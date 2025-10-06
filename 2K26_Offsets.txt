@@ -1,0 +1,1308 @@
+{
+    "game_info": {
+        "executable": "NBA2K26.exe",
+        "version": "September",
+        "playerSize": 1176,
+        "teamSize": 5672
+    },
+    "base_pointers": {
+        "Player": {
+            "address": 131333624,
+            "chain": []
+        },
+        "Team": {
+            "address": 130679520,
+            "chain": []
+        }
+    },
+    "offsets": [
+        {
+            "category": "Appearance",
+            "name": "Height",
+            "address": 0,
+            "length": 16,
+            "type": "Integer",
+            "requiresDereference": true,
+            "dereferenceAddress": 120
+        },
+        {
+            "category": "Appearance",
+            "name": "Wingspan",
+            "address": 2,
+            "length": 16,
+            "type": "Integer",
+            "requiresDereference": true,
+            "dereferenceAddress": 120
+        },
+        {
+            "category": "Appearance",
+            "name": "Trunk Length",
+            "address": 4,
+            "length": 24,
+            "type": "Integer",
+            "requiresDereference": true,
+            "dereferenceAddress": 120
+        },
+        {
+            "category": "Appearance",
+            "name": "Neck Length",
+            "address": 16,
+            "length": 24,
+            "type": "Integer",
+            "requiresDereference": true,
+            "dereferenceAddress": 120
+        },
+
+        {
+            "category": "Vitals",
+            "name": "Current Team",
+            "address": 738,
+            "length": 24,
+            "type": "WString",
+            "requiresDereference": true,
+            "dereferenceAddress": 96
+        },
+        {
+            "category": "Vitals",
+            "name": "First Name",
+            "address": 40,
+            "length": 40,
+            "type": "WString"
+        },
+        {
+            "category": "Vitals",
+            "name": "Last Name",
+            "address": 0,
+            "length": 40,
+            "type": "WString"
+        },
+        {
+            "category": "Vitals",
+            "name": "Position",
+            "address": 293,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Position 2",
+            "address": 293,
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Vitals",
+            "name": "Age",
+            "address": 266,
+            "length": 8,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Weight",
+            "address": 256,
+            "length": 16,
+            "type": "Float"
+        },
+        {
+            "category": "Vitals",
+            "name": "College",
+            "address": 176,
+            "length": 40,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Fiba Team",
+            "address": 988,
+            "length": 0,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Birth Year",
+            "address": 266,
+            "length": 16,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Birth Month",
+            "address": 835,
+            "length": 4,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Birth Day",
+            "address": 268,
+            "length": 5,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Years Pro",
+            "address": 926,
+            "length": 5,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Jersey Number",
+            "address": 269,
+            "length": 7,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Dominant Hand",
+            "address": 294,
+            "length": 1,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Dunk Hand",
+            "address": 294,
+            "length": 1,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Peak Start",
+            "address": 270,
+            "length": 6,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Peak End",
+            "address": 271,
+            "length": 6,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Potential",
+            "address": 993,
+            "length": 8,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Minimum Potential",
+            "address": 952,
+            "length": 7,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Maximum Potential",
+            "address": 953,
+            "length": 6,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Play For Winner",
+            "address": 697,
+            "length": 7,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Financial Security",
+            "address": 698,
+            "length": 7,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Loyalty",
+            "address": 696,
+            "length": 7,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Bust Percentage",
+            "address": 954,
+            "length": 7,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Average Percent",
+            "address": 818,
+            "length": 7,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Boom Percentage",
+            "address": 953,
+            "length": 10,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Injury 1 Type",
+            "address": 292,
+            "length": 4,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Injury 1 Duration",
+            "address": 812,
+            "length": 15,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Force Non Starter",
+            "address": 815,
+            "length": 2,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Play Initiator",
+            "address": 686,
+            "length": 1,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Playtype 1",
+            "address": 412,
+            "length": 4,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Playtype 2",
+            "address": 412,
+            "length": 4,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Playtype 3",
+            "address": 413,
+            "length": 4,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Playtype 4",
+            "address": 413,
+            "length": 4,
+            "type": "Integer"
+        },
+
+        {
+            "category": "Attributes",
+            "name": "Driving Layup",
+            "address": 993,
+            "length": 8,
+            "type": "Binary",
+            "startBit": 6
+        },
+        {
+            "category": "Attributes",
+            "name": "Standing Dunk",
+            "address": 1015,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Driving Dunk",
+            "address": 1016,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Close Shot",
+            "address": 999,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Mid Range",
+            "address": 1000,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Three Point",
+            "address": 1001,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Free Throw",
+            "address": 1002,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Post Hook",
+            "address": 996,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Post Fade",
+            "address": 994,
+            "length": 8,
+            "type": "Binary",
+            "startBit": 6
+        },
+        {
+            "category": "Attributes",
+            "name": "Post Control",
+            "address": 997,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Draw Foul",
+            "address": 998,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Shot Iq",
+            "address": 1024,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Ball Control",
+            "address": 1003,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Speed With Ball",
+            "address": 1018,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Hands",
+            "address": 1045,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Passing Accuracy",
+            "address": 1005,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Passing Iq",
+            "address": 1004,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Passing Vision",
+            "address": 1044,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Offensive Consistency",
+            "address": 1025,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Interior Defense",
+            "address": 1008,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Perimeter Defense",
+            "address": 1009,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Steal",
+            "address": 1012,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Block",
+            "address": 1011,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Offensive Rebound",
+            "address": 1006,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Defensive Rebound",
+            "address": 1007,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Help Defense Iq",
+            "address": 1014,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Passing Perception",
+            "address": 1010,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Defensive Consistency",
+            "address": 1013,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Speed",
+            "address": 1017,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Agility",
+            "address": 1023,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Strength",
+            "address": 1020,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Vertical",
+            "address": 1019,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Stamina",
+            "address": 1021,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Intangibles",
+            "address": 1026,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Hustle",
+            "address": 1022,
+            "length": 8,
+            "type": "Binary"
+        },
+
+        {
+            "category": "Attributes",
+            "name": "Head Durability",
+            "address": 1028,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Neck Durability",
+            "address": 1029,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Back Durability",
+            "address": 1030,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Left Shoulder Durability",
+            "address": 1031,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Right Shoulder Durability",
+            "address": 1032,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Left Elbow Durability",
+            "address": 1033,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Right Elbow Durability",
+            "address": 1034,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Left Hip Durability",
+            "address": 1035,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Right Hip Durability",
+            "address": 1036,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Left Knee Durability",
+            "address": 1037,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Right Knee Durability",
+            "address": 1038,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Left Ankle Durability",
+            "address": 1039,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Right Ankle Durability",
+            "address": 1040,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Left Foot Durability",
+            "address": 1041,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Right Foot Durability",
+            "address": 1042,
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Misc Durability",
+            "address": 1043,
+            "length": 8,
+            "type": "Binary"
+        },
+
+        {
+            "category": "Badges",
+            "name": "Aerial Wizard",
+            "address": 1149,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Ankle Breaker",
+            "address": 1161,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Bail Out",
+            "address": 1152,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Boxout Beast",
+            "address": 1156,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Break Starter",
+            "address": 1152,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Break Starter",
+            "address": 1157,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Challenger",
+            "address": 1154,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Deadeye",
+            "address": 1150,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Dimer",
+            "address": 1152,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Float Game",
+            "address": 1148,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Glove",
+            "address": 1155,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Handles For Days",
+            "address": 1153,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "High Flying Denier",
+            "address": 1163,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Hook Specialist",
+            "address": 1149,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Immovable Enforcer",
+            "address": 1157,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Interceptor",
+            "address": 1156,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Layup Mixmaster",
+            "address": 1158,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Lightning Launch",
+            "address": 1162,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Limitless Range",
+            "address": 1151,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Mini Marksman",
+            "address": 1160,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Off Ball Pest",
+            "address": 1154,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "On Ball Menace",
+            "address": 1163,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Paint Patroller",
+            "address": 1164,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Paint Prodigy",
+            "address": 1158,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Physical Finisher",
+            "address": 1159,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Pick Dodger",
+            "address": 1155,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Pogo Stick",
+            "address": 1156,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Posterizer",
+            "address": 1148,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Post Fade Phenom",
+            "address": 1150,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Post Lockdown",
+            "address": 1153,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Post Powerhouse",
+            "address": 1159,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Post Up Poet",
+            "address": 1160,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Rebound Chaser",
+            "address": 1157,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Rise Up",
+            "address": 1149,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Set Shot Specialist",
+            "address": 1160,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Shifty Shooter",
+            "address": 1161,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Slippery Off Ball",
+            "address": 1151,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Strong Handles",
+            "address": 1162,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Unpluckable",
+            "address": 1153,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Badges",
+            "name": "Versatile Visionary",
+            "address": 1161,
+            "length": 3,
+            "type": "Integer"
+        },
+
+        {
+            "category": "Personality Badges",
+            "name": "Alpha Dog",
+            "address": 1147,
+            "length": 1,
+            "type": "Integer"
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Enforcer",
+            "address": 1147,
+            "length": 1,
+            "type": "Integer"
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Reserved",
+            "address": 1145,
+            "length": 1,
+            "type": "Integer"
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Friendly",
+            "address": 1146,
+            "length": 1,
+            "type": "Integer"
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Team Player",
+            "address": 1146,
+            "length": 1,
+            "type": "Integer"
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Extremely Confident",
+            "address": 1146,
+            "length": 1,
+            "type": "Integer"
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Keep It Real",
+            "address": 1146,
+            "length": 1,
+            "type": "Integer"
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Pat My Back",
+            "address": 1146,
+            "length": 1,
+            "type": "Integer"
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Expressive",
+            "address": 1146,
+            "length": 1,
+            "type": "Integer"
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Unpredictable",
+            "address": 1146,
+            "length": 1,
+            "type": "Integer"
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Laid Back",
+            "address": 1146,
+            "length": 1,
+            "type": "Integer"
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Media Ringmaster",
+            "address": 1147,
+            "length": 1,
+            "type": "Integer"
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Warm Weather Fan",
+            "address": 1147,
+            "length": 1,
+            "type": "Integer"
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Finance Savvy",
+            "address": 1147,
+            "length": 1,
+            "type": "Integer"
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Marketability",
+            "address": 1148,
+            "length": 3,
+            "type": "Integer"
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Work Ethic",
+            "address": 1147,
+            "length": 3,
+            "type": "Integer"
+        },
+
+        {
+            "category": "Hotzones",
+            "name": "Under Basket",
+            "address": 448,
+            "length": 2,
+            "type": "Integer"
+        },
+        {
+            "category": "Hotzones",
+            "name": "Close Left",
+            "address": 451,
+            "length": 2,
+            "type": "Integer"
+        },
+        {
+            "category": "Hotzones",
+            "name": "Close Middle",
+            "address": 448,
+            "length": 2,
+            "type": "Integer"
+        },
+        {
+            "category": "Hotzones",
+            "name": "Close Right",
+            "address": 451,
+            "length": 2,
+            "type": "Integer"
+        },
+        {
+            "category": "Hotzones",
+            "name": "Mid Range Left",
+            "address": 464,
+            "length": 2,
+            "type": "Integer"
+        },
+        {
+            "category": "Hotzones",
+            "name": "Mid Range Center",
+            "address": 448,
+            "length": 2,
+            "type": "Integer"
+        },
+        {
+            "category": "Hotzones",
+            "name": "Mid Range Right Center",
+            "address": 842,
+            "length": 2,
+            "type": "Integer"
+        },
+        {
+            "category": "Hotzones",
+            "name": "Mid Range Right",
+            "address": 854,
+            "length": 2,
+            "type": "Integer"
+        },
+        {
+            "category": "Hotzones",
+            "name": "Three Left",
+            "address": 454,
+            "length": 2,
+            "type": "Integer"
+        },
+        {
+            "category": "Hotzones",
+            "name": "Three Left Center",
+            "address": 455,
+            "length": 2,
+            "type": "Integer"
+        },
+        {
+            "category": "Hotzones",
+            "name": "Three Center",
+            "address": 363,
+            "length": 2,
+            "type": "Integer"
+        },
+        {
+            "category": "Hotzones",
+            "name": "Three Right Center",
+            "address": 823,
+            "length": 2,
+            "type": "Integer"
+        },
+        {
+            "category": "Hotzones",
+            "name": "Three Right Center",
+            "address": 451,
+            "length": 2,
+            "type": "Integer"
+        },
+
+        {
+            "category": "Teams",
+            "name": "City Name",
+            "address": 788,
+            "type": "WString",
+            "length": 24
+        },
+        {
+            "category": "Teams",
+            "name": "Team Name",
+            "address": 738,
+            "type": "WString",
+            "length": 24
+        },
+        {
+            "category": "Teams",
+            "name": "City Abbrev",
+            "address": 824,
+            "type": "WString",
+            "length": 8
+        },
+        {
+            "category": "Teams",
+            "name": "Historic Year",
+            "address": 5670,
+            "type": "Binary",
+            "length": 7,
+            "startBit": 3
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 1",
+            "address": 0,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 2",
+            "address": 8,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 3",
+            "address": 16,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 4",
+            "address": 24,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 5",
+            "address": 32,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 6",
+            "address": 40,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 7",
+            "address": 48,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 8",
+            "address": 56,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 9",
+            "address": 64,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 10",
+            "address": 72,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 11",
+            "address": 80,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 12",
+            "address": 88,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 13",
+            "address": 96,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 14",
+            "address": 104,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 15",
+            "address": 112,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Two Way Player 1",
+            "address": 176,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Two Way Player 2",
+            "address": 184,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Two Way Player 3",
+            "address": 192,
+            "type": "Pointer",
+            "length": 0
+        }
+    ]
+}
