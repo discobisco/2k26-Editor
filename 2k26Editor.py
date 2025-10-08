@@ -34,6 +34,7 @@ import urllib.parse
 import io
 import json
 from pathlib import Path
+from collections import Counter
 # -----------------------------------------------------------------------------
 # Offset loading system for 2K26
 # -----------------------------------------------------------------------------
@@ -56,15 +57,41 @@ OFF_LAST_NAME = 0
 OFF_FIRST_NAME = 0
 OFF_TEAM_PTR = 0
 OFF_TEAM_NAME = 0
-MAX_PLAYERS = 6000
+MAX_PLAYERS = 4000
 NAME_MAX_CHARS = 20
+FIRST_NAME_ENCODING = "utf16"
+LAST_NAME_ENCODING = "utf16"
+TEAM_NAME_ENCODING = "utf16"
 APP_VERSION = "v2K26.0.1"
 TEAM_STRIDE = 0
 TEAM_NAME_OFFSET = 0
 TEAM_NAME_LENGTH = 0
 TEAM_PLAYER_SLOT_COUNT = 30
-MAX_TEAMS_SCAN = 200
+FREE_AGENT_TEAM_ID = -1
+MAX_TEAMS_SCAN = 300
 TEAM_PTR_CHAINS: list[dict[str, object]] = []
+
+# --------------------------------------------------------------------------
+# UI color palette
+# --------------------------------------------------------------------------
+PRIMARY_BG = "#0F1C2E"
+PANEL_BG = "#16213E"
+INPUT_BG = "#1B263B"
+ACCENT_BG = "#415A77"
+BUTTON_BG = "#778DA9"
+BUTTON_ACTIVE_BG = "#415A77"
+TEXT_PRIMARY = "#E0E1DD"
+TEXT_SECONDARY = "#9BA4B5"
+BUTTON_TEXT = "#000000"
+# -----------------------------------------------------------------------------
+# 2K COY auto-import configuration
+# -----------------------------------------------------------------------------
+COY_SHEET_ID: str = "1pxWukEO6oOofSZdPKyu--R_8EyvHOflArT2tJFBzzzo"
+COY_SHEET_TABS: dict[str, str] = {
+    "Attributes": "Attributes",
+    "Tendencies": "TEND",
+    "Durability": "Durabilities",
+}
 # -----------------------------------------------------------------------------
 # Rating scaling constants
 #
@@ -415,14 +442,21 @@ def _apply_offset_config(data: dict | None) -> None:
     global MODULE_NAME, PLAYER_TABLE_RVA, PLAYER_STRIDE
     global PLAYER_PTR_CHAINS, OFF_LAST_NAME, OFF_FIRST_NAME
     global OFF_TEAM_PTR, OFF_TEAM_NAME, NAME_MAX_CHARS
+    global FIRST_NAME_ENCODING, LAST_NAME_ENCODING, TEAM_NAME_ENCODING
     global TEAM_STRIDE, TEAM_NAME_OFFSET, TEAM_NAME_LENGTH, TEAM_PLAYER_SLOT_COUNT
     global TEAM_PTR_CHAINS, TEAM_RECORD_SIZE, TEAM_FIELD_DEFS
     if not data:
         print("Warning: no 2K26 offset configuration found.")
         return
+    combined_offsets: list[dict] = []
     offsets = data.get("offsets")
     if isinstance(offsets, list):
-        _build_offset_index(offsets)
+        combined_offsets.extend(offsets)
+    team_offsets = data.get("Teams") or data.get("team_offsets")
+    if isinstance(team_offsets, list):
+        combined_offsets.extend(team_offsets)
+    if combined_offsets:
+        _build_offset_index(combined_offsets)
     else:
         _offset_index.clear()
     game_info = data.get("game_info") or {}
@@ -445,17 +479,36 @@ def _apply_offset_config(data: dict | None) -> None:
     team_base = base_pointers.get("Team")
     if isinstance(team_base, dict):
         TEAM_PTR_CHAINS.extend(_parse_pointer_chain_config(team_base))
+    name_char_limit = max(1, NAME_MAX_CHARS)
     first_entry = _find_offset_entry("First Name", "Vitals")
     if first_entry:
         OFF_FIRST_NAME = _to_int(first_entry.get("address"))
+        first_type = str(first_entry.get("type", "")).lower()
+        FIRST_NAME_ENCODING = "ascii" if first_type in ("string", "text") else "utf16"
         length_val = _to_int(first_entry.get("length"))
-        if str(first_entry.get("type", "")).lower() == "wstring":
-            NAME_MAX_CHARS = max(1, (length_val // 2) or NAME_MAX_CHARS)
-        elif length_val:
-            NAME_MAX_CHARS = length_val
+        if length_val:
+            if FIRST_NAME_ENCODING == "utf16":
+                char_count = max(1, length_val // 2)
+            else:
+                char_count = max(1, length_val)
+            name_char_limit = max(name_char_limit, char_count)
+    else:
+        FIRST_NAME_ENCODING = "utf16"
     last_entry = _find_offset_entry("Last Name", "Vitals")
     if last_entry:
         OFF_LAST_NAME = _to_int(last_entry.get("address"))
+        last_type = str(last_entry.get("type", "")).lower()
+        LAST_NAME_ENCODING = "ascii" if last_type in ("string", "text") else "utf16"
+        length_val = _to_int(last_entry.get("length"))
+        if length_val:
+            if LAST_NAME_ENCODING == "utf16":
+                char_count = max(1, length_val // 2)
+            else:
+                char_count = max(1, length_val)
+            name_char_limit = max(name_char_limit, char_count)
+    else:
+        LAST_NAME_ENCODING = "utf16"
+    NAME_MAX_CHARS = name_char_limit
     team_entry = _find_offset_entry("Current Team", "Vitals")
     if team_entry:
         OFF_TEAM_PTR = _to_int(team_entry.get("dereferenceAddress"))
@@ -464,8 +517,14 @@ def _apply_offset_config(data: dict | None) -> None:
     team_name_entry = _find_offset_entry("Team Name", "Teams")
     if team_name_entry:
         TEAM_NAME_OFFSET = _to_int(team_name_entry.get("address"))
-        TEAM_NAME_LENGTH = _to_int(team_name_entry.get("length")) or TEAM_NAME_LENGTH
+        team_type = str(team_name_entry.get("type", "")).lower()
+        TEAM_NAME_ENCODING = "ascii" if team_type in ("string", "text") else "utf16"
+        length_val = _to_int(team_name_entry.get("length"))
+        if length_val:
+            TEAM_NAME_LENGTH = max(1, length_val)
         OFF_TEAM_NAME = TEAM_NAME_OFFSET
+    else:
+        TEAM_NAME_ENCODING = "utf16"
     if TEAM_NAME_LENGTH <= 0:
         TEAM_NAME_LENGTH = 24
     team_player_entries = [
@@ -481,11 +540,14 @@ def _apply_offset_config(data: dict | None) -> None:
         offset = _to_int(entry.get("address"))
         length_val = _to_int(entry.get("length", 0))
         entry_type = str(entry.get("type", "")).lower()
-        if not offset or not length_val:
+        if offset is None or offset == 0:
+            continue
+        if length_val <= 0:
             continue
         if entry_type not in ("wstring", "string", "text"):
             continue
-        TEAM_FIELD_DEFS[label] = (offset, length_val)
+        encoding = "ascii" if entry_type in ("string", "text") else "utf16"
+        TEAM_FIELD_DEFS[label] = (offset, length_val, encoding)
     if TEAM_STRIDE:
         TEAM_RECORD_SIZE = TEAM_STRIDE
 def initialize_offsets(force: bool = False) -> bool:
@@ -506,7 +568,7 @@ TEAM_FIELD_SPECS: tuple[tuple[str, str], ...] = (
     ("City Name", "City Name"),
     ("City Abbrev", "City Abbrev"),
 )
-TEAM_FIELD_DEFS: dict[str, tuple[int, int]] = {}
+TEAM_FIELD_DEFS: dict[str, tuple[int, int, str]] = {}
 TEAM_RECORD_SIZE = TEAM_STRIDE
 # -----------------------------------------------------------------------------
 # Unified offsets support
@@ -705,6 +767,150 @@ TEND_IMPORT_ORDER = [
     "T/BLOCK",
     "T/CONTEST",
 ]
+# Fallback tendency field definitions derived from roster memory captures.
+# These are used when the offsets JSON does not supply a Tendencies category.
+TENDENCY_FIELD_DEFS: list[dict[str, object]] = [
+    {"name": "Shot", "offset": 0x4B3, "startBit": 0, "length": 8},
+    {"name": "Touches", "offset": 0x4B4, "startBit": 0, "length": 8},
+    {"name": "Shot Close", "offset": 0x46A, "startBit": 0, "length": 8},
+    {"name": "Shot Under Basket", "offset": 0x469, "startBit": 0, "length": 8},
+    {"name": "Shot Close Left", "offset": 0x46B, "startBit": 0, "length": 8},
+    {"name": "Shot Close Middle", "offset": 0x46C, "startBit": 0, "length": 8},
+    {"name": "Shot Close Right", "offset": 0x46D, "startBit": 0, "length": 8},
+    {"name": "Shot Mid-Range", "offset": 0x46E, "startBit": 0, "length": 8},
+    {"name": "Spot Up Shot Mid-Range", "offset": 0x46F, "startBit": 0, "length": 8},
+    {"name": "Off Screen Shot Mid-Range", "offset": 0x470, "startBit": 0, "length": 8},
+    {"name": "Shot Mid Left", "offset": 0x471, "startBit": 0, "length": 8},
+    {"name": "Shot Mid Left-Center", "offset": 0x472, "startBit": 0, "length": 8},
+    {"name": "Shot Mid Center", "offset": 0x473, "startBit": 0, "length": 8},
+    {"name": "Shot Mid Right-Center", "offset": 0x474, "startBit": 0, "length": 8},
+    {"name": "Shot Mid Right", "offset": 0x475, "startBit": 0, "length": 8},
+    {"name": "Shot Three", "offset": 0x476, "startBit": 0, "length": 8},
+    {"name": "Spot Up Shot Three", "offset": 0x477, "startBit": 0, "length": 8},
+    {"name": "Off Screen Shot Three", "offset": 0x478, "startBit": 0, "length": 8},
+    {"name": "Shot Three Left", "offset": 0x479, "startBit": 0, "length": 8},
+    {"name": "Shot Three Left-Center", "offset": 0x47A, "startBit": 0, "length": 8},
+    {"name": "Shot Three Center", "offset": 0x47B, "startBit": 0, "length": 8},
+    {"name": "Shot Three Right-Center", "offset": 0x47C, "startBit": 0, "length": 8},
+    {"name": "Shot Three Right", "offset": 0x47D, "startBit": 0, "length": 8},
+    {"name": "Contested Jumper Mid-Range", "offset": 0x47F, "startBit": 0, "length": 8},
+    {"name": "Contested Jumper Three", "offset": 0x47E, "startBit": 0, "length": 8},
+    {"name": "Stepback Jumper Mid-Range", "offset": 0x481, "startBit": 0, "length": 8},
+    {"name": "Stepback Jumper Three", "offset": 0x480, "startBit": 0, "length": 8},
+    {"name": "Spin Jumper", "offset": 0x482, "startBit": 0, "length": 8},
+    {"name": "Transition Pull Up Three", "offset": 0x483, "startBit": 0, "length": 8},
+    {"name": "Drive Pull Up Mid-Range", "offset": 0x485, "startBit": 0, "length": 8},
+    {"name": "Drive Pull Up Three", "offset": 0x484, "startBit": 0, "length": 8},
+    {"name": "Drive", "offset": 0x492, "startBit": 0, "length": 8},
+    {"name": "Spot Up Drive", "offset": 0x493, "startBit": 0, "length": 8},
+    {"name": "Off Screen Drive", "offset": 0x494, "startBit": 0, "length": 8},
+    {"name": "Use Glass", "offset": 0x486, "startBit": 0, "length": 8},
+    {"name": "Step Through Shot", "offset": 0x45C, "startBit": 0, "length": 8},
+    {"name": "Driving Layup", "offset": 0x45D, "startBit": 0, "length": 8},
+    {"name": "Spin Layup", "offset": 0x464, "startBit": 0, "length": 8},
+    {"name": "Euro Step Layup", "offset": 0x466, "startBit": 0, "length": 8},
+    {"name": "Hop Step Layup", "offset": 0x465, "startBit": 0, "length": 8},
+    {"name": "Floater", "offset": 0x467, "startBit": 0, "length": 8},
+    {"name": "Standing Dunk", "offset": 0x45E, "startBit": 0, "length": 8},
+    {"name": "Driving Dunk", "offset": 0x45F, "startBit": 0, "length": 8},
+    {"name": "Flashy Dunk", "offset": 0x460, "startBit": 0, "length": 8},
+    {"name": "Alley-Oop", "offset": 0x461, "startBit": 0, "length": 8},
+    {"name": "Putback", "offset": 0x462, "startBit": 0, "length": 8},
+    {"name": "Crash", "offset": 0x463, "startBit": 0, "length": 8},
+    {"name": "Drive Right", "offset": 0x48A, "startBit": 0, "length": 8},
+    {"name": "Triple Threat Pump Fake", "offset": 0x468, "startBit": 0, "length": 8},
+    {"name": "Triple Threat Jab Step", "offset": 0x469, "startBit": 0, "length": 8},
+    {"name": "Triple Threat Idle", "offset": 0x48D, "startBit": 0, "length": 8},
+    {"name": "Triple Threat Shoot", "offset": 0x48E, "startBit": 0, "length": 8},
+    {"name": "Setup With Sizeup", "offset": 0x48F, "startBit": 0, "length": 8},
+    {"name": "Setup With Hesitation", "offset": 0x490, "startBit": 0, "length": 8},
+    {"name": "No Setup Dribble", "offset": 0x491, "startBit": 0, "length": 8},
+    {"name": "Driving Crossover", "offset": 0x495, "startBit": 0, "length": 8},
+    {"name": "Driving Double Crossover", "offset": 0x499, "startBit": 0, "length": 8},
+    {"name": "Driving Spin", "offset": 0x496, "startBit": 0, "length": 8},
+    {"name": "Driving Half Spin", "offset": 0x498, "startBit": 0, "length": 8},
+    {"name": "Driving Step Back", "offset": 0x497, "startBit": 0, "length": 8},
+    {"name": "Driving Behind the Back", "offset": 0x49A, "startBit": 0, "length": 8},
+    {"name": "Driving Dribble Hesitation", "offset": 0x49B, "startBit": 0, "length": 8},
+    {"name": "Driving In and Out", "offset": 0x49C, "startBit": 0, "length": 8},
+    {"name": "No Driving Dribble Move", "offset": 0x49D, "startBit": 0, "length": 8},
+    {"name": "Attack Strong on Drive", "offset": 0x49E, "startBit": 0, "length": 8},
+    {"name": "Dish To Open Man", "offset": 0x49F, "startBit": 0, "length": 8},
+    {"name": "Flashy Pass", "offset": 0x4A0, "startBit": 0, "length": 8},
+    {"name": "Alley-Oop Pass", "offset": 0x4A1, "startBit": 0, "length": 8},
+    {"name": "Roll vs. Pop", "offset": 0x4B5, "startBit": 0, "length": 8},
+    {"name": "Transition Spot Up", "offset": 0x4B6, "startBit": 0, "length": 8},
+    {"name": "Iso vs. Elite Defender", "offset": 0x4B7, "startBit": 0, "length": 8},
+    {"name": "Iso vs. Good Defender", "offset": 0x4B8, "startBit": 0, "length": 8},
+    {"name": "Iso vs. Average Defender", "offset": 0x4B9, "startBit": 0, "length": 8},
+    {"name": "Iso vs. Poor Defender", "offset": 0x4BA, "startBit": 0, "length": 8},
+    {"name": "Play Discipline", "offset": 0x4BB, "startBit": 0, "length": 8},
+    {"name": "Post Up", "offset": 0x4A2, "startBit": 0, "length": 8},
+    {"name": "Post Back Down", "offset": 0x4A5, "startBit": 0, "length": 8},
+    {"name": "Post Aggressive Backdown", "offset": 0x4A6, "startBit": 0, "length": 8},
+    {"name": "Post Face Up", "offset": 0x4A4, "startBit": 0, "length": 8},
+    {"name": "Post Spin", "offset": 0x4B0, "startBit": 0, "length": 8},
+    {"name": "Post Drive", "offset": 0x4AF, "startBit": 0, "length": 8},
+    {"name": "Post Drop Step", "offset": 0x4B1, "startBit": 0, "length": 8},
+    {"name": "Post Hop Step", "offset": 0x4B2, "startBit": 0, "length": 8},
+    {"name": "Shoot From Post", "offset": 0x4A7, "startBit": 0, "length": 8},
+    {"name": "Post Hook Left", "offset": 0x4A8, "startBit": 0, "length": 8},
+    {"name": "Post Hook Right", "offset": 0x4A9, "startBit": 0, "length": 8},
+    {"name": "Post Fade Left", "offset": 0x4AA, "startBit": 0, "length": 8},
+    {"name": "Post Fade Right", "offset": 0x4AB, "startBit": 0, "length": 8},
+    {"name": "Post Shimmy Shot", "offset": 0x4A3, "startBit": 0, "length": 8},
+    {"name": "Post Hop Shot", "offset": 0x4AD, "startBit": 0, "length": 8},
+    {"name": "Post Step Back Shot", "offset": 0x4AE, "startBit": 0, "length": 8},
+    {"name": "Post Up and Under", "offset": 0x4AC, "startBit": 0, "length": 8},
+    {"name": "Take Charge", "offset": 0x4BD, "startBit": 0, "length": 8},
+    {"name": "Foul", "offset": 0x4C1, "startBit": 0, "length": 8},
+    {"name": "Hard Foul", "offset": 0x4C2, "startBit": 0, "length": 8},
+    {"name": "Pass Interception", "offset": 0x4BC, "startBit": 0, "length": 8},
+    {"name": "On-Ball Steal", "offset": 0x4BE, "startBit": 0, "length": 8},
+    {"name": "Block Shot", "offset": 0x4C0, "startBit": 0, "length": 8},
+    {"name": "Contest Shot", "offset": 0x4BF, "startBit": 0, "length": 8},
+]
+FIELD_NAME_ALIASES: dict[str, str] = {
+    "SHOT": "SHOOT",
+    "SHOTMIDRANGE": "SHOTMID",
+    "SPOTUPSHOTMIDRANGE": "SPOTUPSHOTMID",
+    "OFFSCREENSHOTMIDRANGE": "OFFSCREENSHOTMID",
+    "SHOTTHREE": "SHOT3PT",
+    "SPOTUPSHOTTHREE": "SPOTUPSHOT3PT",
+    "OFFSCREENSHOTTHREE": "OFFSCREENSHOT3PT",
+    "SHOTTHREELEFT": "SHOT3PTLEFT",
+    "SHOTTHREELEFTCENTER": "SHOT3PTLEFTCENTER",
+    "SHOTTHREECENTER": "SHOT3PTCENTER",
+    "SHOTTHREERIGHTCENTER": "SHOT3PTRIGHTCENTER",
+    "SHOTTHREERIGHT": "SHOT3PTRIGHT",
+    "CONTESTEDJUMPERMIDRANGE": "CONTESTEDJUMPERMID",
+    "CONTESTEDJUMPERTHREE": "CONTESTEDJUMPER3PT",
+    "STEPBACKJUMPERMIDRANGE": "STEPBACKJUMPERMID",
+    "STEPBACKJUMPERTHREE": "STEPBACKJUMPER3PT",
+    "SPINJUMPER": "SPINJUMPERTENDENCY",
+    "TRANSITIONPULLUPTHREE": "TRANSITIONPULLUP3PT",
+    "DRIVEPULLUPMIDRANGE": "DRIVEPULLUPMID",
+    "DRIVEPULLUPTHREE": "DRIVEPULLUP3PT",
+    "DRIVINGLAYUP": "DRIVINGLAYUPTENDENCY",
+    "EUROSTEPLAYUP": "EUROSTEP",
+    "HOPSTEPLAYUP": "HOPSTEP",
+    "STANDINGDUNK": "STANDINGDUNKTENDENCY",
+    "DRIVINGDUNK": "DRIVINGDUNKTENDENCY",
+    "FLASHYDUNK": "FLASHYDUNKTENDENCY",
+    "DRIVINGBEHINDTHEBACK": "DRIVINGBEHINDBACK",
+    "DRIVINGINANDOUT": "INANDOUT",
+    "NODRIVINGDRIBBLEMOVE": "NODRIBBLE",
+    "TRANSITIONSPOTUP": "SPOTUPCUT",
+    "ISOVSELITEDEFENDER": "ISOVSE",
+    "ISOVSGOODDEFENDER": "ISOVSG",
+    "ISOVSAVERAGEDEFENDER": "ISOVSA",
+    "ISOVSPOORDEFENDER": "ISOVSP",
+    "SHOOTFROMPOST": "POSTSHOT",
+    "POSTSHIMMYSHOT": "POSTSHIMMY",
+    "ONBALLSTEAL": "STEAL",
+    "BLOCKSHOT": "BLOCK",
+    "CONTESTSHOT": "CONTEST",
+}
 # -----------------------------------------------------------------------------
 # Attempt to override hard‑coded offsets from a configuration file.
 #
@@ -749,15 +955,27 @@ def _load_categories() -> dict[str, list[dict]]:
     dropdowns = _load_dropdowns_map()
     if _offset_config is None:
         initialize_offsets()
-    if _offset_config and isinstance(_offset_config.get("offsets"), list):
+    if isinstance(_offset_config, dict):
         categories: dict[str, list[dict]] = {}
-        for entry in _offset_config["offsets"]:
-            if not isinstance(entry, dict):
+        combined_sections: list[dict] = []
+        def _extend(section: object) -> None:
+            if isinstance(section, list):
+                combined_sections.extend(item for item in section if isinstance(item, dict))
+        _extend(_offset_config.get("offsets"))
+        for key, value in _offset_config.items():
+            if key in {"offsets", "game_info", "base_pointers"}:
                 continue
+            _extend(value)
+        seen_fields: set[tuple[str, str]] = set()
+        for entry in combined_sections:
             cat_name = str(entry.get("category", "Misc")).strip() or "Misc"
             field_name = str(entry.get("name", "")).strip()
             if not field_name:
                 continue
+            key = (cat_name.lower(), field_name.lower())
+            if key in seen_fields:
+                continue
+            seen_fields.add(key)
             offset_val = _to_int(entry.get("address"))
             start_bit = _to_int(entry.get("startBit"))
             length_val = _to_int(entry.get("length"))
@@ -783,7 +1001,15 @@ def _load_categories() -> dict[str, list[dict]]:
             except Exception:
                 pass
             categories.setdefault(cat_name, []).append(field)
-        return categories
+        if categories:
+            if not categories.get("Tendencies"):
+                fallback: list[dict[str, object]] = []
+                for field in TENDENCY_FIELD_DEFS:
+                    entry = dict(field)
+                    entry["offset"] = hex(entry["offset"])  # type: ignore[index]
+                    fallback.append(entry)
+                categories["Tendencies"] = fallback
+            return categories
     base_dir = _pathlib.Path(__file__).resolve().parent
     # Try unified offsets files first
     for fname in UNIFIED_FILES:
@@ -804,6 +1030,13 @@ def _load_categories() -> dict[str, list[dict]]:
                         categories[key] = value
                 # If categories were found in unified format return them immediately
                 if categories:
+                    if not categories.get("Tendencies"):
+                        fallback: list[dict[str, object]] = []
+                        for field in TENDENCY_FIELD_DEFS:
+                            entry = dict(field)
+                            entry["offset"] = hex(entry["offset"])  # type: ignore[index]
+                            fallback.append(entry)
+                        categories["Tendencies"] = fallback
                     return categories
                 # Case 2: extended offsets.json format with a nested Player_Info
                 # The sanitized offsets JSON stores category dictionaries under
@@ -873,6 +1106,13 @@ def _load_categories() -> dict[str, list[dict]]:
                         if entries:
                             new_cats[cat_name] = entries
                     if new_cats:
+                        if not new_cats.get("Tendencies"):
+                            fallback: list[dict[str, object]] = []
+                            for field in TENDENCY_FIELD_DEFS:
+                                entry = dict(field)
+                                entry["offset"] = hex(entry["offset"])  # type: ignore[index]
+                                fallback.append(entry)
+                            new_cats["Tendencies"] = fallback
                         return new_cats
         except Exception:
             # ignore errors and continue to next file
@@ -1164,17 +1404,18 @@ class GameMemory:
         self.write_bytes(addr, padded)
 class Player:
     """Container class representing basic player data."""
-    def __init__(self, index: int, first_name: str, last_name: str, team: str):
+    def __init__(self, index: int, first_name: str, last_name: str, team: str, team_id: int | None = None):
         self.index = index
         self.first_name = first_name
         self.last_name = last_name
         self.team = team
+        self.team_id = team_id
     @property
     def full_name(self) -> str:
         name = f"{self.first_name} {self.last_name}".strip()
         return name if name else f"Player {self.index}"
     def __repr__(self) -> str:
-        return f"<Player index={self.index} name='{self.full_name}' team='{self.team}'>"
+        return f"<Player index={self.index} name='{self.full_name}' team='{self.team}' team_id={self.team_id}>"
 class PlayerDataModel:
     """High level API for scanning and editing NBA 2K26 player records."""
     def __init__(self, mem: GameMemory, max_players: int = MAX_PLAYERS):
@@ -1232,6 +1473,28 @@ class PlayerDataModel:
         except Exception:
             self.categories = {}
         self._reorder_categories()
+    # ------------------------------------------------------------------
+    # Internal string helpers
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _normalize_encoding_tag(tag: str) -> str:
+        enc = (tag or "utf16").lower()
+        if enc in ("ascii", "string", "text"):
+            return "ascii"
+        return "utf16"
+    def _read_string(self, addr: int, max_chars: int, encoding: str) -> str:
+        enc = self._normalize_encoding_tag(encoding)
+        max_len = max(1, max_chars)
+        if enc == "ascii":
+            return self.mem.read_ascii(addr, max_len)
+        return self.mem.read_wstring(addr, max_len)
+    def _write_string(self, addr: int, value: str, max_chars: int, encoding: str) -> None:
+        enc = self._normalize_encoding_tag(encoding)
+        max_len = max(1, max_chars)
+        if enc == "ascii":
+            self.mem.write_ascii_fixed(addr, value, max_len)
+        else:
+            self.mem.write_wstring_fixed(addr, value, max_len)
     # -------------------------------------------------------------------------
     # Offline data loading
     # -------------------------------------------------------------------------
@@ -1367,7 +1630,7 @@ class PlayerDataModel:
             # Assign all offline players to the Free Agents team because
             # the CE tables do not include a reliable team ID mapping.
             team_name = "Free Agents"
-            players.append(Player(idx, first, last, team_name))
+            players.append(Player(idx, first, last, team_name, FREE_AGENT_TEAM_ID))
         # Ensure we loaded a reasonable number of players; if not, abort
         return players if players else None
     # -------------------------------------------------------------------------
@@ -1454,14 +1717,13 @@ class PlayerDataModel:
             "DUNK": "DRIVINGDUNK",
             "CLOSE": "CLOSESHOT",
             "MID": "MIDRANGESHOT",
-            "3PT": "3PTSHOT",
+            "3PT": "THREEPOINT",
             "FT": "FREETHROW",
             "PHOOK": "POSTHOOK",
             "PFADE": "POSTFADE",
-            "POSTC": "POSTMOVES",
+            "POSTC": "POSTCONTROL",
             "FOUL": "DRAWFOUL",
             "BALL": "BALLCONTROL",
-            "SPDBALL": "SPEEDWITHBALL",
             "SPDBALL": "SPEEDWITHBALL",
             "PASSIQ": "PASSINGIQ",
             "PASS_IQ": "PASSINGIQ",
@@ -1551,7 +1813,7 @@ class PlayerDataModel:
             "TGLASS": "USEGLASS",
             "TSTHRU": "STEPTHROUGHSHOT",
             "TDRLAYUP": "DRIVINGLAYUPTENDENCY",
-            "TSPLAYUP": "STANDINGLAYUPTENDENCY",
+            "TSPLAYUP": "SPINLAYUP",
             "TEURO": "EUROSTEP",
             "THOPSTEP": "HOPSTEP",
             "TFLOATER": "FLOATER",
@@ -1636,11 +1898,12 @@ class PlayerDataModel:
         """
         Normalize a field name from the offset map for matching.
         This helper performs uppercase conversion and removal of
-        non‑alphanumeric characters.  No synonyms are applied here since
-        the field names are already descriptive.
+        non-alphanumeric characters, then applies aliases so descriptive
+        labels align with the abbreviated headers used by imports.
         """
         import re as _re
-        return _re.sub(r'[^A-Za-z0-9]', '', str(name).upper())
+        norm = _re.sub(r'[^A-Za-z0-9]', '', str(name).upper())
+        return FIELD_NAME_ALIASES.get(norm, norm)
     def _reorder_categories(self) -> None:
         """
         Reorder the categories and fields based on predefined import orders
@@ -1663,6 +1926,11 @@ class PlayerDataModel:
         """
         # Ensure the categories dict exists
         cats = self.categories or {}
+        # Categories that come from the offsets file but are not relevant for the
+        # player-focused editor UI (they relate to team tables instead).  Drop
+        # them so they do not appear as extra tabs in the player editor.
+        for skip in ("Teams", "Team Players"):
+            cats.pop(skip, None)
         # ------------------------------------------------------------------
         # Extract durability fields from Attributes
         if 'Attributes' in cats:
@@ -1999,8 +2267,8 @@ class PlayerDataModel:
             if table_base is None:
                 continue
             try:
-                ln = self.mem.read_wstring(table_base + OFF_LAST_NAME, NAME_MAX_CHARS).strip()
-                fn = self.mem.read_wstring(table_base + OFF_FIRST_NAME, NAME_MAX_CHARS).strip()
+                ln = self._read_string(table_base + OFF_LAST_NAME, NAME_MAX_CHARS, LAST_NAME_ENCODING).strip()
+                fn = self._read_string(table_base + OFF_FIRST_NAME, NAME_MAX_CHARS, FIRST_NAME_ENCODING).strip()
                 if ln or fn:
                     self._resolved_player_base = table_base
                     return table_base
@@ -2023,7 +2291,7 @@ class PlayerDataModel:
             if team_base is None:
                 continue
             try:
-                name = self.mem.read_wstring(team_base + TEAM_NAME_OFFSET, TEAM_NAME_LENGTH).strip()
+                name = self._read_string(team_base + TEAM_NAME_OFFSET, TEAM_NAME_LENGTH, TEAM_NAME_ENCODING).strip()
                 if name and all(32 <= ord(ch) <= 126 for ch in name):
                     self._resolved_team_base = team_base
                     return team_base
@@ -2056,7 +2324,7 @@ class PlayerDataModel:
         for i in range(MAX_TEAMS_SCAN):
             try:
                 rec_addr = team_base_ptr + i * TEAM_STRIDE
-                name = self.mem.read_wstring(rec_addr + TEAM_NAME_OFFSET, TEAM_NAME_LENGTH).strip()
+                name = self._read_string(rec_addr + TEAM_NAME_OFFSET, TEAM_NAME_LENGTH, TEAM_NAME_ENCODING).strip()
             except Exception:
                 break
             # Stop if the name is empty
@@ -2105,15 +2373,15 @@ class PlayerDataModel:
             except Exception:
                 idx = -1
             try:
-                last_name = self.mem.read_wstring(ptr + OFF_LAST_NAME, NAME_MAX_CHARS).strip()
-                first_name = self.mem.read_wstring(ptr + OFF_FIRST_NAME, NAME_MAX_CHARS).strip()
+                last_name = self._read_string(ptr + OFF_LAST_NAME, NAME_MAX_CHARS, LAST_NAME_ENCODING).strip()
+                first_name = self._read_string(ptr + OFF_FIRST_NAME, NAME_MAX_CHARS, FIRST_NAME_ENCODING).strip()
             except Exception:
                 # Skip this player if any field cannot be read
                 continue
             if not first_name and not last_name:
                 continue
-            team_name = self.team_list[team_idx][1] if (team_idx < len(self.team_list)) else "Unknown"
-            players.append(Player(idx if idx >= 0 else len(players), first_name, last_name, team_name))
+            team_name = self._get_team_display_name(team_idx)
+            players.append(Player(idx if idx >= 0 else len(players), first_name, last_name, team_name, team_idx))
         return players
     # -----------------------------------------------------------------
     # Team editing API
@@ -2140,9 +2408,9 @@ class PlayerDataModel:
             return None
         rec_addr = team_base_ptr + team_idx * TEAM_RECORD_SIZE
         fields: Dict[str, str] = {}
-        for label, (offset, max_chars) in TEAM_FIELD_DEFS.items():
+        for label, (offset, max_chars, encoding) in TEAM_FIELD_DEFS.items():
             try:
-                val = self.mem.read_wstring(rec_addr + offset, max_chars).rstrip("\x00")
+                val = self._read_string(rec_addr + offset, max_chars, encoding).rstrip("\x00")
             except Exception:
                 val = ""
             fields[label] = val
@@ -2171,12 +2439,12 @@ class PlayerDataModel:
             return False
         rec_addr = team_base_ptr + team_idx * TEAM_RECORD_SIZE
         success = True
-        for label, (offset, max_chars) in TEAM_FIELD_DEFS.items():
+        for label, (offset, max_chars, encoding) in TEAM_FIELD_DEFS.items():
             if label not in values:
                 continue
             val = values[label]
             try:
-                self.mem.write_wstring_fixed(rec_addr + offset, val, max_chars)
+                self._write_string(rec_addr + offset, val, max_chars, encoding)
             except Exception:
                 success = False
         return success
@@ -2200,32 +2468,44 @@ class PlayerDataModel:
         table_base = self._resolve_player_table_base()
         if table_base is None:
             return []
+        team_base_ptr = self._resolve_team_base_ptr()
+        team_stride = TEAM_STRIDE or TEAM_RECORD_SIZE or 0
         players: list[Player] = []
         for i in range(max_scan):
-            # Compute address of the i‑th player record
+            # Compute address of the i-th player record
             p_addr = table_base + i * PLAYER_STRIDE
             try:
                 # Read essential fields; skip this record on failure
-                last_name = self.mem.read_wstring(p_addr + OFF_LAST_NAME, NAME_MAX_CHARS).strip()
-                first_name = self.mem.read_wstring(p_addr + OFF_FIRST_NAME, NAME_MAX_CHARS).strip()
+                last_name = self._read_string(p_addr + OFF_LAST_NAME, NAME_MAX_CHARS, LAST_NAME_ENCODING).strip()
+                first_name = self._read_string(p_addr + OFF_FIRST_NAME, NAME_MAX_CHARS, FIRST_NAME_ENCODING).strip()
             except Exception:
                 # Skip invalid or unreadable records instead of aborting the scan
                 continue
             # Attempt to resolve the team name; default to Unknown on failure
             team_name = "Unknown"
+            team_id: int | None = None
             try:
                 team_ptr = self.mem.read_uint64(p_addr + OFF_TEAM_PTR)
                 if team_ptr == 0:
                     team_name = "Free Agents"
+                    team_id = FREE_AGENT_TEAM_ID
                 else:
-                    tn = self.mem.read_wstring(team_ptr + OFF_TEAM_NAME, 32).strip()
+                    name_len = TEAM_NAME_LENGTH or 32
+                    tn = self._read_string(team_ptr + OFF_TEAM_NAME, name_len, TEAM_NAME_ENCODING).strip()
                     team_name = tn or "Unknown"
+                    if team_base_ptr and team_stride:
+                        try:
+                            rel = team_ptr - team_base_ptr
+                            if rel >= 0 and rel % team_stride == 0:
+                                team_id = int(rel // team_stride)
+                        except Exception:
+                            team_id = None
             except Exception:
                 pass
             # Skip completely blank name records
             if not first_name and not last_name:
                 continue
-            players.append(Player(i, first_name, last_name, team_name))
+            players.append(Player(i, first_name, last_name, team_name, team_id))
         # Heuristic: if the scanned names appear mostly non‑ASCII, return []
         if players:
             non_ascii_count = 0
@@ -2262,44 +2542,35 @@ class PlayerDataModel:
             if team_base is not None:
                 teams = self._scan_team_names()
                 if teams:
-                    players_all = self._scan_all_players(self.max_players)
-                    if players_all:
-                        unique_names = sorted({p.team for p in players_all})
-                        def _team_sort_key(name: str) -> tuple[int, str]:
-                            return (1 if name.strip().lower().startswith("team ") else 0, name)
-                        ordered_names = sorted(unique_names, key=_team_sort_key)
-                        self.team_list = [(i, name) for i, name in enumerate(ordered_names)]
-                        self.players = players_all
-                        self.fallback_players = True
-                        self._build_name_index_map()
-                        return
                     def _team_sort_key_pair(item: tuple[int, str]) -> tuple[int, str]:
                         idx, name = item
                         return (1 if name.strip().lower().startswith("team ") else 0, name)
                     ordered_teams = sorted(teams, key=_team_sort_key_pair)
-                    self.team_list = ordered_teams
+                    self.team_list = self._build_team_display_list(ordered_teams)
+                    players_all = self._scan_all_players(self.max_players)
+                    if players_all:
+                        if any(p.team_id == FREE_AGENT_TEAM_ID for p in players_all):
+                            self._ensure_team_entry(FREE_AGENT_TEAM_ID, "Free Agents", front=True)
+                        self.players = players_all
+                        self.fallback_players = True
+                        self._apply_team_display_to_players(self.players)
+                        self._build_name_index_map()
                     return
             players = self._scan_all_players(self.max_players)
             if players:
-                unique_names = sorted({p.team for p in players})
-                def _team_sort_key(name: str) -> tuple[int, str]:
-                    return (1 if name.strip().lower().startswith("team ") else 0, name)
-                ordered_names = sorted(unique_names, key=_team_sort_key)
-                self.team_list = [(i, name) for i, name in enumerate(ordered_names)]
                 self.players = players
                 self.fallback_players = True
+                self.team_list = self._build_team_list_from_players(players)
+                self._apply_team_display_to_players(self.players)
                 self._build_name_index_map()
                 return
 
         external_players = self._load_external_roster()
         if external_players:
             self.players = external_players
-            unique_names = sorted({p.team for p in external_players})
-            def _team_sort_key(name: str) -> tuple[int, str]:
-                return (1 if name.strip().lower().startswith("team ") else 0, name)
-            ordered_names = sorted(unique_names, key=_team_sort_key)
-            self.team_list = [(i, name) for i, name in enumerate(ordered_names)]
+            self.team_list = self._build_team_list_from_players(external_players)
             self.external_loaded = True
+            self._apply_team_display_to_players(self.players)
             self._build_name_index_map()
             return
 
@@ -2307,6 +2578,83 @@ class PlayerDataModel:
         self.team_list = []
         self.external_loaded = False
         self.fallback_players = False
+
+    def _build_team_display_list(self, teams: list[tuple[int, str]]) -> list[tuple[int, str]]:
+        """Return a list of (team_id, display_name) with duplicate names disambiguated."""
+        if not teams:
+            return []
+        normalized: list[tuple[int, str]] = []
+        for idx, name in teams:
+            base = (name or f"Team {idx}").strip() or f"Team {idx}"
+            normalized.append((idx, base))
+        counts = Counter(base.lower() for _, base in normalized)
+        display_list: list[tuple[int, str]] = []
+        for idx, base in normalized:
+            display = base if counts[base.lower()] <= 1 else f"{base} (ID {idx})"
+            display_list.append((idx, display))
+        return display_list
+
+    def _build_team_list_from_players(self, players: list[Player]) -> list[tuple[int, str]]:
+        """Construct a team list using data available on the supplied players."""
+        entries: list[tuple[int, str]] = []
+        seen_ids: set[int] = set()
+        name_to_temp: dict[str, int] = {}
+        next_temp_id = -2
+        for player in players:
+            if player.team_id == FREE_AGENT_TEAM_ID:
+                if FREE_AGENT_TEAM_ID not in seen_ids:
+                    entries.append((FREE_AGENT_TEAM_ID, "Free Agents"))
+                    seen_ids.add(FREE_AGENT_TEAM_ID)
+            elif player.team_id is not None:
+                if player.team_id not in seen_ids:
+                    base = (player.team or f"Team {player.team_id}").strip() or f"Team {player.team_id}"
+                    entries.append((player.team_id, base))
+                    seen_ids.add(player.team_id)
+            else:
+                base = (player.team or "Unknown").strip() or "Unknown"
+                if base not in name_to_temp:
+                    while next_temp_id in seen_ids or next_temp_id == FREE_AGENT_TEAM_ID:
+                        next_temp_id -= 1
+                    temp_id = next_temp_id
+                    name_to_temp[base] = temp_id
+                    entries.append((temp_id, base))
+                    seen_ids.add(temp_id)
+                    next_temp_id -= 1
+        return self._build_team_display_list(entries)
+
+    def _apply_team_display_to_players(self, players: list[Player]) -> None:
+        """Update ``player.team`` to use the display names defined by ``team_list``."""
+        mapping = self._team_display_map()
+        for player in players:
+            if player.team_id == FREE_AGENT_TEAM_ID:
+                player.team = "Free Agents"
+            elif player.team_id is not None and player.team_id in mapping:
+                player.team = mapping[player.team_id]
+
+    def _ensure_team_entry(self, team_id: int, display_name: str, front: bool = False) -> None:
+        """Ensure ``team_list`` contains the provided entry."""
+        for idx, name in self.team_list:
+            if idx == team_id or name == display_name:
+                return
+        if front:
+            self.team_list.insert(0, (team_id, display_name))
+        else:
+            self.team_list.append((team_id, display_name))
+
+    def _team_display_map(self) -> dict[int, str]:
+        """Return a mapping of team_id to display name."""
+        return {idx: name for idx, name in self.team_list}
+
+    def _team_index_for_display_name(self, display_name: str) -> int | None:
+        """Resolve a display name back to its team index."""
+        for idx, name in self.team_list:
+            if name == display_name:
+                return idx
+        return None
+
+    def _get_team_display_name(self, team_idx: int) -> str:
+        """Return the display name for a team index."""
+        return self._team_display_map().get(team_idx, f"Team {team_idx}")
 
     def get_teams(self) -> list[str]:
         """Return the list of team names in a logical order.
@@ -2327,16 +2675,37 @@ class PlayerDataModel:
         against the distinct set of team names found in ``self.players``.
         """
         if self.team_list:
-            names = [name for _, name in self.team_list]
-            # Lowercase copies for testing membership
-            lower_names = [n.lower() for n in names]
-            free = [names[i] for i, ln in enumerate(lower_names) if 'free' in ln]
-            draft = [names[i] for i, ln in enumerate(lower_names) if 'draft' in ln]
-            all_time = [names[i] for i, ln in enumerate(lower_names) if 'all time' in ln or 'all-time' in ln]
-            g_league = [names[i] for i, ln in enumerate(lower_names) if 'gleague' in ln or 'g league' in ln or 'g-league' in ln]
-            assigned = set(free + draft + all_time + g_league)
-            base = [n for n in names if n not in assigned]
-            return free + draft + base + all_time + g_league
+            def _classify(entry: tuple[int, str]) -> str:
+                tid, name = entry
+                lname = name.lower()
+                if "all player" in lname:
+                    return "all_players"
+                if tid == FREE_AGENT_TEAM_ID or "free" in lname:
+                    return "free_agents"
+                if "draft" in lname:
+                    return "draft_class"
+                return "normal"
+            all_players: list[str] = []
+            free_agents: list[str] = []
+            draft_class: list[str] = []
+            remaining: list[tuple[int, str]] = []
+            for entry in self.team_list:
+                category = _classify(entry)
+                if category == "all_players":
+                    all_players.append(entry[1])
+                elif category == "free_agents":
+                    free_agents.append(entry[1])
+                elif category == "draft_class":
+                    draft_class.append(entry[1])
+                else:
+                    remaining.append(entry)
+            remaining_sorted = [name for _, name in sorted(remaining, key=lambda item: item[0])]
+            ordered: list[str] = []
+            ordered.extend(all_players)
+            ordered.extend(free_agents)
+            ordered.extend(draft_class)
+            ordered.extend(remaining_sorted)
+            return ordered
         # Offline fallback: derive categories from player team names
         names_set = {p.team for p in self.players}
         names = list(names_set)
@@ -2356,15 +2725,35 @@ class PlayerDataModel:
         """
         # Live memory mode: use team_list to find the index and scan players
         if self.team_list and not self.external_loaded:
+            team_idx = self._team_index_for_display_name(team)
             # If we are in fallback mode (scanned all players), filter from self.players
             if self.fallback_players:
+                if team_idx is not None:
+                    return [p for p in self.players if p.team_id == team_idx]
+                if team.lower() == "free agents":
+                    return [
+                        p for p in self.players
+                        if p.team_id == FREE_AGENT_TEAM_ID or p.team.lower() == "free agents"
+                    ]
                 return [p for p in self.players if p.team == team]
             # Otherwise, use roster pointers to scan players for the team
-            for idx, name in self.team_list:
-                if name == team:
-                    return self.scan_team_players(idx)
+            if team_idx is not None and team_idx >= 0:
+                return self.scan_team_players(team_idx)
+            if team_idx == FREE_AGENT_TEAM_ID:
+                return [
+                    p for p in self.players
+                    if p.team_id == FREE_AGENT_TEAM_ID or p.team.lower() == "free agents"
+                ]
             return []
-        # Offline or fallback mode: filter players by team name
+        # Offline or fallback mode: filter players by team name or ID if known
+        team_idx = self._team_index_for_display_name(team)
+        if team_idx is not None:
+            return [p for p in self.players if p.team_id == team_idx]
+        if team.lower() == "free agents":
+            return [
+                p for p in self.players
+                if p.team_id == FREE_AGENT_TEAM_ID or p.team.lower() == "free agents"
+            ]
         return [p for p in self.players if p.team == team]
     def update_player(self, player: Player) -> None:
         """Write changes to a player back to memory if connected."""
@@ -2377,8 +2766,8 @@ class PlayerDataModel:
             return
         p_addr = table_base + player.index * PLAYER_STRIDE
         # Write names (fixed length strings)
-        self.mem.write_wstring_fixed(p_addr + OFF_LAST_NAME, player.last_name, NAME_MAX_CHARS)
-        self.mem.write_wstring_fixed(p_addr + OFF_FIRST_NAME, player.first_name, NAME_MAX_CHARS)
+        self._write_string(p_addr + OFF_LAST_NAME, player.last_name, NAME_MAX_CHARS, LAST_NAME_ENCODING)
+        self._write_string(p_addr + OFF_FIRST_NAME, player.first_name, NAME_MAX_CHARS, FIRST_NAME_ENCODING)
     # ---------------------------------------------------------------------
     # Bulk copy operations
     # ---------------------------------------------------------------------
@@ -2539,6 +2928,34 @@ class PlayerEditorApp(tk.Tk):
         self.title("2K26 Offline Player Data Editor")
         self.geometry("1280x760")
         self.minsize(1024, 640)
+        self.style = ttk.Style(self)
+        try:
+            current_theme = self.style.theme_use()
+            self.style.theme_use(current_theme)
+        except Exception:
+            pass
+        try:
+            self.style.configure(
+                "App.TCombobox",
+                fieldbackground=INPUT_BG,
+                background=INPUT_BG,
+                foreground=TEXT_PRIMARY,
+                bordercolor=ACCENT_BG,
+                arrowcolor=TEXT_PRIMARY,
+            )
+        except tk.TclError:
+            self.style.configure(
+                "App.TCombobox",
+                fieldbackground=INPUT_BG,
+                background=INPUT_BG,
+                foreground=TEXT_PRIMARY,
+            )
+        self.style.map(
+            "App.TCombobox",
+            fieldbackground=[("readonly", INPUT_BG)],
+            foreground=[("readonly", TEXT_PRIMARY)],
+            arrowcolor=[("readonly", TEXT_PRIMARY)],
+        )
         # State variables
         self.selected_team: str | None = None
         self.selected_player: Player | None = None
@@ -2565,7 +2982,7 @@ class PlayerEditorApp(tk.Tk):
     # Sidebar and navigation
     # ---------------------------------------------------------------------
     def _build_sidebar(self):
-        self.sidebar = tk.Frame(self, width=200, bg="#2F3E46")
+        self.sidebar = tk.Frame(self, width=200, bg=PRIMARY_BG)
         self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
         self.sidebar.pack_propagate(False)
         # Buttons
@@ -2573,22 +2990,22 @@ class PlayerEditorApp(tk.Tk):
             self.sidebar,
             text="Home",
             command=self.show_home,
-            bg="#354F52",
-            fg="white",
+            bg=BUTTON_BG,
+            fg=BUTTON_TEXT,
             relief=tk.FLAT,
-            activebackground="#52796F",
-            activeforeground="white",
+            activebackground=BUTTON_ACTIVE_BG,
+            activeforeground=BUTTON_TEXT,
         )
         self.btn_home.pack(fill=tk.X, padx=10, pady=(20, 5))
         self.btn_players = tk.Button(
             self.sidebar,
             text="Players",
             command=self.show_players,
-            bg="#354F52",
-            fg="white",
+            bg=BUTTON_BG,
+            fg=BUTTON_TEXT,
             relief=tk.FLAT,
-            activebackground="#52796F",
-            activeforeground="white",
+            activebackground=BUTTON_ACTIVE_BG,
+            activeforeground=BUTTON_TEXT,
         )
         self.btn_players.pack(fill=tk.X, padx=10, pady=5)
         # Teams button
@@ -2596,11 +3013,11 @@ class PlayerEditorApp(tk.Tk):
             self.sidebar,
             text="Teams",
             command=self.show_teams,
-            bg="#354F52",
-            fg="white",
+            bg=BUTTON_BG,
+            fg=BUTTON_TEXT,
             relief=tk.FLAT,
-            activebackground="#52796F",
-            activeforeground="white",
+            activebackground=BUTTON_ACTIVE_BG,
+            activeforeground=BUTTON_TEXT,
         )
         self.btn_teams.pack(fill=tk.X, padx=10, pady=5)
         # Stadiums button (disabled for now).
@@ -2620,11 +3037,11 @@ class PlayerEditorApp(tk.Tk):
             self.sidebar,
             text="Randomize",
             command=self._open_randomizer,
-            bg="#354F52",
-            fg="white",
+            bg=BUTTON_BG,
+            fg=BUTTON_TEXT,
             relief=tk.FLAT,
-            activebackground="#52796F",
-            activeforeground="white",
+            activebackground=BUTTON_ACTIVE_BG,
+            activeforeground=BUTTON_TEXT,
         )
         self.btn_randomizer.pack(fill=tk.X, padx=10, pady=5)
         # 2K COY button
@@ -2639,15 +3056,15 @@ class PlayerEditorApp(tk.Tk):
             self.sidebar,
             text="2K COY",
             command=self._open_2kcoy,
-            bg="#354F52",
-            fg="white",
+            bg=BUTTON_BG,
+            fg=BUTTON_TEXT,
             relief=tk.FLAT,
-            activebackground="#52796F",
-            activeforeground="white",
+            activebackground=BUTTON_ACTIVE_BG,
+            activeforeground=BUTTON_TEXT,
         )
         self.btn_coy.pack(fill=tk.X, padx=10, pady=5)
         # Load Excel button
-        # This button imports player data from a user‑selected Excel workbook.
+        # This button imports player data from a user-selected Excel workbook.
         # It prompts the user to choose the workbook first, then asks which
         # categories (Attributes, Tendencies, Durability) should be applied.  A
         # loading dialog is displayed while processing to discourage
@@ -2656,11 +3073,11 @@ class PlayerEditorApp(tk.Tk):
             self.sidebar,
             text="Load Excel",
             command=self._open_load_excel,
-            bg="#354F52",
-            fg="white",
+            bg=BUTTON_BG,
+            fg=BUTTON_TEXT,
             relief=tk.FLAT,
-            activebackground="#52796F",
-            activeforeground="white",
+            activebackground=BUTTON_ACTIVE_BG,
+            activeforeground=BUTTON_TEXT,
         )
         self.btn_load_excel.pack(fill=tk.X, padx=10, pady=5)
         # Team Shuffle button
@@ -2668,11 +3085,11 @@ class PlayerEditorApp(tk.Tk):
             self.sidebar,
             text="Shuffle Teams",
             command=self._open_team_shuffle,
-            bg="#354F52",
-            fg="white",
+            bg=BUTTON_BG,
+            fg=BUTTON_TEXT,
             relief=tk.FLAT,
-            activebackground="#52796F",
-            activeforeground="white",
+            activebackground=BUTTON_ACTIVE_BG,
+            activeforeground=BUTTON_TEXT,
         )
         self.btn_shuffle.pack(fill=tk.X, padx=10, pady=5)
         # Batch Edit button
@@ -2680,55 +3097,57 @@ class PlayerEditorApp(tk.Tk):
             self.sidebar,
             text="Batch Edit",
             command=self._open_batch_edit,
-            bg="#354F52",
-            fg="white",
+            bg=BUTTON_BG,
+            fg=BUTTON_TEXT,
             relief=tk.FLAT,
-            activebackground="#52796F",
-            activeforeground="white",
+            activebackground=BUTTON_ACTIVE_BG,
+            activeforeground=BUTTON_TEXT,
         )
         self.btn_batch_edit.pack(fill=tk.X, padx=10, pady=5)
     # ---------------------------------------------------------------------
     # Home screen
     # ---------------------------------------------------------------------
     def _build_home_screen(self):
-        self.home_frame = tk.Frame(self, bg="#CAD2C5")
+        self.home_frame = tk.Frame(self, bg=PRIMARY_BG)
         # Title
         tk.Label(
             self.home_frame,
             text="2K26 Offline Player Editor",
             font=("Segoe UI", 20, "bold"),
-            bg="#CAD2C5",
-            fg="#2F3E46",
-        ).pack(pady=(40, 20))
+            bg=PRIMARY_BG,
+            fg=TEXT_PRIMARY,
+        ).pack(pady=(40, 10))
+        content = tk.Frame(self.home_frame, bg=PANEL_BG, padx=30, pady=25)
+        content.pack(pady=(0, 30), padx=40)
         # Status
         self.status_var = tk.StringVar()
         self.status_label = tk.Label(
-            self.home_frame,
+            content,
             textvariable=self.status_var,
             font=("Segoe UI", 12),
-            bg="#CAD2C5",
-            fg="#2F3E46",
+            bg=PANEL_BG,
+            fg=TEXT_PRIMARY,
         )
-        self.status_label.pack(pady=10)
+        self.status_label.pack(pady=(0, 15))
         # Refresh button
         tk.Button(
-            self.home_frame,
+            content,
             text="Refresh",
             command=self._update_status,
-            bg="#84A98C",
-            fg="white",
+            bg=BUTTON_BG,
+            fg=BUTTON_TEXT,
             relief=tk.FLAT,
-            activebackground="#52796F",
-            activeforeground="white",
-        ).pack(pady=5)
+            activebackground=BUTTON_ACTIVE_BG,
+            activeforeground=BUTTON_TEXT,
+        ).pack()
         # Version label
         tk.Label(
             self.home_frame,
             text=f"Version {APP_VERSION}",
             font=("Segoe UI", 9, "italic"),
-            bg="#CAD2C5",
-            fg="#52796F",
-        ).pack(side=tk.BOTTOM, pady=10)
+            bg=PRIMARY_BG,
+            fg=TEXT_SECONDARY,
+        ).pack(side=tk.BOTTOM, pady=20)
     # ---------------------------------------------------------------------
     # Players screen
     # ---------------------------------------------------------------------
@@ -2769,10 +3188,10 @@ class PlayerEditorApp(tk.Tk):
             text="Refresh",
             command=self._start_scan,
             bg="#778DA9",
-            fg="white",
+            fg=BUTTON_TEXT,
             relief=tk.FLAT,
             activebackground="#415A77",
-            activeforeground="white",
+            activeforeground=BUTTON_TEXT,
             padx=16,
             pady=4,
         )
@@ -2791,6 +3210,7 @@ class PlayerEditorApp(tk.Tk):
             values=["All Data"],
             state="readonly",
             width=15,
+            style="App.TCombobox",
         )
         dataset_combo.grid(row=0, column=4, padx=(8, 0), sticky="w")
         controls.columnconfigure(5, weight=1)
@@ -2815,6 +3235,7 @@ class PlayerEditorApp(tk.Tk):
             textvariable=self.team_var,
             state="readonly",
             width=25,
+            style="App.TCombobox",
         )
         self.team_dropdown.grid(row=1, column=1, padx=(8, 0), pady=(10, 0), sticky="w")
         self.team_dropdown.bind("<<ComboboxSelected>>", self._on_team_selected)
@@ -3450,13 +3871,18 @@ class PlayerEditorApp(tk.Tk):
     # ---------------------------------------------------------------------
     def _build_teams_screen(self):
         """Construct the Teams editing screen."""
-        self.teams_frame = tk.Frame(self, bg="#F5F5F5")
+        self.teams_frame = tk.Frame(self, bg=PANEL_BG)
         # Top bar with team selection
-        top = tk.Frame(self.teams_frame, bg="#F5F5F5")
+        top = tk.Frame(self.teams_frame, bg=PANEL_BG)
         top.pack(side=tk.TOP, fill=tk.X, pady=10, padx=10)
-        tk.Label(top, text="Team:", font=("Segoe UI", 12), bg="#F5F5F5", fg="#2F3E46").pack(side=tk.LEFT)
+        tk.Label(top, text="Team:", font=("Segoe UI", 12), bg=PANEL_BG, fg=TEXT_PRIMARY).pack(side=tk.LEFT)
         self.team_edit_var = tk.StringVar()
-        self.team_edit_dropdown = ttk.Combobox(top, textvariable=self.team_edit_var, state="readonly")
+        self.team_edit_dropdown = ttk.Combobox(
+            top,
+            textvariable=self.team_edit_var,
+            state="readonly",
+            style="App.TCombobox",
+        )
         self.team_edit_dropdown.bind("<<ComboboxSelected>>", self._on_team_edit_selected)
         self.team_edit_dropdown.pack(side=tk.LEFT, padx=5)
         # Scan status label for teams
@@ -3465,30 +3891,40 @@ class PlayerEditorApp(tk.Tk):
             top,
             textvariable=self.team_scan_status_var,
             font=("Segoe UI", 10, "italic"),
-            bg="#F5F5F5",
-            fg="#52796F",
+            bg=PANEL_BG,
+            fg=TEXT_SECONDARY,
         )
         self.team_scan_status_label.pack(side=tk.LEFT, padx=10)
         # Detail pane for team fields
-        detail = tk.Frame(self.teams_frame, bg="#FFFFFF", relief=tk.RIDGE, bd=1)
+        detail = tk.Frame(self.teams_frame, bg=PANEL_BG, relief=tk.FLAT, bd=0)
         detail.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         tk.Label(
             detail,
             text="Team Details",
             font=("Segoe UI", 14, "bold"),
-            bg="#FFFFFF",
-            fg="#2F3E46",
+            bg=PANEL_BG,
+            fg=TEXT_PRIMARY,
         ).pack(pady=(5, 10))
         # Form for each team field
         self.team_field_vars: Dict[str, tk.StringVar] = {}
-        form = tk.Frame(detail, bg="#FFFFFF")
+        form = tk.Frame(detail, bg=PANEL_BG)
         form.pack(fill=tk.X, padx=10, pady=5)
         row = 0
         if TEAM_FIELD_DEFS:
             for label in TEAM_FIELD_DEFS.keys():
-                tk.Label(form, text=f"{label}:", bg="#FFFFFF").grid(row=row, column=0, sticky=tk.W, pady=2)
+                tk.Label(form, text=f"{label}:", bg=PANEL_BG, fg=TEXT_SECONDARY).grid(row=row, column=0, sticky=tk.W, pady=2)
                 var = tk.StringVar()
-                entry = tk.Entry(form, textvariable=var)
+                entry = tk.Entry(
+                    form,
+                    textvariable=var,
+                    bg=INPUT_BG,
+                    fg=TEXT_PRIMARY,
+                    relief=tk.FLAT,
+                    insertbackground=TEXT_PRIMARY,
+                    highlightthickness=1,
+                    highlightbackground=ACCENT_BG,
+                    highlightcolor=ACCENT_BG,
+                )
                 entry.grid(row=row, column=1, sticky=tk.EW, padx=5, pady=2)
                 self.team_field_vars[label] = var
                 row += 1
@@ -3497,28 +3933,34 @@ class PlayerEditorApp(tk.Tk):
             tk.Label(
                 form,
                 text="No team field offsets found. Update 2K26_Offsets.json to enable editing.",
-                bg="#FFFFFF",
+                bg=PANEL_BG,
                 fg="#B0413E",
                 wraplength=360,
                 justify=tk.LEFT,
             ).pack(anchor=tk.W, pady=4)
-        players_section = tk.Frame(detail, bg="#FFFFFF")
+        players_section = tk.Frame(detail, bg=PANEL_BG)
         players_section.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 5))
         tk.Label(
             players_section,
             text="Team Players",
             font=("Segoe UI", 12, "bold"),
-            bg="#FFFFFF",
-            fg="#2F3E46",
+            bg=PANEL_BG,
+            fg=TEXT_PRIMARY,
         ).pack(anchor=tk.W)
-        list_container = tk.Frame(players_section, bg="#FFFFFF")
+        list_container = tk.Frame(players_section, bg=PANEL_BG)
         list_container.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
         scrollbar = tk.Scrollbar(list_container, orient="vertical")
         self.team_players_listbox = tk.Listbox(
             list_container,
             height=12,
             yscrollcommand=scrollbar.set,
-            bg="#FFFFFF",
+            bg=INPUT_BG,
+            fg=TEXT_PRIMARY,
+            selectbackground=ACCENT_BG,
+            selectforeground=TEXT_PRIMARY,
+            relief=tk.FLAT,
+            borderwidth=0,
+            highlightthickness=0,
         )
         self.team_players_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.config(command=self.team_players_listbox.yview)
@@ -3530,8 +3972,10 @@ class PlayerEditorApp(tk.Tk):
             detail,
             text="Save",
             command=self._save_team,
-            bg="#84A98C",
-            fg="white",
+            bg=BUTTON_BG,
+            fg=TEXT_PRIMARY,
+            activebackground=BUTTON_ACTIVE_BG,
+            activeforeground=TEXT_PRIMARY,
             relief=tk.FLAT,
             state=tk.DISABLED,
         )
@@ -3570,13 +4014,15 @@ class PlayerEditorApp(tk.Tk):
             return
         # Find team index
         teams = self.model.get_teams()
-        try:
-            idx = teams.index(team_name)
-        except ValueError:
-            self.btn_team_save.config(state=tk.DISABLED)
-            self._update_team_players(None)
-            return
-        fields = self.model.get_team_fields(idx)
+        team_idx = self.model._team_index_for_display_name(team_name)
+        if team_idx is None:
+            try:
+                team_idx = teams.index(team_name)
+            except ValueError:
+                self.btn_team_save.config(state=tk.DISABLED)
+                self._update_team_players(None)
+                return
+        fields = self.model.get_team_fields(team_idx)
         if fields is None:
             # Not connected or cannot read
             for var in self.team_field_vars.values():
@@ -3588,7 +4034,7 @@ class PlayerEditorApp(tk.Tk):
         for label, var in self.team_field_vars.items():
             val = fields.get(label, "")
             var.set(val)
-        self._update_team_players(idx)
+        self._update_team_players(team_idx)
         # Enable save if process open
         self.btn_team_save.config(state=tk.NORMAL if self.model.mem.hproc else tk.DISABLED)
     def _save_team(self):
@@ -3597,12 +4043,14 @@ class PlayerEditorApp(tk.Tk):
         if not team_name:
             return
         teams = self.model.get_teams()
-        try:
-            idx = teams.index(team_name)
-        except ValueError:
-            return
+        team_idx = self.model._team_index_for_display_name(team_name)
+        if team_idx is None:
+            try:
+                team_idx = teams.index(team_name)
+            except ValueError:
+                return
         values = {label: var.get() for label, var in self.team_field_vars.items()}
-        ok = self.model.set_team_fields(idx, values)
+        ok = self.model.set_team_fields(team_idx, values)
         if ok:
             messagebox.showinfo("Success", f"Updated {team_name} successfully.")
             # Refresh team list to reflect potential name change
@@ -3610,9 +4058,11 @@ class PlayerEditorApp(tk.Tk):
             teams = self.model.get_teams()
             self._update_team_dropdown(teams)
             # Reselect the updated team name if changed
-            if values.get("Team Name"):
-                self.team_edit_var.set(values.get("Team Name"))
-            self._update_team_players(idx)
+            new_name = values.get("Team Name")
+            if new_name:
+                self.team_edit_var.set(new_name)
+            self._update_team_players(team_idx)
+            return
         else:
             messagebox.showerror("Error", "Failed to write team data. Make sure the game is running and try again.")
 
@@ -3994,6 +4444,47 @@ class FullPlayerEditor(tk.Toplevel):
         self.title(f"Editing: {player.full_name}")
         # Dimensions: slightly larger for many fields
         self.geometry("700x500")
+        self.configure(bg=PANEL_BG)
+        style = ttk.Style(self)
+        try:
+            current_theme = style.theme_use()
+            style.theme_use(current_theme)
+        except Exception:
+            pass
+        style.configure("FullEditor.TNotebook", background=PANEL_BG, borderwidth=0)
+        style.configure(
+            "FullEditor.TNotebook.Tab",
+            background=PANEL_BG,
+            foreground=TEXT_SECONDARY,
+            padding=(12, 6),
+        )
+        style.map(
+            "FullEditor.TNotebook.Tab",
+            background=[("selected", BUTTON_BG), ("active", ACCENT_BG)],
+            foreground=[("selected", TEXT_PRIMARY), ("active", TEXT_PRIMARY)],
+        )
+        style.configure("FullEditor.TFrame", background=PANEL_BG)
+        try:
+            style.configure(
+                "FullEditor.TCombobox",
+                fieldbackground=INPUT_BG,
+                background=INPUT_BG,
+                foreground=TEXT_PRIMARY,
+                bordercolor=ACCENT_BG,
+                arrowcolor=TEXT_PRIMARY,
+            )
+        except tk.TclError:
+            style.configure(
+                "FullEditor.TCombobox",
+                fieldbackground=INPUT_BG,
+                background=INPUT_BG,
+                foreground=TEXT_PRIMARY,
+            )
+        style.map(
+            "FullEditor.TCombobox",
+            fieldbackground=[("readonly", INPUT_BG)],
+            foreground=[("readonly", TEXT_PRIMARY)],
+        )
         # Dictionary mapping category names to a mapping of field names to
         # Tkinter variables.  This allows us to load and save values easily.
         self.field_vars: dict[str, dict[str, tk.Variable]] = {}
@@ -4004,7 +4495,7 @@ class FullPlayerEditor(tk.Toplevel):
         # Dictionary to hold Spinbox widgets for each field.  The key is
         # (category_name, field_name) and the value is the Spinbox
         # instance.  Storing these allows us to compute min/max values
-        # dynamically based on the widget’s configuration (e.g. range)
+        # dynamically based on the widget's configuration (e.g. range)
         # when adjusting entire categories via buttons.
         self.spin_widgets: dict[tuple[str, str], tk.Spinbox] = {}
         # Track fields edited since last save
@@ -4012,7 +4503,7 @@ class FullPlayerEditor(tk.Toplevel):
         # Suppress change-trace callbacks while populating initial values
         self._initializing = True
         # Notebook for category tabs
-        notebook = ttk.Notebook(self)
+        notebook = ttk.Notebook(self, style="FullEditor.TNotebook")
         notebook.pack(fill=tk.BOTH, expand=True)
         # Determine which categories are available from the model.  If
         # categories are missing, we still display the tab with a placeholder.
@@ -4032,18 +4523,20 @@ class FullPlayerEditor(tk.Toplevel):
             if name not in categories:
                 categories.append(name)
         for cat in categories:
-            frame = tk.Frame(notebook, bg="#F5F5F5")
+            frame = tk.Frame(notebook, bg=PANEL_BG, highlightthickness=0, bd=0)
             notebook.add(frame, text=cat)
             self._build_category_tab(frame, cat)
         # Action buttons at bottom
-        btn_frame = tk.Frame(self, bg="#F5F5F5")
+        btn_frame = tk.Frame(self, bg=PANEL_BG)
         btn_frame.pack(fill=tk.X, pady=5)
         save_btn = tk.Button(
             btn_frame,
             text="Save",
             command=self._save_all,
-            bg="#84A98C",
-            fg="white",
+            bg=BUTTON_BG,
+            fg=BUTTON_TEXT,
+            activebackground=BUTTON_ACTIVE_BG,
+            activeforeground=BUTTON_TEXT,
             relief=tk.FLAT,
         )
         save_btn.pack(side=tk.LEFT, padx=10)
@@ -4053,6 +4546,8 @@ class FullPlayerEditor(tk.Toplevel):
             command=self.destroy,
             bg="#B0413E",
             fg="white",
+            activebackground="#8D2C29",
+            activeforeground="white",
             relief=tk.FLAT,
         )
         close_btn.pack(side=tk.LEFT)
@@ -4068,7 +4563,7 @@ class FullPlayerEditor(tk.Toplevel):
         fields = self.model.categories.get(category_name, [])
         # Add category-level adjustment buttons for Attributes, Durability, and Tendencies
         if category_name in ("Attributes", "Durability", "Tendencies"):
-            btn_frame = tk.Frame(parent, bg="#F5F5F5")
+            btn_frame = tk.Frame(parent, bg=PANEL_BG)
             btn_frame.pack(fill=tk.X, padx=10, pady=(5))
             actions = [
                 ("Min", "min"),
@@ -4083,20 +4578,26 @@ class FullPlayerEditor(tk.Toplevel):
                     btn_frame,
                     text=label,
                     command=lambda act=action, cat=category_name: self._adjust_category(cat, act),
-                    bg="#52796F",
-                    fg="white",
+                    bg=BUTTON_BG,
+                    fg=BUTTON_TEXT,
+                    activebackground=BUTTON_ACTIVE_BG,
+                    activeforeground=BUTTON_TEXT,
                     relief=tk.FLAT,
                     width=5,
                 ).pack(side=tk.LEFT, padx=2)
         # Container for scrolled view if many fields
-        canvas = tk.Canvas(parent, bg="#F5F5F5", highlightthickness=0)
+        canvas = tk.Canvas(parent, bg=PANEL_BG, highlightthickness=0, bd=0)
         scrollbar = tk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        scroll_frame = tk.Frame(canvas, bg="#F5F5F5")
+        try:
+            scrollbar.configure(bg=PANEL_BG, troughcolor=PANEL_BG, activebackground=ACCENT_BG)
+        except tk.TclError:
+            pass
+        scroll_frame = tk.Frame(canvas, bg=PANEL_BG)
         scroll_frame.bind(
             "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
         canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.configure(yscrollcommand=scrollbar.set, bg=PANEL_BG)
         # Pack canvas and scrollbar
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -4107,8 +4608,8 @@ class FullPlayerEditor(tk.Toplevel):
             tk.Label(
                 scroll_frame,
                 text=f"{category_name} editing not available.",
-                bg="#F5F5F5",
-                fg="#6C757D",
+                bg=PANEL_BG,
+                fg=TEXT_SECONDARY,
             ).pack(padx=10, pady=10)
             return
         # Build rows for each field
@@ -4120,7 +4621,7 @@ class FullPlayerEditor(tk.Toplevel):
             requires_deref = bool(field.get("requiresDereference") or field.get("requires_deref"))
             deref_offset = _to_int(field.get("dereferenceAddress") or field.get("deref_offset"))
             # Label
-            lbl = tk.Label(scroll_frame, text=name + ":", bg="#F5F5F5")
+            lbl = tk.Label(scroll_frame, text=name + ":", bg=PANEL_BG, fg=TEXT_PRIMARY)
             lbl.grid(row=row, column=0, sticky=tk.W, padx=(10, 5), pady=2)
             # Variable and spinbox
             var = tk.IntVar(value=0)
@@ -4161,6 +4662,7 @@ class FullPlayerEditor(tk.Toplevel):
                     values=values_list,
                     state="readonly",
                     width=16,
+                    style="FullEditor.TCombobox",
                 )
                 combo.grid(row=row, column=1, sticky=tk.W, padx=(0, 10), pady=2)
                 # When user picks an entry, update the IntVar accordingly
@@ -4198,6 +4700,7 @@ class FullPlayerEditor(tk.Toplevel):
                     values=BADGE_LEVEL_NAMES,
                     state="readonly",
                     width=12,
+                    style="FullEditor.TCombobox",
                 )
                 combo.grid(row=row, column=1, sticky=tk.W, padx=(0, 10), pady=2)
                 # When the user picks a level, update the IntVar
@@ -4230,8 +4733,15 @@ class FullPlayerEditor(tk.Toplevel):
                     to=spin_to,
                     textvariable=var,
                     width=10,
+                    bg=INPUT_BG,
+                    fg=TEXT_PRIMARY,
+                    highlightbackground=ACCENT_BG,
+                    highlightthickness=1,
+                    relief=tk.FLAT,
+                    insertbackground=TEXT_PRIMARY,
                 )
                 spin.grid(row=row, column=1, sticky=tk.W, padx=(0, 10), pady=2)
+                spin.configure(selectbackground=ACCENT_BG, selectforeground=TEXT_PRIMARY)
                 # Store variable by name for this category
                 self.field_vars[category_name][name] = var
                 # Record metadata keyed by (category, field_name)
@@ -4782,9 +5292,11 @@ class TeamShuffleWindow(tk.Toplevel):
         if not players_to_pool:
             mb.showinfo("Shuffle Teams", "No players to shuffle.")
             return
+        name_to_idx = {name: idx for idx, name in self.model.team_list}
+        free_agent_idx = name_to_idx.get("Free Agents", FREE_AGENT_TEAM_ID)
         # Determine whether we are in live memory mode.  Shuffling in
         # live memory writes directly to the game process; offline mode
-        # simply updates the in‑memory roster representation.
+        # simply updates the in-memory roster representation.
         live_mode = not self.model.external_loaded and not self.model.fallback_players
         total_assigned = 0
         if live_mode:
@@ -4814,6 +5326,7 @@ class TeamShuffleWindow(tk.Toplevel):
                     p_addr = player_base + p.index * PLAYER_STRIDE
                     self.model.mem.write_bytes(p_addr + OFF_TEAM_PTR, struct.pack('<Q', free_ptr))
                     p.team = "Free Agents"
+                    p.team_id = free_agent_idx
                 except Exception:
                     # Ignore write failures for individual players
                     pass
@@ -4834,6 +5347,7 @@ class TeamShuffleWindow(tk.Toplevel):
                         p_addr = player_base + player.index * PLAYER_STRIDE
                         self.model.mem.write_bytes(p_addr + OFF_TEAM_PTR, struct.pack('<Q', ptr))
                         player.team = team
+                        player.team_id = name_to_idx.get(team, player.team_id)
                         total_assigned += 1
                     except Exception:
                         pass
@@ -4847,6 +5361,7 @@ class TeamShuffleWindow(tk.Toplevel):
             # Dump all selected players to Free Agents
             for p in players_to_pool:
                 p.team = "Free Agents"
+                p.team_id = free_agent_idx
             # Shuffle the pool and assign 15 players back to each team
             _random.shuffle(players_to_pool)
             pos = 0
@@ -4857,6 +5372,7 @@ class TeamShuffleWindow(tk.Toplevel):
                     p = players_to_pool[pos]
                     pos += 1
                     p.team = team
+                    p.team_id = name_to_idx.get(team, p.team_id)
                     total_assigned += 1
             # Rebuild the name index map after offline changes
             self.model._build_name_index_map()
@@ -5182,3 +5698,6 @@ def main() -> None:
     app.mainloop()
 if __name__ == '__main__':
     main()
+
+
+
