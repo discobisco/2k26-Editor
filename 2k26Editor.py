@@ -5427,7 +5427,7 @@ class FullPlayerEditor(tk.Toplevel):
                 # Tendencies are displayed on a 0-100 scale
                 spin_from = 0
                 spin_to = 100
-            elif field_name.lower() == "height":
+            elif name.lower() == "height":
                 spin_from = HEIGHT_MIN_INCHES
                 spin_to = HEIGHT_MAX_INCHES
             else:
