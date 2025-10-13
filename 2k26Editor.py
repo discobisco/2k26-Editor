@@ -1,40 +1,59 @@
 """
-2K26 Offline Player Patcher GUI
---------------------------------
-This script implements a simple offline editor for NBA 2K26 player data.  It
-leverages Windows API calls via `ctypes` to locate the running game,
-enumerate player records in memory and edit all fields off of
-an offset json.
-**Disclaimer**: This tool is intended for offline use only.  EAC will kick you from game
-if ran together!
-Example usage:
-```cmd
-python 2k25_player_patcher_gui.py
-```
-You will be presented with a window containing a side bar with “Home” and
-“Players” options.  The Home page displays whether NBA 2K26 is currently
-running and the application version.  The Players page scans for players
-in memory (or loads them from files if the game is not running), groups
-them by team and allows editing of names and core attributes.  A full editor
-window with placeholder tabs is available for future extensions.
+NBA 2K26 Live Memory Editor
+---------------------------
+This tool attaches to a running ``NBA2K26.exe`` process and uses the offsets
+declared in ``2K26_Offsets.json`` to read, validate, and update roster data
+directly in memory. Every read/write is persisted to ``logs/memory.log`` for
+traceability. The editor requires the game to be running locally; no offline
+fallbacks or synthetic data sources are used.
 """
 import os
 import sys
 import threading
 import struct
 import ctypes
+import logging
+import time
 from ctypes import wintypes
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
-from typing import Dict
+from typing import Dict, Sequence, Callable
 import random
 import tempfile
 import urllib.request
 import urllib.parse
 import io
 import json
+import re
 from pathlib import Path
 from collections import Counter
+# -----------------------------------------------------------------------------
+# Exceptions
+# -----------------------------------------------------------------------------
+class OffsetSchemaError(RuntimeError):
+    """Raised when 2K26_Offsets.json is missing required definitions."""
+
+# -----------------------------------------------------------------------------
+# Memory logging
+# -----------------------------------------------------------------------------
+def _init_memory_logger() -> logging.Logger:
+    logger = logging.getLogger("nba2k26.memory")
+    if logger.handlers:
+        return logger
+    log_dir = Path(__file__).resolve().parent / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "memory.log"
+    handler = logging.FileHandler(log_path, encoding="utf-8")
+    formatter = logging.Formatter("%(asctime)sZ | %(levelname)s | %(message)s", "%Y-%m-%dT%H:%M:%S")
+    formatter.converter = time.gmtime  # type: ignore[assignment]
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    return logger
+
+MEMORY_LOGGER = _init_memory_logger()
+
 # -----------------------------------------------------------------------------
 # Offset loading system for 2K26
 # -----------------------------------------------------------------------------
@@ -91,6 +110,7 @@ COY_SHEET_TABS: dict[str, str] = {
     "Attributes": "Attributes",
     "Tendencies": "TEND",
     "Durability": "Durabilities",
+    "Potential": "Potential",
 }
 # -----------------------------------------------------------------------------
 # Rating scaling constants
@@ -212,6 +232,34 @@ def write_weight(mem, addr: int, val: float) -> bool:
         return True
     except Exception:
         return False
+# -----------------------------------------------------------------------------
+# Height conversion helpers (player record stores total inches * 254)
+HEIGHT_UNIT_SCALE = 254
+HEIGHT_MIN_INCHES = 48   # 4'0"
+HEIGHT_MAX_INCHES = 120  # 10'0"
+
+def raw_height_to_inches(raw_val: int) -> int:
+    try:
+        inches = int(round(int(raw_val) / HEIGHT_UNIT_SCALE))
+    except Exception:
+        inches = 0
+    return max(0, inches)
+
+def height_inches_to_raw(inches: int) -> int:
+    try:
+        raw_val = int(round(int(inches) * HEIGHT_UNIT_SCALE))
+    except Exception:
+        raw_val = 0
+    return max(0, raw_val)
+
+def format_height_inches(inches: int) -> str:
+    try:
+        inches = int(inches)
+    except Exception:
+        return "--"
+    feet = inches // 12
+    remainder = inches % 12
+    return f"{feet}'{remainder}\""
 # -----------------------------------------------------------------------------
 # Tendency conversion helpers
 #
@@ -353,6 +401,38 @@ def _find_offset_entry(name: str, category: str | None = None) -> dict | None:
             return entry
     return None
 
+
+def _collect_player_info_entries(player_info: object) -> list[dict]:
+    """Convert nested Player_Info definitions into flat offset entries."""
+    entries: list[dict] = []
+    if not isinstance(player_info, dict):
+        return entries
+    for category, fields in player_info.items():
+        if not isinstance(fields, dict):
+            continue
+        category_name = str(category)
+        for name, definition in fields.items():
+            if not isinstance(definition, dict):
+                continue
+            entry: dict[str, object] = {
+                "category": category_name,
+                "name": str(name),
+            }
+            # Carry over all fields, normalising offset/length keys for legacy logic.
+            for key, value in definition.items():
+                if key == "offset_from_base":
+                    if not entry.get("address"):
+                        entry["address"] = value
+                else:
+                    entry[key] = value
+            if "address" not in entry and "offset_from_base" in definition:
+                entry["address"] = definition["offset_from_base"]
+            if "length" not in entry and "size" in definition:
+                entry["length"] = definition["size"]
+            entries.append(entry)
+    return entries
+
+
 def _normalize_chain_steps(chain_data: object) -> list[dict[str, object]]:
     steps: list[dict[str, object]] = []
     if not isinstance(chain_data, list):
@@ -446,120 +526,171 @@ def _apply_offset_config(data: dict | None) -> None:
     global TEAM_STRIDE, TEAM_NAME_OFFSET, TEAM_NAME_LENGTH, TEAM_PLAYER_SLOT_COUNT
     global TEAM_PTR_CHAINS, TEAM_RECORD_SIZE, TEAM_FIELD_DEFS
     if not data:
-        print("Warning: no 2K26 offset configuration found.")
-        return
+        raise OffsetSchemaError("2K26_Offsets.json is missing or empty.")
     combined_offsets: list[dict] = []
     offsets = data.get("offsets")
     if isinstance(offsets, list):
         combined_offsets.extend(offsets)
+    player_info_entries = _collect_player_info_entries(data.get("Player_Info"))
+    if player_info_entries:
+        combined_offsets.extend(player_info_entries)
     team_offsets = data.get("Teams") or data.get("team_offsets")
     if isinstance(team_offsets, list):
         combined_offsets.extend(team_offsets)
-    if combined_offsets:
-        _build_offset_index(combined_offsets)
-    else:
+    if not combined_offsets:
         _offset_index.clear()
+        raise OffsetSchemaError("No offsets defined in 2K26_Offsets.json.")
+    _build_offset_index(combined_offsets)
+    errors: list[str] = []
     game_info = data.get("game_info") or {}
     if game_info.get("executable"):
         MODULE_NAME = str(game_info["executable"])
-    if "playerSize" in game_info:
-        PLAYER_STRIDE = _to_int(game_info["playerSize"])
-    if "teamSize" in game_info:
-        TEAM_STRIDE = _to_int(game_info["teamSize"])
+    player_stride_val = _to_int(game_info.get("playerSize"))
+    if player_stride_val <= 0:
+        errors.append("game_info.playerSize must be a positive integer.")
+    else:
+        PLAYER_STRIDE = player_stride_val
+    team_stride_val = _to_int(game_info.get("teamSize"))
+    if team_stride_val <= 0:
+        errors.append("game_info.teamSize must be a positive integer.")
+    else:
+        TEAM_STRIDE = team_stride_val
         TEAM_RECORD_SIZE = TEAM_STRIDE
     base_pointers = data.get("base_pointers") or {}
     PLAYER_PTR_CHAINS.clear()
     player_base = base_pointers.get("Player")
-    if isinstance(player_base, dict):
+    if not isinstance(player_base, dict):
+        errors.append("base_pointers.Player definition missing.")
+    else:
         addr = _to_int(player_base.get("address") or player_base.get("rva") or player_base.get("base"))
-        if addr:
+        if addr <= 0:
+            errors.append("base_pointers.Player.address must be non-zero.")
+        else:
             PLAYER_TABLE_RVA = addr
-        PLAYER_PTR_CHAINS.extend(_parse_pointer_chain_config(player_base))
+        chains = _parse_pointer_chain_config(player_base)
+        if chains:
+            PLAYER_PTR_CHAINS.extend(chains)
+        else:
+            errors.append("base_pointers.Player.chain produced no resolvable entries.")
     TEAM_PTR_CHAINS.clear()
     team_base = base_pointers.get("Team")
-    if isinstance(team_base, dict):
-        TEAM_PTR_CHAINS.extend(_parse_pointer_chain_config(team_base))
-    name_char_limit = max(1, NAME_MAX_CHARS)
+    if not isinstance(team_base, dict):
+        errors.append("base_pointers.Team definition missing.")
+    else:
+        chains = _parse_pointer_chain_config(team_base)
+        if chains:
+            TEAM_PTR_CHAINS.extend(chains)
+        else:
+            errors.append("base_pointers.Team.chain produced no resolvable entries.")
+    name_char_limit: int | None = None
     first_entry = _find_offset_entry("First Name", "Vitals")
-    if first_entry:
+    if not first_entry:
+        errors.append("Player_Info.Vitals.First Name entry missing.")
+    else:
         OFF_FIRST_NAME = _to_int(first_entry.get("address"))
+        if OFF_FIRST_NAME < 0:
+            errors.append("First Name address must be zero or positive.")
         first_type = str(first_entry.get("type", "")).lower()
         FIRST_NAME_ENCODING = "ascii" if first_type in ("string", "text") else "utf16"
         length_val = _to_int(first_entry.get("length"))
-        if length_val:
-            if FIRST_NAME_ENCODING == "utf16":
-                char_count = max(1, length_val // 2)
-            else:
-                char_count = max(1, length_val)
-            name_char_limit = max(name_char_limit, char_count)
-    else:
-        FIRST_NAME_ENCODING = "utf16"
+        char_capacity: int | None = None
+        if length_val <= 0:
+            errors.append("First Name length must be positive.")
+        elif FIRST_NAME_ENCODING == "utf16" and length_val % 2 != 0:
+            errors.append("First Name length must be even for UTF-16 data.")
+        else:
+            char_capacity = length_val // 2 if FIRST_NAME_ENCODING == "utf16" else length_val
+            if char_capacity <= 0:
+                errors.append("First Name character capacity must be positive.")
+        if char_capacity is not None:
+            name_char_limit = char_capacity if name_char_limit is None else max(name_char_limit, char_capacity)
     last_entry = _find_offset_entry("Last Name", "Vitals")
-    if last_entry:
+    if not last_entry:
+        errors.append("Player_Info.Vitals.Last Name entry missing.")
+    else:
         OFF_LAST_NAME = _to_int(last_entry.get("address"))
+        if OFF_LAST_NAME < 0:
+            errors.append("Last Name address must be zero or positive.")
         last_type = str(last_entry.get("type", "")).lower()
         LAST_NAME_ENCODING = "ascii" if last_type in ("string", "text") else "utf16"
         length_val = _to_int(last_entry.get("length"))
-        if length_val:
-            if LAST_NAME_ENCODING == "utf16":
-                char_count = max(1, length_val // 2)
-            else:
-                char_count = max(1, length_val)
-            name_char_limit = max(name_char_limit, char_count)
+        char_capacity = None
+        if length_val <= 0:
+            errors.append("Last Name length must be positive.")
+        elif LAST_NAME_ENCODING == "utf16" and length_val % 2 != 0:
+            errors.append("Last Name length must be even for UTF-16 data.")
+        else:
+            char_capacity = length_val // 2 if LAST_NAME_ENCODING == "utf16" else length_val
+            if char_capacity <= 0:
+                errors.append("Last Name character capacity must be positive.")
+        if char_capacity is not None:
+            name_char_limit = char_capacity if name_char_limit is None else max(name_char_limit, char_capacity)
+    if name_char_limit is None:
+        errors.append("Unable to determine name character limit from schema.")
     else:
-        LAST_NAME_ENCODING = "utf16"
-    NAME_MAX_CHARS = name_char_limit
+        NAME_MAX_CHARS = name_char_limit
     team_entry = _find_offset_entry("Current Team", "Vitals")
-    if team_entry:
-        OFF_TEAM_PTR = _to_int(team_entry.get("dereferenceAddress"))
-    elif OFF_TEAM_PTR == 0:
-        print("Warning: Team pointer offset not provided in 2K26_Offsets.json.")
+    if not team_entry:
+        errors.append("Player_Info.Vitals.Current Team entry missing.")
+    else:
+        OFF_TEAM_PTR = _to_int(
+            team_entry.get("dereferenceAddress")
+            or team_entry.get("deref_offset")
+            or team_entry.get("dereference_address")
+        )
+        if OFF_TEAM_PTR < 0:
+            errors.append("Current Team dereference address must be zero or positive.")
     team_name_entry = _find_offset_entry("Team Name", "Teams")
-    if team_name_entry:
+    if not team_name_entry:
+        errors.append("Teams.Team Name entry missing.")
+    else:
         TEAM_NAME_OFFSET = _to_int(team_name_entry.get("address"))
+        if TEAM_NAME_OFFSET < 0:
+            errors.append("Team Name address must be zero or positive.")
         team_type = str(team_name_entry.get("type", "")).lower()
         TEAM_NAME_ENCODING = "ascii" if team_type in ("string", "text") else "utf16"
-        length_val = _to_int(team_name_entry.get("length"))
-        if length_val:
-            TEAM_NAME_LENGTH = max(1, length_val)
+        TEAM_NAME_LENGTH = _to_int(team_name_entry.get("length"))
+        if TEAM_NAME_LENGTH <= 0:
+            errors.append("Team Name length must be positive.")
         OFF_TEAM_NAME = TEAM_NAME_OFFSET
-    else:
-        TEAM_NAME_ENCODING = "utf16"
-    if TEAM_NAME_LENGTH <= 0:
-        TEAM_NAME_LENGTH = 24
     team_player_entries = [
         entry for (cat, _), entry in _offset_index.items() if cat == "team players"
     ]
-    if team_player_entries:
-        TEAM_PLAYER_SLOT_COUNT = max(TEAM_PLAYER_SLOT_COUNT, len(team_player_entries))
+    if not team_player_entries:
+        errors.append("No Team Players entries found in schema.")
+    else:
+        TEAM_PLAYER_SLOT_COUNT = len(team_player_entries)
     TEAM_FIELD_DEFS.clear()
     for label, entry_name in TEAM_FIELD_SPECS:
         entry = _find_offset_entry(entry_name, "Teams")
         if not entry:
             continue
         offset = _to_int(entry.get("address"))
-        length_val = _to_int(entry.get("length", 0))
+        length_val = _to_int(entry.get("length"))
         entry_type = str(entry.get("type", "")).lower()
-        if offset is None or offset == 0:
-            continue
-        if length_val <= 0:
+        if offset <= 0 or length_val <= 0:
             continue
         if entry_type not in ("wstring", "string", "text"):
             continue
         encoding = "ascii" if entry_type in ("string", "text") else "utf16"
         TEAM_FIELD_DEFS[label] = (offset, length_val, encoding)
-    if TEAM_STRIDE:
+    if TEAM_STRIDE > 0:
         TEAM_RECORD_SIZE = TEAM_STRIDE
-def initialize_offsets(force: bool = False) -> bool:
-    """Ensure offset data is loaded; returns True on success."""
+    if errors:
+        raise OffsetSchemaError(" ; ".join(errors))
+
+def initialize_offsets(force: bool = False) -> None:
+    """Ensure offset data is loaded; raises OffsetSchemaError on failure."""
     global _offset_file_path, _offset_config
     if _offset_config is not None and not force:
-        return True
+        return
     path, data = _load_offset_config_file()
+    if data is None:
+        searched = ", ".join(OFFSET_FILE_CANDIDATES)
+        raise OffsetSchemaError(f"Unable to locate 2K26 offset schema. Looked for: {searched}")
     _offset_file_path = path
     _offset_config = data
     _apply_offset_config(data)
-    return data is not None
 # -----------------------------------------------------------------------------
 # Team metadata (loaded from offsets)
 # -----------------------------------------------------------------------------
@@ -570,6 +701,16 @@ TEAM_FIELD_SPECS: tuple[tuple[str, str], ...] = (
 )
 TEAM_FIELD_DEFS: dict[str, tuple[int, int, str]] = {}
 TEAM_RECORD_SIZE = TEAM_STRIDE
+# Player detail panel field mapping
+PLAYER_PANEL_FIELDS: tuple[tuple[str, str, str], ...] = (
+    ("Position", "Vitals", "Position"),
+    ("Number", "Vitals", "Jersey Number"),
+    ("Height", "Body", "Height"),
+    ("Weight", "Body", "Weight"),
+    ("Face ID", "Vitals", "Face ID"),
+    ("Unique ID", "Vitals", "Player Unique Signature ID"),
+)
+PLAYER_PANEL_OVR_FIELD: tuple[str, str] = ("Attributes", "Overall")
 # -----------------------------------------------------------------------------
 # Unified offsets support
 # -----------------------------------------------------------------------------
@@ -592,8 +733,8 @@ UNIFIED_FILES = (
 #
 # The application supports importing player data from tab- or comma-delimited
 # text files.  To align the UI with commonly used spreadsheets, we define
-# canonical field orders for three tables: Attributes, Tendencies and
-# Durability.  These lists specify the order in which fields should appear
+# canonical field orders for four tables: Attributes, Tendencies, Durability and
+# Potential.  These lists specify the order in which fields should appear
 # in the editor and the import files.  When loading the category definitions
 # from a unified offsets file, the ``_load_categories`` helper
 # reorders the fields to match these lists (where possible).  Unmatched
@@ -662,6 +803,67 @@ DUR_IMPORT_ORDER = [
     "Right Shoulder",
     "miscellaneous",
 ]
+# Order for the Potential table.  These display names correspond to the
+# trio of potential-related ratings used during imports.
+POTENTIAL_IMPORT_ORDER = [
+    "Minimum Potential",
+    "Potential",
+    "Maximum Potential",
+]
+
+
+def _col_to_index(col: str) -> int:
+    """Convert a 1-based spreadsheet column label (e.g. 'B', 'AA') to a 0-based index."""
+    col = (col or "").strip().upper()
+    if not col:
+        return 0
+    acc = 0
+    for ch in col:
+        if not ("A" <= ch <= "Z"):
+            continue
+        acc = acc * 26 + (ord(ch) - ord("A") + 1)
+    return max(acc - 1, 0)
+
+
+COY_IMPORT_LAYOUTS: dict[str, dict[str, object]] = {
+    # Player name column B, data columns E..AO (37 values) matching ATTR_IMPORT_ORDER length.
+    "Attributes": {
+        "name_columns": [_col_to_index("B"), _col_to_index("A")],
+        "value_columns": list(range(_col_to_index("E"), _col_to_index("AO") + 1)),
+        "skip_names": {"player_name"},
+    },
+    # Player name column B, data columns E..CY (99 values) matching TEND_IMPORT_ORDER length.
+    "Tendencies": {
+        "name_columns": [_col_to_index("B"), _col_to_index("A")],
+        "value_columns": list(range(_col_to_index("E"), _col_to_index("CY") + 1)),
+        "skip_names": {"player_name"},
+    },
+    # Player name column B, data columns D..S (16 values) matching DUR_IMPORT_ORDER length.
+    "Durability": {
+        "name_columns": [_col_to_index("B"), _col_to_index("A")],
+        "value_columns": list(range(_col_to_index("D"), _col_to_index("S") + 1)),
+        "skip_names": {"player_name"},
+    },
+    # Player name column B, data columns E..G (Rating min/avg/max). Probability columns are ignored.
+    "Potential": {
+        "name_columns": [_col_to_index("B"), _col_to_index("A")],
+        "value_columns": list(range(_col_to_index("E"), _col_to_index("G") + 1)),
+        "skip_names": {"player_name"},
+    },
+}
+
+NAME_SYNONYMS: dict[str, list[str]] = {
+    "cam": ["Cameron"],
+    "cameron": ["Cam"],
+    "nic": ["Nicolas"],
+    "nicolas": ["Nic"],
+    "rob": ["Robert"],
+    "robert": ["Rob"],
+    "ron": ["Ronald"],
+    "ronald": ["Ron"],
+    "nate": ["Nathan"],
+    "nathan": ["Nate"],
+}
 # Order for the Tendencies table.  These column names are taken directly
 # from the sample provided by the user.  They will be normalized and
 # matched against the field names defined in the "Tendencies" category of
@@ -767,109 +969,6 @@ TEND_IMPORT_ORDER = [
     "T/BLOCK",
     "T/CONTEST",
 ]
-# Fallback tendency field definitions derived from roster memory captures.
-# These are used when the offsets JSON does not supply a Tendencies category.
-TENDENCY_FIELD_DEFS: list[dict[str, object]] = [
-    {"name": "Shot", "offset": 0x4B3, "startBit": 0, "length": 8},
-    {"name": "Touches", "offset": 0x4B4, "startBit": 0, "length": 8},
-    {"name": "Shot Close", "offset": 0x46A, "startBit": 0, "length": 8},
-    {"name": "Shot Under Basket", "offset": 0x469, "startBit": 0, "length": 8},
-    {"name": "Shot Close Left", "offset": 0x46B, "startBit": 0, "length": 8},
-    {"name": "Shot Close Middle", "offset": 0x46C, "startBit": 0, "length": 8},
-    {"name": "Shot Close Right", "offset": 0x46D, "startBit": 0, "length": 8},
-    {"name": "Shot Mid-Range", "offset": 0x46E, "startBit": 0, "length": 8},
-    {"name": "Spot Up Shot Mid-Range", "offset": 0x46F, "startBit": 0, "length": 8},
-    {"name": "Off Screen Shot Mid-Range", "offset": 0x470, "startBit": 0, "length": 8},
-    {"name": "Shot Mid Left", "offset": 0x471, "startBit": 0, "length": 8},
-    {"name": "Shot Mid Left-Center", "offset": 0x472, "startBit": 0, "length": 8},
-    {"name": "Shot Mid Center", "offset": 0x473, "startBit": 0, "length": 8},
-    {"name": "Shot Mid Right-Center", "offset": 0x474, "startBit": 0, "length": 8},
-    {"name": "Shot Mid Right", "offset": 0x475, "startBit": 0, "length": 8},
-    {"name": "Shot Three", "offset": 0x476, "startBit": 0, "length": 8},
-    {"name": "Spot Up Shot Three", "offset": 0x477, "startBit": 0, "length": 8},
-    {"name": "Off Screen Shot Three", "offset": 0x478, "startBit": 0, "length": 8},
-    {"name": "Shot Three Left", "offset": 0x479, "startBit": 0, "length": 8},
-    {"name": "Shot Three Left-Center", "offset": 0x47A, "startBit": 0, "length": 8},
-    {"name": "Shot Three Center", "offset": 0x47B, "startBit": 0, "length": 8},
-    {"name": "Shot Three Right-Center", "offset": 0x47C, "startBit": 0, "length": 8},
-    {"name": "Shot Three Right", "offset": 0x47D, "startBit": 0, "length": 8},
-    {"name": "Contested Jumper Mid-Range", "offset": 0x47F, "startBit": 0, "length": 8},
-    {"name": "Contested Jumper Three", "offset": 0x47E, "startBit": 0, "length": 8},
-    {"name": "Stepback Jumper Mid-Range", "offset": 0x481, "startBit": 0, "length": 8},
-    {"name": "Stepback Jumper Three", "offset": 0x480, "startBit": 0, "length": 8},
-    {"name": "Spin Jumper", "offset": 0x482, "startBit": 0, "length": 8},
-    {"name": "Transition Pull Up Three", "offset": 0x483, "startBit": 0, "length": 8},
-    {"name": "Drive Pull Up Mid-Range", "offset": 0x485, "startBit": 0, "length": 8},
-    {"name": "Drive Pull Up Three", "offset": 0x484, "startBit": 0, "length": 8},
-    {"name": "Drive", "offset": 0x492, "startBit": 0, "length": 8},
-    {"name": "Spot Up Drive", "offset": 0x493, "startBit": 0, "length": 8},
-    {"name": "Off Screen Drive", "offset": 0x494, "startBit": 0, "length": 8},
-    {"name": "Use Glass", "offset": 0x486, "startBit": 0, "length": 8},
-    {"name": "Step Through Shot", "offset": 0x45C, "startBit": 0, "length": 8},
-    {"name": "Driving Layup", "offset": 0x45D, "startBit": 0, "length": 8},
-    {"name": "Spin Layup", "offset": 0x464, "startBit": 0, "length": 8},
-    {"name": "Euro Step Layup", "offset": 0x466, "startBit": 0, "length": 8},
-    {"name": "Hop Step Layup", "offset": 0x465, "startBit": 0, "length": 8},
-    {"name": "Floater", "offset": 0x467, "startBit": 0, "length": 8},
-    {"name": "Standing Dunk", "offset": 0x45E, "startBit": 0, "length": 8},
-    {"name": "Driving Dunk", "offset": 0x45F, "startBit": 0, "length": 8},
-    {"name": "Flashy Dunk", "offset": 0x460, "startBit": 0, "length": 8},
-    {"name": "Alley-Oop", "offset": 0x461, "startBit": 0, "length": 8},
-    {"name": "Putback", "offset": 0x462, "startBit": 0, "length": 8},
-    {"name": "Crash", "offset": 0x463, "startBit": 0, "length": 8},
-    {"name": "Drive Right", "offset": 0x48A, "startBit": 0, "length": 8},
-    {"name": "Triple Threat Pump Fake", "offset": 0x468, "startBit": 0, "length": 8},
-    {"name": "Triple Threat Jab Step", "offset": 0x469, "startBit": 0, "length": 8},
-    {"name": "Triple Threat Idle", "offset": 0x48D, "startBit": 0, "length": 8},
-    {"name": "Triple Threat Shoot", "offset": 0x48E, "startBit": 0, "length": 8},
-    {"name": "Setup With Sizeup", "offset": 0x48F, "startBit": 0, "length": 8},
-    {"name": "Setup With Hesitation", "offset": 0x490, "startBit": 0, "length": 8},
-    {"name": "No Setup Dribble", "offset": 0x491, "startBit": 0, "length": 8},
-    {"name": "Driving Crossover", "offset": 0x495, "startBit": 0, "length": 8},
-    {"name": "Driving Double Crossover", "offset": 0x499, "startBit": 0, "length": 8},
-    {"name": "Driving Spin", "offset": 0x496, "startBit": 0, "length": 8},
-    {"name": "Driving Half Spin", "offset": 0x498, "startBit": 0, "length": 8},
-    {"name": "Driving Step Back", "offset": 0x497, "startBit": 0, "length": 8},
-    {"name": "Driving Behind the Back", "offset": 0x49A, "startBit": 0, "length": 8},
-    {"name": "Driving Dribble Hesitation", "offset": 0x49B, "startBit": 0, "length": 8},
-    {"name": "Driving In and Out", "offset": 0x49C, "startBit": 0, "length": 8},
-    {"name": "No Driving Dribble Move", "offset": 0x49D, "startBit": 0, "length": 8},
-    {"name": "Attack Strong on Drive", "offset": 0x49E, "startBit": 0, "length": 8},
-    {"name": "Dish To Open Man", "offset": 0x49F, "startBit": 0, "length": 8},
-    {"name": "Flashy Pass", "offset": 0x4A0, "startBit": 0, "length": 8},
-    {"name": "Alley-Oop Pass", "offset": 0x4A1, "startBit": 0, "length": 8},
-    {"name": "Roll vs. Pop", "offset": 0x4B5, "startBit": 0, "length": 8},
-    {"name": "Transition Spot Up", "offset": 0x4B6, "startBit": 0, "length": 8},
-    {"name": "Iso vs. Elite Defender", "offset": 0x4B7, "startBit": 0, "length": 8},
-    {"name": "Iso vs. Good Defender", "offset": 0x4B8, "startBit": 0, "length": 8},
-    {"name": "Iso vs. Average Defender", "offset": 0x4B9, "startBit": 0, "length": 8},
-    {"name": "Iso vs. Poor Defender", "offset": 0x4BA, "startBit": 0, "length": 8},
-    {"name": "Play Discipline", "offset": 0x4BB, "startBit": 0, "length": 8},
-    {"name": "Post Up", "offset": 0x4A2, "startBit": 0, "length": 8},
-    {"name": "Post Back Down", "offset": 0x4A5, "startBit": 0, "length": 8},
-    {"name": "Post Aggressive Backdown", "offset": 0x4A6, "startBit": 0, "length": 8},
-    {"name": "Post Face Up", "offset": 0x4A4, "startBit": 0, "length": 8},
-    {"name": "Post Spin", "offset": 0x4B0, "startBit": 0, "length": 8},
-    {"name": "Post Drive", "offset": 0x4AF, "startBit": 0, "length": 8},
-    {"name": "Post Drop Step", "offset": 0x4B1, "startBit": 0, "length": 8},
-    {"name": "Post Hop Step", "offset": 0x4B2, "startBit": 0, "length": 8},
-    {"name": "Shoot From Post", "offset": 0x4A7, "startBit": 0, "length": 8},
-    {"name": "Post Hook Left", "offset": 0x4A8, "startBit": 0, "length": 8},
-    {"name": "Post Hook Right", "offset": 0x4A9, "startBit": 0, "length": 8},
-    {"name": "Post Fade Left", "offset": 0x4AA, "startBit": 0, "length": 8},
-    {"name": "Post Fade Right", "offset": 0x4AB, "startBit": 0, "length": 8},
-    {"name": "Post Shimmy Shot", "offset": 0x4A3, "startBit": 0, "length": 8},
-    {"name": "Post Hop Shot", "offset": 0x4AD, "startBit": 0, "length": 8},
-    {"name": "Post Step Back Shot", "offset": 0x4AE, "startBit": 0, "length": 8},
-    {"name": "Post Up and Under", "offset": 0x4AC, "startBit": 0, "length": 8},
-    {"name": "Take Charge", "offset": 0x4BD, "startBit": 0, "length": 8},
-    {"name": "Foul", "offset": 0x4C1, "startBit": 0, "length": 8},
-    {"name": "Hard Foul", "offset": 0x4C2, "startBit": 0, "length": 8},
-    {"name": "Pass Interception", "offset": 0x4BC, "startBit": 0, "length": 8},
-    {"name": "On-Ball Steal", "offset": 0x4BE, "startBit": 0, "length": 8},
-    {"name": "Block Shot", "offset": 0x4C0, "startBit": 0, "length": 8},
-    {"name": "Contest Shot", "offset": 0x4BF, "startBit": 0, "length": 8},
-]
 FIELD_NAME_ALIASES: dict[str, str] = {
     "SHOT": "SHOOT",
     "SHOTMIDRANGE": "SHOTMID",
@@ -953,8 +1052,57 @@ def _load_categories() -> dict[str, list[dict]]:
     dictionary is returned.
     """
     dropdowns = _load_dropdowns_map()
+    def _entry_to_field(entry: dict, display_name: str) -> dict | None:
+        offset_val = _to_int(entry.get("address"))
+        length_val = _to_int(entry.get("length"))
+        if offset_val <= 0 or length_val <= 0:
+            return None
+        start_bit = _to_int(entry.get("startBit"))
+        field: dict[str, object] = {
+            "name": display_name,
+            "offset": hex(offset_val),
+            "startBit": int(start_bit),
+            "length": int(length_val),
+        }
+        if entry.get("requiresDereference"):
+            field["requiresDereference"] = True
+            field["dereferenceAddress"] = _to_int(entry.get("dereferenceAddress"))
+        if "type" in entry:
+            field["type"] = entry["type"]
+        if "values" in entry and isinstance(entry["values"], list):
+            field["values"] = entry["values"]
+        return field
+    def _ensure_potential_category(cat_map: dict[str, list[dict]]) -> None:
+        if cat_map.get("Potential"):
+            return
+        specs = [
+            ("Minimum Potential", ("Minimum Potential", "Min Potential")),
+            ("Potential", ("Potential",)),
+            ("Maximum Potential", ("Maximum Potential", "Max Potential")),
+        ]
+        potential_fields: list[dict] = []
+        for display_name, candidates in specs:
+            entry = None
+            for base in candidates:
+                entry = _find_offset_entry(base, "Vitals")
+                if entry:
+                    break
+                entry = _find_offset_entry(base, "Attributes")
+                if entry:
+                    break
+            if not entry:
+                continue
+            field = _entry_to_field(entry, display_name)
+            if field is not None:
+                potential_fields.append(field)
+        if potential_fields:
+            cat_map["Potential"] = potential_fields
+    base_categories: dict[str, list[dict]] = {}
     if _offset_config is None:
         initialize_offsets()
+    base_categories: dict[str, list[dict]] = {}
+    bit_cursor: dict[tuple[str, int], int] = {}
+    seen_fields_global: dict[str, set[str]] = {}
     if isinstance(_offset_config, dict):
         categories: dict[str, list[dict]] = {}
         combined_sections: list[dict] = []
@@ -977,8 +1125,21 @@ def _load_categories() -> dict[str, list[dict]]:
                 continue
             seen_fields.add(key)
             offset_val = _to_int(entry.get("address"))
+            if offset_val < 0:
+                continue
             start_bit = _to_int(entry.get("startBit"))
             length_val = _to_int(entry.get("length"))
+            size_val = _to_int(entry.get("size"))
+            entry_type = str(entry.get("type", "")).lower()
+            if any(tag in entry_type for tag in ("string", "text")):
+                continue
+            if length_val <= 0:
+                if entry_type in ("bitfield", "bool", "boolean", "combo"):
+                    length_val = size_val
+                elif entry_type in ("number", "slider", "int", "uint", "pointer", "float"):
+                    length_val = size_val * 8
+            if length_val <= 0:
+                continue
             field: dict[str, object] = {
                 "name": field_name,
                 "offset": hex(offset_val),
@@ -1002,14 +1163,18 @@ def _load_categories() -> dict[str, list[dict]]:
                 pass
             categories.setdefault(cat_name, []).append(field)
         if categories:
-            if not categories.get("Tendencies"):
-                fallback: list[dict[str, object]] = []
-                for field in TENDENCY_FIELD_DEFS:
-                    entry = dict(field)
-                    entry["offset"] = hex(entry["offset"])  # type: ignore[index]
-                    fallback.append(entry)
-                categories["Tendencies"] = fallback
-            return categories
+            base_categories = {key: list(value) for key, value in categories.items()}
+            for cat_name, fields in base_categories.items():
+                seen = seen_fields_global.setdefault(cat_name, set())
+                for field in fields:
+                    if not isinstance(field, dict):
+                        continue
+                    seen.add(str(field.get("name", "")))
+                    offset_int = _to_int(field.get("offset"))
+                    start_val = _to_int(field.get("startBit") or field.get("start_bit"))
+                    length_val = _to_int(field.get("length"))
+                    key = (cat_name, offset_int)
+                    bit_cursor[key] = max(bit_cursor.get(key, 0), start_val + max(length_val, 0))
     base_dir = _pathlib.Path(__file__).resolve().parent
     # Try unified offsets files first
     for fname in UNIFIED_FILES:
@@ -1019,25 +1184,38 @@ def _load_categories() -> dict[str, list[dict]]:
         try:
             with open(upath, "r", encoding="utf-8") as f:
                 udata = _json.load(f)
-            categories: dict[str, list[dict]] = {}
+            categories: dict[str, list[dict]] = {key: list(value) for key, value in base_categories.items()}
+            for cat_name, fields in categories.items():
+                seen = seen_fields_global.setdefault(cat_name, set())
+                for field in fields:
+                    if not isinstance(field, dict):
+                        continue
+                    seen.add(str(field.get("name", "")))
+                    offset_int = _to_int(field.get("offset"))
+                    start_val = _to_int(field.get("startBit") or field.get("start_bit"))
+                    length_val = _to_int(field.get("length"))
+                    key = (cat_name, offset_int)
+                    bit_cursor[key] = max(bit_cursor.get(key, 0), start_val + max(length_val, 0))
             # Extract category lists from JSON (ignore "Base")
             if isinstance(udata, dict):
-                # Case 1: unified format where categories are top‑level lists of field definitions
+                # Case 1: unified format where categories are top-level lists of field definitions
                 for key, value in udata.items():
                     if key.lower() == "base":
                         continue
                     if isinstance(value, list) and all(isinstance(x, dict) for x in value):
                         categories[key] = value
-                # If categories were found in unified format return them immediately
-                if categories:
-                    if not categories.get("Tendencies"):
-                        fallback: list[dict[str, object]] = []
-                        for field in TENDENCY_FIELD_DEFS:
-                            entry = dict(field)
-                            entry["offset"] = hex(entry["offset"])  # type: ignore[index]
-                            fallback.append(entry)
-                        categories["Tendencies"] = fallback
-                    return categories
+                        seen = seen_fields_global.setdefault(key, set())
+                        for entry in value:
+                            if not isinstance(entry, dict):
+                                continue
+                            seen.add(str(entry.get("name", "")))
+                            offset_int = _to_int(entry.get("offset"))
+                            start_val = _to_int(entry.get("startBit") or entry.get("start_bit"))
+                            length_val = _to_int(entry.get("length"))
+                            bit_cursor[(key, offset_int)] = max(
+                                bit_cursor.get((key, offset_int), 0),
+                                start_val + max(length_val, 0),
+                            )
                 # Case 2: extended offsets.json format with a nested Player_Info
                 # The sanitized offsets JSON stores category dictionaries under
                 # the "Player_Info" key.  Each category (e.g. "VITALS_offsets")
@@ -1049,71 +1227,107 @@ def _load_categories() -> dict[str, list[dict]]:
                 pinf = udata.get("Player_Info")
                 if isinstance(pinf, dict):
                     new_cats: dict[str, list[dict]] = {}
+                    def _append_field(cat_label: str, field_name: str, prefix: str | None, fdef: dict) -> None:
+                        display_name = field_name if prefix in (None, "") else f"{prefix} - {field_name}"
+                        off_raw = (
+                            fdef.get("address")
+                            or fdef.get("offset_from_base")
+                            or fdef.get("offset")
+                        )
+                        offset_int = _to_int(off_raw)
+                        if offset_int < 0:
+                            return
+                        f_type = str(fdef.get("type", "")).lower()
+                        if any(tag in f_type for tag in ("string", "text")):
+                            return
+                        start_raw = fdef.get("startBit") or fdef.get("start_bit") or fdef.get("bit_start")
+                        explicit_start = start_raw is not None
+                        start_bit = _to_int(start_raw)
+                        size_int = _to_int(fdef.get("size"))
+                        length_int = _to_int(fdef.get("length"))
+                        if length_int <= 0:
+                            if f_type in ("bitfield", "bool", "boolean", "combo"):
+                                length_int = size_int
+                            elif f_type in ("number", "slider", "int", "uint", "pointer"):
+                                length_int = size_int * 8
+                            elif f_type == "float":
+                                length_int = 32 if size_int <= 0 else size_int * 8
+                        if length_int <= 0:
+                            return
+                        if f_type in ("bitfield", "bool", "boolean", "combo") and not explicit_start:
+                            key = (cat_label, offset_int)
+                            start_bit = bit_cursor.get(key, 0)
+                            bit_cursor[key] = start_bit + length_int
+                        entry: dict[str, object] = {
+                            "name": display_name,
+                            "offset": hex(offset_int),
+                            "startBit": int(start_bit),
+                            "length": int(length_int),
+                        }
+                        if f_type:
+                            entry["type"] = f_type
+                        if f_type == "combo":
+                            try:
+                                value_count = min(1 << length_int, 64)
+                                entry["values"] = [str(i) for i in range(max(value_count, 0))]
+                            except Exception:
+                                pass
+                        try:
+                            dcat = dropdowns.get(cat_label) or dropdowns.get(cat_label.title()) or {}
+                            if display_name in dcat and isinstance(dcat[display_name], list):
+                                entry.setdefault("values", list(dcat[display_name]))
+                            elif field_name.upper().startswith("PLAYTYPE") and isinstance(dcat.get("PLAYTYPE"), list):
+                                entry.setdefault("values", list(dcat["PLAYTYPE"]))
+                        except Exception:
+                            pass
+                        seen_set = seen_fields_global.setdefault(cat_label, set())
+                        if display_name in seen_set:
+                            return
+                        seen_set.add(display_name)
+                        bit_cursor[(cat_label, offset_int)] = max(
+                            bit_cursor.get((cat_label, offset_int), 0),
+                            start_bit + length_int,
+                        )
+                        new_cats.setdefault(cat_label, []).append(entry)
+                    def _walk_field_map(base_label: str, mapping: dict, prefix: str | None = None) -> None:
+                        for fname, fdef in mapping.items():
+                            if not isinstance(fdef, dict):
+                                continue
+                            has_direct_keys = any(
+                                key in fdef
+                                for key in (
+                                    "address",
+                                    "offset_from_base",
+                                    "offset",
+                                    "startBit",
+                                    "start_bit",
+                                    "bit_start",
+                                    "size",
+                                    "length",
+                                    "type",
+                                )
+                            )
+                            if has_direct_keys:
+                                cat_label = base_label
+                                _append_field(cat_label, fname, prefix, fdef)
+                            else:
+                                next_prefix = fname if prefix is None else f"{prefix} - {fname}"
+                                _walk_field_map(base_label, fdef, next_prefix)
                     for cat_key, field_map in pinf.items():
                         if not isinstance(field_map, dict):
                             continue
-                        # Derive a user‑friendly category name
-                        cat_name = cat_key
-                        if cat_name.endswith("_offsets"):
-                            cat_name = cat_name[:-8]
-                        # Normalise case (e.g. VITALS -> Vitals)
+                        cat_name = cat_key[:-8] if cat_key.endswith("_offsets") else cat_key
                         cat_name = cat_name.title()
-                        entries: list[dict] = []
-                        for fname, fdef in field_map.items():
-                            if not isinstance(fdef, dict):
-                                continue
-                            off_str = fdef.get("offset_from_base") or fdef.get("offset")
-                            if not off_str:
-                                continue
-                            try:
-                                off_int = int(str(off_str), 16)
-                            except Exception:
-                                continue
-                            # Determine bit length based on the field type.
-                            f_type = str(fdef.get("type", "")).lower()
-                            size_val = fdef.get("size", 1)
-                            try:
-                                size_int = int(size_val)
-                            except Exception:
-                                size_int = 1
-                            # Numeric/slider fields occupy whole bytes; others use bit count directly
-                            if f_type in ("number", "slider"):
-                                bit_length = size_int * 8
-                            else:
-                                bit_length = size_int
-                            entry: dict[str, object] = {
-                                "name": fname,
-                                "offset": hex(off_int),
-                                "startBit": 0,
-                                "length": bit_length,
-                            }
-                            # Provide a simple enumeration for combo fields
-                            if f_type == "combo":
-                                try:
-                                    max_val = 2 ** bit_length
-                                    entry["values"] = [str(i) for i in range(max_val)]
-                                except Exception:
-                                    pass
-                            try:
-                                dcat = dropdowns.get(cat_name) or dropdowns.get(cat_name.title()) or {}
-                                if fname in dcat and isinstance(dcat[fname], list):
-                                    entry.setdefault("values", list(dcat[fname]))
-                                elif fname.upper().startswith("PLAYTYPE") and isinstance(dcat.get("PLAYTYPE"), list):
-                                    entry.setdefault("values", list(dcat["PLAYTYPE"]))
-                            except Exception:
-                                pass
-                            entries.append(entry)
-                        if entries:
-                            new_cats[cat_name] = entries
+                        _walk_field_map(cat_name, field_map)
                     if new_cats:
-                        if not new_cats.get("Tendencies"):
-                            fallback: list[dict[str, object]] = []
-                            for field in TENDENCY_FIELD_DEFS:
-                                entry = dict(field)
-                                entry["offset"] = hex(entry["offset"])  # type: ignore[index]
-                                fallback.append(entry)
-                            new_cats["Tendencies"] = fallback
-                        return new_cats
+                        for key, vals in new_cats.items():
+                            if key in categories:
+                                categories[key].extend(vals)
+                            else:
+                                categories[key] = vals
+                if categories:
+                    _ensure_potential_category(categories)
+                    return categories
         except Exception:
             # ignore errors and continue to next file
             pass
@@ -1125,8 +1339,8 @@ def _load_categories() -> dict[str, list[dict]]:
 # Only a subset of the Win32 API is required: enumerating processes and
 # modules, opening a process, and reading/writing its memory.  These
 # declarations mirror those used in the earlier patcher example.  They are
-# defined only on Windows; on other platforms the memory access functions
-# will remain unused and the tool will operate purely on offline data.
+# defined only on Windows. On other platforms the application exits before
+# attempting any memory access.
 if sys.platform == "win32":
     PROCESS_VM_READ      = 0x0010
     PROCESS_VM_WRITE     = 0x0020
@@ -1230,6 +1444,27 @@ class GameMemory:
         self.pid: int | None = None
         self.hproc: wintypes.HANDLE | None = None
         self.base_addr: int | None = None
+    def _log_event(self, level: int, op: str, addr: int, length: int, status: str, **extra: object) -> None:
+        """Write a structured entry to the memory operation log."""
+        try:
+            parts: list[str] = [
+                f"op={op}",
+                f"addr=0x{int(addr):016X}",
+                f"len={int(length)}",
+                f"status={status}",
+            ]
+            if self.pid is not None:
+                parts.append(f"pid={self.pid}")
+            if self.base_addr is not None:
+                rel = int(addr) - int(self.base_addr)
+                sign = "-" if rel < 0 else ""
+                parts.append(f"rva={sign}0x{abs(rel):X}")
+            for key, value in extra.items():
+                parts.append(f"{key}={value}")
+            MEMORY_LOGGER.log(level, " | ".join(parts))
+        except Exception:
+            # Logging must never interfere with memory operations.
+            pass
     # -------------------------------------------------------------------------
     # Process management
     # -------------------------------------------------------------------------
@@ -1331,27 +1566,93 @@ class GameMemory:
     # -------------------------------------------------------------------------
     # Memory access helpers
     # -------------------------------------------------------------------------
-    def _check_open(self):
+    def _check_open(self, op: str | None = None, addr: int | None = None, length: int | None = None) -> None:
         if self.hproc is None or self.base_addr is None:
+            if op is not None and addr is not None and length is not None:
+                self._log_event(logging.ERROR, op, addr, length, "process-closed", validation="not-open")
             raise RuntimeError("Game process not opened")
     def read_bytes(self, addr: int, length: int) -> bytes:
         """Read ``length`` bytes from absolute address ``addr``."""
-        self._check_open()
+        self._check_open("read", addr, length)
         buf = (ctypes.c_ubyte * length)()
         read_count = ctypes.c_size_t()
-        ok = ReadProcessMemory(self.hproc, ctypes.c_void_p(addr), buf, length, ctypes.byref(read_count))
-        if not ok or read_count.value != length:
-            raise RuntimeError(f"Failed to read memory at 0x{addr:X}")
+        try:
+            ok = ReadProcessMemory(self.hproc, ctypes.c_void_p(addr), buf, length, ctypes.byref(read_count))
+        except Exception as exc:
+            self._log_event(
+                logging.ERROR,
+                "read",
+                addr,
+                length,
+                "exception",
+                validation="exception",
+                error=repr(exc),
+            )
+            raise
+        if not ok:
+            winerr = ctypes.get_last_error()
+            self._log_event(
+                logging.ERROR,
+                "read",
+                addr,
+                length,
+                "failed",
+                validation=f"win32={winerr}",
+            )
+            raise RuntimeError(f"Failed to read memory at 0x{addr:X} (error {winerr})")
+        if read_count.value != length:
+            self._log_event(
+                logging.ERROR,
+                "read",
+                addr,
+                length,
+                "failed",
+                validation=f"bytes={read_count.value}",
+            )
+            raise RuntimeError(f"Partial read at 0x{addr:X}: {read_count.value}/{length} bytes")
+        self._log_event(logging.INFO, "read", addr, length, "success", validation="exact")
         return bytes(buf)
     def write_bytes(self, addr: int, data: bytes) -> None:
         """Write ``data`` to absolute address ``addr``."""
-        self._check_open()
         length = len(data)
+        self._check_open("write", addr, length)
         buf = (ctypes.c_ubyte * length).from_buffer_copy(data)
         written = ctypes.c_size_t()
-        ok = WriteProcessMemory(self.hproc, ctypes.c_void_p(addr), buf, length, ctypes.byref(written))
-        if not ok or written.value != length:
-            raise RuntimeError(f"Failed to write memory at 0x{addr:X}")
+        try:
+            ok = WriteProcessMemory(self.hproc, ctypes.c_void_p(addr), buf, length, ctypes.byref(written))
+        except Exception as exc:
+            self._log_event(
+                logging.ERROR,
+                "write",
+                addr,
+                length,
+                "exception",
+                validation="exception",
+                error=repr(exc),
+            )
+            raise
+        if not ok:
+            winerr = ctypes.get_last_error()
+            self._log_event(
+                logging.ERROR,
+                "write",
+                addr,
+                length,
+                "failed",
+                validation=f"win32={winerr}",
+            )
+            raise RuntimeError(f"Failed to write memory at 0x{addr:X} (error {winerr})")
+        if written.value != length:
+            self._log_event(
+                logging.ERROR,
+                "write",
+                addr,
+                length,
+                "failed",
+                validation=f"bytes={written.value}",
+            )
+            raise RuntimeError(f"Partial write at 0x{addr:X}: {written.value}/{length} bytes")
+        self._log_event(logging.INFO, "write", addr, length, "success", validation="exact")
     def read_uint32(self, addr: int) -> int:
         data = self.read_bytes(addr, 4)
         return struct.unpack('<I', data)[0]
@@ -1427,17 +1728,19 @@ class PlayerDataModel:
         # scanned or loaded.  It allows for fast lookup of players by name
         # during imports and other operations.
         self.name_index_map: Dict[str, list[int]] = {}
-        self.external_loaded = False  # indicates if offline data was loaded from files
+        self.external_loaded = False  # reserved; offline roster loading is disabled
         # Optional mapping of team indices to names derived from CE table comments
         self.team_name_map: Dict[int, str] = {}
         # Current list of available teams represented as (index, name) tuples.
-        # This will be populated by scanning memory or via offline files.
+        # Populated exclusively from live memory scans.
         self.team_list: list[tuple[int, str]] = []
         # Flag indicating that ``self.players`` was populated by scanning all
-        # player records rather than via per‑team scanning.  When true,
+        # player records rather than via per-team scanning.  When true,
         # ``get_players_by_team`` will filter ``self.players`` by team name
         # instead of using roster pointers.
         self.fallback_players: bool = False
+        # Cached list of free agent players derived from the most recent scan.
+        self._cached_free_agents: list[Player] = []
         # Internal caches for resolved pointer chains.  During a successful
         # scan, these fields store the computed base addresses of the player
         # and team tables.  Subsequent operations reuse the cached values
@@ -1448,8 +1751,8 @@ class PlayerDataModel:
         # Attempt to load team names from cheat table comments for later use.  We
         # look for files matching "2K26 Team Data (10.18.24).txt" or
         # "2K26 Team Data.txt" in the current directory.  If found, we parse
-        # the comments section to build a team index→name mapping.  This
-        # mapping can be useful for offline lookups or when scanning memory.
+        # the comments section to build a team index-to-name mapping that improves
+        # display labels when live memory omits them.
         team_candidates = [
             "2K26 Team Data (10.18.24).txt",
             "2K26 Team Data.txt",
@@ -1473,6 +1776,52 @@ class PlayerDataModel:
         except Exception:
             self.categories = {}
         self._reorder_categories()
+        # Stores per-category partial match suggestions collected during imports.
+        self.import_partial_matches: dict[str, dict[str, list[str]]] = {}
+
+    def _make_name_key(self, first: str, last: str, sanitize: bool = False) -> str:
+        """Return a normalized lookup key for the given first/last name."""
+        first_norm = (first or "").strip().lower()
+        last_norm = (last or "").strip().lower()
+        if sanitize:
+            first_norm = re.sub(r"[^a-z0-9]", "", first_norm)
+            last_norm = re.sub(r"[^a-z0-9]", "", last_norm)
+        key = f"{first_norm} {last_norm}".strip()
+        return key
+
+    def _generate_name_keys(self, first: str, last: str) -> list[str]:
+        """Generate lookup keys (original and sanitized) for a name pair."""
+        keys: list[str] = []
+        for sanitize in (False, True):
+            key = self._make_name_key(first, last, sanitize=sanitize)
+            if key and key not in keys:
+                keys.append(key)
+        return keys
+    def _get_import_fields(self, category_name: str) -> list[dict]:
+        """Return the subset of fields that correspond to the import order for the given category."""
+        fields = self.categories.get(category_name, [])
+        order_map: dict[str, list[str]] = {
+            "Attributes": ATTR_IMPORT_ORDER,
+            "Tendencies": TEND_IMPORT_ORDER,
+            "Durability": DUR_IMPORT_ORDER,
+            "Potential": POTENTIAL_IMPORT_ORDER,
+        }
+        import_order = order_map.get(category_name)
+        if not fields or not import_order:
+            return list(fields)
+        remaining = list(fields)
+        selected: list[dict] = []
+        for hdr in import_order:
+            norm_hdr = self._normalize_header_name(hdr)
+            match_idx = -1
+            for idx, fdef in enumerate(remaining):
+                norm_field = self._normalize_field_name(fdef.get("name", ""))
+                if norm_hdr == norm_field or norm_hdr in norm_field or norm_field in norm_hdr:
+                    match_idx = idx
+                    break
+            if match_idx >= 0:
+                selected.append(remaining.pop(match_idx))
+        return selected
     # ------------------------------------------------------------------
     # Internal string helpers
     # ------------------------------------------------------------------
@@ -1484,13 +1833,17 @@ class PlayerDataModel:
         return "utf16"
     def _read_string(self, addr: int, max_chars: int, encoding: str) -> str:
         enc = self._normalize_encoding_tag(encoding)
-        max_len = max(1, max_chars)
+        max_len = int(max_chars)
+        if max_len <= 0:
+            raise ValueError("String length must be positive according to schema.")
         if enc == "ascii":
             return self.mem.read_ascii(addr, max_len)
         return self.mem.read_wstring(addr, max_len)
     def _write_string(self, addr: int, value: str, max_chars: int, encoding: str) -> None:
         enc = self._normalize_encoding_tag(encoding)
-        max_len = max(1, max_chars)
+        max_len = int(max_chars)
+        if max_len <= 0:
+            raise ValueError("String length must be positive according to schema.")
         if enc == "ascii":
             self.mem.write_ascii_fixed(addr, value, max_len)
         else:
@@ -1499,140 +1852,8 @@ class PlayerDataModel:
     # Offline data loading
     # -------------------------------------------------------------------------
     def _load_external_roster(self) -> list[Player] | None:
-        """Attempt to load players and teams from uploaded text files.
-        This method tries to populate the player list and team names from
-        the text files distributed with the Cheat Engine tables.  It looks
-        for files named ``"2K26 Team Data (10.18.24).txt"`` (or
-        ``"2K26 Team Data.txt"``) and ``"2K26 Player Data (10.18.24).txt"`` (or
-        ``"2K26 Player Data.txt"``) in the same directory as this script.  If
-        both files exist, it will attempt to extract team names from the
-        <Comments> section of the team table and player names from the
-        trailing mapping appended to the player table.  In the absence of
-        these files or if parsing fails, ``None`` is returned so that the
-        caller can fall back to the built‑in demo roster.
-        The player data files distributed with Cheat Engine are not
-        conventional CSVs; instead they consist of an XML cheat table
-        followed by a list of lines like ``"4425:Stanley Johnson"`` or
-        ``"0 - Maxey"`` that map an index to a player name.  We parse these
-        lines by splitting on ':' or '-' and interpreting the index as
-        either decimal or hexadecimal (when letters A–F are present).  The
-        team ID column is unavailable in this mapping, so all players are
-        assigned to a generic team called "Free Agents" unless a team
-        mapping can be inferred from the team table.
-        """
-        # Candidate filenames for team and player data; allow shorter names
-        team_file_candidates = [
-            "2K26 Team Data (10.18.24).txt",
-            "2K26 Team Data.txt",
-        ]
-        player_file_candidates = [
-            "2K26 Player Data (10.18.24).txt",
-            "2K26 Player Data.txt",
-        ]
-        # Determine base directory (where this script resides)
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        # Locate the first existing team file
-        team_file: str | None = None
-        for name in team_file_candidates:
-            path = os.path.join(base_dir, name)
-            if os.path.isfile(path):
-                team_file = path
-                break
-        # Locate the first existing player file
-        player_file: str | None = None
-        for name in player_file_candidates:
-            path = os.path.join(base_dir, name)
-            if os.path.isfile(path):
-                player_file = path
-                break
-        # If either file is missing, bail out
-        if not team_file or not player_file:
-            return None
-        # ------------------------------------------------------------------
-        # Parse team names
-        # ------------------------------------------------------------------
-        team_lookup: dict[str, str] = {}
-        # First, attempt to parse team names from the <Comments> section
-        ce_map = self.parse_team_comments(team_file)
-        for idx, name in ce_map.items():
-            team_lookup[str(idx)] = name
-        # If no entries were found, also try reading simple delimiter lines
-        if not team_lookup:
-            try:
-                with open(team_file, 'r', encoding='utf-8', errors='ignore') as f:
-                    for line in f:
-                        s = line.strip()
-                        if not s or s.startswith("#"):
-                            continue
-                        # Try splitting on common delimiters
-                        for delim in ('\t', '|', ';', ',', ':', ' - '):
-                            if delim in s:
-                                parts = [p.strip() for p in s.split(delim)]
-                                if len(parts) >= 2:
-                                    team_id, team_name = parts[0], parts[1]
-                                    if team_id:
-                                        team_lookup[team_id] = team_name
-                                    break
-            except Exception:
-                pass
-        # ------------------------------------------------------------------
-        # Parse player names
-        # ------------------------------------------------------------------
-        players: list[Player] = []
-        try:
-            with open(player_file, 'r', encoding='utf-8', errors='ignore') as f:
-                text = f.read()
-        except Exception:
-            return None
-        # Scan the entire file for simple mapping lines of the form "index - name"
-        # or "index:name".  Ignore any lines containing angle brackets (< or >)
-        # which denote XML tags.  This captures player mappings regardless of
-        # their location in the file.
-        index_counter = 0
-        for line in text.splitlines():
-            s = line.strip()
-            if not s:
-                continue
-            # Skip XML tags and other markup lines
-            if '<' in s or '>' in s:
-                continue
-            # Identify separator: try ':' then ' - ' then '-' (without spaces)
-            sep = None
-            if ':' in s:
-                sep = ':'
-            elif ' - ' in s:
-                sep = ' - '
-            elif '-' in s:
-                sep = '-'
-            if sep:
-                left, right = s.split(sep, 1)
-            else:
-                # Could be just a name with no index
-                left, right = '', s
-            idx_str = left.strip()
-            name = right.strip()
-            if not name:
-                continue
-            # Determine numeric index; treat empty as auto
-            try:
-                # If contains letters A–F, treat as hex
-                base = 16 if any(c in idx_str.upper() for c in "ABCDEF") else 10
-                idx = int(idx_str, base) if idx_str else index_counter
-            except Exception:
-                idx = index_counter
-            index_counter += 1
-            # Split full name into first and last names (take first token as first name)
-            parts = name.split()
-            if not parts:
-                continue
-            first = parts[0]
-            last = " ".join(parts[1:]) if len(parts) > 1 else ""
-            # Assign all offline players to the Free Agents team because
-            # the CE tables do not include a reliable team ID mapping.
-            team_name = "Free Agents"
-            players.append(Player(idx, first, last, team_name, FREE_AGENT_TEAM_ID))
-        # Ensure we loaded a reasonable number of players; if not, abort
-        return players if players else None
+        """External roster loading disabled."""
+        return None
     # -------------------------------------------------------------------------
     # Cheat Engine team table support
     # -------------------------------------------------------------------------
@@ -1685,12 +1906,13 @@ class PlayerDataModel:
         """
         self.name_index_map.clear()
         for player in self.players:
-            first = player.first_name.strip().lower()
-            last = player.last_name.strip().lower()
+            first = player.first_name or ""
+            last = player.last_name or ""
             if not first and not last:
                 continue
-            key = f"{first} {last}".strip()
-            self.name_index_map.setdefault(key, []).append(player.index)
+            for key in self._generate_name_keys(first, last):
+                if key:
+                    self.name_index_map.setdefault(key, []).append(player.index)
 
 
     def _normalize_header_name(self, name: str) -> str:
@@ -1958,24 +2180,38 @@ class PlayerDataModel:
             reordered: list[dict] = []
             for hdr in import_order:
                 norm_hdr = self._normalize_header_name(hdr)
-                match_idx = -1
-                # Find the first field whose normalized name matches or
-                # contains the normalized header name.
-                for i, f in enumerate(remaining):
+                if not norm_hdr:
+                    continue
+                best_idx = -1
+                best_score = 3  # 0 = exact, 1 = header in field, 2 = field in header
+                for idx, f in enumerate(remaining):
                     norm_field = self._normalize_field_name(f.get('name', ''))
-                    # Exact or partial match
-                    if norm_hdr == norm_field or norm_hdr in norm_field or norm_field in norm_hdr:
-                        match_idx = i
-                        break
-                if match_idx >= 0:
-                    reordered.append(remaining.pop(match_idx))
+                    if not norm_field:
+                        continue
+                    score = None
+                    if norm_hdr == norm_field:
+                        score = 0
+                    elif norm_hdr in norm_field:
+                        score = 1
+                    elif norm_field in norm_hdr:
+                        score = 2
+                    if score is None:
+                        continue
+                    if score < best_score:
+                        best_idx = idx
+                        best_score = score
+                        if score == 0:
+                            break
+                if best_idx >= 0:
+                    reordered.append(remaining.pop(best_idx))
             # Append any unmatched fields at the end
             reordered.extend(remaining)
             cats[cat_name] = reordered
-        # Reorder attributes, tendencies, durability
+        # Reorder attributes, tendencies, durability, potential
         reorder('Attributes', ATTR_IMPORT_ORDER)
         reorder('Tendencies', TEND_IMPORT_ORDER)
         reorder('Durability', DUR_IMPORT_ORDER)
+        reorder('Potential', POTENTIAL_IMPORT_ORDER)
         # Save back in a deterministic order.  We prefer to display
         # categories in a consistent order matching the import tables.
         ordered = {}
@@ -1984,6 +2220,7 @@ class PlayerDataModel:
             'Vitals',
             'Attributes',
             'Durability',
+            'Potential',
             'Tendencies',
             'Badges',
         ]
@@ -2014,27 +2251,231 @@ class PlayerDataModel:
         first = parts[0].strip()
         last = ' '.join(parts[1:]).strip() if len(parts) > 1 else ''
         # Use the name_index_map for efficient lookup if available
-        key = f"{first.lower()} {last.lower()}".strip()
         if self.name_index_map:
-            return self.name_index_map.get(key, [])
-        # Fallback: linear scan over players
+            for key in self._generate_name_keys(first, last):
+                if key and key in self.name_index_map:
+                    return self.name_index_map[key]
+        # Fallback: linear scan over players with sanitized comparison
+        target_keys = set(self._generate_name_keys(first, last))
         indices: list[int] = []
         for p in self.players:
-            if p.first_name.lower() == first.lower() and p.last_name.lower() == last.lower():
+            player_keys = self._generate_name_keys(p.first_name, p.last_name)
+            if target_keys.intersection(player_keys):
                 indices.append(p.index)
         return indices
+
+    def _name_variants(self, raw_name: str) -> list[str]:
+        """Return plausible player name variants derived from an import cell."""
+        text = str(raw_name or "").strip()
+        if not text:
+            return []
+        base = " ".join(text.replace("\u00a0", " ").split())
+        variants: list[str] = []
+        if base:
+            variants.append(base)
+            stripped = re.sub(r"[^A-Za-z0-9 ]", "", base)
+            if stripped and stripped != base:
+                variants.append(" ".join(stripped.split()))
+        parts = base.split()
+        if "," in base:
+            parts = [p.strip() for p in base.split(",", 1)]
+            if len(parts) == 2 and parts[0] and parts[1]:
+                variants.append(f"{parts[1]} {parts[0]}")
+        elif len(parts) >= 2:
+            first = parts[-1]
+            last = " ".join(parts[:-1])
+            variants.append(f"{first} {last}".strip())
+            stripped_parts = re.sub(r"[^A-Za-z0-9 ]", "", base).split()
+            if stripped_parts and len(stripped_parts) >= 2:
+                stripped_first = stripped_parts[-1]
+                stripped_last = " ".join(stripped_parts[:-1])
+                variants.append(f"{stripped_first} {stripped_last}".strip())
+        expanded_variants: list[str] = []
+        for candidate in variants:
+            expanded_variants.append(candidate)
+            words = candidate.split()
+            for idx, word in enumerate(words):
+                stripped_word = re.sub(r"[^A-Za-z]", "", word)
+                if not stripped_word:
+                    continue
+                key = stripped_word.lower()
+                synonyms = NAME_SYNONYMS.get(key)
+                if not synonyms:
+                    continue
+                pattern = re.compile(re.escape(stripped_word), re.IGNORECASE)
+                for repl in synonyms:
+                    new_word = pattern.sub(repl, word, count=1)
+                    new_words = list(words)
+                    new_words[idx] = new_word
+                    expanded_variants.append(" ".join(new_words).strip())
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for candidate in expanded_variants:
+            key = candidate.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            ordered.append(candidate)
+        return ordered
+
+    def _match_player_indices(self, raw_name: str) -> list[int]:
+        """Try matching a raw name against the roster using common variants."""
+        for candidate in self._name_variants(raw_name):
+            idxs = self.find_player_indices_by_name(candidate)
+            if idxs:
+                return idxs
+        return []
+
+    @staticmethod
+    def _sanitize_name_token(token: str) -> str:
+        return re.sub(r"[^a-z0-9]", "", (token or "").lower())
+
+    @staticmethod
+    def _normalize_family_token(token: str) -> str:
+        sanitized = PlayerDataModel._sanitize_name_token(token)
+        return re.sub(r"(jr|sr|ii|iii|iv|v)$", "", sanitized)
+
+    def _partial_name_candidates(self, raw_name: str) -> list[str]:
+        variants = self._name_variants(raw_name)
+        first_tokens: set[str] = set()
+        last_tokens: set[str] = set()
+        norm_first_tokens: set[str] = set()
+        norm_last_tokens: set[str] = set()
+        for variant in variants:
+            parts = variant.split()
+            if len(parts) >= 2:
+                first = parts[0]
+                last = " ".join(parts[1:])
+                sf = self._sanitize_name_token(first)
+                sl = self._sanitize_name_token(last)
+                if sf:
+                    first_tokens.add(sf)
+                    norm_first_tokens.add(self._normalize_family_token(first))
+                if sl:
+                    last_tokens.add(sl)
+                    norm_last_tokens.add(self._normalize_family_token(last))
+        if not first_tokens and not last_tokens:
+            return []
+        candidates: list[str] = []
+        seen: set[str] = set()
+        for player in self.players:
+            pf = self._sanitize_name_token(player.first_name)
+            pl = self._sanitize_name_token(player.last_name)
+            pf_norm = self._normalize_family_token(player.first_name)
+            pl_norm = self._normalize_family_token(player.last_name)
+            strict_first = pf in first_tokens
+            strict_last = pl in last_tokens
+            fuzzy_first = pf_norm in norm_first_tokens
+            fuzzy_last = pl_norm in norm_last_tokens
+            strong_match = strict_first and strict_last
+            partial = False
+            if strict_first != strict_last:
+                partial = True
+            elif not strong_match:
+                if (strict_first and fuzzy_last) or (strict_last and fuzzy_first):
+                    partial = True
+                elif fuzzy_first != fuzzy_last:
+                    partial = True
+            if partial and (strict_first or strict_last or fuzzy_first or fuzzy_last):
+                full_name = player.full_name
+                if full_name not in seen:
+                    seen.add(full_name)
+                    candidates.append(full_name)
+        return candidates
+
+    def _get_import_order(self, category_name: str) -> list[str]:
+        name = (category_name or "").strip().lower()
+        if name == "attributes":
+            return ATTR_IMPORT_ORDER
+        if name == "tendencies":
+            return TEND_IMPORT_ORDER
+        if name == "durability":
+            return DUR_IMPORT_ORDER
+        if name == "potential":
+            return POTENTIAL_IMPORT_ORDER
+        return []
+
+    def prepare_import_rows(self, category_name: str, rows: Sequence[Sequence[str]]) -> dict[str, object] | None:
+        if not rows:
+            return None
+        layout = COY_IMPORT_LAYOUTS.get(category_name)
+        if layout:
+            value_columns = list(layout.get("value_columns", []))
+            skip_names = {str(s).strip().lower() for s in layout.get("skip_names", set())}
+            name_columns_raw = layout.get("name_columns")
+            if name_columns_raw is None:
+                name_columns = [int(layout.get("name_col", 0))]
+            else:
+                name_columns = [int(col) for col in name_columns_raw]
+
+            def _is_valid_name(cell: str) -> bool:
+                normalized = (cell or "").strip()
+                if not normalized:
+                    return False
+                if normalized.lower() in skip_names:
+                    return False
+                return any(ch.isalpha() for ch in normalized)
+
+            def _row_has_numeric(row: Sequence[str]) -> bool:
+                for idx in value_columns:
+                    if idx >= len(row):
+                        continue
+                    cell = str(row[idx]).strip()
+                    if not cell:
+                        continue
+                    if any(ch.isdigit() for ch in cell):
+                        return True
+                return False
+
+            data_rows: list[list[str]] = []
+            for row in rows:
+                name_value: str | None = None
+                for col in name_columns:
+                    if col >= len(row):
+                        continue
+                    candidate = str(row[col]).strip()
+                    if _is_valid_name(candidate):
+                        name_value = candidate
+                        break
+                if not name_value:
+                    continue
+                if not _row_has_numeric(row):
+                    continue
+                values = [row[idx] if idx < len(row) else "" for idx in value_columns]
+                data_rows.append([name_value, *values])
+            if not data_rows:
+                return None
+            return {
+                "header": [],
+                "data_rows": data_rows,
+                "name_col": 0,
+                "value_columns": list(range(1, len(value_columns) + 1)),
+                "fixed_mapping": True,
+            }
+        header = rows[0]
+        if not header:
+            return None
+        name_col = 0
+        value_columns = list(range(1, len(header)))
+        data_rows = [row for row in rows[1:] if any(str(cell).strip() for cell in row)]
+        if not value_columns or not data_rows:
+            return None
+        return {
+            "header": header,
+            "data_rows": data_rows,
+            "name_col": name_col,
+            "value_columns": value_columns,
+        }
+
     def import_table(self, category_name: str, filepath: str) -> int:
         """
         Import player data from a tab- or comma-delimited file for a single category.
-        The file must have a header row where the first column is the player
-        name and the subsequent columns correspond to fields of the given
-        category.  The order of columns defines the order in which values
-        should be applied.  Column headers are matched to field names using
-        normalized strings and simple substring matching.  Values are
-        converted to raw bitfield values as required.
+        The first column is assumed to contain player names unless a fixed layout overrides it.
+        Subsequent columns are read in order and applied to the category's field definitions.
+        Values are converted to raw bitfield representations as required.
         Args:
             category_name: Name of the category to import (e.g. "Attributes",
-                "Tendencies", "Durability").
+                "Tendencies", "Durability", "Potential").
             filepath: Path to the import file.
         Returns:
             The number of players successfully updated.
@@ -2057,51 +2498,48 @@ class PlayerDataModel:
             return 0
         if not rows:
             return 0
-        header = rows[0]
-        if not header or len(header) < 2:
+        info = self.prepare_import_rows(category_name, rows)
+        if not info:
             return 0
-        # Build mapping list: for each column after the first, find the field
-        # definition in the category.  For Attributes, we use fuzzy name
-        # matching; for Tendencies and Durability we rely on column order
-        # matching after the fields have been reordered according to the
-        # import order lists.  This ensures that abbreviated headers like
-        # "T/SCLOSE" map to their corresponding fields (e.g. Shot Close) even
-        # without explicit synonyms.
-        field_defs = self.categories[category_name]
-        mappings: list[dict | None] = []
-        # Build normalized field names list once for matching
-        norm_fields: list[tuple[str, dict]] = []
-        for f in field_defs:
-            n = self._normalize_field_name(f.get('name', ''))
-            norm_fields.append((n, f))
-        # For each column header (skipping player name) attempt to match by name
-        for i, col in enumerate(header[1:]):
-            n_hdr = self._normalize_header_name(col)
-            matched: dict | None = None
-            # First attempt fuzzy match: exact or substring in either direction
-            for norm_field, f in norm_fields:
-                if n_hdr == norm_field or n_hdr in norm_field or norm_field in n_hdr:
-                    matched = f
-                    break
-            if matched is None:
-                # Fallback: map by position if within range
-                if i < len(field_defs):
-                    matched = field_defs[i]
-            mappings.append(matched)
-        # Process each row
+        header = info["header"]
+        data_rows = info["data_rows"]
+        name_col = info["name_col"]
+        value_columns = info["value_columns"]
+        field_defs = self._get_import_fields(category_name) or self.categories.get(category_name, [])
+        if not field_defs:
+            return 0
+        fixed_mapping = bool(info.get("fixed_mapping"))
+        selected_columns = value_columns[:len(field_defs)]
+        if not data_rows or not selected_columns:
+            return 0
+        # Map columns directly to field definitions in order.
+        mappings = list(field_defs[:len(selected_columns)])
         players_updated = 0
-        for row in rows[1:]:
-            if not row or len(row) < 2:
+        partial_matches: dict[str, list[str]] = {}
+        for row in data_rows:
+            if not row:
                 continue
-            name = row[0].strip()
-            values = row[1:]
-            idxs = self.find_player_indices_by_name(name)
+            if len(row) <= name_col:
+                continue
+            raw_name = str(row[name_col]).strip()
+            if not raw_name:
+                continue
+            idxs = self._match_player_indices(raw_name)
             if not idxs:
+                candidates = self._partial_name_candidates(raw_name)
+                if candidates:
+                    partial_matches.setdefault(raw_name, [])
+                    for cand in candidates:
+                        if cand not in partial_matches[raw_name]:
+                            partial_matches[raw_name].append(cand)
                 continue
             # Apply values to each matching player
             for idx in idxs:
                 any_set = False
-                for val, meta in zip(values, mappings):
+                for col_idx, meta in zip(selected_columns, mappings):
+                    if meta is None or col_idx >= len(row):
+                        continue
+                    val = row[col_idx]
                     if meta is None:
                         continue
                     # Retrieve offset, start_bit and length.  Offsets in
@@ -2136,7 +2574,7 @@ class PlayerDataModel:
                     requires_deref = bool(meta.get("requiresDereference") or meta.get("requires_deref"))
                     deref_offset = _to_int(meta.get("dereferenceAddress") or meta.get("deref_offset"))
                     max_raw = (1 << length) - 1
-                    if category_name in ('Attributes', 'Durability'):
+                    if category_name in ('Attributes', 'Durability', 'Potential'):
                         # Interpret the imported value directly as a rating on
                         # the 25-99 scale and convert to raw.  Values
                         # outside the expected range are clamped internally.
@@ -2166,20 +2604,26 @@ class PlayerDataModel:
                         any_set = True
                 if any_set:
                     players_updated += 1
+        if partial_matches:
+            self.import_partial_matches[category_name] = partial_matches
+        else:
+            self.import_partial_matches[category_name] = {}
         return players_updated
     def import_all(self, file_map: dict[str, str]) -> dict[str, int]:
         """
         Import multiple tables from a mapping of category names to file paths.
         Args:
             file_map: A mapping of category names ("Attributes", "Tendencies",
-                "Durability") to file paths.  If a file path is an empty
-                string or does not exist, that category will be skipped.
+                "Durability", "Potential") to file paths.  If a file path is an
+                empty string or does not exist, that category will be skipped.
         Returns:
             A dictionary mapping category names to the number of players
             updated for each category.
         """
         results: dict[str, int] = {}
+        self.import_partial_matches = {}
         for cat, path in file_map.items():
+            self.import_partial_matches.setdefault(cat, {})
             if not path or not os.path.isfile(path):
                 results[cat] = 0
                 continue
@@ -2469,7 +2913,7 @@ class PlayerDataModel:
         if table_base is None:
             return []
         team_base_ptr = self._resolve_team_base_ptr()
-        team_stride = TEAM_STRIDE or TEAM_RECORD_SIZE or 0
+        team_stride = TEAM_STRIDE
         players: list[Player] = []
         for i in range(max_scan):
             # Compute address of the i-th player record
@@ -2490,10 +2934,9 @@ class PlayerDataModel:
                     team_name = "Free Agents"
                     team_id = FREE_AGENT_TEAM_ID
                 else:
-                    name_len = TEAM_NAME_LENGTH or 32
-                    tn = self._read_string(team_ptr + OFF_TEAM_NAME, name_len, TEAM_NAME_ENCODING).strip()
+                    tn = self._read_string(team_ptr + OFF_TEAM_NAME, TEAM_NAME_LENGTH, TEAM_NAME_ENCODING).strip()
                     team_name = tn or "Unknown"
-                    if team_base_ptr and team_stride:
+                    if team_base_ptr and team_stride > 0:
                         try:
                             rel = team_ptr - team_base_ptr
                             if rel >= 0 and rel % team_stride == 0:
@@ -2524,10 +2967,9 @@ class PlayerDataModel:
         pointers and extract team and roster information.  If the
         process cannot be opened or no valid pointers are found, the
         method falls back to scanning all player records sequentially.
-        As a last resort it will load an offline roster from the CE
-        table files (if present).  The results populate
-        ``self.team_list`` and ``self.players`` and set flags
-        ``fallback_players`` and ``external_loaded`` appropriately.
+        When both strategies fail the caches remain empty.  Offline
+        roster fallbacks are intentionally disabled, so
+        ``external_loaded`` stays ``False``.
         """
         # Reset all state
         self.team_list = []
@@ -2536,6 +2978,7 @@ class PlayerDataModel:
         self.external_loaded = False
         self._resolved_player_base = None
         self._resolved_team_base = None
+        self._cached_free_agents = []
 
         if self.mem.open_process():
             team_base = self._resolve_team_base_ptr()
@@ -2553,6 +2996,9 @@ class PlayerDataModel:
                             self._ensure_team_entry(FREE_AGENT_TEAM_ID, "Free Agents", front=True)
                         self.players = players_all
                         self.fallback_players = True
+                        self._cached_free_agents = [
+                            p for p in self.players if p.team_id == FREE_AGENT_TEAM_ID
+                        ]
                         self._apply_team_display_to_players(self.players)
                         self._build_name_index_map()
                     return
@@ -2561,6 +3007,9 @@ class PlayerDataModel:
                 self.players = players
                 self.fallback_players = True
                 self.team_list = self._build_team_list_from_players(players)
+                self._cached_free_agents = [
+                    p for p in self.players if p.team_id == FREE_AGENT_TEAM_ID
+                ]
                 self._apply_team_display_to_players(self.players)
                 self._build_name_index_map()
                 return
@@ -2630,6 +3079,98 @@ class PlayerDataModel:
                 player.team = "Free Agents"
             elif player.team_id is not None and player.team_id in mapping:
                 player.team = mapping[player.team_id]
+    def _read_panel_entry(self, record_addr: int, entry: dict) -> object | None:
+        """Read a raw field value for the detail panel based on a schema entry."""
+        try:
+            offset = _to_int(
+                entry.get("address")
+                or entry.get("offset")
+                or entry.get("offset_from_base")
+            )
+            if offset < 0:
+                return None
+            requires_deref = bool(entry.get("requiresDereference") or entry.get("requires_deref"))
+            deref_offset = _to_int(entry.get("dereferenceAddress") or entry.get("deref_offset"))
+            target_addr = record_addr + offset
+            if requires_deref and deref_offset:
+                ptr = self.mem.read_uint64(record_addr + deref_offset)
+                if not ptr:
+                    return None
+                target_addr = ptr + offset
+            entry_type = str(entry.get("type", "")).lower()
+            start_bit = _to_int(entry.get("startBit") or entry.get("start_bit") or 0)
+            size_val = _to_int(entry.get("size"))
+            length_val = _to_int(entry.get("length"))
+            if entry_type in {"string_utf16", "wstring"}:
+                if size_val <= 0:
+                    return None
+                max_chars = size_val // 2
+                return self.mem.read_wstring(target_addr, max_chars).strip("\x00")
+            if entry_type in {"string", "text", "cstring", "ascii"}:
+                if size_val <= 0:
+                    return None
+                return self.mem.read_ascii(target_addr, size_val).strip("\x00")
+            if entry_type == "float":
+                byte_len = size_val if size_val > 0 else ((length_val + 7) // 8 if length_val > 0 else 0)
+                if byte_len <= 0:
+                    return None
+                raw = self.mem.read_bytes(target_addr, byte_len)
+                if byte_len == 4:
+                    return struct.unpack("<f", raw)[0]
+                if byte_len == 8:
+                    return struct.unpack("<d", raw)[0]
+                return None
+            if entry_type == "bitfield":
+                bit_length = length_val if length_val > 0 else size_val
+                if bit_length <= 0:
+                    return None
+                bits_needed = start_bit + bit_length
+                byte_len = (bits_needed + 7) // 8
+                raw = self.mem.read_bytes(target_addr, byte_len)
+                value = int.from_bytes(raw, "little")
+                value >>= start_bit
+                mask = (1 << bit_length) - 1
+                return value & mask
+            byte_len = size_val if size_val > 0 else ((length_val + 7) // 8 if length_val > 0 else 0)
+            if byte_len <= 0:
+                return None
+            raw = self.mem.read_bytes(target_addr, byte_len)
+            return int.from_bytes(raw, "little")
+        except Exception:
+            return None
+    def get_player_panel_snapshot(self, player: Player) -> dict[str, object]:
+        """Return field values required for the player detail panel."""
+        snapshot: dict[str, object] = {}
+        if not player:
+            return snapshot
+        if not self.mem.open_process():
+            return snapshot
+        base = self._resolve_player_table_base()
+        if base is None:
+            return snapshot
+        if PLAYER_STRIDE <= 0:
+            return snapshot
+        try:
+            record_addr = base + player.index * PLAYER_STRIDE
+        except Exception:
+            return snapshot
+        for label, category, entry_name in PLAYER_PANEL_FIELDS:
+            entry = _find_offset_entry(entry_name, category)
+            if not entry:
+                continue
+            value = self._read_panel_entry(record_addr, entry)
+            if value is None:
+                continue
+            values_list = entry.get("values")
+            if isinstance(values_list, list) and isinstance(value, int) and 0 <= value < len(values_list):
+                value = values_list[value]
+            snapshot[label] = value
+        ovr_entry = _find_offset_entry(PLAYER_PANEL_OVR_FIELD[1], PLAYER_PANEL_OVR_FIELD[0])
+        if ovr_entry:
+            overall_val = self._read_panel_entry(record_addr, ovr_entry)
+            if overall_val is not None:
+                snapshot["Overall"] = overall_val
+        return snapshot
 
     def _ensure_team_entry(self, team_id: int, display_name: str, front: bool = False) -> None:
         """Ensure ``team_list`` contains the provided entry."""
@@ -2640,6 +3181,68 @@ class PlayerDataModel:
             self.team_list.insert(0, (team_id, display_name))
         else:
             self.team_list.append((team_id, display_name))
+
+    def _collect_assigned_player_indexes(self) -> set[int]:
+        """Return the set of player indices currently assigned to team rosters."""
+        assigned: set[int] = set()
+        if not self.team_list:
+            return assigned
+        if not self.mem.hproc or self.mem.base_addr is None:
+            return assigned
+        player_base = self._resolve_player_table_base()
+        team_base_ptr = self._resolve_team_base_ptr()
+        if player_base is None or team_base_ptr is None or TEAM_STRIDE <= 0:
+            return assigned
+        stride = PLAYER_STRIDE or 1
+        for team_idx, _ in self.team_list:
+            if team_idx is None or team_idx < 0:
+                continue
+            try:
+                rec_addr = team_base_ptr + team_idx * TEAM_STRIDE
+            except Exception:
+                continue
+            for slot in range(TEAM_PLAYER_SLOT_COUNT):
+                try:
+                    ptr = self.mem.read_uint64(rec_addr + slot * 8)
+                except Exception:
+                    ptr = 0
+                if not ptr:
+                    continue
+                try:
+                    idx = int((ptr - player_base) // stride)
+                except Exception:
+                    continue
+                if 0 <= idx < self.max_players:
+                    assigned.add(idx)
+        return assigned
+
+    def _get_free_agents(self) -> list[Player]:
+        """Return cached free agent list, recomputing if necessary."""
+        if self._cached_free_agents:
+            return list(self._cached_free_agents)
+        if not self.players:
+            players = self._scan_all_players(self.max_players)
+            if players:
+                self.players = players
+                self.fallback_players = True
+                self._apply_team_display_to_players(self.players)
+                self._build_name_index_map()
+        if not self.players:
+            return []
+        free_agents = [p for p in self.players if p.team_id == FREE_AGENT_TEAM_ID]
+        if free_agents:
+            self._cached_free_agents = list(free_agents)
+            return list(free_agents)
+        assigned = self._collect_assigned_player_indexes()
+        if assigned:
+            free_agents = [p for p in self.players if p.index not in assigned]
+        else:
+            free_agents = [
+                p for p in self.players
+                if (p.team or "").strip().lower().startswith("free")
+            ]
+        self._cached_free_agents = list(free_agents)
+        return list(free_agents)
 
     def _team_display_map(self) -> dict[int, str]:
         """Return a mapping of team_id to display name."""
@@ -2669,31 +3272,26 @@ class PlayerDataModel:
           3. Standard NBA teams
           4. All‑Time teams (names containing "All Time" or "All‑Time")
           5. G‑League teams (names containing "G League", "G-League" or "GLeague")
-        Within each category the original order is preserved.  In
-        offline mode (when players are loaded from files and no
-        ``team_list`` exists), the same grouping logic is applied
-        against the distinct set of team names found in ``self.players``.
+        Within each category the original order is preserved.  When the
+        team pointer chain cannot be resolved, the same grouping logic is
+        applied to the distinct set of team names discovered via the
+        sequential player scan.
         """
         if self.team_list:
             def _classify(entry: tuple[int, str]) -> str:
                 tid, name = entry
                 lname = name.lower()
-                if "all player" in lname:
-                    return "all_players"
                 if tid == FREE_AGENT_TEAM_ID or "free" in lname:
                     return "free_agents"
                 if "draft" in lname:
                     return "draft_class"
                 return "normal"
-            all_players: list[str] = []
             free_agents: list[str] = []
             draft_class: list[str] = []
             remaining: list[tuple[int, str]] = []
             for entry in self.team_list:
                 category = _classify(entry)
-                if category == "all_players":
-                    all_players.append(entry[1])
-                elif category == "free_agents":
+                if category == "free_agents":
                     free_agents.append(entry[1])
                 elif category == "draft_class":
                     draft_class.append(entry[1])
@@ -2701,12 +3299,11 @@ class PlayerDataModel:
                     remaining.append(entry)
             remaining_sorted = [name for _, name in sorted(remaining, key=lambda item: item[0])]
             ordered: list[str] = []
-            ordered.extend(all_players)
             ordered.extend(free_agents)
             ordered.extend(draft_class)
             ordered.extend(remaining_sorted)
             return ordered
-        # Offline fallback: derive categories from player team names
+        # Sequential-scan fallback: derive categories from player team names
         names_set = {p.team for p in self.players}
         names = list(names_set)
         lower_names = [n.lower() for n in names]
@@ -2720,41 +3317,46 @@ class PlayerDataModel:
     def get_players_by_team(self, team: str) -> list[Player]:
         """Return players for the specified team.
         If team data has been scanned from memory, use the team index
-        mapping to look up players dynamically.  Otherwise, filter
-        preloaded players (offline mode).
+        mapping to look up players dynamically.  Otherwise, filter the
+        sequential scan results stored in ``self.players``.
         """
+        team_name = (team or "").strip()
+        team_lower = team_name.lower()
+        is_free_team = "free" in team_lower
+        if team_lower == "all players":
+            if not self.players:
+                players = self._scan_all_players(self.max_players)
+                if players:
+                    self.players = players
+                    self.fallback_players = True
+                    self._apply_team_display_to_players(self.players)
+                    self._build_name_index_map()
+            return list(self.players)
         # Live memory mode: use team_list to find the index and scan players
         if self.team_list and not self.external_loaded:
             team_idx = self._team_index_for_display_name(team)
             # If we are in fallback mode (scanned all players), filter from self.players
             if self.fallback_players:
                 if team_idx is not None:
+                    if team_idx == FREE_AGENT_TEAM_ID:
+                        return self._get_free_agents()
                     return [p for p in self.players if p.team_id == team_idx]
-                if team.lower() == "free agents":
-                    return [
-                        p for p in self.players
-                        if p.team_id == FREE_AGENT_TEAM_ID or p.team.lower() == "free agents"
-                    ]
-                return [p for p in self.players if p.team == team]
+                if is_free_team:
+                    return self._get_free_agents()
+                return [p for p in self.players if p.team == team_name]
             # Otherwise, use roster pointers to scan players for the team
             if team_idx is not None and team_idx >= 0:
                 return self.scan_team_players(team_idx)
-            if team_idx == FREE_AGENT_TEAM_ID:
-                return [
-                    p for p in self.players
-                    if p.team_id == FREE_AGENT_TEAM_ID or p.team.lower() == "free agents"
-                ]
+            if team_idx == FREE_AGENT_TEAM_ID or is_free_team:
+                return self._get_free_agents()
             return []
         # Offline or fallback mode: filter players by team name or ID if known
         team_idx = self._team_index_for_display_name(team)
         if team_idx is not None:
             return [p for p in self.players if p.team_id == team_idx]
-        if team.lower() == "free agents":
-            return [
-                p for p in self.players
-                if p.team_id == FREE_AGENT_TEAM_ID or p.team.lower() == "free agents"
-            ]
-        return [p for p in self.players if p.team == team]
+        if is_free_team:
+            return self._get_free_agents()
+        return [p for p in self.players if p.team == team_name]
     def update_player(self, player: Player) -> None:
         """Write changes to a player back to memory if connected."""
         if not self.mem.hproc or self.mem.base_addr is None or self.external_loaded:
@@ -3066,7 +3668,7 @@ class PlayerEditorApp(tk.Tk):
         # Load Excel button
         # This button imports player data from a user-selected Excel workbook.
         # It prompts the user to choose the workbook first, then asks which
-        # categories (Attributes, Tendencies, Durability) should be applied.  A
+        # categories (Attributes, Tendencies, Durability, Potential) should be applied.  A
         # loading dialog is displayed while processing to discourage
         # interaction.  See ``_open_load_excel`` for details.
         self.btn_load_excel = tk.Button(
@@ -3391,7 +3993,7 @@ class PlayerEditorApp(tk.Tk):
         self.player_listbox.delete(0, tk.END)
         self.player_count_var.set("Players: 0")
         self.player_listbox.insert(tk.END, "No players available.")
-        self.player_search_var.trace_add("write", lambda *_: self._apply_player_filter())
+        self.player_search_var.trace_add("write", lambda *_: self._filter_player_list())
     # ---------------------------------------------------------------------
     # Navigation methods
     # ---------------------------------------------------------------------
@@ -3528,10 +4130,10 @@ class PlayerEditorApp(tk.Tk):
             return
         # Ask the user which categories to import.  Present a simple
         # checkbox dialog so they can choose between Attributes,
-        # Tendencies and Durability.  If they cancel or uncheck all
+        # Tendencies, Durability, and Potential.  If they cancel or uncheck all
         # boxes, no import is performed.
         # ------------------------------------------------------------------
-        categories_to_ask = ["Attributes", "Tendencies", "Durability"]
+        categories_to_ask = ["Attributes", "Tendencies", "Durability", "Potential"]
         try:
             dlg = CategorySelectionDialog(self, categories_to_ask)
             # Wait for the dialog to close before proceeding
@@ -3558,6 +4160,8 @@ class PlayerEditorApp(tk.Tk):
         auto_download = bool(COY_SHEET_ID)
         file_map: dict[str, str] = {}
         not_found: set[str] = set()
+        category_tables: dict[str, dict[str, object]] = {}
+        results: dict[str, int] = {}
         if auto_download:
             # Attempt to fetch each configured sheet for the selected categories
             for cat, sheet_name in COY_SHEET_TABS.items():
@@ -3585,17 +4189,19 @@ class PlayerEditorApp(tk.Tk):
                 # Parse names to identify missing players
                 try:
                     import csv as _csv
-                    reader = _csv.reader(io.StringIO(csv_text))
-                    header = next(reader, None)
-                    for row in reader:
-                        if not row:
-                            continue
-                        name = row[0].strip()
-                        if not name:
-                            continue
-                        idxs = self.model.find_player_indices_by_name(name)
-                        if not idxs:
-                            not_found.add(name)
+                    rows = list(_csv.reader(io.StringIO(csv_text)))
+                    category_tables[cat] = {"rows": rows, "delimiter": ","}
+                    info = self.model.prepare_import_rows(cat, rows) if rows else None
+                    if info:
+                        name_col = info["name_col"]
+                        for row in info["data_rows"]:
+                            if len(row) <= name_col:
+                                continue
+                            name = str(row[name_col]).strip()
+                            if not name:
+                                continue
+                            if not self.model._match_player_indices(name):
+                                not_found.add(name)
                 except Exception:
                     pass
         # If no files were downloaded or auto-download disabled, prompt the user
@@ -3623,7 +4229,7 @@ class PlayerEditorApp(tk.Tk):
                     return
                 file_map[cat] = path
             # Collect names from selected files
-            def collect_missing_names(path: str) -> None:
+            def collect_missing_names(cat_name: str, path: str) -> None:
                 import csv as _csv
                 if not path or not os.path.isfile(path):
                     return
@@ -3632,21 +4238,23 @@ class PlayerEditorApp(tk.Tk):
                         sample = f.readline()
                         delim = '\t' if '\t' in sample else ',' if ',' in sample else ';'
                         f.seek(0)
-                        reader = _csv.reader(f, delimiter=delim)
-                        next(reader, None)  # skip header
-                        for row in reader:
-                            if not row:
+                        rows = list(_csv.reader(f, delimiter=delim))
+                    category_tables[cat_name] = {"rows": rows, "delimiter": delim}
+                    info = self.model.prepare_import_rows(cat_name, rows) if rows else None
+                    if info:
+                        name_col = info["name_col"]
+                        for row in info["data_rows"]:
+                            if len(row) <= name_col:
                                 continue
-                            name = row[0].strip()
+                            name = str(row[name_col]).strip()
                             if not name:
                                 continue
-                            idxs = self.model.find_player_indices_by_name(name)
-                            if not idxs:
+                            if not self.model._match_player_indices(name):
                                 not_found.add(name)
                 except Exception:
                     pass
-            for p in file_map.values():
-                collect_missing_names(p)
+            for cat_name, path in file_map.items():
+                collect_missing_names(cat_name, path)
         # Compute the size of the Attributes player pool (number of names in the
         # attributes file).  We track this to inform the user if some
         # players were not updated.  It is computed before imports so
@@ -3664,12 +4272,17 @@ class PlayerEditorApp(tk.Tk):
                     f.seek(0)
                     reader = _csv.reader(f, delimiter=delim)
                     rows = list(reader)
-                # Skip header and collect non‑blank names
-                for row in rows[1:]:
-                    if not row or not row[0].strip():
-                        continue
-                    attr_names_set.add(row[0].strip())
-                attr_pool_size = len(attr_names_set)
+                info = self.model.prepare_import_rows('Attributes', rows) if rows else None
+                if info:
+                    name_col = info['name_col']
+                    for row in info['data_rows']:
+                        if not row or len(row) <= name_col:
+                            continue
+                        cell = str(row[name_col]).strip()
+                        if not cell:
+                            continue
+                        attr_names_set.add(cell)
+                    attr_pool_size = len(attr_names_set)
             except Exception:
                 attr_pool_size = 0
         # Perform imports only for the selected categories
@@ -3695,6 +4308,19 @@ class PlayerEditorApp(tk.Tk):
             for cat, cnt in results.items():
                 if file_map.get(cat):
                     msg_lines.append(f"  {cat}: {cnt}")
+        partial_info = getattr(self.model, "import_partial_matches", {}) or {}
+        had_partial = False
+        for cat, mapping in partial_info.items():
+            if not mapping:
+                continue
+            if not had_partial:
+                msg_lines.append("\nPlayers requiring confirmation (skipped):")
+                had_partial = True
+            msg_lines.append(f"  {cat}:")
+            for raw_name, candidates in mapping.items():
+                display = ", ".join(candidates[:5]) if candidates else "Possible roster match"
+                msg_lines.append(f"    {raw_name} -> {display}")
+                not_found.add(raw_name)
         # Compute number of attributes pool entries that were not updated
         if attr_pool_size:
             updated_attr = results.get('Attributes')
@@ -3712,9 +4338,7 @@ class PlayerEditorApp(tk.Tk):
                 )
         # List any players that were not found in the roster
         if not_found:
-            msg_lines.append("\nPlayers not found (no matches in roster):")
-            for name in sorted(not_found):
-                msg_lines.append(f"  {name}")
+            msg_lines.append(f"\nPlayers not found (no matches in roster): {len(not_found)}")
         else:
             msg_lines.append("\nAll players were found in the roster.")
         # Destroy the loading dialog before showing the summary
@@ -3722,7 +4346,17 @@ class PlayerEditorApp(tk.Tk):
             loading_win.destroy()
         except Exception:
             pass
-        messagebox.showinfo("2K COY Import", "\n".join(msg_lines))
+        apply_cb = None
+        if not_found and category_tables:
+            def _apply(mapping, tables=category_tables):
+                self._apply_manual_import(mapping, tables, title="2K COY Manual Import")
+            apply_cb = _apply
+        self._show_import_summary(
+            title="2K COY Import",
+            summary_lines=msg_lines,
+            missing_players=sorted(not_found),
+            apply_callback=apply_cb,
+        )
     def _open_load_excel(self) -> None:
         """
         Prompt the user to import player updates from a single Excel workbook.
@@ -3757,7 +4391,7 @@ class PlayerEditorApp(tk.Tk):
         if not workbook_path:
             return
         # Ask the user which categories to import
-        categories_to_ask = ["Attributes", "Tendencies", "Durability"]
+        categories_to_ask = ["Attributes", "Tendencies", "Durability", "Potential"]
         try:
             dlg = CategorySelectionDialog(self, categories_to_ask)
             self.wait_window(dlg)
@@ -3780,6 +4414,7 @@ class PlayerEditorApp(tk.Tk):
         loading_win.update_idletasks()
         file_map: dict[str, str] = {}
         not_found: set[str] = set()
+        category_tables: dict[str, dict[str, object]] = {}
         try:
             import pandas as _pd
         except Exception:
@@ -3787,12 +4422,30 @@ class PlayerEditorApp(tk.Tk):
             loading_win.destroy()
             return
         # Helper to collect missing names from a DataFrame
-        def collect_missing_names_df(df) -> None:
-            for name in df.iloc[:, 0].astype(str).str.strip():
+        def collect_missing_names_df(cat_name: str, df) -> None:
+            if df is None or df.empty:
+                return
+            try:
+                data = df.fillna('').astype(str)
+            except Exception:
+                data = df.astype(str)
+            header = [str(col) for col in data.columns]
+            rows = [header]
+            rows.extend([list(row) for row in data.values.tolist()])
+            if not rows:
+                return
+            category_tables[cat_name] = {"rows": rows, "delimiter": ","}
+            info = self.model.prepare_import_rows(cat_name, rows)
+            if not info:
+                return
+            name_col = info['name_col']
+            for row in info['data_rows']:
+                if len(row) <= name_col:
+                    continue
+                name = str(row[name_col]).strip()
                 if not name:
                     continue
-                idxs = self.model.find_player_indices_by_name(name)
-                if not idxs:
+                if not self.model._match_player_indices(name):
                     not_found.add(name)
         try:
             # Read the workbook once to obtain the list of sheet names
@@ -3832,7 +4485,7 @@ class PlayerEditorApp(tk.Tk):
                 df.to_csv(tmp.name, index=False)
                 tmp.close()
                 file_map[cat] = tmp.name
-                collect_missing_names_df(df)
+                collect_missing_names_df(cat, df)
             # Perform the import
             results = self.model.import_all(file_map)
             # Refresh players to reflect changes
@@ -3862,10 +4515,89 @@ class PlayerEditorApp(tk.Tk):
                     msg_lines.append(f"  {cat}: {cnt}")
         # Inform about missing players
         if not_found:
-            msg_lines.append("\nPlayers not found:")
-            for name in sorted(not_found):
-                msg_lines.append(f"  {name}")
-        messagebox.showinfo("Excel Import", "\n".join(msg_lines))
+            msg_lines.append(f"\nPlayers not found: {len(not_found)}")
+        else:
+            msg_lines.append("\nAll players were found in the roster.")
+        apply_cb = None
+        if not_found and category_tables:
+            def _apply(mapping, tables=category_tables):
+                self._apply_manual_import(mapping, tables, title="Excel Manual Import")
+            apply_cb = _apply
+        self._show_import_summary(
+            title="Excel Import",
+            summary_lines=msg_lines,
+            missing_players=sorted(not_found),
+            apply_callback=apply_cb,
+        )
+    def _show_import_summary(
+        self,
+        title: str,
+        summary_lines: list[str],
+        missing_players: list[str],
+        apply_callback: Callable[[dict[str, str]], None] | None = None,
+    ) -> None:
+        """Display an import summary with optional lookup helpers for missing players."""
+        summary_text = "\n".join(summary_lines)
+        roster_names = [p.full_name for p in self.model.players if (p.first_name or p.last_name)]
+        if not missing_players or not roster_names:
+            messagebox.showinfo(title, summary_text)
+            return
+        ImportSummaryDialog(self, title, summary_text, missing_players, roster_names, apply_callback=apply_callback)
+    def _apply_manual_import(self, mapping: dict[str, str], category_tables: dict[str, dict[str, object]], title: str) -> None:
+        if not mapping:
+            messagebox.showinfo(title, "No player matches were selected.")
+            return
+        import csv as _csv
+        map_lookup = {str(k or "").strip().lower(): v for k, v in mapping.items() if v}
+        if not map_lookup:
+            messagebox.showinfo(title, "No valid player matches were provided.")
+            return
+        temp_files: dict[str, str] = {}
+        try:
+            for cat, table in category_tables.items():
+                rows = list(table.get("rows") or [])
+                if len(rows) < 2:
+                    continue
+                header = rows[0]
+                filtered = [header]
+                for row in rows[1:]:
+                    if not row:
+                        continue
+                    sheet_name = str(row[0]).strip()
+                    mapped = map_lookup.get(sheet_name.lower())
+                    if not mapped:
+                        continue
+                    new_row = list(row)
+                    new_row[0] = mapped
+                    filtered.append(new_row)
+                if len(filtered) <= 1:
+                    continue
+                delimiter = table.get("delimiter") or ","
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv", mode="w", newline='', encoding='utf-8')
+                writer = _csv.writer(tmp, delimiter=delimiter)
+                writer.writerows(filtered)
+                tmp.close()
+                temp_files[cat] = tmp.name
+            if not temp_files:
+                messagebox.showinfo(title, "No matching rows were found for the selected players.")
+                return
+            results = self.model.import_all(temp_files)
+            try:
+                self.model.refresh_players()
+            except Exception:
+                pass
+            msg_lines = [f"{title} completed."]
+            if results:
+                msg_lines.append("\nPlayers updated:")
+                for cat, cnt in results.items():
+                    msg_lines.append(f"  {cat}: {cnt}")
+            messagebox.showinfo(title, "\n".join(msg_lines))
+        finally:
+            for path in temp_files.values():
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
     # ---------------------------------------------------------------------
     # Teams screen
     # ---------------------------------------------------------------------
@@ -3998,9 +4730,10 @@ class PlayerEditorApp(tk.Tk):
         """Helper to update both team dropdowns (players and teams screens)."""
         # Update players screen dropdown if it exists
         if hasattr(self, "team_dropdown"):
-            self.team_dropdown['values'] = teams
-            if teams:
-                self.team_var.set(teams[0])
+            player_list = ["All Players"] + list(teams)
+            self.team_dropdown['values'] = player_list
+            if player_list:
+                self.team_var.set(player_list[0])
         # Update teams screen dropdown
         self.team_edit_dropdown['values'] = teams
     def _on_team_edit_selected(self, event=None):
@@ -4117,10 +4850,7 @@ class PlayerEditorApp(tk.Tk):
             pid = self.model.mem.pid
             self.status_var.set(f"NBA2K26 is running (PID {pid})")
         else:
-            if self.model.external_loaded:
-                self.status_var.set("Using offline roster from files")
-            else:
-                self.status_var.set("NBA2K26 not detected – using demo roster")
+            self.status_var.set("NBA2K26 not detected - launch the game to enable editing")
     # ---------------------------------------------------------------------
     # Scanning players
     # ---------------------------------------------------------------------
@@ -4145,7 +4875,12 @@ class PlayerEditorApp(tk.Tk):
             else:
                 self.team_var.set("")
             self._refresh_player_list()
-            self.scan_status_var.set("")
+            if not self.model.mem.hproc:
+                self.scan_status_var.set("NBA 2K26 is not running.")
+            elif not teams:
+                self.scan_status_var.set("No teams available.")
+            else:
+                self.scan_status_var.set("")
         self.after(0, update_ui)
     # ---------------------------------------------------------------------
     # UI update helpers
@@ -4189,6 +4924,13 @@ class PlayerEditorApp(tk.Tk):
             search = ""
         self.player_listbox.delete(0, tk.END)
         self.filtered_player_indices = []
+        if not self.current_players:
+            if not self.model.mem.hproc:
+                self.player_listbox.insert(tk.END, "NBA 2K26 is not running.")
+            else:
+                self.player_listbox.insert(tk.END, "No players available.")
+            self.player_count_var.set("Players: 0")
+            return
         for idx, player in enumerate(self.current_players):
             name = (player.full_name or "").lower()
             if not search or search in name:
@@ -4231,15 +4973,53 @@ class PlayerEditorApp(tk.Tk):
         p = self.selected_player
         if not p:
             # Clear fields
+            self.player_name_var.set("Select a player")
+            self.player_ovr_var.set("OVR --")
             self.var_first.set("")
             self.var_last.set("")
             self.var_player_team.set("")
             self.btn_save.config(state=tk.DISABLED)
             self.btn_edit.config(state=tk.DISABLED)
+            self.btn_copy.config(state=tk.DISABLED)
+            for var in self.player_detail_fields.values():
+                var.set("--")
+            try:
+                self.player_portrait.itemconfig(self.player_portrait_text, text="")
+            except Exception:
+                pass
         else:
+            display_name = p.full_name or f"Player {p.index}"
+            self.player_name_var.set(display_name)
+            initials = "".join(part[0].upper() for part in (p.first_name, p.last_name) if part) or "?"
+            try:
+                self.player_portrait.itemconfig(self.player_portrait_text, text=initials[:2])
+            except Exception:
+                pass
             self.var_first.set(p.first_name)
             self.var_last.set(p.last_name)
             self.var_player_team.set(p.team)
+            snapshot: dict[str, object] = {}
+            try:
+                snapshot = self.model.get_player_panel_snapshot(p)
+            except Exception:
+                snapshot = {}
+            overall_val = snapshot.get("Overall")
+            if isinstance(overall_val, (int, float)):
+                self.player_ovr_var.set(f"OVR {int(overall_val)}")
+            else:
+                self.player_ovr_var.set("OVR --")
+            def _format_detail(label: str, value: object) -> str:
+                if label == "Height" and isinstance(value, (int, float)):
+                    inches_val = raw_height_to_inches(int(value))
+                    inches_val = max(HEIGHT_MIN_INCHES, min(HEIGHT_MAX_INCHES, inches_val))
+                    return format_height_inches(inches_val)
+                if value is None:
+                    return "--"
+                if isinstance(value, float):
+                    return f"{value:.3f}".rstrip("0").rstrip(".") or "0"
+                return str(value)
+            for label, var in self.player_detail_fields.items():
+                var.set(_format_detail(label, snapshot.get(label)))
             # Save button enabled only if connected to game and not loaded from files
             enable_save = self.model.mem.hproc is not None and not self.model.external_loaded
             self.btn_save.config(state=tk.NORMAL if enable_save else tk.DISABLED)
@@ -4519,7 +5299,8 @@ class FullPlayerEditor(tk.Toplevel):
             if name not in categories:
                 categories.append(name)
         # Append placeholder categories for unimplemented sections
-        for name in ["Accessories", "Contract"]:
+        if "Contract" not in categories:
+            categories.append("Contract")
             if name not in categories:
                 categories.append(name)
         for cat in categories:
@@ -4639,13 +5420,16 @@ class FullPlayerEditor(tk.Toplevel):
             # bitfield values is handled in the load/save methods.  For
             # all other categories, use the raw bit range.
             if category_name in ("Attributes", "Durability"):
-                # Attributes and Durability use the familiar 25–99 rating scale
+                # Attributes and Durability use the familiar 25-99 rating scale
                 spin_from = 25
                 spin_to = 99
             elif category_name == "Tendencies":
-                # Tendencies are displayed on a 0–100 scale
+                # Tendencies are displayed on a 0-100 scale
                 spin_from = 0
                 spin_to = 100
+            elif field_name.lower() == "height":
+                spin_from = HEIGHT_MIN_INCHES
+                spin_to = HEIGHT_MAX_INCHES
             else:
                 spin_from = 0
                 spin_to = max_raw
@@ -4792,7 +5576,12 @@ class FullPlayerEditor(tk.Toplevel):
                 if value is not None:
                     try:
                         # Convert raw bitfield values to user‑friendly values
-                        if field_name.lower() == "weight":
+                        field_name_lower = field_name.lower()
+                        if field_name_lower == "height":
+                            inches_val = raw_height_to_inches(int(value))
+                            inches_val = max(HEIGHT_MIN_INCHES, min(HEIGHT_MAX_INCHES, inches_val))
+                            var.set(inches_val)
+                        elif field_name_lower == "weight":
                             try:
                                 self.model.mem.open_process()
                             except Exception:
@@ -4804,7 +5593,7 @@ class FullPlayerEditor(tk.Toplevel):
                                 var.set(int(round(wval)))
                             else:
                                 var.set(0)
-                        elif category in ("Attributes", "Durability"):  # Map the raw bitfield value into the 25–99 rating scale
+                        elif category in ("Attributes", "Durability"):  # Map the raw bitfield value into the 25-99 rating scale
                             rating = convert_raw_to_rating(int(value), length)
                             var.set(int(rating))
                         elif category == "Tendencies":
@@ -4875,7 +5664,18 @@ class FullPlayerEditor(tk.Toplevel):
                     # subtract 10 from the rating and clamp the result to
                     # the valid bitfield range.  Other categories are
                     # written as-is.
-                    if field_name.lower() == "weight":
+                    field_name_lower = field_name.lower()
+                    if field_name_lower == "height":
+                        try:
+                            inches_val = int(ui_value)
+                        except Exception:
+                            inches_val = HEIGHT_MIN_INCHES
+                        if inches_val < HEIGHT_MIN_INCHES:
+                            inches_val = HEIGHT_MIN_INCHES
+                        elif inches_val > HEIGHT_MAX_INCHES:
+                            inches_val = HEIGHT_MAX_INCHES
+                        value_to_write = height_inches_to_raw(inches_val)
+                    elif field_name_lower == "weight":
                         try:
                             wval = float(ui_value)
                         except Exception:
@@ -5272,10 +6072,9 @@ class TeamShuffleWindow(tk.Toplevel):
         The updated shuffling logic first dumps all players from the
         selected teams into the Free Agents pool, then randomly
         assigns exactly 15 players back to each selected team.  Any
-        leftover players remain in Free Agents.  Unlike the old
-        implementation, this function works in both live memory mode
-        and offline mode and does not enforce a per‑team roster
-        maximum prior to shuffling.
+        leftover players remain in Free Agents.  The shuffle operates
+        against live memory when pointer chains are available and
+        otherwise mutates the sequential scan cache.
         """
         import tkinter.messagebox as mb
         import random as _random
@@ -5295,8 +6094,8 @@ class TeamShuffleWindow(tk.Toplevel):
         name_to_idx = {name: idx for idx, name in self.model.team_list}
         free_agent_idx = name_to_idx.get("Free Agents", FREE_AGENT_TEAM_ID)
         # Determine whether we are in live memory mode.  Shuffling in
-        # live memory writes directly to the game process; offline mode
-        # simply updates the in-memory roster representation.
+        # live memory writes directly to the game process; otherwise it
+        # only updates the in-memory cache.
         live_mode = not self.model.external_loaded and not self.model.fallback_players
         total_assigned = 0
         if live_mode:
@@ -5374,7 +6173,7 @@ class TeamShuffleWindow(tk.Toplevel):
                     p.team = team
                     p.team_id = name_to_idx.get(team, p.team_id)
                     total_assigned += 1
-            # Rebuild the name index map after offline changes
+            # Rebuild the name index map after in-memory cache changes
             self.model._build_name_index_map()
         # Report summary
         mb.showinfo("Shuffle Teams", f"Shuffle complete. {total_assigned} players reassigned. Remaining players are Free Agents.")
@@ -5624,10 +6423,238 @@ class BatchEditWindow(tk.Toplevel):
 # Category selection dialog for COY imports
 #
 # When invoking the COY import from the side bar, the user can choose which
-# categories (Attributes, Tendencies, Durability) they wish to import.  This
+# categories (Attributes, Tendencies, Durability, Potential) they wish to import.  This
 # dialog presents a list of checkboxes and returns the selected categories
 # when the user clicks OK.  If the dialog is cancelled or no categories are
 # selected, ``selected`` is set to None.
+class ImportSummaryDialog(tk.Toplevel):
+    """Dialog displaying import results and providing quick player lookup."""
+    MAX_SUGGESTIONS = 200
+    def __init__(
+        self,
+        parent: tk.Misc,
+        title: str,
+        summary_text: str,
+        missing_players: list[str],
+        roster_names: list[str],
+        apply_callback: Callable[[dict[str, str]], None] | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.title(title)
+        self.transient(parent)
+        self.grab_set()
+        self.resizable(True, True)
+        self.configure(bg=PANEL_BG)
+        self.apply_callback = apply_callback
+        self.missing_players = list(missing_players)
+        self.mapping: dict[str, str] = {}
+        # Summary section
+        summary_frame = tk.Frame(self, bg=PANEL_BG)
+        summary_frame.pack(fill=tk.X, padx=16, pady=(16, 8))
+        tk.Label(
+            summary_frame,
+            text="Import summary:",
+            bg=PANEL_BG,
+            fg=TEXT_PRIMARY,
+            font=("Segoe UI", 11, "bold"),
+        ).pack(anchor="w")
+        summary_lines_count = summary_text.count("\n") + 1
+        summary_box = tk.Text(
+            summary_frame,
+            height=max(3, min(12, summary_lines_count)),
+            wrap="word",
+            bg=PANEL_BG,
+            fg=TEXT_PRIMARY,
+            relief=tk.FLAT,
+            state="normal",
+            padx=0,
+            pady=0,
+            highlightthickness=0,
+        )
+        summary_box.insert("1.0", summary_text)
+        summary_box.config(state="disabled")
+        summary_box.pack(fill=tk.X, pady=(4, 0))
+        if missing_players:
+            missing_frame = tk.LabelFrame(
+                self,
+                text="Players not found – type to search the current roster",
+                bg=PANEL_BG,
+                fg=TEXT_PRIMARY,
+                labelanchor="n",
+                padx=8,
+                pady=8,
+            )
+            missing_frame.pack(fill=tk.BOTH, expand=True, padx=16, pady=(0, 12))
+            canvas = tk.Canvas(missing_frame, highlightthickness=0, bg=PANEL_BG)
+            scrollbar = tk.Scrollbar(missing_frame, orient="vertical", command=canvas.yview)
+            canvas.configure(yscrollcommand=scrollbar.set)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            rows_frame = tk.Frame(canvas, bg=PANEL_BG)
+            canvas.create_window((0, 0), window=rows_frame, anchor="nw")
+            def _on_configure(event):
+                canvas.configure(scrollregion=canvas.bbox("all"))
+            rows_frame.bind("<Configure>", _on_configure)
+            header_fg = TEXT_PRIMARY
+            tk.Label(
+                rows_frame,
+                text="Sheet Name",
+                bg=PANEL_BG,
+                fg=header_fg,
+                font=("Segoe UI", 10, "bold"),
+            ).grid(row=0, column=0, sticky="w", padx=(0, 10), pady=(0, 4))
+            tk.Label(
+                rows_frame,
+                text="Search roster",
+                bg=PANEL_BG,
+                fg=header_fg,
+                font=("Segoe UI", 10, "bold"),
+            ).grid(row=0, column=1, sticky="w", pady=(0, 4))
+            roster_sorted = sorted(set(roster_names), key=lambda n: n.lower())
+            for idx, name in enumerate(missing_players, start=1):
+                tk.Label(
+                    rows_frame,
+                    text=name,
+                    bg=PANEL_BG,
+                    fg=TEXT_PRIMARY,
+                ).grid(row=idx, column=0, sticky="w", padx=(0, 10), pady=2)
+                combo = SearchEntry(rows_frame, roster_sorted, width=32)
+                combo.grid(row=idx, column=1, sticky="ew", pady=2)
+                combo.set_match_callback(lambda value, source=name, self=self: self._set_mapping(source, value))
+            rows_frame.columnconfigure(1, weight=1)
+        btn_frame = tk.Frame(self, bg=PANEL_BG)
+        btn_frame.pack(fill=tk.X, padx=16, pady=(0, 16))
+        if missing_players and apply_callback:
+            tk.Button(
+                btn_frame,
+                text="Apply Matches",
+                command=self._on_apply,
+                width=14,
+                bg=ACCENT_BG,
+                activebackground=BUTTON_ACTIVE_BG,
+                fg=TEXT_PRIMARY,
+            ).pack(side=tk.RIGHT, padx=(0, 8))
+        tk.Button(
+            btn_frame,
+            text="Close",
+            command=self.destroy,
+            width=12,
+            bg=BUTTON_BG,
+            activebackground=BUTTON_ACTIVE_BG,
+            fg=BUTTON_TEXT,
+        ).pack(side=tk.RIGHT)
+
+    def _set_mapping(self, sheet_name: str, roster_value: str) -> None:
+        value = roster_value.strip()
+        if value:
+            self.mapping[sheet_name] = value
+        elif sheet_name in self.mapping:
+            self.mapping.pop(sheet_name, None)
+
+    def _on_apply(self) -> None:
+        if self.apply_callback:
+            self.apply_callback(dict(self.mapping))
+        self.destroy()
+
+class SearchEntry(ttk.Entry):
+    """Entry with dropdown suggestion list that stays open while typing."""
+    def __init__(self, parent: tk.Misc, values: list[str], width: int = 30):
+        self._all_values = values
+        self._popup = None
+        self._listbox = None
+        super().__init__(parent, width=width)
+        self._match_callback: Callable[[str], None] | None = None
+        self.bind("<KeyRelease>", self._on_keyrelease, add="+")
+        self.bind("<FocusOut>", self._on_focus_out, add="+")
+        self.bind("<Down>", self._move_focus_to_list, add="+")
+        self.bind("<Return>", self._commit_current, add="+")
+
+    def set_match_callback(self, callback: Callable[[str], None]) -> None:
+        self._match_callback = callback
+
+    def _move_focus_to_list(self, event=None) -> None:
+        if self._listbox:
+            self._listbox.focus_set()
+            self._listbox.selection_clear(0, tk.END)
+            self._listbox.selection_set(0)
+            self._listbox.activate(0)
+
+    def _commit_current(self, event=None) -> None:
+        value = self.get().strip()
+        if self._listbox and self._listbox.curselection():
+            value = self._listbox.get(self._listbox.curselection()[0])
+            self.delete(0, tk.END)
+            self.insert(0, value)
+        if self._match_callback:
+            self._match_callback(value)
+        self._hide_popup()
+
+    def _on_keyrelease(self, event) -> None:
+        if event.keysym in ("Return", "Escape", "Tab"):
+            return
+        term = self.get().strip().lower()
+        if not term:
+            filtered = self._all_values[:ImportSummaryDialog.MAX_SUGGESTIONS]
+        else:
+            filtered = [v for v in self._all_values if term in v.lower()]
+            filtered = filtered[:ImportSummaryDialog.MAX_SUGGESTIONS]
+        if not filtered:
+            self._hide_popup()
+            return
+        self._show_popup(filtered)
+
+    def _on_focus_out(self, event) -> None:
+        widget = event.widget
+        if self._popup and widget not in (self, self._listbox):
+            self.after(100, self._hide_popup)
+
+    def _show_popup(self, values: list[str]) -> None:
+        if self._popup and not self._popup.winfo_exists():
+            self._popup = None
+        if not self._popup:
+            self._popup = tk.Toplevel(self)
+            self._popup.wm_overrideredirect(True)
+            self._popup.configure(bg="#2C3E50")
+            self._listbox = tk.Listbox(
+                self._popup,
+                selectmode=tk.SINGLE,
+                activestyle="dotbox",
+                bg="#2C3E50",
+                fg="#ECF0F1",
+                highlightthickness=0,
+                relief=tk.FLAT,
+            )
+            self._listbox.pack(fill=tk.BOTH, expand=True)
+            self._listbox.bind("<ButtonRelease-1>", self._on_list_click, add="+")
+            self._listbox.bind("<Return>", self._commit_current, add="+")
+            self._listbox.bind("<Escape>", lambda _e: self._hide_popup(), add="+")
+        assert self._popup and self._listbox
+        self._listbox.delete(0, tk.END)
+        for item in values:
+            self._listbox.insert(tk.END, item)
+        self._popup.update_idletasks()
+        x = self.winfo_rootx()
+        y = self.winfo_rooty() + self.winfo_height()
+        width = max(self.winfo_width(), 240)
+        height = min(200, self._popup.winfo_reqheight())
+        self._popup.geometry(f"{width}x{height}+{x}+{y}")
+        self._popup.deiconify()
+
+    def _on_list_click(self, _event) -> None:
+        if self._listbox and self._listbox.curselection():
+            value = self._listbox.get(self._listbox.curselection()[0])
+            self.delete(0, tk.END)
+            self.insert(0, value)
+            if self._match_callback:
+                self._match_callback(value)
+        self._hide_popup()
+
+    def _hide_popup(self) -> None:
+        if self._popup:
+            self._popup.destroy()
+            self._popup = None
+            self._listbox = None
+
 class CategorySelectionDialog(tk.Toplevel):
     """
     Simple modal dialog that allows the user to select one or more categories
@@ -5685,8 +6712,10 @@ def main() -> None:
     if sys.platform != "win32":
         messagebox.showerror("Unsupported platform", "This application can only run on Windows.")
         return
-    if not initialize_offsets(force=True):
-        messagebox.showerror("Offsets missing", "Unable to load 2K26_Offsets.json. Place the file next to the editor.")
+    try:
+        initialize_offsets(force=True)
+    except OffsetSchemaError as exc:
+        messagebox.showerror("Offset schema error", str(exc))
         return
     if _offset_file_path:
         print(f"Loaded 2K26 offsets from {_offset_file_path.name}")
@@ -5698,6 +6727,3 @@ def main() -> None:
     app.mainloop()
 if __name__ == '__main__':
     main()
-
-
-
