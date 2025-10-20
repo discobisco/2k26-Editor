@@ -2994,6 +2994,88 @@ class PlayerDataModel:
                 continue
             results[cat] = self.import_table(cat, path)
         return results
+
+    def export_category_to_csv(self, category_name: str, filepath: str) -> int:
+        """
+        Export the specified category to a CSV file.
+        The file will contain a header row followed by one row per player.
+        Returns the number of player rows written.
+        """
+        if not filepath:
+            return 0
+        fields = self._get_import_fields(category_name) or self.categories.get(category_name, [])
+        if not fields:
+            return 0
+        if not self.mem.open_process():
+            raise RuntimeError("Game process not opened; cannot export roster data.")
+        if not self.players:
+            self.refresh_players()
+        if not self.players:
+            return 0
+        header = ["Player Name"] + [str(field.get("name", f"Field {idx+1}")) for idx, field in enumerate(fields)]
+        import csv as _csv  # local import to mirror import_table pattern
+        rows_written = 0
+        with open(filepath, "w", newline="", encoding="utf-8") as handle:
+            writer = _csv.writer(handle)
+            writer.writerow(header)
+            for player in self.players:
+                row: list[str] = [player.full_name]
+                for meta in fields:
+                    offset = _to_int(meta.get("offset") or meta.get("address") or meta.get("offset_from_base"))
+                    start_bit = _to_int(meta.get("startBit") or meta.get("start_bit") or 0)
+                    length = _to_int(meta.get("length") or meta.get("bitLength") or meta.get("bits"))
+                    requires_deref = bool(meta.get("requiresDereference") or meta.get("requires_deref"))
+                    deref_offset = _to_int(meta.get("dereferenceAddress") or meta.get("deref_offset"))
+                    raw_val = self.get_field_value(
+                        player.index,
+                        offset,
+                        start_bit,
+                        length,
+                        requires_deref=requires_deref,
+                        deref_offset=deref_offset,
+                    )
+                    if raw_val is None:
+                        row.append("")
+                        continue
+                    if category_name in ("Attributes", "Durability", "Potential"):
+                        row.append(str(convert_raw_to_rating(raw_val, length or 8)))
+                    elif category_name == "Tendencies":
+                        row.append(str(convert_tendency_raw_to_rating(raw_val, length or 8)))
+                    else:
+                        row.append(str(raw_val))
+                writer.writerow(row)
+                rows_written += 1
+        return rows_written
+
+    def export_categories_to_directory(self, category_names: Sequence[str], directory: str) -> dict[str, tuple[str, int]]:
+        """
+        Export multiple categories into the provided directory.
+        Returns a mapping of category -> (filepath, rows_written).
+        """
+        if not category_names or not directory:
+            return {}
+        os.makedirs(directory, exist_ok=True)
+        results: dict[str, tuple[str, int]] = {}
+        for category_name in category_names:
+            safe_name = re.sub(r"[^A-Za-z0-9]+", "_", category_name.strip()).strip("_")
+            if not safe_name:
+                safe_name = "category"
+            filename = f"{safe_name.lower()}.csv"
+            path = os.path.join(directory, filename)
+            try:
+                count = self.export_category_to_csv(category_name, path)
+            except Exception:
+                continue
+            if count > 0:
+                results[category_name] = (path, count)
+            else:
+                # Remove empty files to avoid confusion
+                try:
+                    if os.path.isfile(path):
+                        os.remove(path)
+                except Exception:
+                    pass
+        return results
     # -----------------------------------------------------------------
     # Pointer resolution helpers
     # -----------------------------------------------------------------
@@ -3998,6 +4080,18 @@ class PlayerEditorApp(tk.Tk):
             activeforeground=BUTTON_TEXT,
         )
         self.btn_load_excel.pack(fill=tk.X, padx=10, pady=5)
+        # Export CSV button
+        self.btn_export_csv = tk.Button(
+            self.sidebar,
+            text="Export CSV",
+            command=self._open_export_dialog,
+            bg=BUTTON_BG,
+            fg=BUTTON_TEXT,
+            relief=tk.FLAT,
+            activebackground=BUTTON_ACTIVE_BG,
+            activeforeground=BUTTON_TEXT,
+        )
+        self.btn_export_csv.pack(fill=tk.X, padx=10, pady=5)
         # Team Shuffle button
         self.btn_shuffle = tk.Button(
             self.sidebar,
@@ -4303,6 +4397,17 @@ class PlayerEditorApp(tk.Tk):
             pady=6,
         )
         self.btn_import.pack(side=tk.LEFT, padx=5)
+        self.btn_export = tk.Button(
+            btn_row,
+            text="Export CSV",
+            command=self._open_export_dialog,
+            bg="#1D3557",
+            fg="white",
+            relief=tk.FLAT,
+            padx=16,
+            pady=6,
+        )
+        self.btn_export.pack(side=tk.LEFT, padx=5)
         self.current_players = []
         self.filtered_player_indices = []
         self.selected_player = None
@@ -4451,7 +4556,12 @@ class PlayerEditorApp(tk.Tk):
         # ------------------------------------------------------------------
         categories_to_ask = ["Attributes", "Tendencies", "Durability", "Potential"]
         try:
-            dlg = CategorySelectionDialog(self, categories_to_ask)
+            dlg = CategorySelectionDialog(
+                self,
+                categories_to_ask,
+                title="Select categories to import",
+                message="Import the following categories:",
+            )
             # Wait for the dialog to close before proceeding
             self.wait_window(dlg)
             selected_categories = dlg.selected
@@ -4709,7 +4819,12 @@ class PlayerEditorApp(tk.Tk):
         # Ask the user which categories to import
         categories_to_ask = ["Attributes", "Tendencies", "Durability", "Potential"]
         try:
-            dlg = CategorySelectionDialog(self, categories_to_ask)
+            dlg = CategorySelectionDialog(
+                self,
+                categories_to_ask,
+                title="Select categories to import",
+                message="Import the following categories:",
+            )
             self.wait_window(dlg)
             selected_categories = dlg.selected
         except Exception:
@@ -5462,6 +5577,59 @@ class PlayerEditorApp(tk.Tk):
             win.destroy()
         tk.Button(btn_frame, text="Copy", command=do_copy, bg="#84A98C", fg="white", relief=tk.FLAT).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="Cancel", command=win.destroy, bg="#B0413E", fg="white", relief=tk.FLAT).pack(side=tk.LEFT, padx=5)
+    def _open_export_dialog(self) -> None:
+        """Prompt the user to export selected roster categories to CSV files."""
+        try:
+            if not self.model.mem.open_process():
+                messagebox.showerror("Export Data", "Unable to connect to NBA 2K. Launch the game and try again.")
+                return
+        except Exception:
+            messagebox.showerror("Export Data", "Failed to access the game process. Make sure NBA 2K is running.")
+            return
+        # Ensure we have an up-to-date player list before exporting
+        try:
+            self.model.refresh_players()
+        except Exception:
+            pass
+        if not self.model.players:
+            messagebox.showerror("Export Data", "No players were detected. Refresh the roster and try again.")
+            return
+        available_categories = [cat for cat in ("Attributes", "Tendencies", "Durability", "Potential") if cat in self.model.categories]
+        if not available_categories:
+            messagebox.showerror("Export Data", "No exportable categories were found in the current offsets configuration.")
+            return
+        dlg = CategorySelectionDialog(
+            self,
+            available_categories,
+            title="Select categories to export",
+            message="Export the following categories:",
+        )
+        self.wait_window(dlg)
+        if not getattr(dlg, "selected", None):
+            return
+        export_dir = filedialog.askdirectory(parent=self, title="Select export folder")
+        if not export_dir:
+            return
+        try:
+            results = self.model.export_categories_to_directory(dlg.selected, export_dir)
+        except RuntimeError as exc:
+            messagebox.showerror("Export Data", str(exc))
+            return
+        except Exception as exc:  # Safety net
+            messagebox.showerror("Export Data", f"Failed to export roster data:\n{exc}")
+            return
+        if not results:
+            messagebox.showinfo("Export Data", "No CSV files were created. Ensure the selected categories are available.")
+            return
+        lines = []
+        for cat in dlg.selected:
+            info = results.get(cat)
+            if not info:
+                continue
+            path, count = info
+            lines.append(f"{cat}: exported {count} players to {os.path.basename(path)}")
+        summary = "\n".join(lines) if lines else "Export completed."
+        messagebox.showinfo("Export Data", summary)
     def _open_import_dialog(self):
         """Prompt the user to select one or more import files and apply them to the roster.
         The user can select up to three files corresponding to Attributes,
@@ -6993,14 +7161,21 @@ class SearchEntry(ttk.Entry):
 
 class CategorySelectionDialog(tk.Toplevel):
     """
-    Simple modal dialog that allows the user to select one or more categories
-    for the COY import.  Categories are presented as checkboxes.  The
-    selected categories are stored in the ``selected`` attribute after
-    ``OK`` is pressed; if cancelled, ``selected`` is ``None``.
+    Simple modal dialog that allows the user to select one or more categories.
+    Categories are presented as checkboxes.  The selected categories are stored
+    in the ``selected`` attribute after ``OK`` is pressed; if cancelled,
+    ``selected`` is ``None``.
     """
-    def __init__(self, parent: tk.Misc, categories: list[str]) -> None:
+    def __init__(
+        self,
+        parent: tk.Misc,
+        categories: list[str],
+        title: str | None = None,
+        message: str | None = None,
+        select_all: bool = True,
+    ) -> None:
         super().__init__(parent)
-        self.title("Select categories to import")
+        self.title(title or "Select categories")
         self.resizable(False, False)
         # Ensure the dialog appears above its parent
         self.transient(parent)
@@ -7008,14 +7183,14 @@ class CategorySelectionDialog(tk.Toplevel):
         # Internal storage for selected categories; None until closed
         self.selected: list[str] | None = []
         # Create a label
-        tk.Label(self, text="Import the following categories:").pack(padx=10, pady=(10, 5))
+        tk.Label(self, text=message or "Select the following categories:").pack(padx=10, pady=(10, 5))
         # Create a frame to hold the checkboxes
         frame = tk.Frame(self)
         frame.pack(padx=10, pady=5)
         # Dictionary mapping category names to BooleanVars
         self.var_map: dict[str, tk.BooleanVar] = {}
         for cat in categories:
-            var = tk.BooleanVar(value=True)
+            var = tk.BooleanVar(value=select_all)
             chk = tk.Checkbutton(frame, text=cat, variable=var)
             chk.pack(anchor=tk.W)
             self.var_map[cat] = var
