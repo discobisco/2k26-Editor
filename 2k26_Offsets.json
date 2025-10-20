@@ -1,0 +1,3628 @@
+{
+    "game_info": {
+        "executable": "NBA2K26.exe",
+        "version": "September",
+        "playerSize": 1176,
+        "teamSize": 5672
+    },
+    "base_pointers": {
+        "Player": {
+            "address": 130927960,
+            "chain": []
+        },
+        "Team": {
+            "address": 130928560,
+            "chain": []
+        }
+    },
+    "offsets": [
+
+
+        {
+            "category": "Attributes",
+            "name": "Driving Layup",
+            "address": 993,
+            "hex": "0x3E1",
+            "length": 8,
+            "type": "Binary",
+            "startBit": 6
+        },
+        {
+            "category": "Attributes",
+            "name": "Standing Dunk",
+            "address": 1015,
+            "hex": "0x3F7",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Driving Dunk",
+            "address": 1016,
+            "hex": "0x3F8",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Close Shot",
+            "address": 999,
+            "hex": "0x3E7",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Mid Range",
+            "address": 1000,
+            "hex": "0x3E8",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Three Point",
+            "address": 1001,
+            "hex": "0x3E9",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Free Throw",
+            "address": 1002,
+            "hex": "0x3EA",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Post Hook",
+            "address": 996,
+            "hex": "0x3E4",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Post Fade",
+            "address": 994,
+            "hex": "0x3E2",
+            "length": 8,
+            "type": "Binary",
+            "startBit": 6
+        },
+        {
+            "category": "Attributes",
+            "name": "Post Control",
+            "address": 997,
+            "hex": "0x3E5",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Draw Foul",
+            "address": 998,
+            "hex": "0x3E6",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Shot IQ",
+            "address": 1024,
+            "hex": "0x400",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Ball Control",
+            "address": 1003,
+            "hex": "0x3EB",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Speed With Ball",
+            "address": 1018,
+            "hex": "0x3FA",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Hands",
+            "address": 1045,
+            "hex": "0x415",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Passing Accuracy",
+            "address": 1005,
+            "hex": "0x3ED",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Passing IQ",
+            "address": 1004,
+            "hex": "0x3EC",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Passing Vision",
+            "address": 1044,
+            "hex": "0x414",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Offensive Consistency",
+            "address": 1025,
+            "hex": "0x401",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Interior Defense",
+            "address": 1008,
+            "hex": "0x3F0",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Perimeter Defense",
+            "address": 1009,
+            "hex": "0x3F1",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Steal",
+            "address": 1012,
+            "hex": "0x3F4",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Block",
+            "address": 1011,
+            "hex": "0x3F3",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Offensive Rebound",
+            "address": 1006,
+            "hex": "0x3EE",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Defensive Rebound",
+            "address": 1007,
+            "hex": "0x3EF",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Help Defense IQ",
+            "address": 1014,
+            "hex": "0x3F6",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Passing Perception",
+            "address": 1010,
+            "hex": "0x3F2",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Defensive Consistency",
+            "address": 1013,
+            "hex": "0x3F5",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Speed",
+            "address": 1017,
+            "hex": "0x3F9",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Agility",
+            "address": 1023,
+            "hex": "0x3FF",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Strength",
+            "address": 1020,
+            "hex": "0x3FC",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Vertical",
+            "address": 1019,
+            "hex": "0x3FB",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Stamina",
+            "address": 1021,
+            "hex": "0x3FD",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Intangibles",
+            "address": 1026,
+            "hex": "0x402",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Hustle",
+            "address": 1022,
+            "hex": "0x3FE",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Head Durability",
+            "address": 1028,
+            "hex": "0x404",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Neck Durability",
+            "address": 1029,
+            "hex": "0x405",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Back Durability",
+            "address": 1030,
+            "hex": "0x406",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Left Shoulder Durability",
+            "address": 1031,
+            "hex": "0x407",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Right Shoulder Durability",
+            "address": 1032,
+            "hex": "0x408",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Left Elbow Durability",
+            "address": 1033,
+            "hex": "0x409",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Right Elbow Durability",
+            "address": 1034,
+            "hex": "0x40A",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Left Hip Durability",
+            "address": 1035,
+            "hex": "0x40B",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Right Hip Durability",
+            "address": 1036,
+            "hex": "0x40C",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Left Knee Durability",
+            "address": 1037,
+            "hex": "0x40D",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Right Knee Durability",
+            "address": 1038,
+            "hex": "0x40E",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Left Ankle Durability",
+            "address": 1039,
+            "hex": "0x40F",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Right Ankle Durability",
+            "address": 1040,
+            "hex": "0x410",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Left Foot Durability",
+            "address": 1041,
+            "hex": "0x411",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Right Foot Durability",
+            "address": 1042,
+            "hex": "0x412",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Attributes",
+            "name": "Misc Durability",
+            "address": 1043,
+            "hex": "0x413",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Hotzones",
+            "name": "Under Basket",
+            "address": 448,
+            "hex": "0x1C0",
+            "length": 2,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Hotzones",
+            "name": "Close Left",
+            "address": 451,
+            "hex": "0x1C3",
+            "length": 2,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Hotzones",
+            "name": "Close Middle",
+            "address": 448,
+            "hex": "0x1C0",
+            "length": 2,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Hotzones",
+            "name": "Close Right",
+            "address": 451,
+            "hex": "0x1C3",
+            "length": 2,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Hotzones",
+            "name": "Mid Range Left",
+            "address": 464,
+            "hex": "0x1D0",
+            "length": 2,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Hotzones",
+            "name": "Mid Range Left Center",
+            "address": 448,
+            "hex": "0x1C0",
+            "length": 2,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Hotzones",
+            "name": "Mid Range Center",
+            "address": 448,
+            "hex": "0x1C0",
+            "length": 2,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Hotzones",
+            "name": "Mid Range Right Center",
+            "address": 842,
+            "hex": "0x34A",
+            "length": 2,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Hotzones",
+            "name": "Mid Range Right",
+            "address": 854,
+            "hex": "0x356",
+            "length": 2,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Hotzones",
+            "name": "Three Left",
+            "address": 454,
+            "hex": "0x1C6",
+            "length": 2,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Hotzones",
+            "name": "Three Left Center",
+            "address": 455,
+            "hex": "0x1C7",
+            "length": 2,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Hotzones",
+            "name": "Three Center",
+            "address": 363,
+            "hex": "0x16B",
+            "length": 2,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Hotzones",
+            "name": "Three Right Center",
+            "address": 823,
+            "hex": "0x337",
+            "length": 2,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Hotzones",
+            "name": "Three Right Center",
+            "address": 451,
+            "hex": "0x1C3",
+            "length": 2,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Vitals",
+            "name": "First Name",
+            "address": 40,
+            "hex": "0x28",
+            "length": 40,
+            "type": "WString"
+        },
+        {
+            "category": "Vitals",
+            "name": "Last Name",
+            "address": 0,
+            "hex": "0x0",
+            "length": 40,
+            "type": "WString"
+        },
+        {
+            "category": "Vitals",
+            "name": "Position",
+            "address": 293,
+            "hex": "0x125",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Vitals",
+            "name": "Position 2",
+            "address": 293,
+            "hex": "0x125",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Vitals",
+            "name": "Age",
+            "address": 266,
+            "hex": "0x10A",
+            "length": 8,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Vitals",
+            "name": "Weight",
+            "address": 256,
+            "hex": "0x100",
+            "length": 32,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "College",
+            "address": 176,
+            "hex": "0xB0",
+            "length": 40,
+            "type": "WString"
+        },
+        {
+            "category": "Attributes",
+            "name": "Potential",
+            "address": 1027,
+            "hex": "0x403",
+            "length": 8,
+            "type": "Binary"
+        },
+        {
+            "category": "Vitals",
+            "name": "Birth Year",
+            "address": 266,
+            "hex": "0x10A",
+            "length": 16,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Birth Month",
+            "address": 835,
+            "hex": "0x343",
+            "length": 4,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Vitals",
+            "name": "Birth Day",
+            "address": 268,
+            "hex": "0x10C",
+            "length": 5,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Vitals",
+            "name": "Years Pro",
+            "address": 926,
+            "hex": "0x39E",
+            "length": 5,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Vitals",
+            "name": "Jersey Number",
+            "address": 269,
+            "hex": "0x10D",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Vitals",
+            "name": "Dominant Hand",
+            "address": 294,
+            "hex": "0x126",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Vitals",
+            "name": "Dunk Hand",
+            "address": 294,
+            "hex": "0x126",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Vitals",
+            "name": "Peak Start",
+            "address": 270,
+            "hex": "0x10E",
+            "length": 6,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Vitals",
+            "name": "Peak End",
+            "address": 271,
+            "hex": "0x10F",
+            "length": 6,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Vitals",
+            "name": "Minimum Potential",
+            "address": 952,
+            "hex": "0x3B8",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Vitals",
+            "name": "Play For Winner",
+            "address": 697,
+            "hex": "0x2B9",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Vitals",
+            "name": "Financial Security",
+            "address": 698,
+            "hex": "0x2BA",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Vitals",
+            "name": "Maximum Potential",
+            "address": 952,
+            "hex": "0x3B8",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Vitals",
+            "name": "Boom Percentage",
+            "address": 953,
+            "hex": "0x3B9",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Vitals",
+            "name": "Loyalty",
+            "address": 696,
+            "hex": "0x2B8",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Vitals",
+            "name": "Bust Percentage",
+            "address": 954,
+            "hex": "0x3BA",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Vitals",
+            "name": "Average Percent",
+            "address": 818,
+            "hex": "0x332",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Vitals",
+            "name": "Injury 1 Type",
+            "address": 292,
+            "hex": "0x124",
+            "length": 8,
+            "type": "Integer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Injury 1 Duration",
+            "address": 812,
+            "hex": "0x32C",
+            "length": 15,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Vitals",
+            "name": "Force Non Starter",
+            "address": 815,
+            "hex": "0x32F",
+            "length": 2,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Vitals",
+            "name": "Play Initiator",
+            "address": 686,
+            "hex": "0x2AE",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Vitals",
+            "name": "Playtype 1",
+            "address": 412,
+            "hex": "0x19C",
+            "length": 4,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Vitals",
+            "name": "Playtype 2",
+            "address": 412,
+            "hex": "0x19C",
+            "length": 4,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Vitals",
+            "name": "Playtype 3",
+            "address": 413,
+            "hex": "0x19D",
+            "length": 4,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Vitals",
+            "name": "Playtype 4",
+            "address": 413,
+            "hex": "0x19D",
+            "length": 4,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Badges",
+            "name": "Aerial Wizard",
+            "address": 1149,
+            "hex": "0x47D",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Badges",
+            "name": "Ankle Breaker",
+            "address": 1161,
+            "hex": "0x489",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Badges",
+            "name": "Bail Out",
+            "address": 1152,
+            "hex": "0x480",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Badges",
+            "name": "Boxout Beast",
+            "address": 1156,
+            "hex": "0x484",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Badges",
+            "name": "Break Starter",
+            "address": 1152,
+            "hex": "0x480",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Badges",
+            "name": "Brick Wall",
+            "address": 1157,
+            "hex": "0x485",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Badges",
+            "name": "Challenger",
+            "address": 1154,
+            "hex": "0x482",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Badges",
+            "name": "Deadeye",
+            "address": 1150,
+            "hex": "0x47E",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Badges",
+            "name": "Dimer",
+            "address": 1152,
+            "hex": "0x480",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Badges",
+            "name": "Float Game",
+            "address": 1148,
+            "hex": "0x47C",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Badges",
+            "name": "Glove",
+            "address": 1155,
+            "hex": "0x483",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Badges",
+            "name": "Handles For Days",
+            "address": 1153,
+            "hex": "0x481",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Badges",
+            "name": "High Flying Denier",
+            "address": 1163,
+            "hex": "0x48B",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Badges",
+            "name": "Hook Specialist",
+            "address": 1149,
+            "hex": "0x47D",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Badges",
+            "name": "Immovable Enforcer",
+            "address": 1157,
+            "hex": "0x485",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Badges",
+            "name": "Interceptor",
+            "address": 1156,
+            "hex": "0x484",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Badges",
+            "name": "Layup Mixmaster",
+            "address": 1158,
+            "hex": "0x486",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Badges",
+            "name": "Lightning Launch",
+            "address": 1162,
+            "hex": "0x48A",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Badges",
+            "name": "Limitless Range",
+            "address": 1151,
+            "hex": "0x47F",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Badges",
+            "name": "Mini Marksman",
+            "address": 1160,
+            "hex": "0x488",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Badges",
+            "name": "Off Ball Pest",
+            "address": 1154,
+            "hex": "0x482",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Badges",
+            "name": "On Ball Menace",
+            "address": 1163,
+            "hex": "0x48B",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Badges",
+            "name": "Paint Patroller",
+            "address": 1164,
+            "hex": "0x48C",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Badges",
+            "name": "Paint Prodigy",
+            "address": 1158,
+            "hex": "0x486",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Badges",
+            "name": "Physical Finisher",
+            "address": 1159,
+            "hex": "0x487",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Badges",
+            "name": "Pick Dodger",
+            "address": 1155,
+            "hex": "0x483",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Badges",
+            "name": "Pogo Stick",
+            "address": 1156,
+            "hex": "0x484",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Badges",
+            "name": "Posterizer",
+            "address": 1148,
+            "hex": "0x47C",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Badges",
+            "name": "Post Fade Phenom",
+            "address": 1150,
+            "hex": "0x47E",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Badges",
+            "name": "Post Lockdown",
+            "address": 1153,
+            "hex": "0x481",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Badges",
+            "name": "Post Powerhouse",
+            "address": 1159,
+            "hex": "0x487",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Badges",
+            "name": "Post Up Poet",
+            "address": 1160,
+            "hex": "0x488",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Badges",
+            "name": "Rebound Chaser",
+            "address": 1157,
+            "hex": "0x485",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Badges",
+            "name": "Rise Up",
+            "address": 1149,
+            "hex": "0x47D",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Badges",
+            "name": "Set Shot Specialist",
+            "address": 1160,
+            "hex": "0x488",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Badges",
+            "name": "Shifty Shooter",
+            "address": 1161,
+            "hex": "0x489",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Badges",
+            "name": "Slippery Off Ball",
+            "address": 1151,
+            "hex": "0x47F",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Badges",
+            "name": "Strong Handles",
+            "address": 1162,
+            "hex": "0x48A",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Badges",
+            "name": "Unpluckable",
+            "address": 1153,
+            "hex": "0x481",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Badges",
+            "name": "Versatile Visionary",
+            "address": 1161,
+            "hex": "0x489",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Alpha Dog",
+            "address": 1147,
+            "hex": "0x47B",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Enforcer",
+            "address": 1147,
+            "hex": "0x47B",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Reserved",
+            "address": 1145,
+            "hex": "0x479",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Friendly",
+            "address": 1146,
+            "hex": "0x47A",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Team Player",
+            "address": 1146,
+            "hex": "0x47A",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Extremely Confident",
+            "address": 1146,
+            "hex": "0x47A",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Keep It Real",
+            "address": 1146,
+            "hex": "0x47A",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Pat My Back",
+            "address": 1146,
+            "hex": "0x47A",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Expressive",
+            "address": 1146,
+            "hex": "0x47A",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Unpredictable",
+            "address": 1146,
+            "hex": "0x47A",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Laid Back",
+            "address": 1146,
+            "hex": "0x47A",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Media Ringmaster",
+            "address": 1147,
+            "hex": "0x47B",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Warm Weather Fan",
+            "address": 1147,
+            "hex": "0x47B",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Finance Savvy",
+            "address": 1147,
+            "hex": "0x47B",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Marketability",
+            "address": 1148,
+            "hex": "0x47C",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Personality Badges",
+            "name": "Work Ethic",
+            "address": 1147,
+            "hex": "0x47B",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Alley Oop",
+            "address": 1052,
+            "hex": "0x41C",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Alley Oop Pass",
+            "address": 1137,
+            "hex": "0x471",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Attack Strong On Drive",
+            "address": 1109,
+            "hex": "0x455",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Block",
+            "address": 1142,
+            "hex": "0x476",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Contested Jumper Mid",
+            "address": 1081,
+            "hex": "0x439",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Contested Jumper Three",
+            "address": 1080,
+            "hex": "0x438",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Contest Shot",
+            "address": 1141,
+            "hex": "0x475",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Crash",
+            "address": 1053,
+            "hex": "0x41D",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Dish To Open Man",
+            "address": 1110,
+            "hex": "0x456",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Dribble Behind The Back",
+            "address": 1105,
+            "hex": "0x451",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Dribble Crossover",
+            "address": 1100,
+            "hex": "0x44C",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Dribble Double Crossover",
+            "address": 1104,
+            "hex": "0x450",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Dribble Half Spin",
+            "address": 1104,
+            "hex": "0x450",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Dribble Hesitation",
+            "address": 1098,
+            "hex": "0x44A",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Dribble Size Up",
+            "address": 1097,
+            "hex": "0x449",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Dribble Spin",
+            "address": 1101,
+            "hex": "0x44D",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Dribble Stepback",
+            "address": 1102,
+            "hex": "0x44E",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Drive",
+            "address": 1089,
+            "hex": "0x441",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Drive Pull Up Mid",
+            "address": 1088,
+            "hex": "0x440",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Drive Pull Up Three",
+            "address": 1086,
+            "hex": "0x43E",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Drive Right",
+            "address": 1092,
+            "hex": "0x444",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Driving Dribble Hesitation",
+            "address": 1106,
+            "hex": "0x452",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Driving Dunk",
+            "address": 1049,
+            "hex": "0x419",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Driving In And Out",
+            "address": 1108,
+            "hex": "0x454",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Driving Layup",
+            "address": 1048,
+            "hex": "0x418",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Euro Step Layup",
+            "address": 1056,
+            "hex": "0x420",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Flashy Dunk",
+            "address": 1050,
+            "hex": "0x41A",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Flashy Pass",
+            "address": 1136,
+            "hex": "0x470",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Floater",
+            "address": 1057,
+            "hex": "0x421",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Foul",
+            "address": 1144,
+            "hex": "0x478",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Hard Foul",
+            "address": 1144,
+            "hex": "0x478",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Hop Step Layup",
+            "address": 1056,
+            "hex": "0x420",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Iso Vs Average Defender",
+            "address": 1117,
+            "hex": "0x45D",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Iso Vs Elite Defender",
+            "address": 1116,
+            "hex": "0x45C",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Iso Vs Good Defender",
+            "address": 1116,
+            "hex": "0x45C",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Iso Vs Poor Defender",
+            "address": 1118,
+            "hex": "0x45E",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "No Driving Dribble Move",
+            "address": 1108,
+            "hex": "0x454",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "No Setup Dribble Move",
+            "address": 1100,
+            "hex": "0x44C",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Off Screen Drive",
+            "address": 1092,
+            "hex": "0x444",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Off Screen Shot Mid",
+            "address": 1066,
+            "hex": "0x42A",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Off Screen Shot Three",
+            "address": 1074,
+            "hex": "0x432",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Pass Interception",
+            "address": 1138,
+            "hex": "0x472",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Play Discipline",
+            "address": 1120,
+            "hex": "0x460",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Post Aggressive Backdown",
+            "address": 1124,
+            "hex": "0x464",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Post Back Down",
+            "address": 1122,
+            "hex": "0x462",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Post Drive",
+            "address": 1132,
+            "hex": "0x46C",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Post Dropstep",
+            "address": 1134,
+            "hex": "0x46E",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Post Face Up",
+            "address": 1121,
+            "hex": "0x461",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Post Fade Left",
+            "address": 1128,
+            "hex": "0x468",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Post Fade Right",
+            "address": 1128,
+            "hex": "0x468",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Post Hook Left",
+            "address": 1125,
+            "hex": "0x465",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Post Hook Right",
+            "address": 1126,
+            "hex": "0x466",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Post Hop Shot",
+            "address": 1130,
+            "hex": "0x46A",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Post Hop Step",
+            "address": 1076,
+            "hex": "0x434",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Post Shimmy Shot",
+            "address": 1120,
+            "hex": "0x460",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Post Shoot",
+            "address": 1124,
+            "hex": "0x464",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Post Spin",
+            "address": 1133,
+            "hex": "0x46D",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Post Stepback Shot",
+            "address": 1132,
+            "hex": "0x46C",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Post Up",
+            "address": 1112,
+            "hex": "0x458",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Post Up And Under",
+            "address": 1129,
+            "hex": "0x469",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Putback Dunk",
+            "address": 1052,
+            "hex": "0x41C",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Roll Vs Pop",
+            "address": 1113,
+            "hex": "0x459",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Shot Close",
+            "address": 1060,
+            "hex": "0x424",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Shot Close Left",
+            "address": 1061,
+            "hex": "0x425",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Shot Close Middle",
+            "address": 1062,
+            "hex": "0x426",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Shot Close Right",
+            "address": 1064,
+            "hex": "0x428",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Shot Mid",
+            "address": 1064,
+            "hex": "0x428",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Shot Mid Center",
+            "address": 1069,
+            "hex": "0x42D",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Shot Mid Left",
+            "address": 1068,
+            "hex": "0x42C",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Shot Mid Left Center",
+            "address": 1068,
+            "hex": "0x42C",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Shot Mid Right",
+            "address": 1072,
+            "hex": "0x430",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Shot Mid Right Center",
+            "address": 1070,
+            "hex": "0x42E",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Shot Tendency",
+            "address": 1047,
+            "hex": "0x417",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Shot Three",
+            "address": 1072,
+            "hex": "0x430",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Shot Three Center",
+            "address": 1077,
+            "hex": "0x435",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Shot Three Left",
+            "address": 1136,
+            "hex": "0x470",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Shot Three Left Center",
+            "address": 1076,
+            "hex": "0x434",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Shot Three Right",
+            "address": 1080,
+            "hex": "0x438",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Shot Three Right Center",
+            "address": 1078,
+            "hex": "0x436",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Shot Under Basket",
+            "address": 1060,
+            "hex": "0x424",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Spin Jumper",
+            "address": 1084,
+            "hex": "0x43C",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Spin Layup",
+            "address": 1054,
+            "hex": "0x41E",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Spot Up Drive",
+            "address": 1090,
+            "hex": "0x442",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Spot Up Shot Mid",
+            "address": 1065,
+            "hex": "0x429",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Spot Up Shot Three",
+            "address": 1073,
+            "hex": "0x431",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Spot Up Vs Cut",
+            "address": 1114,
+            "hex": "0x45A",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Standing Dunk",
+            "address": 1048,
+            "hex": "0x418",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Steal",
+            "address": 1140,
+            "hex": "0x474",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Stepback Jumper Three",
+            "address": 1082,
+            "hex": "0x43A",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Step Back Jumper Mid",
+            "address": 1084,
+            "hex": "0x43C",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Step Through",
+            "address": 1058,
+            "hex": "0x422",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Take Charge",
+            "address": 1140,
+            "hex": "0x474",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Touches",
+            "address": 1112,
+            "hex": "0x458",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Transition Pull Up Three",
+            "address": 1085,
+            "hex": "0x43D",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Triple Threat Idle",
+            "address": 1096,
+            "hex": "0x448",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Tendencies",
+            "name": "Triple Threat Jab Step",
+            "address": 1094,
+            "hex": "0x446",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Tendencies",
+            "name": "Triple Threat Pump Fake",
+            "address": 1093,
+            "hex": "0x445",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Tendencies",
+            "name": "Triple Threat Shoot",
+            "address": 1096,
+            "hex": "0x448",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Tendencies",
+            "name": "Use Glass",
+            "address": 1088,
+            "hex": "0x440",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Gear",
+            "name": "Shoe Away",
+            "address": 377,
+            "hex": "0x179",
+            "length": 13,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Gear",
+            "name": "Shoe Home",
+            "address": 376,
+            "hex": "0x178",
+            "length": 13,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Gear",
+            "name": "Shorts",
+            "address": 411,
+            "hex": "0x19B",
+            "length": 2,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Gear",
+            "name": "Shorts Away Color",
+            "address": 392,
+            "hex": "0x188",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Gear",
+            "name": "Shorts Home Color",
+            "address": 392,
+            "hex": "0x188",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Gear",
+            "name": "Shorts Length",
+            "address": 945,
+            "hex": "0x3B1",
+            "length": 4,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Gear",
+            "name": "Shorts Preferred Type",
+            "address": 909,
+            "hex": "0x38D",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Gear",
+            "name": "Sock Length Away",
+            "address": 361,
+            "hex": "0x169",
+            "length": 4,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Gear",
+            "name": "Sock Length Home",
+            "address": 360,
+            "hex": "0x168",
+            "length": 4,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Gear",
+            "name": "Undershirt",
+            "address": 839,
+            "hex": "0x347",
+            "length": 2,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Gear",
+            "name": "Undershirt Away Color",
+            "address": 841,
+            "hex": "0x349",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Gear",
+            "name": "Undershirt Home Color",
+            "address": 911,
+            "hex": "0x38F",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Gear",
+            "name": "Shoe Locked Vendor (Broken)",
+            "address": 385,
+            "hex": "0x181",
+            "length": 5,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Accessories",
+            "name": "Headband",
+            "address": 446,
+            "hex": "0x1BE",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Accessories",
+            "name": "Headband Logo",
+            "address": 967,
+            "hex": "0x3C7",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Accessories",
+            "name": "Headband Frequency",
+            "address": 916,
+            "hex": "0x394",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Arm",
+            "address": 392,
+            "hex": "0x188",
+            "length": 5,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Arm Frequency",
+            "address": 918,
+            "hex": "0x396",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Arm Item Home Color",
+            "address": 393,
+            "hex": "0x189",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Arm Item Away Color",
+            "address": 393,
+            "hex": "0x189",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Elbow",
+            "address": 395,
+            "hex": "0x18B",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Elbow Frequency",
+            "address": 917,
+            "hex": "0x395",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Elbow Item Home Color",
+            "address": 396,
+            "hex": "0x18C",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Elbow Item Away Color",
+            "address": 396,
+            "hex": "0x18C",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Wrist",
+            "address": 397,
+            "hex": "0x18D",
+            "length": 4,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Wrist Frequency",
+            "address": 917,
+            "hex": "0x395",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Wrist Item Home Color",
+            "address": 398,
+            "hex": "0x18E",
+            "length": 5,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Wrist Item Away Color",
+            "address": 398,
+            "hex": "0x18E",
+            "length": 5,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Fingers",
+            "address": 922,
+            "hex": "0x39A",
+            "length": 4,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Fingers Frequency",
+            "address": 922,
+            "hex": "0x39A",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Fingers Item Home Colro",
+            "address": 404,
+            "hex": "0x194",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Fingers Item Away Color",
+            "address": 404,
+            "hex": "0x194",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Arm",
+            "address": 394,
+            "hex": "0x18A",
+            "length": 5,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Arm Frequency",
+            "address": 839,
+            "hex": "0x347",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Arm Item Home Color",
+            "address": 394,
+            "hex": "0x18A",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Arm Item Away Color",
+            "address": 395,
+            "hex": "0x18B",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Elbow",
+            "address": 396,
+            "hex": "0x18C",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Elbow Frequency",
+            "address": 918,
+            "hex": "0x396",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Elbow Item Home Color",
+            "address": 397,
+            "hex": "0x18D",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Elbow Item Away Color",
+            "address": 400,
+            "hex": "0x190",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Wrist",
+            "address": 710,
+            "hex": "0x2C6",
+            "length": 4,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Wrist Frequency",
+            "address": 917,
+            "hex": "0x395",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Wrist Item Home Color",
+            "address": 399,
+            "hex": "0x18F",
+            "length": 5,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Wrist Item Away Color",
+            "address": 400,
+            "hex": "0x190",
+            "length": 5,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Fingers",
+            "address": 925,
+            "hex": "0x39D",
+            "length": 4,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Fingers Frequency",
+            "address": 925,
+            "hex": "0x39D",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Fingers Item Home Color",
+            "address": 404,
+            "hex": "0x194",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Fingers Item Away Color",
+            "address": 405,
+            "hex": "0x195",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Accessories",
+            "name": "Arm Frequency Paired",
+            "address": 495,
+            "hex": "0x1EF",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Accessories",
+            "name": "Shorts Home Color",
+            "address": 392,
+            "hex": "0x188",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Accessories",
+            "name": "Shorts Frequency",
+            "address": 916,
+            "hex": "0x394",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Accessories",
+            "name": "Shorts Away Color",
+            "address": 392,
+            "hex": "0x188",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Accessories",
+            "name": "Shorts",
+            "address": 411,
+            "hex": "0x19B",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Leg Item Home Color",
+            "address": 407,
+            "hex": "0x197",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Leg Item Away Color",
+            "address": 407,
+            "hex": "0x197",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Leg Frequency",
+            "address": 921,
+            "hex": "0x399",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Leg",
+            "address": 406,
+            "hex": "0x196",
+            "length": 4,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Knee Item Home Color",
+            "address": 408,
+            "hex": "0x198",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Knee Item Away Color",
+            "address": 409,
+            "hex": "0x199",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Knee Frequency",
+            "address": 921,
+            "hex": "0x399",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Knee",
+            "address": 464,
+            "hex": "0x1D0",
+            "length": 4,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Ankle Item Home Color",
+            "address": 411,
+            "hex": "0x19B",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Ankle Item Away Color",
+            "address": 411,
+            "hex": "0x19B",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Ankle Frequency",
+            "address": 922,
+            "hex": "0x39A",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Accessories",
+            "name": "Right Ankle",
+            "address": 410,
+            "hex": "0x19A",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Accessories",
+            "name": "Leg Frequency Paired",
+            "address": 450,
+            "hex": "0x1C2",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Leg Item Home Color",
+            "address": 406,
+            "hex": "0x196",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Leg Item Away Color",
+            "address": 406,
+            "hex": "0x196",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Leg Frequency",
+            "address": 919,
+            "hex": "0x397",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Leg",
+            "address": 405,
+            "hex": "0x195",
+            "length": 4,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Knee Item Home Color",
+            "address": 408,
+            "hex": "0x198",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Knee Item Away Color",
+            "address": 408,
+            "hex": "0x198",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Knee Frequency",
+            "address": 362,
+            "hex": "0x16A",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Knee",
+            "address": 840,
+            "hex": "0x348",
+            "length": 4,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Ankle Item Home Color",
+            "address": 409,
+            "hex": "0x199",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Ankle Item Away Color",
+            "address": 410,
+            "hex": "0x19A",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Ankle Frequency",
+            "address": 921,
+            "hex": "0x399",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Accessories",
+            "name": "Left Ankle",
+            "address": 409,
+            "hex": "0x199",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Accessories",
+            "name": "Knee Frequency Paired",
+            "address": 487,
+            "hex": "0x1E7",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Signatures",
+            "name": "Chew Gum",
+            "address": 263,
+            "hex": "0x107",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Signatures",
+            "name": "Dunk Emotion",
+            "address": 263,
+            "hex": "0x107",
+            "length": 1,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Signatures",
+            "name": "Crossover Combos",
+            "address": 447,
+            "hex": "0x1BF",
+            "length": 5,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Signatures",
+            "name": "Post Hook",
+            "address": 452,
+            "hex": "0x1C4",
+            "length": 5,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Signatures",
+            "name": "Moving Spin",
+            "address": 452,
+            "hex": "0x1C4",
+            "length": 6,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Post Fade",
+            "address": 465,
+            "hex": "0x1D1",
+            "length": 6,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Signatures",
+            "name": "Spin Jumper",
+            "address": 466,
+            "hex": "0x1D2",
+            "length": 6,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Signatures",
+            "name": "Layup Package",
+            "address": 627,
+            "hex": "0x273",
+            "length": 6,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Signatures",
+            "name": "Pre Game 1",
+            "address": 638,
+            "hex": "0x27E",
+            "length": 8,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Signatures",
+            "name": "Pre Game 2",
+            "address": 725,
+            "hex": "0x2D5",
+            "length": 8,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Signatures",
+            "name": "Dunk Package 5",
+            "address": 728,
+            "hex": "0x2D8",
+            "length": 8,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Dunk Package 6",
+            "address": 729,
+            "hex": "0x2D9",
+            "length": 8,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Dunk Package 7",
+            "address": 736,
+            "hex": "0x2E0",
+            "length": 8,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Dunk Package 8",
+            "address": 737,
+            "hex": "0x2E1",
+            "length": 8,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Dunk Package 9",
+            "address": 738,
+            "hex": "0x2E2",
+            "length": 8,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Dunk Package 10",
+            "address": 739,
+            "hex": "0x2E3",
+            "length": 8,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Dunk Package 11",
+            "address": 740,
+            "hex": "0x2E4",
+            "length": 8,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Dunk Package 12",
+            "address": 741,
+            "hex": "0x2E5",
+            "length": 8,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Motion Style",
+            "address": 748,
+            "hex": "0x2EC",
+            "length": 9,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Triple Threat Style",
+            "address": 752,
+            "hex": "0x2F0",
+            "length": 4,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Signatures",
+            "name": "Dunk Package 13",
+            "address": 753,
+            "hex": "0x2F1",
+            "length": 8,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Dunk Package 14",
+            "address": 754,
+            "hex": "0x2F2",
+            "length": 8,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Dunk Package 14",
+            "address": 755,
+            "hex": "0x2F3",
+            "length": 8,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Go To Dunk Package",
+            "address": 764,
+            "hex": "0x2FC",
+            "length": 8,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Dunk Package 2",
+            "address": 765,
+            "hex": "0x2FD",
+            "length": 8,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Dunk Package 3",
+            "address": 766,
+            "hex": "0x2FE",
+            "length": 8,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Jumpball Ritual",
+            "address": 769,
+            "hex": "0x301",
+            "length": 5,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Signatures",
+            "name": "Hop Jumper",
+            "address": 772,
+            "hex": "0x304",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Signatures",
+            "name": "Release Timing",
+            "address": 786,
+            "hex": "0x312",
+            "length": 3,
+            "type": "Integer",
+            "startBit": 5
+        },
+        {
+            "category": "Signatures",
+            "name": "Dribble Pull Up",
+            "address": 787,
+            "hex": "0x313",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Animation Blending",
+            "address": 837,
+            "hex": "0x345",
+            "length": 7,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Signatures",
+            "name": "Pass Style",
+            "address": 852,
+            "hex": "0x354",
+            "length": 5,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Escape Moves",
+            "address": 876,
+            "hex": "0x36C",
+            "length": 6,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Signatures",
+            "name": "Signature Size Up",
+            "address": 876,
+            "hex": "0x36C",
+            "length": 6,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Moving Stepback",
+            "address": 887,
+            "hex": "0x377",
+            "length": 6,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Signatures",
+            "name": "Dunk Package 4",
+            "address": 890,
+            "hex": "0x37A",
+            "length": 8,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Lower/Base",
+            "address": 892,
+            "hex": "0x37C",
+            "length": 10,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Go To Shot",
+            "address": 894,
+            "hex": "0x37E",
+            "length": 6,
+            "type": "Integer",
+            "startBit": 4
+        },
+        {
+            "category": "Signatures",
+            "name": "Upper Release 1",
+            "address": 896,
+            "hex": "0x380",
+            "length": 10,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Upper Release 2",
+            "address": 897,
+            "hex": "0x381",
+            "length": 10,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Signatures",
+            "name": "Moving Behind The Back",
+            "address": 904,
+            "hex": "0x388",
+            "length": 6,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Signatures",
+            "name": "Regular Breakdown Combos",
+            "address": 906,
+            "hex": "0x38A",
+            "length": 6,
+            "type": "Integer",
+            "startBit": 2
+        },
+        {
+            "category": "Signatures",
+            "name": "Aggressive Breakdown Combos",
+            "address": 907,
+            "hex": "0x38B",
+            "length": 6,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Signatures",
+            "name": "Moving Crossover",
+            "address": 908,
+            "hex": "0x38C",
+            "length": 6,
+            "type": "Integer",
+            "startBit": 0
+        },
+        {
+            "category": "Signatures",
+            "name": "Moving Hesitation",
+            "address": 908,
+            "hex": "0x38C",
+            "length": 5,
+            "type": "Integer",
+            "startBit": 7
+        },
+        {
+            "category": "Signatures",
+            "name": "Post Spin Shot",
+            "address": 911,
+            "hex": "0x38F",
+            "length": 2,
+            "type": "Integer",
+            "startBit": 6
+        },
+        {
+            "category": "Signatures",
+            "name": "Free Throw",
+            "address": 913,
+            "hex": "0x391",
+            "length": 9,
+            "type": "Integer",
+            "startBit": 1
+        },
+        {
+            "category": "Signatures",
+            "name": "Post Hop Shot",
+            "address": 921,
+            "hex": "0x399",
+            "length": 4,
+            "type": "Integer",
+            "startBit": 3
+        },
+        {
+            "category": "Signatures",
+            "name": "Dribble Style",
+            "address": 0,
+            "hex": "0x0",
+            "length": 6,
+            "type": "Integer",
+            "startBit": 3
+        },
+
+
+        {
+            "category": "Appearance",
+            "name": "Height",
+            "address": 0,
+            "length": 16,
+            "type": "Integer",
+            "requiresDereference": true,
+            "dereferenceAddress": 120
+        },
+        {
+            "category": "Appearance",
+            "name": "Wingspan",
+            "address": 2,
+            "length": 16,
+            "type": "Integer",
+            "requiresDereference": true,
+            "dereferenceAddress": 120
+        },
+        {
+            "category": "Appearance",
+            "name": "Face ID",
+            "address": 264,
+            "hex": "0x108",
+            "length": 16,
+            "type": "Integer"
+        },
+        {
+            "category": "Appearance",
+            "name": "Portrait ID",
+            "address": 808,
+            "hex": "0x328",
+            "length": 18,
+            "type": "Integer"
+        },
+        {
+            "category": "Pointers",
+            "name": "Portrait Team 1",
+            "address": 216,
+            "hex": "0xD8",
+            "length": 64,
+            "type": "Pointer"
+        },
+        {
+            "category": "Pointers",
+            "name": "Portrait Team 2",
+            "address": 208,
+            "hex": "0xD0",
+            "length": 64,
+            "type": "Pointer"
+        },
+        {
+            "category": "Appearance",
+            "name": "Headshot ID",
+            "address": 981,
+            "hex": "0x3D5",
+            "length": 15,
+            "startBit": 6,
+            "type": "Integer"
+        },
+
+        {
+            "category": "Pointers",
+            "name": "Current Team Address",
+            "address": 96,
+            "length": 64,
+            "type": "Pointer"
+        },
+        {
+            "category": "Vitals",
+            "name": "Current Team",
+            "address": 738,
+            "length": 24,
+            "type": "WString",
+            "requiresDereference": true,
+            "dereferenceAddress": 96
+        },   
+        {
+            "category": "Teams",
+            "name": "City Name",
+            "address": 788,
+            "type": "WString",
+            "length": 24
+        },
+        {
+            "category": "Teams",
+            "name": "Team Name",
+            "address": 738,
+            "type": "WString",
+            "length": 24
+        },
+        {
+            "category": "Teams",
+            "name": "City Abbrev",
+            "address": 824,
+            "type": "WString",
+            "length": 8
+        },
+        {
+            "category": "Teams",
+            "name": "Historic Year",
+            "address": 5670,
+            "type": "Binary",
+            "length": 7,
+            "startBit": 3
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 1",
+            "address": 0,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 2",
+            "address": 8,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 3",
+            "address": 16,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 4",
+            "address": 24,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 5",
+            "address": 32,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 6",
+            "address": 40,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 7",
+            "address": 48,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 8",
+            "address": 56,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 9",
+            "address": 64,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 10",
+            "address": 72,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 11",
+            "address": 80,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 12",
+            "address": 88,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 13",
+            "address": 96,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 14",
+            "address": 104,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Player 15",
+            "address": 112,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Two Way Player 1",
+            "address": 176,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Two Way Player 2",
+            "address": 184,
+            "type": "Pointer",
+            "length": 0
+        },
+        {
+            "category": "Team Players",
+            "name": "Two Way Player 3",
+            "address": 192,
+            "type": "Pointer",
+            "length": 0
+        }
+    ]
+}

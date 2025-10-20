@@ -69,6 +69,13 @@ _offset_file_path: Path | None = None
 _offset_config: dict | None = None
 _offset_index: dict[tuple[str, str], dict] = {}
 MODULE_NAME = "NBA2K26.exe"
+ALLOWED_MODULE_NAMES = {
+    "nba2k22.exe",
+    "nba2k23.exe",
+    "nba2k24.exe",
+    "nba2k25.exe",
+    "nba2k26.exe",
+}
 PLAYER_TABLE_RVA = 0
 PLAYER_STRIDE = 0
 PLAYER_PTR_CHAINS: list[dict[str, object]] = []
@@ -214,7 +221,6 @@ def convert_rating_to_raw(rating: float, length: int) -> int:
 
 # -----------------------------------------------------------------------------
 # Weight conversion helpers (treat as 32-bit float in pounds)
-import struct
 
 def read_weight(mem, addr: int) -> float:
     try:
@@ -728,6 +734,15 @@ PLAYER_PANEL_OVR_FIELD: tuple[str, str] = ("Attributes", "Overall")
 UNIFIED_FILES = (
     "2K26_Offsets.json",
 )
+EXTRA_TEMPLATE_FILES: tuple[tuple[str, str, str | None], ...] = (
+    ("JERSEY.json", "Jersey", "Jersey"),
+    ("STADIUM.json", "Stadium", "Stadium"),
+    ("STAFF.json", "Staff", "Staff"),
+    ("TEAM.json", "Teams", "Team"),
+    ("TEAM_RECORDS.json", "Teams", "Team Records"),
+    ("TEAM_STATS.json", "Teams", "Team Stats"),
+)
+EXTRA_CATEGORY_FIELDS: dict[str, list[dict]] = {}
 # -----------------------------------------------------------------------------
 # Import table definitions
 #
@@ -826,11 +841,11 @@ def _col_to_index(col: str) -> int:
 
 
 COY_IMPORT_LAYOUTS: dict[str, dict[str, object]] = {
-    # Player name column B, data columns E..AO (37 values) matching ATTR_IMPORT_ORDER length.
+    # Player name column B. Value columns are detected dynamically using sheet headers.
     "Attributes": {
         "name_columns": [_col_to_index("B"), _col_to_index("A")],
-        "value_columns": list(range(_col_to_index("E"), _col_to_index("AO") + 1)),
         "skip_names": {"player_name"},
+        "column_headers": ATTR_IMPORT_ORDER,
     },
     # Player name column B, data columns E..CY (99 values) matching TEND_IMPORT_ORDER length.
     "Tendencies": {
@@ -864,6 +879,7 @@ NAME_SYNONYMS: dict[str, list[str]] = {
     "nate": ["Nathan"],
     "nathan": ["Nate"],
 }
+NAME_SUFFIXES: set[str] = {"jr", "sr", "ii", "iii", "iv", "v"}
 # Order for the Tendencies table.  These column names are taken directly
 # from the sample provided by the user.  They will be normalized and
 # matched against the field names defined in the "Tendencies" category of
@@ -1052,7 +1068,51 @@ def _load_categories() -> dict[str, list[dict]]:
     dictionary is returned.
     """
     dropdowns = _load_dropdowns_map()
-    def _entry_to_field(entry: dict, display_name: str) -> dict | None:
+    def _finalize_field_metadata(
+        field: dict[str, object],
+        category_label: str,
+        *,
+        offset_val: int | None = None,
+        start_bit_val: int | None = None,
+        length_val: int | None = None,
+        source_entry: dict | None = None,
+    ) -> None:
+        """Ensure each field dictionary carries core offset metadata."""
+        if not isinstance(field, dict):
+            return
+        if category_label:
+            field["category"] = category_label
+        provided_hex = None
+        if source_entry is not None and source_entry.get("hex"):
+            provided_hex = str(source_entry.get("hex"))
+        if offset_val is None:
+            offset_val = _to_int(
+                field.get("address")
+                or field.get("offset")
+                or field.get("hex")
+            )
+        if offset_val is not None and offset_val >= 0:
+            offset_int = int(offset_val)
+            field["address"] = offset_int
+            field.setdefault("offset", hex(offset_int))
+            if provided_hex is None:
+                provided_hex = f"0x{offset_int:X}"
+        if provided_hex is not None:
+            field["hex"] = provided_hex
+        start_val = start_bit_val
+        if start_val is None:
+            start_val = _to_int(field.get("startBit") or field.get("start_bit"))
+        field["startBit"] = int(start_val or 0)
+        if "start_bit" in field:
+            field.pop("start_bit", None)
+        length = length_val
+        if length is None:
+            length = _to_int(field.get("length") or field.get("size"))
+        if length is not None and length > 0:
+            field["length"] = int(length)
+        if source_entry is not None and source_entry.get("type"):
+            field["type"] = source_entry.get("type")
+    def _entry_to_field(entry: dict, display_name: str, target_category: str | None = None) -> dict | None:
         offset_val = _to_int(entry.get("address"))
         length_val = _to_int(entry.get("length"))
         if offset_val <= 0 or length_val <= 0:
@@ -1071,7 +1131,165 @@ def _load_categories() -> dict[str, list[dict]]:
             field["type"] = entry["type"]
         if "values" in entry and isinstance(entry["values"], list):
             field["values"] = entry["values"]
+        category_label = target_category or str(entry.get("category", "")).strip()
+        _finalize_field_metadata(
+            field,
+            category_label,
+            offset_val=offset_val,
+            start_bit_val=start_bit,
+            length_val=length_val,
+            source_entry=entry,
+        )
         return field
+    def _humanize_label(raw: object) -> str:
+        text = str(raw or "").strip()
+        if not text:
+            return ""
+        tokens = [tok for tok in re.split(r"[^A-Za-z0-9]+", text) if tok]
+        if not tokens:
+            return text
+        words: list[str] = []
+        for tok in tokens:
+            if tok.isupper() and len(tok) <= 3:
+                words.append(tok)
+            else:
+                words.append(tok.capitalize())
+        return " ".join(words)
+    def _template_entry_to_field(cat_label: str, entry: dict, name_prefix: str | None = None) -> dict | None:
+        if not isinstance(entry, dict):
+            return None
+        display_name = str(entry.get("name", "")).strip()
+        if not display_name:
+            return None
+        if name_prefix:
+            prefix = name_prefix.strip()
+            if prefix:
+                if display_name:
+                    display_name = f"{prefix} - {display_name}"
+                else:
+                    display_name = prefix
+        entry_type = str(entry.get("type", "")).strip().lower()
+        if entry_type in {"blank", "folder", "section", "class"}:
+            return None
+        if any(tag in entry_type for tag in ("string", "text")):
+            return None
+        offset_val = _to_int(entry.get("offset") or entry.get("address"))
+        if offset_val < 0:
+            return None
+        info = entry.get("info") if isinstance(entry.get("info"), dict) else {}
+        start_raw = entry.get("startBit") or entry.get("start_bit")
+        if isinstance(info, dict):
+            start_info = info.get("startbit") or info.get("startBit") or info.get("bit_start")
+            if start_info is not None:
+                start_raw = start_info
+        explicit_start = start_raw is not None
+        start_bit = _to_int(start_raw)
+        if start_bit < 0:
+            start_bit = 0
+        length_bits = _to_int(entry.get("length"))
+        if length_bits <= 0:
+            size_val = _to_int(entry.get("size"))
+            if entry_type in {"combo", "bitfield", "bool", "boolean"}:
+                length_bits = size_val
+            else:
+                length_bits = size_val * 8
+        if length_bits <= 0 and isinstance(info, dict):
+            length_bits = _to_int(info.get("length") or info.get("bits"))
+        if length_bits <= 0:
+            return None
+        if entry_type in {"combo", "bitfield", "bool", "boolean"} and not explicit_start:
+            key = (cat_label, offset_val)
+            start_bit = bit_cursor.get(key, 0)
+        field: dict[str, object] = {
+            "name": display_name,
+            "offset": hex(offset_val),
+            "startBit": int(start_bit),
+            "length": int(length_bits),
+        }
+        if entry.get("type"):
+            field["type"] = entry["type"]
+        if isinstance(info, dict):
+            options = info.get("options")
+            if isinstance(options, list):
+                values: list[str] = []
+                for opt in options:
+                    if isinstance(opt, dict):
+                        label = str(opt.get("name") or opt.get("label") or opt.get("value") or "").strip()
+                        if label:
+                            values.append(label)
+                    elif isinstance(opt, str):
+                        label = opt.strip()
+                        if label:
+                            values.append(label)
+                if values:
+                    field.setdefault("values", values)
+            if info.get("isptr"):
+                deref = _to_int(info.get("offset") or info.get("deviation"))
+                if deref > 0:
+                    field["requiresDereference"] = True
+                    field["dereferenceAddress"] = deref
+        _finalize_field_metadata(
+            field,
+            cat_label,
+            offset_val=offset_val,
+            start_bit_val=field.get("startBit"),
+            length_val=length_bits,
+            source_entry=entry,
+        )
+        return field
+    def _compose_field_prefix(base_label: str | None, subgroup: str | None) -> str | None:
+        base_clean = _humanize_label(base_label) if base_label else ""
+        sub_clean = _humanize_label(subgroup) if subgroup else ""
+        if base_clean and sub_clean:
+            if base_clean.lower() == sub_clean.lower():
+                return base_clean
+            return f"{base_clean} {sub_clean}"
+        return base_clean or sub_clean or None
+    def _convert_template_payload(target_category: str, base_prefix: str | None, payload: object) -> list[dict]:
+        fields: list[dict] = []
+        if isinstance(payload, list):
+            prefix = _compose_field_prefix(base_prefix, None)
+            for item in payload:
+                field = _template_entry_to_field(target_category, item, prefix)
+                if field:
+                    fields.append(field)
+            return fields
+        if isinstance(payload, dict):
+            for key, entries in payload.items():
+                if not isinstance(entries, list):
+                    continue
+                prefix = _compose_field_prefix(base_prefix, key)
+                for item in entries:
+                    field = _template_entry_to_field(target_category, item, prefix)
+                    if field:
+                        fields.append(field)
+        return fields
+    def _merge_extra_template_files(cat_map: dict[str, list[dict]]) -> None:
+        for fname, target_category, section_label in EXTRA_TEMPLATE_FILES:
+            path = base_dir / fname
+            if not path.is_file():
+                continue
+            try:
+                with open(path, "r", encoding="utf-8") as handle:
+                    payload = _json.load(handle)
+            except Exception:
+                continue
+            collected_fields = _convert_template_payload(target_category, section_label, payload)
+            if not collected_fields:
+                continue
+            seen = seen_fields_global.setdefault(target_category, set())
+            bucket = cat_map.setdefault(target_category, [])
+            for field in collected_fields:
+                name = str(field.get("name", "")).strip()
+                if not name or name in seen:
+                    continue
+                seen.add(name)
+                bucket.append(field)
+                offset_int = _to_int(field.get("offset"))
+                start_val = _to_int(field.get("startBit") or field.get("start_bit"))
+                length_val = _to_int(field.get("length"))
+                key = (target_category, offset_int)
+                bit_cursor[key] = max(bit_cursor.get(key, 0), start_val + max(length_val, 0))
     def _ensure_potential_category(cat_map: dict[str, list[dict]]) -> None:
         if cat_map.get("Potential"):
             return
@@ -1092,7 +1310,7 @@ def _load_categories() -> dict[str, list[dict]]:
                     break
             if not entry:
                 continue
-            field = _entry_to_field(entry, display_name)
+            field = _entry_to_field(entry, display_name, "Potential")
             if field is not None:
                 potential_fields.append(field)
         if potential_fields:
@@ -1161,6 +1379,14 @@ def _load_categories() -> dict[str, list[dict]]:
                     field.setdefault("values", list(dcat["PLAYTYPE"]))
             except Exception:
                 pass
+            _finalize_field_metadata(
+                field,
+                cat_name,
+                offset_val=offset_val,
+                start_bit_val=start_bit,
+                length_val=length_val,
+                source_entry=entry,
+            )
             categories.setdefault(cat_name, []).append(field)
         if categories:
             base_categories = {key: list(value) for key, value in categories.items()}
@@ -1200,14 +1426,21 @@ def _load_categories() -> dict[str, list[dict]]:
             if isinstance(udata, dict):
                 # Case 1: unified format where categories are top-level lists of field definitions
                 for key, value in udata.items():
-                    if key.lower() == "base":
+                    key_lower = key.lower()
+                    if key_lower in {"base", "offsets", "game_info", "base_pointers"}:
                         continue
                     if isinstance(value, list) and all(isinstance(x, dict) for x in value):
-                        categories[key] = value
+                        normalized_fields: list[dict] = []
                         seen = seen_fields_global.setdefault(key, set())
                         for entry in value:
                             if not isinstance(entry, dict):
                                 continue
+                            _finalize_field_metadata(
+                                entry,
+                                key,
+                                source_entry=entry,
+                            )
+                            normalized_fields.append(entry)
                             seen.add(str(entry.get("name", "")))
                             offset_int = _to_int(entry.get("offset"))
                             start_val = _to_int(entry.get("startBit") or entry.get("start_bit"))
@@ -1216,6 +1449,7 @@ def _load_categories() -> dict[str, list[dict]]:
                                 bit_cursor.get((key, offset_int), 0),
                                 start_val + max(length_val, 0),
                             )
+                        categories[key] = normalized_fields
                 # Case 2: extended offsets.json format with a nested Player_Info
                 # The sanitized offsets JSON stores category dictionaries under
                 # the "Player_Info" key.  Each category (e.g. "VITALS_offsets")
@@ -1288,6 +1522,14 @@ def _load_categories() -> dict[str, list[dict]]:
                             bit_cursor.get((cat_label, offset_int), 0),
                             start_bit + length_int,
                         )
+                        _finalize_field_metadata(
+                            entry,
+                            cat_label,
+                            offset_val=offset_int,
+                            start_bit_val=start_bit,
+                            length_val=length_int,
+                            source_entry=fdef,
+                        )
                         new_cats.setdefault(cat_label, []).append(entry)
                     def _walk_field_map(base_label: str, mapping: dict, prefix: str | None = None) -> None:
                         for fname, fdef in mapping.items():
@@ -1326,11 +1568,18 @@ def _load_categories() -> dict[str, list[dict]]:
                             else:
                                 categories[key] = vals
                 if categories:
+                    _merge_extra_template_files(categories)
                     _ensure_potential_category(categories)
                     return categories
         except Exception:
             # ignore errors and continue to next file
             pass
+    if base_categories:
+        categories = {key: list(value) for key, value in base_categories.items()}
+        _merge_extra_template_files(categories)
+        if categories:
+            _ensure_potential_category(categories)
+            return categories
     # Nothing found
     return {}
 ###############################################################################
@@ -1474,7 +1723,9 @@ class GameMemory:
         try:
             import psutil  # type: ignore
             for proc in psutil.process_iter(['name']):
-                if proc.info['name'] and proc.info['name'].lower() == self.module_name.lower():
+                name = (proc.info['name'] or '').lower()
+                if name in ALLOWED_MODULE_NAMES:
+                    self.module_name = proc.info['name'] or MODULE_NAME
                     return proc.pid
         except Exception:
             pass
@@ -1489,7 +1740,9 @@ class GameMemory:
         try:
             success = Process32FirstW(snap, ctypes.byref(entry))
             while success:
-                if entry.szExeFile.lower() == self.module_name.lower():
+                name = entry.szExeFile.lower()
+                if name in ALLOWED_MODULE_NAMES:
+                    self.module_name = entry.szExeFile
                     return entry.th32ProcessID
                 success = Process32NextW(snap, ctypes.byref(entry))
         finally:
@@ -1734,11 +1987,6 @@ class PlayerDataModel:
         # Current list of available teams represented as (index, name) tuples.
         # Populated exclusively from live memory scans.
         self.team_list: list[tuple[int, str]] = []
-        # Flag indicating that ``self.players`` was populated by scanning all
-        # player records rather than via per-team scanning.  When true,
-        # ``get_players_by_team`` will filter ``self.players`` by team name
-        # instead of using roster pointers.
-        self.fallback_players: bool = False
         # Cached list of free agent players derived from the most recent scan.
         self._cached_free_agents: list[Player] = []
         # Internal caches for resolved pointer chains.  During a successful
@@ -1792,10 +2040,20 @@ class PlayerDataModel:
     def _generate_name_keys(self, first: str, last: str) -> list[str]:
         """Generate lookup keys (original and sanitized) for a name pair."""
         keys: list[str] = []
-        for sanitize in (False, True):
-            key = self._make_name_key(first, last, sanitize=sanitize)
-            if key and key not in keys:
-                keys.append(key)
+        first_variants = [first]
+        stripped_first = self._strip_suffix_string(first)
+        if stripped_first and stripped_first.lower() != first.lower():
+            first_variants.append(stripped_first)
+        last_variants = [last]
+        stripped_last = self._strip_suffix_string(last)
+        if stripped_last and stripped_last.lower() != last.lower():
+            last_variants.append(stripped_last)
+        for first_variant in first_variants:
+            for last_variant in last_variants:
+                for sanitize in (False, True):
+                    key = self._make_name_key(first_variant, last_variant, sanitize=sanitize)
+                    if key and key not in keys:
+                        keys.append(key)
         return keys
     def _get_import_fields(self, category_name: str) -> list[dict]:
         """Return the subset of fields that correspond to the import order for the given category."""
@@ -1930,6 +2188,8 @@ class PlayerDataModel:
         """
         import re as _re
         norm = _re.sub(r'[^A-Za-z0-9]', '', str(name).upper())
+        if not norm:
+            return ""
         # Apply known header synonyms; map abbreviations to canonical
         # attribute names.  Only a subset of synonyms is defined here; any
         # unknown name will fall back to its normalized form.
@@ -1966,8 +2226,11 @@ class PlayerDataModel:
             "VERT": "VERTICAL",
             "STAM": "STAMINA",
             "INTNGBL": "INTANGIBLES",
+            "INTANG": "INTANGIBLES",
+            "INTANGIBLE": "INTANGIBLES",
+            "INTANGIBLES": "INTANGIBLES",
             "HSTL": "HUSTLE",
-            "DUR": "MISCELLANEOUSDURABILITY",
+            "DUR": "MISCDURABILITY",
             "POT": "POTENTIAL",
             # Durability synonyms
             "BACK": "BACKDURABILITY",
@@ -2115,6 +2378,18 @@ class PlayerDataModel:
         # Example: SPD/BALL -> SPDBALL, PASS_IQ -> PASSIQ
         if norm in header_synonyms:
             return header_synonyms[norm]
+        summary_tokens = (
+            "TOTAL",
+            "TOTALS",
+            "TOTALATTRIBUTES",
+            "ATTRIBUTESTOTAL",
+            "TOTALPOINTS",
+            "ATTRIBUTESPOINTS",
+            "TOTALCOUNT",
+            "COUNTTOTAL",
+        )
+        if any(norm == token or norm.startswith(token) or norm.endswith(token) for token in summary_tokens):
+            return ""
         return norm
     def _normalize_field_name(self, name: str) -> str:
         """
@@ -2162,7 +2437,10 @@ class PlayerDataModel:
             for fld in attr_fields:
                 name = fld.get('name', '')
                 norm = self._normalize_field_name(name)
-                if 'DURABILITY' in norm:
+                if (
+                    'DURABILITY' in norm
+                    and norm not in ('MISCDURABILITY',)
+                ):
                     dura_fields.append(fld)
                 else:
                     new_attr.append(fld)
@@ -2293,6 +2571,12 @@ class PlayerDataModel:
         expanded_variants: list[str] = []
         for candidate in variants:
             expanded_variants.append(candidate)
+            # Add variant with trailing suffix tokens removed
+            stripped_words = self._strip_suffix_words(candidate.split())
+            if stripped_words:
+                stripped_variant = " ".join(stripped_words).strip()
+                if stripped_variant and stripped_variant.lower() != candidate.lower():
+                    expanded_variants.append(stripped_variant)
             words = candidate.split()
             for idx, word in enumerate(words):
                 stripped_word = re.sub(r"[^A-Za-z]", "", word)
@@ -2331,9 +2615,31 @@ class PlayerDataModel:
         return re.sub(r"[^a-z0-9]", "", (token or "").lower())
 
     @staticmethod
+    def _strip_suffix_words(words: list[str]) -> list[str]:
+        if not words:
+            return []
+        trimmed = list(words)
+        while trimmed:
+            suffix_token = re.sub(r"[^a-z0-9]", "", trimmed[-1].lower())
+            if suffix_token in NAME_SUFFIXES:
+                trimmed.pop()
+                continue
+            break
+        return trimmed
+
+    @staticmethod
+    def _strip_suffix_string(text: str) -> str:
+        words = PlayerDataModel._strip_suffix_words(text.split())
+        return " ".join(words).strip()
+
+    @staticmethod
     def _normalize_family_token(token: str) -> str:
         sanitized = PlayerDataModel._sanitize_name_token(token)
-        return re.sub(r"(jr|sr|ii|iii|iv|v)$", "", sanitized)
+        for suffix in sorted(NAME_SUFFIXES, key=len, reverse=True):
+            if sanitized.endswith(suffix):
+                sanitized = sanitized[: -len(suffix)]
+                break
+        return sanitized
 
     def _partial_name_candidates(self, raw_name: str) -> list[str]:
         variants = self._name_variants(raw_name)
@@ -2401,12 +2707,26 @@ class PlayerDataModel:
         layout = COY_IMPORT_LAYOUTS.get(category_name)
         if layout:
             value_columns = list(layout.get("value_columns", []))
+            column_headers = list(layout.get("column_headers", []))
             skip_names = {str(s).strip().lower() for s in layout.get("skip_names", set())}
             name_columns_raw = layout.get("name_columns")
             if name_columns_raw is None:
                 name_columns = [int(layout.get("name_col", 0))]
             else:
                 name_columns = [int(col) for col in name_columns_raw]
+            header_lookup: dict[str, int] = {}
+            if column_headers and rows:
+                header_row = rows[0]
+                for idx, cell in enumerate(header_row):
+                    norm_cell = self._normalize_header_name(cell)
+                    if norm_cell and norm_cell not in header_lookup:
+                        header_lookup[norm_cell] = idx
+            resolved_value_indices: list[int] = []
+            if column_headers:
+                for hdr in column_headers:
+                    norm_hdr = self._normalize_header_name(hdr)
+                    if norm_hdr and norm_hdr in header_lookup:
+                        resolved_value_indices.append(header_lookup[norm_hdr])
 
             def _is_valid_name(cell: str) -> bool:
                 normalized = (cell or "").strip()
@@ -2417,13 +2737,17 @@ class PlayerDataModel:
                 return any(ch.isalpha() for ch in normalized)
 
             def _row_has_numeric(row: Sequence[str]) -> bool:
-                for idx in value_columns:
+                target_columns = resolved_value_indices or value_columns
+                if not target_columns and column_headers:
+                    # If columns are derived from headers but none were resolved, fall back to scanning entire row.
+                    target_columns = [i for i in range(len(row)) if i not in name_columns]
+                for idx in target_columns:
                     if idx >= len(row):
                         continue
                     cell = str(row[idx]).strip()
                     if not cell:
                         continue
-                    if any(ch.isdigit() for ch in cell):
+                    if any(ch.isdigit() for ch in cell) and not any(ch.isalpha() for ch in cell):
                         return True
                 return False
 
@@ -2441,16 +2765,36 @@ class PlayerDataModel:
                     continue
                 if not _row_has_numeric(row):
                     continue
-                values = [row[idx] if idx < len(row) else "" for idx in value_columns]
+                if column_headers:
+                    values: list[str] = []
+                    for hdr in column_headers:
+                        norm_hdr = self._normalize_header_name(hdr)
+                        col_idx = header_lookup.get(norm_hdr)
+                        if col_idx is None or col_idx >= len(row):
+                            values.append("")
+                        else:
+                            values.append(row[col_idx])
+                else:
+                    values = [row[idx] if idx < len(row) else "" for idx in value_columns]
                 data_rows.append([name_value, *values])
             if not data_rows:
                 return None
+            order_headers: list[str] = []
+            if category_name == "Attributes":
+                order_headers = ["Player Name", *ATTR_IMPORT_ORDER]
+            elif category_name == "Tendencies":
+                order_headers = ["Player Name", *TEND_IMPORT_ORDER]
+            elif category_name == "Durability":
+                order_headers = ["Player Name", *DUR_IMPORT_ORDER]
+            elif category_name == "Potential":
+                order_headers = ["Player Name", *POTENTIAL_IMPORT_ORDER]
+            else:
+                order_headers = []
             return {
-                "header": [],
+                "header": order_headers,
                 "data_rows": data_rows,
                 "name_col": 0,
-                "value_columns": list(range(1, len(value_columns) + 1)),
-                "fixed_mapping": True,
+                "value_columns": list(range(1, len(order_headers))),
             }
         header = rows[0]
         if not header:
@@ -2509,11 +2853,32 @@ class PlayerDataModel:
         if not field_defs:
             return 0
         fixed_mapping = bool(info.get("fixed_mapping"))
-        selected_columns = value_columns[:len(field_defs)]
+        header = info.get("header") or []
+        selected_columns: list[int] = []
+        mappings: list[dict] = []
+        if header and not fixed_mapping:
+            normalized_headers = [
+                self._normalize_header_name(h) if idx != name_col else ""
+                for idx, h in enumerate(header)
+            ]
+            remaining_fields = list(field_defs)
+            for idx, norm_hdr in enumerate(normalized_headers):
+                if idx == name_col or not norm_hdr:
+                    continue
+                match_idx = -1
+                for j, fdef in enumerate(remaining_fields):
+                    norm_field = self._normalize_field_name(fdef.get("name", ""))
+                    if norm_hdr == norm_field or norm_hdr in norm_field or norm_field in norm_hdr:
+                        match_idx = j
+                        break
+                if match_idx >= 0:
+                    mappings.append(remaining_fields.pop(match_idx))
+                    selected_columns.append(idx)
+        else:
+            selected_columns = value_columns[:len(field_defs)]
+            mappings = list(field_defs[:len(selected_columns)])
         if not data_rows or not selected_columns:
             return 0
-        # Map columns directly to field definitions in order.
-        mappings = list(field_defs[:len(selected_columns)])
         players_updated = 0
         partial_matches: dict[str, list[str]] = {}
         for row in data_rows:
@@ -2961,72 +3326,43 @@ class PlayerDataModel:
                 return []
         return players
     def refresh_players(self) -> None:
-        """Populate team and player information.
-        This method is the heart of the scanning logic.  It attempts to
-        connect to the running game, resolve the player and team base
-        pointers and extract team and roster information.  If the
-        process cannot be opened or no valid pointers are found, the
-        method falls back to scanning all player records sequentially.
-        When both strategies fail the caches remain empty.  Offline
-        roster fallbacks are intentionally disabled, so
-        ``external_loaded`` stays ``False``.
-        """
-        # Reset all state
+        """Populate team and player information from live memory only."""
         self.team_list = []
         self.players = []
-        self.fallback_players = False
         self.external_loaded = False
         self._resolved_player_base = None
         self._resolved_team_base = None
         self._cached_free_agents = []
+        self.name_index_map.clear()
 
-        if self.mem.open_process():
-            team_base = self._resolve_team_base_ptr()
-            if team_base is not None:
-                teams = self._scan_team_names()
-                if teams:
-                    def _team_sort_key_pair(item: tuple[int, str]) -> tuple[int, str]:
-                        idx, name = item
-                        return (1 if name.strip().lower().startswith("team ") else 0, name)
-                    ordered_teams = sorted(teams, key=_team_sort_key_pair)
-                    self.team_list = self._build_team_display_list(ordered_teams)
-                    players_all = self._scan_all_players(self.max_players)
-                    if players_all:
-                        if any(p.team_id == FREE_AGENT_TEAM_ID for p in players_all):
-                            self._ensure_team_entry(FREE_AGENT_TEAM_ID, "Free Agents", front=True)
-                        self.players = players_all
-                        self.fallback_players = True
-                        self._cached_free_agents = [
-                            p for p in self.players if p.team_id == FREE_AGENT_TEAM_ID
-                        ]
-                        self._apply_team_display_to_players(self.players)
-                        self._build_name_index_map()
-                    return
-            players = self._scan_all_players(self.max_players)
-            if players:
-                self.players = players
-                self.fallback_players = True
-                self.team_list = self._build_team_list_from_players(players)
-                self._cached_free_agents = [
-                    p for p in self.players if p.team_id == FREE_AGENT_TEAM_ID
-                ]
-                self._apply_team_display_to_players(self.players)
-                self._build_name_index_map()
-                return
-
-        external_players = self._load_external_roster()
-        if external_players:
-            self.players = external_players
-            self.team_list = self._build_team_list_from_players(external_players)
-            self.external_loaded = True
-            self._apply_team_display_to_players(self.players)
-            self._build_name_index_map()
+        if not self.mem.open_process():
             return
 
-        self.players = []
-        self.team_list = []
-        self.external_loaded = False
-        self.fallback_players = False
+        team_base = self._resolve_team_base_ptr()
+        if team_base is None:
+            return
+
+        teams = self._scan_team_names()
+        if not teams:
+            return
+
+        def _team_sort_key_pair(item: tuple[int, str]) -> tuple[int, str]:
+            idx, name = item
+            return (1 if name.strip().lower().startswith("team ") else 0, name)
+
+        ordered_teams = sorted(teams, key=_team_sort_key_pair)
+        self.team_list = self._build_team_display_list(ordered_teams)
+
+        players_all = self._scan_all_players(self.max_players)
+        if not players_all:
+            return
+
+        if any(p.team_id == FREE_AGENT_TEAM_ID for p in players_all):
+            self._ensure_team_entry(FREE_AGENT_TEAM_ID, "Free Agents", front=True)
+        self.players = players_all
+        self._cached_free_agents = [p for p in self.players if p.team_id == FREE_AGENT_TEAM_ID]
+        self._apply_team_display_to_players(self.players)
+        self._build_name_index_map()
 
     def _build_team_display_list(self, teams: list[tuple[int, str]]) -> list[tuple[int, str]]:
         """Return a list of (team_id, display_name) with duplicate names disambiguated."""
@@ -3224,7 +3560,6 @@ class PlayerDataModel:
             players = self._scan_all_players(self.max_players)
             if players:
                 self.players = players
-                self.fallback_players = True
                 self._apply_team_display_to_players(self.players)
                 self._build_name_index_map()
         if not self.players:
@@ -3270,93 +3605,74 @@ class PlayerDataModel:
           1. Free agency / Free Agents entries
           2. Draft Class (if present)
           3. Standard NBA teams
-          4. All‑Time teams (names containing "All Time" or "All‑Time")
-          5. G‑League teams (names containing "G League", "G-League" or "GLeague")
-        Within each category the original order is preserved.  When the
-        team pointer chain cannot be resolved, the same grouping logic is
-        applied to the distinct set of team names discovered via the
-        sequential player scan.
+          4. All-Time teams (names containing "All Time" or "All-Time")
+          5. G-League teams (names containing "G League", "G-League" or "GLeague")
+        Within each category the original order is preserved.  If team
+        data cannot be resolved from live memory the method returns an
+        empty list instead of synthesising entries.
         """
-        if self.team_list:
-            def _classify(entry: tuple[int, str]) -> str:
-                tid, name = entry
-                lname = name.lower()
-                if tid == FREE_AGENT_TEAM_ID or "free" in lname:
-                    return "free_agents"
-                if "draft" in lname:
-                    return "draft_class"
-                return "normal"
-            free_agents: list[str] = []
-            draft_class: list[str] = []
-            remaining: list[tuple[int, str]] = []
-            for entry in self.team_list:
-                category = _classify(entry)
-                if category == "free_agents":
-                    free_agents.append(entry[1])
-                elif category == "draft_class":
-                    draft_class.append(entry[1])
-                else:
-                    remaining.append(entry)
-            remaining_sorted = [name for _, name in sorted(remaining, key=lambda item: item[0])]
-            ordered: list[str] = []
-            ordered.extend(free_agents)
-            ordered.extend(draft_class)
-            ordered.extend(remaining_sorted)
-            return ordered
-        # Sequential-scan fallback: derive categories from player team names
-        names_set = {p.team for p in self.players}
-        names = list(names_set)
-        lower_names = [n.lower() for n in names]
-        free = [names[i] for i, ln in enumerate(lower_names) if 'free' in ln]
-        draft = [names[i] for i, ln in enumerate(lower_names) if 'draft' in ln]
-        all_time = [names[i] for i, ln in enumerate(lower_names) if 'all time' in ln or 'all-time' in ln]
-        g_league = [names[i] for i, ln in enumerate(lower_names) if 'gleague' in ln or 'g league' in ln or 'g-league' in ln]
-        assigned = set(free + draft + all_time + g_league)
-        base = [n for n in names if n not in assigned]
-        return free + draft + base + all_time + g_league
+        if not self.team_list:
+            return []
+
+        def _classify(entry: tuple[int, str]) -> str:
+            tid, name = entry
+            lname = name.lower()
+            if tid == FREE_AGENT_TEAM_ID or "free" in lname:
+                return "free_agents"
+            if "draft" in lname:
+                return "draft_class"
+            return "normal"
+
+        free_agents: list[str] = []
+        draft_class: list[str] = []
+        remaining: list[tuple[int, str]] = []
+        for entry in self.team_list:
+            category = _classify(entry)
+            if category == "free_agents":
+                free_agents.append(entry[1])
+            elif category == "draft_class":
+                draft_class.append(entry[1])
+            else:
+                remaining.append(entry)
+        remaining_sorted = [name for _, name in sorted(remaining, key=lambda item: item[0])]
+        ordered: list[str] = []
+        ordered.extend(free_agents)
+        ordered.extend(draft_class)
+        ordered.extend(remaining_sorted)
+        return ordered
     def get_players_by_team(self, team: str) -> list[Player]:
-        """Return players for the specified team.
-        If team data has been scanned from memory, use the team index
-        mapping to look up players dynamically.  Otherwise, filter the
-        sequential scan results stored in ``self.players``.
-        """
+        """Return players for the specified team using live memory access."""
         team_name = (team or "").strip()
+        if not team_name:
+            return []
         team_lower = team_name.lower()
-        is_free_team = "free" in team_lower
+
         if team_lower == "all players":
             if not self.players:
                 players = self._scan_all_players(self.max_players)
                 if players:
                     self.players = players
-                    self.fallback_players = True
                     self._apply_team_display_to_players(self.players)
                     self._build_name_index_map()
             return list(self.players)
-        # Live memory mode: use team_list to find the index and scan players
-        if self.team_list and not self.external_loaded:
-            team_idx = self._team_index_for_display_name(team)
-            # If we are in fallback mode (scanned all players), filter from self.players
-            if self.fallback_players:
-                if team_idx is not None:
-                    if team_idx == FREE_AGENT_TEAM_ID:
-                        return self._get_free_agents()
-                    return [p for p in self.players if p.team_id == team_idx]
-                if is_free_team:
-                    return self._get_free_agents()
-                return [p for p in self.players if p.team == team_name]
-            # Otherwise, use roster pointers to scan players for the team
-            if team_idx is not None and team_idx >= 0:
-                return self.scan_team_players(team_idx)
-            if team_idx == FREE_AGENT_TEAM_ID or is_free_team:
-                return self._get_free_agents()
-            return []
-        # Offline or fallback mode: filter players by team name or ID if known
-        team_idx = self._team_index_for_display_name(team)
-        if team_idx is not None:
-            return [p for p in self.players if p.team_id == team_idx]
-        if is_free_team:
+
+        if team_lower.startswith("free"):
             return self._get_free_agents()
-        return [p for p in self.players if p.team == team_name]
+
+        team_idx = self._team_index_for_display_name(team_name)
+        if team_idx == FREE_AGENT_TEAM_ID:
+            return self._get_free_agents()
+        if team_idx is not None and team_idx >= 0:
+            live_players = self.scan_team_players(team_idx)
+            if live_players:
+                return live_players
+
+        # Use cached roster data (still sourced from live memory) if available
+        if self.players:
+            if team_idx is not None:
+                return [p for p in self.players if p.team_id == team_idx]
+            return [p for p in self.players if p.team == team_name]
+        return []
     def update_player(self, player: Player) -> None:
         """Write changes to a player back to memory if connected."""
         if not self.mem.hproc or self.mem.base_addr is None or self.external_loaded:
@@ -5058,12 +5374,10 @@ class PlayerEditorApp(tk.Tk):
         if not src:
             return
         # Prepare list of destination players (exclude source)
-        if self.model.external_loaded or self.model.fallback_players:
-            # Offline or fallback mode: use loaded players list
+        dest_players: list[Player] = []
+        if self.model.players:
             dest_players = [p for p in self.model.players if p.index != src.index]
-        else:
-            # Live memory mode: scan players across all teams via roster pointers
-            dest_players: list[Player] = []
+        elif self.model.team_list:
             for idx, _ in self.model.team_list:
                 players = self.model.scan_team_players(idx)
                 for p in players:
@@ -5303,7 +5617,25 @@ class FullPlayerEditor(tk.Toplevel):
             categories.append("Contract")
             if name not in categories:
                 categories.append(name)
+        exclude_for_player = {
+            "pointers",
+            "offsets",
+            "teams",
+            "team business",
+            "team jersey",
+            "team stats",
+            "team stats edit",
+            "team vitals",
+            "staff",
+            "stadium",
+            "jersey",
+        }
+        filtered_categories: list[str] = []
         for cat in categories:
+            if cat.strip().lower() in exclude_for_player:
+                continue
+            filtered_categories.append(cat)
+        for cat in filtered_categories:
             frame = tk.Frame(notebook, bg=PANEL_BG, highlightthickness=0, bd=0)
             notebook.add(frame, text=cat)
             self._build_category_tab(frame, cat)
@@ -5887,7 +6219,7 @@ class RandomizerWindow(tk.Toplevel):
                 spin_from = 0
                 spin_to = 100
             else:
-                # Fallback; not expected for randomizer categories
+                # Default branch; not expected for randomizer categories
                 default_min = 0
                 default_max = (1 << int(field.get("length", 8))) - 1
                 spin_from = 0
@@ -5913,7 +6245,7 @@ class RandomizerWindow(tk.Toplevel):
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        # Obtain team names: use get_teams if available, fallback to model.team_list
+        # Obtain team names: prefer get_teams' ordering, otherwise use the raw team_list
         team_names = []
         try:
             team_names = self.model.get_teams()
@@ -6047,7 +6379,7 @@ class TeamShuffleWindow(tk.Toplevel):
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        # Fetch team names: use get_teams or team_list fallback
+        # Fetch team names: prefer get_teams' ordering, otherwise use team_list directly
         team_names = []
         try:
             team_names = self.model.get_teams()
@@ -6096,7 +6428,11 @@ class TeamShuffleWindow(tk.Toplevel):
         # Determine whether we are in live memory mode.  Shuffling in
         # live memory writes directly to the game process; otherwise it
         # only updates the in-memory cache.
-        live_mode = not self.model.external_loaded and not self.model.fallback_players
+        live_mode = (
+            not self.model.external_loaded
+            and self.model.mem.hproc is not None
+            and self.model.mem.base_addr is not None
+        )
         total_assigned = 0
         if live_mode:
             # Resolve base pointers
