@@ -1,18 +1,4 @@
-python 3.11.9 is needed
+winget install --id Python.Python.3.11 -e
 
-import os
-import sys
-import threading
-import struct
-import ctypes
-from ctypes import wintypes
-import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
-from typing import Dict
-import random
-import tempfile
-import urllib.request
-import urllib.parse
-import io
-import json
-from pathlib import Path
+python -m pip install --upgrade pip
+python -m pip install psutil
