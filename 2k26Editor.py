@@ -14,6 +14,8 @@ import struct
 import ctypes
 import logging
 import time
+import difflib
+import unicodedata
 from ctypes import wintypes
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -299,18 +301,14 @@ def convert_tendency_raw_to_rating(raw: int, length: int) -> int:
         clamped to 0..100.
     """
     try:
-        max_raw = (1 << length) - 1
-        if max_raw <= 0:
-            return 0
-        # Proportional mapping: raw 0..max_raw maps to 0..100
-        rating = (raw / max_raw) * 100.0
-        if rating < 0.0:
-            rating = 0.0
-        elif rating > 100.0:
-            rating = 100.0
-        return int(round(rating))
+        value = int(raw)
     except Exception:
-        return 0
+        value = 0
+    if value < 0:
+        value = 0
+    elif value > 100:
+        value = 100
+    return value
 
 
 def convert_rating_to_tendency_raw(rating: float, length: int) -> int:
@@ -334,27 +332,14 @@ def convert_rating_to_tendency_raw(rating: float, length: int) -> int:
         Raw bitfield value corresponding to the rating.
     """
     try:
-        max_raw = (1 << length) - 1
-        if max_raw <= 0:
-            return 0
         r = float(rating)
-        if r < 0.0:
-            r = 0.0
-        elif r > 100.0:
-            r = 100.0
-        fraction = r / 100.0
-        if fraction < 0.0:
-            fraction = 0.0
-        elif fraction > 1.0:
-            fraction = 1.0
-        raw_val = round(fraction * max_raw)
-        if raw_val < 0:
-            raw_val = 0
-        elif raw_val > max_raw:
-            raw_val = max_raw
-        return int(raw_val)
     except Exception:
-        return 0
+        r = 0.0
+    if r < 0.0:
+        r = 0.0
+    elif r > 100.0:
+        r = 100.0
+    return int(round(r))
 
 def _to_int(value: object) -> int:
     """Convert strings or numeric values to an integer, accepting hex strings."""
@@ -987,6 +972,9 @@ TEND_IMPORT_ORDER = [
 ]
 FIELD_NAME_ALIASES: dict[str, str] = {
     "SHOT": "SHOOT",
+    "SHOTTENDENCY": "SHOOT",
+    "SHOTSHOT": "SHOOT",
+    "SHOTATTRIBUTE": "SHOOT",
     "SHOTMIDRANGE": "SHOTMID",
     "SPOTUPSHOTMIDRANGE": "SPOTUPSHOTMID",
     "OFFSCREENSHOTMIDRANGE": "OFFSCREENSHOTMID",
@@ -2025,7 +2013,7 @@ class PlayerDataModel:
             self.categories = {}
         self._reorder_categories()
         # Stores per-category partial match suggestions collected during imports.
-        self.import_partial_matches: dict[str, dict[str, list[str]]] = {}
+        self.import_partial_matches: dict[str, dict[str, list[dict[str, object]]]] = {}
 
     def _make_name_key(self, first: str, last: str, sanitize: bool = False) -> str:
         """Return a normalized lookup key for the given first/last name."""
@@ -2351,11 +2339,11 @@ class PlayerDataModel:
             "TPAGGBD": "POSTAGGRESSIVEBACKDOWN",
             "TPFACEUP": "POSTFACEUP",
             "TPSPIN": "POSTSPIN",
-            "TPDRIVE": "POSTDRIVE",
-            "TPDSTEP": "POSTDROPSTEP",
-            "TPHSTEP": "POSTHOPSTEP",
-            "TPSHOOT": "POSTSHOT",
-            "TPHOOKL": "POSTHOOKLEFT",
+    "TPDRIVE": "POSTDRIVE",
+    "TPDSTEP": "POSTDROPSTEP",
+    "TPHSTEP": "POSTHOPSTEP",
+    "TPSHOOT": "POSTSHOT",
+    "TPHOOKL": "POSTHOOKLEFT",
             "TPHOOKR": "POSTHOOKRIGHT",
             "TPFADEL": "POSTFADELEFT",
             "TPFADER": "POSTFADERIGHT",
@@ -2517,102 +2505,302 @@ class PlayerDataModel:
             name: Full name as appearing in import files (e.g. "LeBron James").
         Returns:
             A list of integer indices of players whose first and last names
-            match the given name (case‑insensitive).  If no match is found
+            match the given name (case-insensitive).  If no match is found
             returns an empty list.
         """
-        name = str(name or '').strip()
-        if not name:
+        for first, last in self._candidate_name_pairs(name):
+            indices = self._match_name_tokens(first, last)
+            if indices:
+                return indices
+        return []
+
+    def _match_name_tokens(self, first: str, last: str) -> list[int]:
+        """Return roster indices that match the supplied first/last name tokens."""
+        first = str(first or '').strip()
+        last = str(last or '').strip()
+        if not first and not last:
             return []
-        parts = name.split()
-        if not parts:
+        keys = self._generate_name_keys(first, last)
+        if not keys:
             return []
-        first = parts[0].strip()
-        last = ' '.join(parts[1:]).strip() if len(parts) > 1 else ''
-        # Use the name_index_map for efficient lookup if available
+        seen: set[int] = set()
+        matches: list[int] = []
         if self.name_index_map:
-            for key in self._generate_name_keys(first, last):
-                if key and key in self.name_index_map:
-                    return self.name_index_map[key]
-        # Fallback: linear scan over players with sanitized comparison
-        target_keys = set(self._generate_name_keys(first, last))
-        indices: list[int] = []
-        for p in self.players:
-            player_keys = self._generate_name_keys(p.first_name, p.last_name)
+            for key in keys:
+                for idx in self.name_index_map.get(key, []):
+                    if idx not in seen:
+                        seen.add(idx)
+                        matches.append(idx)
+            if matches:
+                return matches
+        target_keys = set(keys)
+        for player in self.players:
+            player_keys = self._generate_name_keys(player.first_name, player.last_name)
             if target_keys.intersection(player_keys):
-                indices.append(p.index)
-        return indices
+                if player.index not in seen:
+                    seen.add(player.index)
+                    matches.append(player.index)
+        return matches
+
+    def _candidate_name_pairs(self, raw_name: str) -> list[tuple[str, str]]:
+        """Derive plausible (first, last) name pairs from raw import values."""
+        text = str(raw_name or "").replace("\u00a0", " ")
+        text = " ".join(text.split())
+        if not text:
+            return []
+        pairs: list[tuple[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+
+        def add_pair(first: str, last: str) -> None:
+            first_clean = (first or "").strip()
+            last_clean = (last or "").strip()
+            if not first_clean and not last_clean:
+                return
+            key = (first_clean.lower(), last_clean.lower())
+            if key in seen:
+                return
+            seen.add(key)
+            pairs.append((first_clean, last_clean))
+
+        if "," in text:
+            left, right = [part.strip(" ,") for part in text.split(",", 1)]
+            if left and right:
+                add_pair(right, left)
+                stripped_left_words = self._strip_suffix_words(left.split())
+                stripped_left = " ".join(stripped_left_words).strip()
+                if stripped_left and stripped_left.lower() != left.lower():
+                    add_pair(right, stripped_left)
+                right_tokens = right.split()
+                if right_tokens:
+                    add_pair(right_tokens[0], left)
+                    if stripped_left:
+                        add_pair(right_tokens[0], stripped_left)
+        else:
+            tokens = text.split()
+            if len(tokens) == 1:
+                add_pair(tokens[0], "")
+            elif len(tokens) >= 2:
+                first = tokens[0]
+                remainder = tokens[1:]
+                stripped_remainder = self._strip_suffix_words(remainder)
+                last = " ".join(stripped_remainder) if stripped_remainder else " ".join(remainder)
+                add_pair(first, last)
+                if len(tokens) > 2:
+                    add_pair(first, tokens[-1])
+                    add_pair(first, " ".join(tokens[-2:]))
+                reversed_last_tokens = self._strip_suffix_words(tokens[:-1])
+                reversed_last = " ".join(reversed_last_tokens).strip()
+                reversed_first = tokens[-1]
+                add_pair(reversed_first, reversed_last)
+        return pairs
+
+    def _expand_first_name_variants(self, first: str) -> list[str]:
+        """Return normalized first-name variants preserving first-name alignment."""
+        base = str(first or "").strip()
+        if not base:
+            return []
+        variants: list[str] = []
+        seen: set[str] = set()
+
+        def add(token: str) -> None:
+            token_clean = (token or "").strip()
+            if not token_clean:
+                return
+            key = token_clean.lower()
+            if key in seen:
+                return
+            seen.add(key)
+            variants.append(token_clean)
+
+        add(base)
+        ascii_first = self._strip_diacritics(base)
+        if ascii_first and ascii_first.lower() != base.lower():
+            add(ascii_first)
+        if "-" in base:
+            add(base.replace("-", " "))
+            add(base.replace("-", ""))
+        if "'" in base:
+            add(base.replace("'", ""))
+        if " " in base:
+            add(base.split()[0])
+        sanitized = self._sanitize_name_token(base)
+        if sanitized:
+            for synonym in NAME_SYNONYMS.get(sanitized, []):
+                add(synonym)
+        return variants
+
+    def _expand_last_name_variants(self, last: str) -> list[str]:
+        """Return normalized last-name variants preserving surname alignment."""
+        base = str(last or "").strip()
+        if not base:
+            return [""]
+        variants: list[str] = []
+        seen: set[str] = set()
+
+        def add(token: str) -> None:
+            token_clean = (token or "").strip()
+            if not token_clean:
+                return
+            key = token_clean.lower()
+            if key in seen:
+                return
+            seen.add(key)
+            variants.append(token_clean)
+
+        add(base)
+        ascii_last = self._strip_diacritics(base)
+        if ascii_last and ascii_last.lower() != base.lower():
+            add(ascii_last)
+        stripped_suffix = " ".join(self._strip_suffix_words(base.split())).strip()
+        if stripped_suffix and stripped_suffix.lower() != base.lower():
+            add(stripped_suffix)
+        if "-" in base:
+            add(base.replace("-", " "))
+            add(base.replace("-", ""))
+        if "'" in base:
+            add(base.replace("'", ""))
+        if " " in base:
+            parts = base.split()
+            add(parts[-1])
+            if len(parts) >= 2:
+                add(" ".join(parts[-2:]))
+        return variants
 
     def _name_variants(self, raw_name: str) -> list[str]:
         """Return plausible player name variants derived from an import cell."""
-        text = str(raw_name or "").strip()
-        if not text:
-            return []
-        base = " ".join(text.replace("\u00a0", " ").split())
         variants: list[str] = []
-        if base:
-            variants.append(base)
-            stripped = re.sub(r"[^A-Za-z0-9 ]", "", base)
-            if stripped and stripped != base:
-                variants.append(" ".join(stripped.split()))
-        parts = base.split()
-        if "," in base:
-            parts = [p.strip() for p in base.split(",", 1)]
-            if len(parts) == 2 and parts[0] and parts[1]:
-                variants.append(f"{parts[1]} {parts[0]}")
-        elif len(parts) >= 2:
-            first = parts[-1]
-            last = " ".join(parts[:-1])
-            variants.append(f"{first} {last}".strip())
-            stripped_parts = re.sub(r"[^A-Za-z0-9 ]", "", base).split()
-            if stripped_parts and len(stripped_parts) >= 2:
-                stripped_first = stripped_parts[-1]
-                stripped_last = " ".join(stripped_parts[:-1])
-                variants.append(f"{stripped_first} {stripped_last}".strip())
-        expanded_variants: list[str] = []
-        for candidate in variants:
-            expanded_variants.append(candidate)
-            # Add variant with trailing suffix tokens removed
-            stripped_words = self._strip_suffix_words(candidate.split())
-            if stripped_words:
-                stripped_variant = " ".join(stripped_words).strip()
-                if stripped_variant and stripped_variant.lower() != candidate.lower():
-                    expanded_variants.append(stripped_variant)
-            words = candidate.split()
-            for idx, word in enumerate(words):
-                stripped_word = re.sub(r"[^A-Za-z]", "", word)
-                if not stripped_word:
-                    continue
-                key = stripped_word.lower()
-                synonyms = NAME_SYNONYMS.get(key)
-                if not synonyms:
-                    continue
-                pattern = re.compile(re.escape(stripped_word), re.IGNORECASE)
-                for repl in synonyms:
-                    new_word = pattern.sub(repl, word, count=1)
-                    new_words = list(words)
-                    new_words[idx] = new_word
-                    expanded_variants.append(" ".join(new_words).strip())
         seen: set[str] = set()
-        ordered: list[str] = []
-        for candidate in expanded_variants:
-            key = candidate.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            ordered.append(candidate)
-        return ordered
+        for first, last in self._candidate_name_pairs(raw_name):
+            first_variants = self._expand_first_name_variants(first) or [first]
+            last_variants = self._expand_last_name_variants(last) or [last]
+            for first_name in first_variants:
+                for last_name in last_variants:
+                    combined = f"{first_name} {last_name}".strip()
+                    key = combined.lower()
+                    if not combined or key in seen:
+                        continue
+                    seen.add(key)
+                    variants.append(combined)
+        return variants
 
     def _match_player_indices(self, raw_name: str) -> list[int]:
         """Try matching a raw name against the roster using common variants."""
-        for candidate in self._name_variants(raw_name):
-            idxs = self.find_player_indices_by_name(candidate)
-            if idxs:
-                return idxs
+        for first, last in self._candidate_name_pairs(raw_name):
+            first_variants = self._expand_first_name_variants(first) or [first]
+            last_variants = self._expand_last_name_variants(last) or [last]
+            for first_name in first_variants:
+                for last_name in last_variants:
+                    idxs = self._match_name_tokens(first_name, last_name)
+                    if idxs:
+                        return idxs
         return []
 
     @staticmethod
+    def _token_similarity(left: str, right: str) -> float:
+        """Return a fuzzy similarity score between two sanitized tokens (0.0-1.0+)."""
+        if not left or not right:
+            return 0.0
+        if left == right:
+            return 1.0
+        if len(left) == 1 or len(right) == 1:
+            return 1.0 if left[0] == right[0] else 0.0
+        if left in right or right in left:
+            return 0.92
+        return difflib.SequenceMatcher(None, left, right).ratio()
+
+    def _rank_roster_candidates(self, raw_name: str, limit: int = 5) -> list[tuple[str, float]]:
+        """Return roster names most similar to ``raw_name`` with alignment-aware scoring."""
+        combos: list[dict[str, str]] = []
+        seen: set[tuple[str, str, str, str]] = set()
+        for first, last in self._candidate_name_pairs(raw_name):
+            first_variants = self._expand_first_name_variants(first) or [first]
+            last_variants = self._expand_last_name_variants(last) or [last]
+            for first_name in first_variants:
+                for last_name in last_variants:
+                    first_s = self._sanitize_name_token(first_name)
+                    last_s = self._sanitize_name_token(last_name)
+                    first_n = self._normalize_family_token(first_name)
+                    last_n = self._normalize_family_token(last_name)
+                    key = (first_s, last_s, first_n, last_n)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    if not first_s and not last_s:
+                        continue
+                    combos.append(
+                        {
+                            "first_raw": first_name,
+                            "last_raw": last_name,
+                            "first_s": first_s,
+                            "last_s": last_s,
+                            "first_n": first_n,
+                            "last_n": last_n,
+                        }
+                    )
+        if not combos:
+            return []
+        scored: list[tuple[float, Player]] = []
+        for player in self.players:
+            pf_s = self._sanitize_name_token(player.first_name)
+            pl_s = self._sanitize_name_token(player.last_name)
+            pf_n = self._normalize_family_token(player.first_name)
+            pl_n = self._normalize_family_token(player.last_name)
+            best_score = 0.0
+            for combo in combos:
+                first_score = self._token_similarity(combo["first_s"], pf_s)
+                last_score = self._token_similarity(combo["last_s"], pl_s)
+                alt_first = self._token_similarity(combo["first_n"], pf_n)
+                alt_last = self._token_similarity(combo["last_n"], pl_n)
+                combined_first = max(first_score, alt_first)
+                combined_last = max(last_score, alt_last)
+                # Require strong last-name alignment when both sides have data.
+                if combo["last_s"] and pl_s and combined_last < 0.72:
+                    continue
+                # Require reasonable first-name alignment when available.
+                if combo["first_s"] and pf_s and combined_first < 0.62:
+                    initials_match = combo["first_s"][:1] == pf_s[:1]
+                    if not initials_match or combined_last < 0.9:
+                        continue
+                score = (combined_last * 0.7) + (combined_first * 0.3)
+                if combo["last_s"] and combo["last_s"] == pl_s:
+                    score += 0.08
+                if combo["first_s"] and combo["first_s"] == pf_s:
+                    score += 0.04
+                if combo["first_s"] == pf_s and combo["last_s"] == pl_s:
+                    score = 1.3
+                if not combo["first_s"]:
+                    score = combined_last
+                elif not combo["last_s"]:
+                    score = combined_first
+                if combo["first_s"] and pf_s and combo["first_s"][0] == pf_s[:1]:
+                    score += 0.01
+                if combo["last_s"] and pl_s and combo["last_s"][0] == pl_s[:1]:
+                    score += 0.02
+                if score > best_score:
+                    best_score = score
+            if best_score >= 0.6:
+                scored.append((best_score, player))
+        scored.sort(key=lambda item: item[0], reverse=True)
+        filtered: list[tuple[str, float]] = []
+        for score, player in scored:
+            if score < 0.75:
+                break
+            filtered.append((player.full_name, round(score, 3)))
+            if len(filtered) >= limit:
+                break
+        return filtered
+
+    @staticmethod
+    def _strip_diacritics(text: str) -> str:
+        if not text:
+            return ""
+        normalized = unicodedata.normalize("NFKD", text)
+        return "".join(ch for ch in normalized if not unicodedata.combining(ch))
+
+    @staticmethod
     def _sanitize_name_token(token: str) -> str:
-        return re.sub(r"[^a-z0-9]", "", (token or "").lower())
+        base = PlayerDataModel._strip_diacritics(token or "")
+        return re.sub(r"[^a-z0-9]", "", base.lower())
 
     @staticmethod
     def _strip_suffix_words(words: list[str]) -> list[str]:
@@ -2641,53 +2829,18 @@ class PlayerDataModel:
                 break
         return sanitized
 
-    def _partial_name_candidates(self, raw_name: str) -> list[str]:
-        variants = self._name_variants(raw_name)
-        first_tokens: set[str] = set()
-        last_tokens: set[str] = set()
-        norm_first_tokens: set[str] = set()
-        norm_last_tokens: set[str] = set()
-        for variant in variants:
-            parts = variant.split()
-            if len(parts) >= 2:
-                first = parts[0]
-                last = " ".join(parts[1:])
-                sf = self._sanitize_name_token(first)
-                sl = self._sanitize_name_token(last)
-                if sf:
-                    first_tokens.add(sf)
-                    norm_first_tokens.add(self._normalize_family_token(first))
-                if sl:
-                    last_tokens.add(sl)
-                    norm_last_tokens.add(self._normalize_family_token(last))
-        if not first_tokens and not last_tokens:
+    def _partial_name_candidates(self, raw_name: str) -> list[dict[str, object]]:
+        ranked = self._rank_roster_candidates(raw_name, limit=6)
+        if not ranked:
             return []
-        candidates: list[str] = []
-        seen: set[str] = set()
-        for player in self.players:
-            pf = self._sanitize_name_token(player.first_name)
-            pl = self._sanitize_name_token(player.last_name)
-            pf_norm = self._normalize_family_token(player.first_name)
-            pl_norm = self._normalize_family_token(player.last_name)
-            strict_first = pf in first_tokens
-            strict_last = pl in last_tokens
-            fuzzy_first = pf_norm in norm_first_tokens
-            fuzzy_last = pl_norm in norm_last_tokens
-            strong_match = strict_first and strict_last
-            partial = False
-            if strict_first != strict_last:
-                partial = True
-            elif not strong_match:
-                if (strict_first and fuzzy_last) or (strict_last and fuzzy_first):
-                    partial = True
-                elif fuzzy_first != fuzzy_last:
-                    partial = True
-            if partial and (strict_first or strict_last or fuzzy_first or fuzzy_last):
-                full_name = player.full_name
-                if full_name not in seen:
-                    seen.add(full_name)
-                    candidates.append(full_name)
-        return candidates
+        suggestions: list[dict[str, object]] = []
+        seen_names: set[str] = set()
+        for name, score in ranked:
+            if name in seen_names:
+                continue
+            seen_names.add(name)
+            suggestions.append({"name": name, "score": score})
+        return suggestions
 
     def _get_import_order(self, category_name: str) -> list[str]:
         name = (category_name or "").strip().lower()
@@ -2701,10 +2854,16 @@ class PlayerDataModel:
             return POTENTIAL_IMPORT_ORDER
         return []
 
-    def prepare_import_rows(self, category_name: str, rows: Sequence[Sequence[str]]) -> dict[str, object] | None:
+    def prepare_import_rows(
+        self,
+        category_name: str,
+        rows: Sequence[Sequence[str]],
+        *,
+        context: str = "default",
+    ) -> dict[str, object] | None:
         if not rows:
             return None
-        layout = COY_IMPORT_LAYOUTS.get(category_name)
+        layout = COY_IMPORT_LAYOUTS.get(category_name) if context == "coy" else None
         if layout:
             value_columns = list(layout.get("value_columns", []))
             column_headers = list(layout.get("column_headers", []))
@@ -2714,9 +2873,21 @@ class PlayerDataModel:
                 name_columns = [int(layout.get("name_col", 0))]
             else:
                 name_columns = [int(col) for col in name_columns_raw]
+            if column_headers and not value_columns:
+                value_columns = list(range(1, 1 + len(column_headers)))
             header_lookup: dict[str, int] = {}
+            header_row: Sequence[str] | None = None
             if column_headers and rows:
-                header_row = rows[0]
+                for row in rows:
+                    if any(
+                        str(row[col]).strip().lower() in skip_names
+                        for col in name_columns
+                        if col < len(row)
+                    ):
+                        header_row = row
+                        break
+                if header_row is None:
+                    header_row = rows[0]
                 for idx, cell in enumerate(header_row):
                     norm_cell = self._normalize_header_name(cell)
                     if norm_cell and norm_cell not in header_lookup:
@@ -2727,6 +2898,8 @@ class PlayerDataModel:
                     norm_hdr = self._normalize_header_name(hdr)
                     if norm_hdr and norm_hdr in header_lookup:
                         resolved_value_indices.append(header_lookup[norm_hdr])
+                if resolved_value_indices and len(resolved_value_indices) < max(4, len(column_headers) // 2):
+                    resolved_value_indices = []
 
             def _is_valid_name(cell: str) -> bool:
                 normalized = (cell or "").strip()
@@ -2754,12 +2927,14 @@ class PlayerDataModel:
             data_rows: list[list[str]] = []
             for row in rows:
                 name_value: str | None = None
+                used_name_col: int | None = None
                 for col in name_columns:
                     if col >= len(row):
                         continue
                     candidate = str(row[col]).strip()
                     if _is_valid_name(candidate):
                         name_value = candidate
+                        used_name_col = col
                         break
                 if not name_value:
                     continue
@@ -2767,13 +2942,27 @@ class PlayerDataModel:
                     continue
                 if column_headers:
                     values: list[str] = []
+                    matched_count = 0
                     for hdr in column_headers:
                         norm_hdr = self._normalize_header_name(hdr)
                         col_idx = header_lookup.get(norm_hdr)
                         if col_idx is None or col_idx >= len(row):
                             values.append("")
                         else:
+                            matched_count += 1
                             values.append(row[col_idx])
+                    if matched_count < max(4, len(column_headers) // 2):
+                        fallback_cols = resolved_value_indices or value_columns
+                        if not fallback_cols:
+                            fallback_cols = [
+                                idx for idx in range(len(row))
+                                if idx != used_name_col
+                            ]
+                        fallback_cols = fallback_cols[:len(column_headers)]
+                        values = [
+                            row[idx] if idx < len(row) else ""
+                            for idx in fallback_cols
+                        ]
                 else:
                     values = [row[idx] if idx < len(row) else "" for idx in value_columns]
                 data_rows.append([name_value, *values])
@@ -2811,7 +3000,7 @@ class PlayerDataModel:
             "value_columns": value_columns,
         }
 
-    def import_table(self, category_name: str, filepath: str) -> int:
+    def import_table(self, category_name: str, filepath: str, *, context: str = "default") -> int:
         """
         Import player data from a tab- or comma-delimited file for a single category.
         The first column is assumed to contain player names unless a fixed layout overrides it.
@@ -2821,6 +3010,7 @@ class PlayerDataModel:
             category_name: Name of the category to import (e.g. "Attributes",
                 "Tendencies", "Durability", "Potential").
             filepath: Path to the import file.
+            context: Import pipeline identifier (e.g. "default", "excel", "coy").
         Returns:
             The number of players successfully updated.
         """
@@ -2842,7 +3032,7 @@ class PlayerDataModel:
             return 0
         if not rows:
             return 0
-        info = self.prepare_import_rows(category_name, rows)
+        info = self.prepare_import_rows(category_name, rows, context=context)
         if not info:
             return 0
         header = info["header"]
@@ -2880,7 +3070,7 @@ class PlayerDataModel:
         if not data_rows or not selected_columns:
             return 0
         players_updated = 0
-        partial_matches: dict[str, list[str]] = {}
+        partial_matches: dict[str, list[dict[str, object]]] = {}
         for row in data_rows:
             if not row:
                 continue
@@ -2893,10 +3083,19 @@ class PlayerDataModel:
             if not idxs:
                 candidates = self._partial_name_candidates(raw_name)
                 if candidates:
-                    partial_matches.setdefault(raw_name, [])
+                    bucket = partial_matches.setdefault(raw_name, [])
+                    existing = {str(entry.get("name")).strip().lower() for entry in bucket if isinstance(entry, dict)}
                     for cand in candidates:
-                        if cand not in partial_matches[raw_name]:
-                            partial_matches[raw_name].append(cand)
+                        if not isinstance(cand, dict):
+                            continue
+                        cand_name = str(cand.get("name", "")).strip()
+                        if not cand_name:
+                            continue
+                        key = cand_name.lower()
+                        if key in existing:
+                            continue
+                        existing.add(key)
+                        bucket.append({"name": cand_name, "score": cand.get("score")})
                 continue
             # Apply values to each matching player
             for idx in idxs:
@@ -2974,9 +3173,20 @@ class PlayerDataModel:
         else:
             self.import_partial_matches[category_name] = {}
         return players_updated
+    def _import_file_map(self, file_map: dict[str, str], *, context: str) -> dict[str, int]:
+        results: dict[str, int] = {}
+        self.import_partial_matches = {}
+        for cat, path in file_map.items():
+            self.import_partial_matches.setdefault(cat, {})
+            if not path or not os.path.isfile(path):
+                results[cat] = 0
+                continue
+            results[cat] = self.import_table(cat, path, context=context)
+        return results
+
     def import_all(self, file_map: dict[str, str]) -> dict[str, int]:
         """
-        Import multiple tables from a mapping of category names to file paths.
+        Import multiple tables from a mapping of category names to file paths using the default layout rules.
         Args:
             file_map: A mapping of category names ("Attributes", "Tendencies",
                 "Durability", "Potential") to file paths.  If a file path is an
@@ -2985,14 +3195,15 @@ class PlayerDataModel:
             A dictionary mapping category names to the number of players
             updated for each category.
         """
-        results: dict[str, int] = {}
-        self.import_partial_matches = {}
-        for cat, path in file_map.items():
-            self.import_partial_matches.setdefault(cat, {})
-            if not path or not os.path.isfile(path):
-                results[cat] = 0
-                continue
-            results[cat] = self.import_table(cat, path)
+        return self._import_file_map(file_map, context="default")
+
+    def import_excel_tables(self, file_map: dict[str, str]) -> dict[str, int]:
+        """Import tables that originated from the Load Excel workflow."""
+        return self._import_file_map(file_map, context="excel")
+
+    def import_coy_tables(self, file_map: dict[str, str]) -> dict[str, int]:
+        """Import tables that originated from the 2K COY workflow."""
+        return self._import_file_map(file_map, context="coy")
         return results
 
     def export_category_to_csv(self, category_name: str, filepath: str) -> int:
@@ -4617,7 +4828,7 @@ class PlayerEditorApp(tk.Tk):
                     import csv as _csv
                     rows = list(_csv.reader(io.StringIO(csv_text)))
                     category_tables[cat] = {"rows": rows, "delimiter": ","}
-                    info = self.model.prepare_import_rows(cat, rows) if rows else None
+                    info = self.model.prepare_import_rows(cat, rows, context="coy") if rows else None
                     if info:
                         name_col = info["name_col"]
                         for row in info["data_rows"]:
@@ -4666,7 +4877,7 @@ class PlayerEditorApp(tk.Tk):
                         f.seek(0)
                         rows = list(_csv.reader(f, delimiter=delim))
                     category_tables[cat_name] = {"rows": rows, "delimiter": delim}
-                    info = self.model.prepare_import_rows(cat_name, rows) if rows else None
+                    info = self.model.prepare_import_rows(cat_name, rows, context="coy") if rows else None
                     if info:
                         name_col = info["name_col"]
                         for row in info["data_rows"]:
@@ -4684,7 +4895,7 @@ class PlayerEditorApp(tk.Tk):
         # Compute the size of the Attributes player pool (number of names in the
         # attributes file).  We track this to inform the user if some
         # players were not updated.  It is computed before imports so
-        # that ``import_all`` does not need to be changed.
+        # that ``import_coy_tables`` does not need to be changed.
         attr_pool_size = 0
         attr_names_set: set[str] = set()
         if 'Attributes' in file_map:
@@ -4698,7 +4909,7 @@ class PlayerEditorApp(tk.Tk):
                     f.seek(0)
                     reader = _csv.reader(f, delimiter=delim)
                     rows = list(reader)
-                info = self.model.prepare_import_rows('Attributes', rows) if rows else None
+                info = self.model.prepare_import_rows('Attributes', rows, context="coy") if rows else None
                 if info:
                     name_col = info['name_col']
                     for row in info['data_rows']:
@@ -4712,7 +4923,7 @@ class PlayerEditorApp(tk.Tk):
             except Exception:
                 attr_pool_size = 0
         # Perform imports only for the selected categories
-        results = self.model.import_all(file_map)
+        results = self.model.import_coy_tables(file_map)
         # Refresh players to reflect changes
         try:
             self.model.refresh_players()
@@ -4744,7 +4955,25 @@ class PlayerEditorApp(tk.Tk):
                 had_partial = True
             msg_lines.append(f"  {cat}:")
             for raw_name, candidates in mapping.items():
-                display = ", ".join(candidates[:5]) if candidates else "Possible roster match"
+                if candidates:
+                    entries: list[str] = []
+                    for entry in candidates[:5]:
+                        if isinstance(entry, dict):
+                            label = str(entry.get("name", "")).strip()
+                            score = entry.get("score")
+                            if label and isinstance(score, (int, float)) and score < 1.2:
+                                label = f"{label} ({score:.2f})"
+                        elif isinstance(entry, tuple) and entry:
+                            label = str(entry[0])
+                            if len(entry) > 1 and isinstance(entry[1], (int, float)) and entry[1] < 1.2:
+                                label = f"{label} ({entry[1]:.2f})"
+                        else:
+                            label = str(entry)
+                        if label:
+                            entries.append(label)
+                    display = ", ".join(entries) if entries else "Possible roster match"
+                else:
+                    display = "Possible roster match"
                 msg_lines.append(f"    {raw_name} -> {display}")
                 not_found.add(raw_name)
         # Compute number of attributes pool entries that were not updated
@@ -4775,7 +5004,7 @@ class PlayerEditorApp(tk.Tk):
         apply_cb = None
         if not_found and category_tables:
             def _apply(mapping, tables=category_tables):
-                self._apply_manual_import(mapping, tables, title="2K COY Manual Import")
+                self._apply_manual_import(mapping, tables, title="2K COY Manual Import", context="coy")
             apply_cb = _apply
         self._show_import_summary(
             title="2K COY Import",
@@ -4793,7 +5022,7 @@ class PlayerEditorApp(tk.Tk):
         corresponding sheet is extracted from the workbook (matching the
         category name if it exists, otherwise falling back to the first sheet).
         The sheet is converted to a temporary CSV file and passed through
-        ``import_all`` for processing.  A modal loading dialog is displayed
+        ``import_excel_tables`` for processing.  A modal loading dialog is displayed
         during the import to discourage further clicks.
         """
         # Refresh players to ensure we have up-to-date indices
@@ -4866,7 +5095,7 @@ class PlayerEditorApp(tk.Tk):
             if not rows:
                 return
             category_tables[cat_name] = {"rows": rows, "delimiter": ","}
-            info = self.model.prepare_import_rows(cat_name, rows)
+            info = self.model.prepare_import_rows(cat_name, rows, context="excel")
             if not info:
                 return
             name_col = info['name_col']
@@ -4918,7 +5147,7 @@ class PlayerEditorApp(tk.Tk):
                 file_map[cat] = tmp.name
                 collect_missing_names_df(cat, df)
             # Perform the import
-            results = self.model.import_all(file_map)
+            results = self.model.import_excel_tables(file_map)
             # Refresh players to reflect changes
             try:
                 self.model.refresh_players()
@@ -4952,7 +5181,7 @@ class PlayerEditorApp(tk.Tk):
         apply_cb = None
         if not_found and category_tables:
             def _apply(mapping, tables=category_tables):
-                self._apply_manual_import(mapping, tables, title="Excel Manual Import")
+                self._apply_manual_import(mapping, tables, title="Excel Manual Import", context="excel")
             apply_cb = _apply
         self._show_import_summary(
             title="Excel Import",
@@ -4973,8 +5202,48 @@ class PlayerEditorApp(tk.Tk):
         if not missing_players or not roster_names:
             messagebox.showinfo(title, summary_text)
             return
-        ImportSummaryDialog(self, title, summary_text, missing_players, roster_names, apply_callback=apply_callback)
-    def _apply_manual_import(self, mapping: dict[str, str], category_tables: dict[str, dict[str, object]], title: str) -> None:
+        partial_matches = getattr(self.model, "import_partial_matches", {}) or {}
+        suggestions: dict[str, str] = {}
+        for mapping in partial_matches.values():
+            if not mapping:
+                continue
+            for raw_name, candidates in mapping.items():
+                if not candidates:
+                    continue
+                first = candidates[0]
+                candidate_name = ""
+                candidate_score: float | None = None
+                if isinstance(first, dict):
+                    candidate_name = str(first.get("name", "")).strip()
+                    raw_score = first.get("score")
+                    if isinstance(raw_score, (int, float)):
+                        candidate_score = float(raw_score)
+                elif isinstance(first, (tuple, list)) and first:
+                    candidate_name = str(first[0]).strip()
+                    if len(first) > 1 and isinstance(first[1], (int, float)):
+                        candidate_score = float(first[1])
+                else:
+                    candidate_name = str(first).strip()
+                key = str(raw_name or "").strip()
+                if key and candidate_name and (candidate_score is None or candidate_score >= 0.92):
+                    suggestions.setdefault(key, candidate_name)
+        ImportSummaryDialog(
+            self,
+            title,
+            summary_text,
+            missing_players,
+            roster_names,
+            apply_callback=apply_callback,
+            suggestions=suggestions if suggestions else None,
+        )
+    def _apply_manual_import(
+        self,
+        mapping: dict[str, str],
+        category_tables: dict[str, dict[str, object]],
+        title: str,
+        *,
+        context: str | None = None,
+    ) -> None:
         if not mapping:
             messagebox.showinfo(title, "No player matches were selected.")
             return
@@ -5012,7 +5281,12 @@ class PlayerEditorApp(tk.Tk):
             if not temp_files:
                 messagebox.showinfo(title, "No matching rows were found for the selected players.")
                 return
-            results = self.model.import_all(temp_files)
+            if context == "coy":
+                results = self.model.import_coy_tables(temp_files)
+            elif context == "excel":
+                results = self.model.import_excel_tables(temp_files)
+            else:
+                results = self.model.import_all(temp_files)
             try:
                 self.model.refresh_players()
             except Exception:
@@ -6942,6 +7216,7 @@ class ImportSummaryDialog(tk.Toplevel):
         missing_players: list[str],
         roster_names: list[str],
         apply_callback: Callable[[dict[str, str]], None] | None = None,
+        suggestions: dict[str, str] | None = None,
     ) -> None:
         super().__init__(parent)
         self.title(title)
@@ -7015,6 +7290,20 @@ class ImportSummaryDialog(tk.Toplevel):
                 font=("Segoe UI", 10, "bold"),
             ).grid(row=0, column=1, sticky="w", pady=(0, 4))
             roster_sorted = sorted(set(roster_names), key=lambda n: n.lower())
+            self._roster_lookup = {name.lower(): name for name in roster_sorted}
+            self._suggestions: dict[str, str] = {}
+            if suggestions:
+                for raw_name, candidate in suggestions.items():
+                    if not candidate:
+                        continue
+                    key = str(raw_name or "").strip()
+                    if not key:
+                        continue
+                    cand = str(candidate).strip()
+                    if not cand:
+                        continue
+                    self._suggestions.setdefault(key, cand)
+                    self._suggestions.setdefault(key.lower(), cand)
             for idx, name in enumerate(missing_players, start=1):
                 tk.Label(
                     rows_frame,
@@ -7024,6 +7313,11 @@ class ImportSummaryDialog(tk.Toplevel):
                 ).grid(row=idx, column=0, sticky="w", padx=(0, 10), pady=2)
                 combo = SearchEntry(rows_frame, roster_sorted, width=32)
                 combo.grid(row=idx, column=1, sticky="ew", pady=2)
+                suggestion = self._get_initial_suggestion(name, roster_sorted)
+                if suggestion:
+                    combo.insert(0, suggestion)
+                    combo.icursor(tk.END)
+                    self._set_mapping(name, suggestion)
                 combo.set_match_callback(lambda value, source=name, self=self: self._set_mapping(source, value))
             rows_frame.columnconfigure(1, weight=1)
         btn_frame = tk.Frame(self, bg=PANEL_BG)
@@ -7047,6 +7341,34 @@ class ImportSummaryDialog(tk.Toplevel):
             activebackground=BUTTON_ACTIVE_BG,
             fg=BUTTON_TEXT,
         ).pack(side=tk.RIGHT)
+
+    def _get_initial_suggestion(self, sheet_name: str, roster_sorted: list[str]) -> str | None:
+        key = str(sheet_name or "").strip()
+        if not key:
+            return None
+        direct = self._suggestions.get(key) or self._suggestions.get(key.lower())
+        if direct:
+            return direct
+        return self._closest_roster_match(key, roster_sorted)
+
+    def _closest_roster_match(self, sheet_name: str, roster_sorted: list[str]) -> str | None:
+        if not sheet_name:
+            return None
+        lower = sheet_name.lower()
+        match = self._roster_lookup.get(lower)
+        if match:
+            return match
+        for candidate in roster_sorted:
+            cand_lower = candidate.lower()
+            if lower in cand_lower or cand_lower in lower:
+                return candidate
+        matches = difflib.get_close_matches(sheet_name, roster_sorted, n=1, cutoff=0.65)
+        if matches:
+            return matches[0]
+        matches_lower = difflib.get_close_matches(lower, list(self._roster_lookup.keys()), n=1, cutoff=0.65)
+        if matches_lower:
+            return self._roster_lookup.get(matches_lower[0])
+        return None
 
     def _set_mapping(self, sheet_name: str, roster_value: str) -> None:
         value = roster_value.strip()
@@ -7238,3 +7560,6 @@ def main() -> None:
     app.mainloop()
 if __name__ == '__main__':
     main()
+
+
+
