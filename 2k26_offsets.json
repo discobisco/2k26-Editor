@@ -1,17 +1,17 @@
 {
     "game_info": {
         "executable": "NBA2K26.exe",
-        "version": "October 24th; Season 2; Patch 2",
+        "version": "November 4th; Season 2; Patch 3",
         "playerSize": 1176,
         "teamSize": 5672
     },
     "base_pointers": {
         "Player": {
-            "address": 130932056,
+            "address": 130936200,
             "chain": []
         },
         "Team": {
-            "address": 130932656,
+            "address": 130936800,
             "chain": []
         }
     },

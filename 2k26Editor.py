@@ -20,7 +20,18 @@ import copy
 from ctypes import wintypes
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
-from typing import Any, Callable, Collection, Dict, Sequence, TypedDict, TYPE_CHECKING, cast
+from typing import (
+    Any,
+    Callable,
+    Collection,
+    Dict,
+    Sequence,
+    TypedDict,
+    TYPE_CHECKING,
+    cast,
+    NotRequired,
+    Protocol,
+)
 from dataclasses import dataclass
 import random
 import tempfile
@@ -31,6 +42,8 @@ import json
 import re
 from pathlib import Path
 from collections import Counter
+from collections.abc import Collection as CollectionABC
+import importlib.util
 from raw_field_extension import RawFieldInspectorExtension
 
 # -----------------------------------------------------------------------------
@@ -61,6 +74,104 @@ def register_full_editor_extension(factory: FullEditorExtension) -> None:
     """
     if callable(factory):
         FULL_EDITOR_EXTENSIONS.append(factory)
+
+
+_SCROLL_BINDING_INITIALIZED = False
+_SCROLL_AREAS: list[tuple[tk.Misc, tk.Misc]] = []
+
+
+class _YScrollable(Protocol):
+    def yview_scroll(self, number: int, what: str) -> None:
+        ...
+
+
+def _is_descendant(widget: tk.Misc | None, ancestor: tk.Misc) -> bool:
+    while widget is not None:
+        if widget == ancestor:
+            return True
+        widget = widget.master  # type: ignore[attr-defined]
+    return False
+
+
+def _prune_dead_scroll_areas() -> None:
+    alive: list[tuple[tk.Misc, tk.Misc]] = []
+    for area, target in _SCROLL_AREAS:
+        try:
+            exists = area.winfo_exists() and target.winfo_exists()
+        except Exception:
+            exists = False
+        if exists:
+            alive.append((area, target))
+    _SCROLL_AREAS[:] = alive
+
+
+def _locate_scroll_target(event: tk.Event) -> tk.Misc | None:
+    _prune_dead_scroll_areas()
+    pointer_widget: tk.Misc | None = None
+    try:
+        widget = event.widget
+        if widget:
+            pointer_widget = widget.winfo_containing(event.x_root, event.y_root)
+    except Exception:
+        pointer_widget = None
+    for area, target in _SCROLL_AREAS:
+        if pointer_widget is not None and _is_descendant(pointer_widget, area):
+            return target
+    return None
+
+
+def _on_global_mousewheel(event: tk.Event) -> str | None:
+    target = _locate_scroll_target(event)
+    if target is None or not hasattr(target, "yview_scroll"):
+        return None
+    scroll_target = cast(_YScrollable, target)
+    delta = getattr(event, "delta", 0)
+    if delta == 0:
+        return "break"
+    try:
+        steps = int(-1 * (delta / 120))
+    except Exception:
+        steps = -1 if delta > 0 else 1
+    if steps == 0:
+        steps = -1 if delta > 0 else 1
+    try:
+        scroll_target.yview_scroll(steps, "units")
+    except tk.TclError:
+        return None
+    return "break"
+
+
+def _on_global_linux_scroll(event: tk.Event) -> str | None:
+    target = _locate_scroll_target(event)
+    if target is None or not hasattr(target, "yview_scroll"):
+        return None
+    scroll_target = cast(_YScrollable, target)
+    direction = -1 if getattr(event, "num", 5) == 4 else 1
+    try:
+        scroll_target.yview_scroll(direction, "units")
+    except tk.TclError:
+        return None
+    return "break"
+
+
+def _ensure_global_scroll_binding(widget: tk.Misc) -> None:
+    global _SCROLL_BINDING_INITIALIZED
+    if _SCROLL_BINDING_INITIALIZED:
+        return
+    widget.bind_all("<MouseWheel>", _on_global_mousewheel, add="+")
+    widget.bind_all("<Button-4>", _on_global_linux_scroll, add="+")
+    widget.bind_all("<Button-5>", _on_global_linux_scroll, add="+")
+    _SCROLL_BINDING_INITIALIZED = True
+
+
+def bind_mousewheel(area: tk.Misc, scroll_target: tk.Misc | None = None) -> None:
+    """
+    Register a widget area whose associated scrollbar should react to the
+    mouse wheel even when focus is inside child controls.
+    """
+    target = scroll_target or area
+    _ensure_global_scroll_binding(area)
+    _SCROLL_AREAS.append((area, target))
 # -----------------------------------------------------------------------------
 # Exceptions
 # -----------------------------------------------------------------------------
@@ -144,6 +255,22 @@ OFFSET_FIELD_SYNONYMS: dict[str, list[str]] = {
         "offset team name",
         "city name",
     ],
+    "team short name": [
+        "team_short_name",
+        "offset team short name",
+        "team abbrev",
+        "team abbreviation",
+        "city abbrev",
+    ],
+    "team year": [
+        "team year",
+        "historic year",
+        "offset team year",
+    ],
+    "team type": [
+        "team type",
+        "offset team type",
+    ],
 }
 CATEGORY_ALIASES: dict[str, str] = {
     "vitals_offsets": "vitals",
@@ -156,6 +283,30 @@ CATEGORY_ALIASES: dict[str, str] = {
     "edit_offsets": "edit",
     "look_offsets": "appearance",
     "shoes/gear_offsets": "gear",
+}
+def _build_field_canonical_lookup() -> dict[str, str]:
+    lookup: dict[str, str] = {}
+    for canon, syns in OFFSET_FIELD_SYNONYMS.items():
+        canon_l = canon.lower()
+        lookup[canon_l] = canon_l
+        for alias in syns:
+            lookup[str(alias).lower()] = canon_l
+    return lookup
+
+
+_FIELD_CANONICAL_LOOKUP: dict[str, str] = _build_field_canonical_lookup()
+_CANONICAL_DISPLAY_NAMES: dict[str, str] = {
+    key.lower(): key.title() for key in OFFSET_FIELD_SYNONYMS
+}
+BASE_CANONICAL_FIELD_INFO: dict[str, dict[str, str]] = {
+    "first name": {"category": "Vitals", "display": "First Name", "type": "wstring"},
+    "last name": {"category": "Vitals", "display": "Last Name", "type": "wstring"},
+    "face id": {"category": "Vitals", "display": "Face ID", "type": "number"},
+    "current team": {"category": "Vitals", "display": "Current Team", "type": "number"},
+    "team name": {"category": "Teams", "display": "Team Name", "type": "wstring"},
+    "team short name": {"category": "Teams", "display": "Team Short Name", "type": "wstring"},
+    "team year": {"category": "Teams", "display": "Team Year", "type": "number"},
+    "team type": {"category": "Teams", "display": "Team Type", "type": "number"},
 }
 _current_offset_target: str | None = None
 MODULE_NAME = "NBA2K26.exe"
@@ -215,15 +366,15 @@ PRIMARY_BG = "#0F1C2E"
 PANEL_BG = "#16213E"
 INPUT_BG = "#1B263B"
 ACCENT_BG = "#415A77"
-BUTTON_BG = "#778DA9"
+BUTTON_BG = "#083672"
 BUTTON_ACTIVE_BG = "#415A77"
-TEXT_PRIMARY = "#E0E1DD"
-TEXT_SECONDARY = "#9BA4B5"
+TEXT_PRIMARY = "#57525F"
+TEXT_SECONDARY = "#827991"
 BUTTON_TEXT = "#000000"
 # Slightly darker text for badge combobox entries
-TEXT_BADGE = "#C6CCD6"
+TEXT_BADGE = "#101011"
 INPUT_TEXT_FG = "#111111"
-INPUT_PLACEHOLDER_FG = "#6B6B6B"
+INPUT_PLACEHOLDER_FG = "#0F0F0F"
 # -----------------------------------------------------------------------------
 # 2K COY auto-import configuration
 # -----------------------------------------------------------------------------
@@ -608,6 +759,32 @@ def _collect_player_info_entries(player_info: object) -> list[dict]:
     return entries
 
 
+def _collect_base_entries(base_data: object) -> list[dict]:
+    """Convert legacy Base map entries into indexed offsets where possible."""
+    entries: list[dict] = []
+    if not isinstance(base_data, dict):
+        return entries
+    for raw_key, raw_value in base_data.items():
+        if isinstance(raw_value, (dict, list)):
+            continue
+        key = str(raw_key).strip().lower()
+        canonical = _FIELD_CANONICAL_LOOKUP.get(key)
+        if canonical is None:
+            continue
+        info = BASE_CANONICAL_FIELD_INFO.get(canonical)
+        if info is None:
+            continue
+        address = _to_int(raw_value)
+        entry: dict[str, object] = {
+            "category": info["category"],
+            "name": info.get("display") or _CANONICAL_DISPLAY_NAMES.get(canonical, canonical.title()),
+            "address": address,
+            "type": info.get("type", "number"),
+        }
+        entries.append(entry)
+    return entries
+
+
 def _normalize_chain_steps(chain_data: object) -> list[dict[str, object]]:
     steps: list[dict[str, object]] = []
     if not isinstance(chain_data, list):
@@ -653,14 +830,25 @@ def _parse_pointer_chain_config(base_cfg: dict | None) -> list[dict[str, object]
     chains: list[dict[str, object]] = []
     if not isinstance(base_cfg, dict):
         return chains
-    base_addr = _to_int(base_cfg.get("address") or base_cfg.get("rva") or base_cfg.get("base"))
-    if not base_addr:
+    addr_raw = base_cfg.get("address")
+    if addr_raw is None:
+        addr_raw = base_cfg.get("rva")
+    if addr_raw is None:
+        addr_raw = base_cfg.get("base")
+    if addr_raw is None:
         return chains
+    base_addr = _to_int(addr_raw)
     final_offset = _to_int(base_cfg.get("finalOffset") or base_cfg.get("final_offset"))
     absolute_flag = base_cfg.get("absolute")
     if absolute_flag is None:
         absolute_flag = base_cfg.get("isAbsolute")
     is_absolute = bool(absolute_flag)
+    direct_table = bool(
+        base_cfg.get("direct_table")
+        or base_cfg.get("direct")
+        or base_cfg.get("directTable")
+        or base_cfg.get("treat_as_base")
+    )
     chain_data = base_cfg.get("chain") or base_cfg.get("steps")
     if isinstance(chain_data, list) and chain_data:
         candidate_like = [
@@ -680,6 +868,7 @@ def _parse_pointer_chain_config(base_cfg: dict | None) -> list[dict[str, object]
                     "chain": candidate.get("chain") or candidate.get("steps"),
                     "finalOffset": candidate.get("finalOffset") or candidate.get("final_offset") or final_offset,
                     "absolute": candidate_absolute if candidate_absolute is not None else is_absolute,
+                    "direct_table": candidate.get("direct_table") or candidate.get("direct"),
                 }))
             if chains:
                 return chains
@@ -689,8 +878,47 @@ def _parse_pointer_chain_config(base_cfg: dict | None) -> list[dict[str, object]
         "steps": steps,
         "final_offset": final_offset,
         "absolute": is_absolute,
+        "direct_table": direct_table,
     })
     return chains
+
+
+def _extend_pointer_candidates(target: list[dict[str, object]], candidates: object) -> None:
+    """Append pointer chain candidates defined using legacy tuple/dict notation."""
+    if not isinstance(candidates, (list, tuple)):
+        return
+    for candidate in candidates:
+        candidate_cfg: dict[str, object] | None = None
+        if isinstance(candidate, dict):
+            candidate_cfg = dict(candidate)
+        elif isinstance(candidate, (list, tuple)):
+            if not candidate:
+                continue
+            rva = _to_int(candidate[0])
+            if rva == 0:
+                continue
+            final_offset = _to_int(candidate[1]) if len(candidate) > 1 else 0
+            extra_deref = bool(candidate[2]) if len(candidate) > 2 else False
+            direct_table = bool(candidate[3]) if len(candidate) > 3 else False
+            candidate_cfg = {
+                "address": rva,
+                "absolute": False,
+                "finalOffset": final_offset,
+            }
+            steps: list[dict[str, object]] = []
+            if extra_deref:
+                steps.append({"offset": 0, "dereference": True})
+            if steps:
+                candidate_cfg["steps"] = steps
+            if direct_table:
+                candidate_cfg["direct_table"] = True
+        else:
+            continue
+        if not isinstance(candidate_cfg, dict):
+            continue
+        chains = _parse_pointer_chain_config(candidate_cfg)
+        if chains:
+            target.extend(chains)
 
 def _apply_offset_config(data: dict | None) -> None:
     """Update module-level constants using the loaded offset data."""
@@ -702,6 +930,12 @@ def _apply_offset_config(data: dict | None) -> None:
     global TEAM_PTR_CHAINS, TEAM_RECORD_SIZE, TEAM_FIELD_DEFS
     if not data:
         raise OffsetSchemaError("2K26_Offsets.json is missing or empty.")
+    base_pointers_source = data.get("base_pointers") or data.get("BasePointers")
+    legacy_base = data.get("Base") or data.get("base")
+    if legacy_base is None and isinstance(base_pointers_source, dict):
+        legacy_base = base_pointers_source
+    if legacy_base is None:
+        legacy_base = {}
     combined_offsets: list[dict] = []
     offsets = data.get("offsets")
     if isinstance(offsets, list):
@@ -709,6 +943,9 @@ def _apply_offset_config(data: dict | None) -> None:
     player_info_entries = _collect_player_info_entries(data.get("Player_Info"))
     if player_info_entries:
         combined_offsets.extend(player_info_entries)
+    base_entries = _collect_base_entries(legacy_base)
+    if base_entries:
+        combined_offsets.extend(base_entries)
     team_offsets = data.get("Teams") or data.get("team_offsets")
     if isinstance(team_offsets, list):
         combined_offsets.extend(team_offsets)
@@ -720,7 +957,11 @@ def _apply_offset_config(data: dict | None) -> None:
     warnings: list[str] = []
     game_info = data.get("game_info") or {}
     process_info = data.get("process_info") or {}
-    legacy_base = data.get("Base") or data.get("base") or {}
+    process_base_addr = _to_int(
+        process_info.get("base_address")
+        or process_info.get("BaseAddress")
+        or process_info.get("module_base")
+    )
     def _legacy_lookup(section: object, *candidates: str) -> object:
         if not isinstance(section, dict):
             return None
@@ -755,23 +996,49 @@ def _apply_offset_config(data: dict | None) -> None:
     else:
         TEAM_STRIDE = team_stride_val
         TEAM_RECORD_SIZE = TEAM_STRIDE
-    base_pointers = data.get("base_pointers")
+    base_pointers = base_pointers_source if isinstance(base_pointers_source, dict) else {}
+    if base_pointers and not any(
+        key.lower() in {"player", "team"}
+        for key in base_pointers.keys()
+    ):
+        # Legacy structure without explicit Player/Team entries; treat as missing so fallbacks apply.
+        base_pointers = {}
     if not isinstance(base_pointers, dict) or not base_pointers:
         base_pointers = {}
-        legacy_player_addr = _to_int(_legacy_lookup(legacy_base, "Player Base Address"))
-        if legacy_player_addr > 0:
-            base_pointers["Player"] = {
-                "address": legacy_player_addr,
-                "absolute": True,
-                "chain": [],
+        legacy_player_addr_raw = _legacy_lookup(legacy_base, "Player Base Address")
+        legacy_player_chain = _legacy_lookup(legacy_base, "Player Offset Chain")
+        if legacy_player_addr_raw is not None:
+            addr_int = _to_int(legacy_player_addr_raw)
+            direct_player = not legacy_player_chain
+            absolute_flag = True
+            if addr_int and process_base_addr:
+                if 0 <= addr_int < process_base_addr:
+                    absolute_flag = False
+            entry: dict[str, object] = {
+                "address": addr_int,
+                "absolute": absolute_flag,
+                "chain": legacy_player_chain if isinstance(legacy_player_chain, list) else [],
             }
-        legacy_team_addr = _to_int(_legacy_lookup(legacy_base, "Team Base Address"))
-        if legacy_team_addr > 0:
-            base_pointers["Team"] = {
-                "address": legacy_team_addr,
-                "absolute": True,
-                "chain": [],
+            if direct_player:
+                entry["direct_table"] = True
+            base_pointers["Player"] = entry
+        legacy_team_addr_raw = _legacy_lookup(legacy_base, "Team Base Address")
+        legacy_team_chain = _legacy_lookup(legacy_base, "Team Offset Chain")
+        if legacy_team_addr_raw is not None:
+            addr_int = _to_int(legacy_team_addr_raw)
+            direct_team = not legacy_team_chain
+            absolute_flag = True
+            if addr_int and process_base_addr:
+                if 0 <= addr_int < process_base_addr:
+                    absolute_flag = False
+            entry: dict[str, object] = {
+                "address": addr_int,
+                "absolute": absolute_flag,
+                "chain": legacy_team_chain if isinstance(legacy_team_chain, list) else [],
             }
+            if direct_team:
+                entry["direct_table"] = True
+            base_pointers["Team"] = entry
     # Store legacy team table RVA (can be 0, meaning module base)
     try:
         from builtins import int as _int_alias
@@ -779,18 +1046,22 @@ def _apply_offset_config(data: dict | None) -> None:
         pass
     global TEAM_TABLE_RVA
     TEAM_TABLE_RVA = _to_int(_legacy_lookup(legacy_base, "Team Base Address"))
+    def _pointer_address(defn: dict | None) -> tuple[int, bool]:
+        if not isinstance(defn, dict):
+            return 0, False
+        for key in ("address", "rva", "base"):
+            if key in defn:
+                return _to_int(defn.get(key)), True
+        return 0, False
+
     PLAYER_PTR_CHAINS.clear()
     player_base = base_pointers.get("Player")
-    if not isinstance(player_base, dict):
+    player_addr, player_addr_defined = _pointer_address(player_base)
+    if not player_addr_defined:
         warnings.append("Player base pointer definition missing; live player scanning disabled.")
         PLAYER_TABLE_RVA = 0
     else:
-        addr = _to_int(player_base.get("address") or player_base.get("rva") or player_base.get("base"))
-        if addr <= 0:
-            warnings.append("Player base pointer address missing; live player scanning disabled.")
-            PLAYER_TABLE_RVA = 0
-        else:
-            PLAYER_TABLE_RVA = addr
+        PLAYER_TABLE_RVA = player_addr
         chains = _parse_pointer_chain_config(player_base)
         if chains:
             PLAYER_PTR_CHAINS.extend(chains)
@@ -798,7 +1069,8 @@ def _apply_offset_config(data: dict | None) -> None:
             warnings.append("Player base pointer chain produced no resolvable entries; live player scanning disabled.")
     TEAM_PTR_CHAINS.clear()
     team_base = base_pointers.get("Team")
-    if not isinstance(team_base, dict):
+    team_addr, team_addr_defined = _pointer_address(team_base)
+    if not team_addr_defined:
         warnings.append("Team base pointer definition missing; team scanning disabled.")
     else:
         chains = _parse_pointer_chain_config(team_base)
@@ -806,6 +1078,22 @@ def _apply_offset_config(data: dict | None) -> None:
             TEAM_PTR_CHAINS.extend(chains)
         else:
             warnings.append("Team base pointer chain produced no resolvable entries; team scanning disabled.")
+    pointer_candidates = data.get("pointer_candidates") or data.get("PointerCandidates")
+    if isinstance(pointer_candidates, dict):
+        extra_player_candidates = (
+            pointer_candidates.get("Player")
+            or pointer_candidates.get("player")
+            or pointer_candidates.get("Players")
+        )
+        if extra_player_candidates:
+            _extend_pointer_candidates(PLAYER_PTR_CHAINS, extra_player_candidates)
+        extra_team_candidates = (
+            pointer_candidates.get("Team")
+            or pointer_candidates.get("team")
+            or pointer_candidates.get("Teams")
+        )
+        if extra_team_candidates:
+            _extend_pointer_candidates(TEAM_PTR_CHAINS, extra_team_candidates)
     name_char_limit: int | None = None
     def _derive_char_capacity(offset_val: int, enc: str, length_val: int) -> int | None:
         # Prefer explicit length from schema; otherwise derive from stride boundary
@@ -844,7 +1132,7 @@ def _apply_offset_config(data: dict | None) -> None:
     if not last_entry:
         OFF_LAST_NAME = _to_int(_legacy_lookup(legacy_base, "Offset Player Last Name", "Offset Last Name", "Last Name Offset")) or 0
         LAST_NAME_ENCODING = "utf16"
-        if OFF_LAST_NAME > 0:
+        if OFF_LAST_NAME >= 0:
             cap = _derive_char_capacity(OFF_LAST_NAME, LAST_NAME_ENCODING, 0)
             if cap is not None:
                 name_char_limit = cap if name_char_limit is None else max(name_char_limit, cap)
@@ -913,19 +1201,16 @@ def _apply_offset_config(data: dict | None) -> None:
     team_player_entries = [
         entry for (cat, _), entry in _offset_index.items() if cat == "team players"
     ]
-    if not team_player_entries:
-        warnings.append("No Team Players entries found; using default team slot count.")
-        # keep default TEAM_PLAYER_SLOT_COUNT
-    else:
+    if team_player_entries:
         TEAM_PLAYER_SLOT_COUNT = len(team_player_entries)
     TEAM_FIELD_DEFS.clear()
     for label, entry_name in TEAM_FIELD_SPECS:
-        entry = _find_offset_entry(entry_name, "Teams")
-        if not entry:
+        entry_obj = _find_offset_entry(entry_name, "Teams")
+        if not isinstance(entry_obj, dict):
             continue
-        offset = _to_int(entry.get("address"))
-        length_val = _to_int(entry.get("length"))
-        entry_type = str(entry.get("type", "")).lower()
+        offset = _to_int(entry_obj.get("address"))
+        length_val = _to_int(entry_obj.get("length"))
+        entry_type = str(entry_obj.get("type", "")).lower()
         if offset <= 0 or length_val <= 0:
             continue
         if entry_type not in ("wstring", "string", "text"):
@@ -1106,6 +1391,8 @@ class PreparedImportRows(TypedDict):
     data_rows: list[list[str]]
     name_col: int
     value_columns: list[int]
+    first_name_col: NotRequired[int | None]
+    last_name_col: NotRequired[int | None]
 
 
 class CoyImportLayout(TypedDict, total=False):
@@ -1312,7 +1599,6 @@ FIELD_NAME_ALIASES: dict[str, str] = {
     "TRANSITIONPULLUPTHREE": "TRANSITIONPULLUP3PT",
     "DRIVEPULLUPMIDRANGE": "DRIVEPULLUPMID",
     "DRIVEPULLUPTHREE": "DRIVEPULLUP3PT",
-    "DRIVINGLAYUP": "DRIVINGLAYUPTENDENCY",
     "EUROSTEPLAYUP": "EUROSTEP",
     "HOPSTEPLAYUP": "HOPSTEP",
     "STANDINGDUNK": "STANDINGDUNKTENDENCY",
@@ -2442,6 +2728,8 @@ class PlayerDataModel:
                     break
             if match_idx >= 0:
                 selected.append(remaining.pop(match_idx))
+        if remaining:
+            selected.extend(remaining)
         return selected
     # ------------------------------------------------------------------
     # Internal string helpers
@@ -2560,8 +2848,10 @@ class PlayerDataModel:
             "LAYUP": "DRIVINGLAYUP",
             "STDUNK": "STANDINGDUNK",
             "DUNK": "DRIVINGDUNK",
+            "CLOSESHOT": "CLOSESHOT",
             "CLOSE": "CLOSESHOT",
-            "MID": "MIDRANGESHOT",
+            "MIDRANGE": "MIDRANGE",
+            "MID": "MIDRANGE",
             "3PT": "THREEPOINT",
             "FT": "FREETHROW",
             "PHOOK": "POSTHOOK",
@@ -2572,6 +2862,12 @@ class PlayerDataModel:
             "SPDBALL": "SPEEDWITHBALL",
             "PASSIQ": "PASSINGIQ",
             "PASS_IQ": "PASSINGIQ",
+            "PASS": "PASSINGACCURACY",
+            "PASSACC": "PASSINGACCURACY",
+            "PASSACCURACY": "PASSINGACCURACY",
+            "SECONDARYPOSITION": "POSITION2",
+            "SECONDARYPOS": "POSITION2",
+            "POS2": "POSITION2",
             "VISION": "PASSINGVISION",
             "OCNST": "OFFENSIVECONSISTENCY",
             "ID": "INTERIORDEFENSE",
@@ -3373,7 +3669,30 @@ class PlayerDataModel:
         if not header:
             return None
         name_col = 0
-        value_columns = list(range(1, len(header)))
+
+        def _simple_norm(token: str) -> str:
+            return "".join(ch for ch in str(token).upper() if ch.isalnum())
+
+        first_name_markers = {"FIRSTNAME", "FIRST", "FNAME", "PLAYERFIRST", "PLAYERFIRSTNAME", "GIVENNAME"}
+        last_name_markers = {"LASTNAME", "LAST", "LNAME", "PLAYERLAST", "PLAYERLASTNAME", "SURNAME", "FAMILYNAME"}
+        normalized_headers = [_simple_norm(cell) for cell in header]
+        first_name_col = None
+        last_name_col = None
+        for idx, norm in enumerate(normalized_headers):
+            if not norm:
+                continue
+            if first_name_col is None and norm in first_name_markers:
+                first_name_col = idx
+                continue
+            if last_name_col is None and norm in last_name_markers:
+                last_name_col = idx
+
+        skip_value_cols = {name_col}
+        if first_name_col is not None:
+            skip_value_cols.add(first_name_col)
+        if last_name_col is not None:
+            skip_value_cols.add(last_name_col)
+        value_columns = [idx for idx in range(len(header)) if idx not in skip_value_cols]
         data_rows = [
             [str(cell) for cell in row]
             for row in rows[1:]
@@ -3388,8 +3707,46 @@ class PlayerDataModel:
                 "data_rows": data_rows,
                 "name_col": name_col,
                 "value_columns": value_columns,
+                "first_name_col": first_name_col,
+                "last_name_col": last_name_col,
             },
         )
+
+    @staticmethod
+    def compose_import_row_name(info: PreparedImportRows, row: Sequence[object]) -> str:
+        """Return the best full-name string for a prepared import row."""
+        if not row or not info:
+            return ""
+
+        def _idx(value: object) -> int | None:
+            if isinstance(value, int):
+                return value if value >= 0 else None
+            try:
+                idx_val = int(value)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                return None
+            return idx_val if idx_val >= 0 else None
+
+        first_idx = _idx(info.get("first_name_col"))
+        last_idx = _idx(info.get("last_name_col"))
+        name_idx = _idx(info.get("name_col"))
+
+        def _piece(idx: int | None) -> str:
+            if idx is None or idx < 0 or idx >= len(row):
+                return ""
+            return str(row[idx]).strip()
+
+        parts: list[str] = []
+        first_part = _piece(first_idx)
+        last_part = _piece(last_idx)
+        if first_part:
+            parts.append(first_part)
+        if last_part:
+            parts.append(last_part)
+        if parts:
+            return " ".join(parts).strip()
+        fallback = _piece(name_idx)
+        return fallback.strip() if fallback else ""
 
     def import_table(
         self,
@@ -3416,6 +3773,7 @@ class PlayerDataModel:
         # Ensure category exists
         if category_name not in self.categories:
             return 0
+        context_key = (context or "").strip().lower()
         # Open file
         try:
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
@@ -3437,16 +3795,89 @@ class PlayerDataModel:
         data_rows = info["data_rows"]
         name_col = info["name_col"]
         value_columns = info["value_columns"]
+
+        def _resolve_optional_index(value: Any) -> int | None:
+            if isinstance(value, int):
+                return value if value >= 0 else None
+            try:
+                idx = int(value)
+            except (TypeError, ValueError):
+                return None
+            return idx if idx >= 0 else None
         field_defs = self._get_import_fields(category_name) or self.categories.get(category_name, [])
         if not field_defs:
             return 0
+        first_name_col: int | None = _resolve_optional_index(info.get("first_name_col"))
+        last_name_col: int | None = _resolve_optional_index(info.get("last_name_col"))
+        if header and (first_name_col is None or last_name_col is None):
+            first_name_markers = {
+                "FIRSTNAME",
+                "FIRST",
+                "PLAYERFIRST",
+                "PLAYERFIRSTNAME",
+                "FNAME",
+                "GIVENNAME",
+            }
+            last_name_markers = {
+                "LASTNAME",
+                "LAST",
+                "PLAYERLAST",
+                "PLAYERLASTNAME",
+                "LNAME",
+                "SURNAME",
+                "FAMILYNAME",
+            }
+
+            def _looks_like_first(norm: str) -> bool:
+                return any(
+                    (
+                        norm in first_name_markers,
+                        "FIRSTNAME" in norm,
+                        "GIVENNAME" in norm,
+                        norm.endswith("FNAME"),
+                        norm.startswith("FNAME"),
+                    )
+                )
+
+            def _looks_like_last(norm: str) -> bool:
+                return any(
+                    (
+                        norm in last_name_markers,
+                        "LASTNAME" in norm,
+                        "SURNAME" in norm,
+                        "FAMILYNAME" in norm,
+                        norm.endswith("LNAME"),
+                        norm.startswith("LNAME"),
+                    )
+                )
+
+            for idx, column_name in enumerate(header):
+                if (
+                    first_name_col is not None
+                    and last_name_col is not None
+                    and idx not in (first_name_col, last_name_col)
+                ):
+                    continue
+                normalized_name = self._normalize_header_name(column_name)
+                if not normalized_name:
+                    continue
+                if first_name_col is None and _looks_like_first(normalized_name):
+                    first_name_col = idx
+                    continue
+                if last_name_col is None and _looks_like_last(normalized_name):
+                    last_name_col = idx
         fixed_mapping = bool(info.get("fixed_mapping"))
         header = info.get("header") or []
         selected_columns: list[int] = []
         mappings: list[dict] = []
+        skip_match_cols = {name_col}
+        if first_name_col is not None:
+            skip_match_cols.add(first_name_col)
+        if last_name_col is not None:
+            skip_match_cols.add(last_name_col)
         if header and not fixed_mapping:
             normalized_headers = [
-                self._normalize_header_name(h) if idx != name_col else ""
+                self._normalize_header_name(h) if idx not in skip_match_cols else ""
                 for idx, h in enumerate(header)
             ]
             remaining_fields = list(field_defs)
@@ -3537,13 +3968,63 @@ class PlayerDataModel:
                 return (1, 1_000_000 + p.index, p.index)
             sorted_players = sorted(cached_players, key=_player_order_key)
             player_sequence = [p.index for p in sorted_players]
+        def _get_cell(row: Sequence[str], idx: int | None) -> str:
+            if idx is None or idx < 0 or idx >= len(row):
+                return ""
+            return str(row[idx]).strip()
+
+        def _coerce_position_value(raw: object) -> int | None:
+            """Translate FREE text position codes (PG/SG/SF/PF/C) into slot indices."""
+            if raw is None:
+                return None
+            try:
+                num = float(str(raw))
+            except Exception:
+                token = str(raw).strip().upper()
+                mapping = {
+                    "PG": 0,
+                    "POINT": 0,
+                    "POINTGUARD": 0,
+                    "SG": 1,
+                    "SHOOTING": 1,
+                    "SHOOTINGGUARD": 1,
+                    "SF": 2,
+                    "SMALL": 2,
+                    "SMALLFORWARD": 2,
+                    "PF": 3,
+                    "POWER": 3,
+                    "POWERFORWARD": 3,
+                    "C": 4,
+                    "CENTER": 4,
+                }
+                return mapping.get(token)
+            else:
+                try:
+                    return int(round(num))
+                except Exception:
+                    return None
+
         partial_matches: dict[str, list[dict[str, object]]] = {}
         for row in data_rows:
             if not row:
                 continue
-            if len(row) <= name_col:
+            row_len = len(row)
+            has_name_col = 0 <= name_col < row_len
+            has_first = first_name_col is not None and 0 <= first_name_col < row_len
+            has_last = last_name_col is not None and 0 <= last_name_col < row_len
+            if not (has_name_col or has_first or has_last):
                 continue
-            raw_name = str(row[name_col]).strip()
+            first_piece = _get_cell(row, first_name_col)
+            last_piece = _get_cell(row, last_name_col)
+            raw_name_parts = [part for part in (first_piece, last_piece) if part]
+            raw_name = " ".join(raw_name_parts).strip()
+            if not raw_name and has_name_col:
+                raw_name = str(row[name_col]).strip()
+            row_first_name = ""
+            row_last_name = ""
+            if not name_match_mode and context_key != "coy":
+                row_first_name = first_piece
+                row_last_name = last_piece
             if name_match_mode:
                 if not raw_name:
                     continue
@@ -3566,6 +4047,8 @@ class PlayerDataModel:
                             bucket.append({"name": cand_name, "score": cand.get("score")})
                     continue
             else:
+                if not (row_first_name or row_last_name):
+                    break
                 if seq_index >= len(player_sequence):
                     break
                 idxs = [player_sequence[seq_index]]
@@ -3575,6 +4058,8 @@ class PlayerDataModel:
                 assignments: list[FieldWriteSpec] = []
                 post_writes: list[tuple[str, int, float]] = []
                 string_writes: list[tuple[str, int, str]] = []
+                has_first_override = False
+                has_last_override = False
                 for col_idx, spec in column_specs:
                     if spec is None or col_idx >= len(row):
                         continue
@@ -3588,12 +4073,20 @@ class PlayerDataModel:
                             continue
                         if field_name in ("first name", "firstname"):
                             string_writes.append(("first", spec_offset, text_value))
+                            has_first_override = True
                         elif field_name in ("last name", "lastname"):
                             string_writes.append(("last", spec_offset, text_value))
+                            has_last_override = True
                         else:
                             string_writes.append(("generic", spec_offset, text_value))
                         continue
-                    cleaned = numeric_clean("", str(val))
+                    if field_name in ("position", "position 2", "position2", "secondary position"):
+                        coerced = _coerce_position_value(val)
+                        if coerced is None:
+                            continue
+                        cleaned = str(coerced)
+                    else:
+                        cleaned = numeric_clean("", str(val))
                     if not cleaned:
                         continue
                     try:
@@ -3602,9 +4095,12 @@ class PlayerDataModel:
                         continue
                     spec_start = cast(int, spec["start_bit"])
                     spec_length = cast(int, spec["length"])
-                    if category_name == "Potential" and ("min" in field_name or "max" in field_name):
+                    if field_name in ("position", "position 2", "position2"):
+                        max_raw = int(cast(int, spec["max_raw"]))
+                        raw_value = max(0, min(int(round(num)), max_raw))
+                    elif category_name == "Potential" and ("min" in field_name or "max" in field_name):
                         raw_value = convert_minmax_potential_to_raw(num, spec_length)
-                    elif field_name == "height":
+                    elif field_name in ("height", "wingspan"):
                         try:
                             inches_val = int(round(float(num)))
                         except Exception:
@@ -3630,10 +4126,38 @@ class PlayerDataModel:
                             deref_offset,
                         )
                     )
-                if not assignments and not post_writes and not string_writes:
-                    continue
+                if (
+                    not name_match_mode
+                    and context_key != "coy"
+                    and (row_first_name or row_last_name)
+                ):
+                    if row_first_name and not has_first_override and OFF_FIRST_NAME >= 0:
+                        string_writes.append(("first", OFF_FIRST_NAME, row_first_name))
+                        has_first_override = True
+                    if row_last_name and not has_last_override and OFF_LAST_NAME >= 0:
+                        string_writes.append(("last", OFF_LAST_NAME, row_last_name))
+                        has_last_override = True
                 record_addr = player_base + idx * PLAYER_STRIDE
                 player_changed = False
+                if string_writes and not name_match_mode and context_key != "coy":
+                    remaining_strings: list[tuple[str, int, str]] = []
+                    for name_kind, offset_val, text_val in string_writes:
+                        if name_kind not in ("first", "last"):
+                            remaining_strings.append((name_kind, offset_val, text_val))
+                            continue
+                        if offset_val < 0:
+                            continue
+                        try:
+                            encoding = FIRST_NAME_ENCODING if name_kind == "first" else LAST_NAME_ENCODING
+                            self._write_string(record_addr + offset_val, text_val, NAME_MAX_CHARS, encoding)
+                            player_changed = True
+                        except Exception:
+                            pass
+                    string_writes = remaining_strings
+                if not assignments and not post_writes and not string_writes:
+                    if player_changed:
+                        players_updated += 1
+                    continue
                 if assignments:
                     applied = self._apply_field_assignments(record_addr, assignments)
                     if applied:
@@ -4006,8 +4530,12 @@ class PlayerDataModel:
             if base_rva == 0:
                 return None
             absolute = bool(chain_entry.get("absolute"))
+            direct_table = bool(chain_entry.get("direct_table"))
             try:
                 base_addr = base_rva if absolute else self.mem.base_addr + base_rva
+                final_offset = _to_int(chain_entry.get("final_offset") or chain_entry.get("finalOffset"))
+                if direct_table:
+                    return base_addr + final_offset
                 ptr = self.mem.read_uint64(base_addr)
             except Exception:
                 return None
@@ -4074,11 +4602,20 @@ class PlayerDataModel:
             if table_base is None:
                 continue
             try:
-                ln = self._read_string(table_base + OFF_LAST_NAME, NAME_MAX_CHARS, LAST_NAME_ENCODING).strip()
-                fn = self._read_string(table_base + OFF_FIRST_NAME, NAME_MAX_CHARS, FIRST_NAME_ENCODING).strip()
-                if ln or fn:
+                probe_offsets: list[tuple[int, int, str]] = []
+                if OFF_LAST_NAME >= 0:
+                    probe_offsets.append((OFF_LAST_NAME, NAME_MAX_CHARS, LAST_NAME_ENCODING))
+                if OFF_FIRST_NAME > 0:
+                    probe_offsets.append((OFF_FIRST_NAME, NAME_MAX_CHARS, FIRST_NAME_ENCODING))
+                if not probe_offsets:
+                    # No name offsets to validate against; accept the table base.
                     self._resolved_player_base = table_base
                     return table_base
+                for offset, max_chars, encoding in probe_offsets:
+                    text = self._read_string(table_base + offset, max_chars, encoding).strip()
+                    if text:
+                        self._resolved_player_base = table_base
+                        return table_base
             except Exception:
                 continue
         return None
@@ -4963,6 +5500,7 @@ class PlayerEditorApp(tk.Tk):
         self.player_search_var = tk.StringVar()
         self.team_players_lookup: list[Player] = []
         self.team_players_listbox: tk.Listbox | None = None
+        self.selected_players: list[Player] = []
         self.hook_target_var = tk.StringVar(value=self.model.mem.module_name or MODULE_NAME)
         self.player_panel_inspector: RawFieldInspectorExtension | None = None
         # AI integration settings
@@ -4980,6 +5518,11 @@ class PlayerEditorApp(tk.Tk):
         self._ai_local_inputs: list[tk.Widget] = []
         self.ai_status_label: tk.Label | None = None
         self._load_ai_settings_into_vars()
+        # Extension loader state
+        self.extension_vars: dict[str, tk.BooleanVar] = {}
+        self.extension_checkbuttons: dict[str, tk.Checkbutton] = {}
+        self.loaded_extensions: set[str] = set()
+        self.extension_status_var = tk.StringVar(value="")
         # Build UI elements
         self._build_sidebar()
         self._build_home_screen()
@@ -5086,12 +5629,12 @@ class PlayerEditorApp(tk.Tk):
         local_state = tk.NORMAL if mode == "local" else tk.DISABLED
         for widget in self._ai_remote_inputs:
             try:
-                widget.configure(state=remote_state)
+                widget.configure({"state": remote_state})
             except Exception:
                 pass
         for widget in self._ai_local_inputs:
             try:
-                widget.configure(state=local_state)
+                widget.configure({"state": local_state})
             except Exception:
                 pass
 
@@ -5341,6 +5884,111 @@ class PlayerEditorApp(tk.Tk):
             activebackground=BUTTON_ACTIVE_BG,
             activeforeground=BUTTON_TEXT,
         ).pack()
+        self._build_extension_loader(parent)
+
+    def _build_extension_loader(self, parent: tk.Frame) -> None:
+        container = tk.Frame(parent, bg=PANEL_BG)
+        container.pack(fill=tk.X, pady=(24, 0))
+        tk.Label(
+            container,
+            text="Extensions",
+            font=("Segoe UI", 12, "bold"),
+            bg=PANEL_BG,
+            fg=TEXT_PRIMARY,
+        ).pack(anchor="w")
+        files = self._discover_extension_files()
+        if not files:
+            tk.Label(
+                container,
+                text="No additional Python modules detected in the editor directory.",
+                bg=PANEL_BG,
+                fg=TEXT_SECONDARY,
+                font=("Segoe UI", 10, "italic"),
+            ).pack(anchor="w", pady=(4, 0))
+        else:
+            list_frame = tk.Frame(container, bg=PANEL_BG)
+            list_frame.pack(fill=tk.X, pady=(4, 0))
+            for path in files:
+                key = str(path.resolve())
+                already_loaded = self._is_extension_loaded(path)
+                var = tk.BooleanVar(value=already_loaded)
+                self.extension_vars[key] = var
+                chk = tk.Checkbutton(
+                    list_frame,
+                    text=path.name,
+                    variable=var,
+                    command=lambda p=path, v=var: self._toggle_extension_module(p, v),
+                    bg=PANEL_BG,
+                    fg=TEXT_PRIMARY,
+                    activebackground=PANEL_BG,
+                    activeforeground=TEXT_PRIMARY,
+                    selectcolor=ACCENT_BG,
+                    anchor="w",
+                    justify="left",
+                )
+                chk.pack(fill=tk.X, anchor="w")
+                if already_loaded:
+                    chk.configure(state=tk.DISABLED)
+                    self.loaded_extensions.add(key)
+                self.extension_checkbuttons[key] = chk
+        tk.Label(
+            container,
+            textvariable=self.extension_status_var,
+            bg=PANEL_BG,
+            fg=TEXT_SECONDARY,
+            font=("Segoe UI", 10, "italic"),
+            wraplength=400,
+            justify="left",
+        ).pack(anchor="w", pady=(6, 0))
+
+    def _discover_extension_files(self) -> list[Path]:
+        base_dir = Path(__file__).resolve().parent
+        return [
+            path
+            for path in sorted(base_dir.glob("*.py"))
+            if not path.name.startswith("__")
+        ]
+
+    def _is_extension_loaded(self, path: Path) -> bool:
+        abs_path = str(path.resolve())
+        if abs_path in self.loaded_extensions:
+            return True
+        for module in list(sys.modules.values()):
+            module_file = getattr(module, "__file__", None)
+            if module_file and Path(module_file).resolve() == path.resolve():
+                return True
+        return False
+
+    def _toggle_extension_module(self, path: Path, var: tk.BooleanVar) -> None:
+        key = str(path.resolve())
+        if not var.get():
+            if key in self.loaded_extensions:
+                self.extension_status_var.set("Unloading extensions is not supported once they are loaded.")
+                var.set(True)
+            return
+        if key in self.loaded_extensions:
+            self.extension_status_var.set(f"{path.name} is already loaded.")
+            return
+        if self._load_extension_module(path):
+            self.loaded_extensions.add(key)
+            self.extension_status_var.set(f"Loaded extension: {path.name}")
+            chk = self.extension_checkbuttons.get(key)
+            if chk is not None:
+                chk.configure(state=tk.DISABLED)
+        else:
+            var.set(False)
+
+    def _load_extension_module(self, path: Path) -> bool:
+        try:
+            spec = importlib.util.spec_from_file_location(f"ext_{path.stem}", path)
+            if spec is None or spec.loader is None:
+                raise ImportError(f"Unable to create module spec for {path}")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return True
+        except Exception as exc:
+            messagebox.showerror("Extension Loader", f"Failed to load {path.name}:\n{exc}")
+            return False
 
     def _build_ai_settings_tab(self, parent: tk.Frame) -> None:
         for widget_list in (self._ai_remote_inputs, self._ai_local_inputs):
@@ -5560,7 +6208,7 @@ class PlayerEditorApp(tk.Tk):
         list_container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.player_listbox = tk.Listbox(
             list_container,
-            selectmode=tk.SINGLE,
+            selectmode=tk.EXTENDED,
             exportselection=False,
             font=("Segoe UI", 11),
             bg="#0F1C2E",
@@ -5571,7 +6219,7 @@ class PlayerEditorApp(tk.Tk):
         self.player_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.player_listbox.bind("<<ListboxSelect>>", self._on_player_selected)
         self.player_listbox.bind("<Double-Button-1>", lambda _e: self._open_full_editor())
-        self.player_listbox.bind("<MouseWheel>", self._on_player_list_mousewheel)
+        bind_mousewheel(self.player_listbox)
         list_scroll = tk.Scrollbar(list_container, orient=tk.VERTICAL, command=self.player_listbox.yview)
         list_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.player_listbox.configure(yscrollcommand=list_scroll.set)
@@ -5968,11 +6616,8 @@ class PlayerEditorApp(tk.Tk):
                     category_tables[cat] = {"rows": rows, "delimiter": ","}
                     info = self.model.prepare_import_rows(cat, rows, context="coy") if rows else None
                     if info:
-                        name_col = info["name_col"]
                         for row in info["data_rows"]:
-                            if len(row) <= name_col:
-                                continue
-                            name = str(row[name_col]).strip()
+                            name = self.model.compose_import_row_name(info, row)
                             if not name:
                                 continue
                             if not self.model._match_player_indices(name):
@@ -6016,11 +6661,8 @@ class PlayerEditorApp(tk.Tk):
                     category_tables[cat_name] = {"rows": rows, "delimiter": delim}
                     info = self.model.prepare_import_rows(cat_name, rows, context="coy") if rows else None
                     if info:
-                        name_col = info["name_col"]
                         for row in info["data_rows"]:
-                            if len(row) <= name_col:
-                                continue
-                            name = str(row[name_col]).strip()
+                            name = self.model.compose_import_row_name(info, row)
                             if not name:
                                 continue
                             if not self.model._match_player_indices(name):
@@ -6186,8 +6828,8 @@ class PlayerEditorApp(tk.Tk):
             return
         # Prompt for the Excel workbook first
         workbook_path = filedialog.askopenfilename(
-            title="Select Excel Workbook",
-            filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")],
+            title="Select Excel or CSV File",
+            filetypes=[("Excel/CSV files", "*.xlsx *.xls *.csv *.tsv"), ("All files", "*.*")],
         )
         if not workbook_path:
             return
@@ -6199,7 +6841,7 @@ class PlayerEditorApp(tk.Tk):
         if match_response is None:
             return
         match_by_name = bool(match_response)
-        field_lookup: dict[str, tuple[str, str]] = {}
+        field_lookup: dict[str, list[tuple[str, str]]] = {}
         category_order: list[str] = []
         for cat_name, fields in (self.model.categories or {}).items():
             if cat_name not in category_order:
@@ -6211,20 +6853,52 @@ class PlayerEditorApp(tk.Tk):
                 if not fname:
                     continue
                 normalized = self.model._normalize_field_name(fname)
-                if not normalized or normalized in field_lookup:
+                if not normalized:
                     continue
-                field_lookup[normalized] = (cat_name, fname)
+                entries = field_lookup.setdefault(normalized, [])
+                if not any(existing_cat == cat_name and existing_name == fname for existing_cat, existing_name in entries):
+                    entries.append((cat_name, fname))
 
-        def categorize_columns(df: Any) -> tuple[str | None, dict[str, list[str]]]:
+        first_name_markers = {"FIRSTNAME", "FIRST", "FNAME", "PLAYERFIRST", "PLAYERFIRSTNAME", "GIVENNAME"}
+        last_name_markers = {
+            "LASTNAME",
+            "LAST",
+            "LNAME",
+            "PLAYERLAST",
+            "PLAYERLASTNAME",
+            "SURNAME",
+            "FAMILYNAME",
+        }
+
+        def _collect_name_columns(columns: Sequence[str]) -> list[str]:
+            """Return the ordered list of name-related columns to preserve in exports."""
+            name_columns: list[str] = []
+            for idx, column_name in enumerate(columns):
+                normalized = self.model._normalize_header_name(column_name)
+                if idx == 0:
+                    if column_name not in name_columns:
+                        name_columns.append(column_name)
+                    continue
+                if not normalized:
+                    continue
+                if normalized in first_name_markers and column_name not in name_columns:
+                    name_columns.append(column_name)
+                    continue
+                if normalized in last_name_markers and column_name not in name_columns:
+                    name_columns.append(column_name)
+            return name_columns
+
+        def categorize_columns(df: Any) -> tuple[str | None, list[str], dict[str, list[str]]]:
             if df is None or getattr(df, "empty", False):
-                return (None, {})
+                return (None, [], {})
             try:
                 columns = [str(col).strip() for col in df.columns]
             except Exception:
-                return (None, {})
+                return (None, [], {})
             if not columns:
-                return (None, {})
+                return (None, [], {})
             name_column = columns[0]
+            name_columns = _collect_name_columns(df.columns)
             categorized: dict[str, list[str]] = {}
             for idx, column_name in enumerate(columns):
                 if idx == 0:
@@ -6232,12 +6906,15 @@ class PlayerEditorApp(tk.Tk):
                 normalized = self.model._normalize_header_name(column_name)
                 if not normalized:
                     continue
-                cat_info = field_lookup.get(normalized)
-                if not cat_info:
+                cat_entries = field_lookup.get(normalized)
+                if not cat_entries:
                     continue
-                category, _ = cat_info
+                first_entry = cat_entries[0]
+                if not isinstance(first_entry, (tuple, list)) or len(first_entry) < 2:
+                    continue
+                category = first_entry[0]
                 categorized.setdefault(category, []).append(df.columns[idx])
-            return (name_column, categorized)
+            return (name_column, name_columns, categorized)
         # Show a loading dialog to discourage clicking during processing
         loading_win = tk.Toplevel(self)
         loading_win.title("Loading")
@@ -6277,37 +6954,49 @@ class PlayerEditorApp(tk.Tk):
             info = self.model.prepare_import_rows(cat_name, rows, context="excel")
             if not info:
                 return
-            name_col = info['name_col']
             for row in info['data_rows']:
-                if len(row) <= name_col:
-                    continue
-                name = str(row[name_col]).strip()
+                name = self.model.compose_import_row_name(info, row)
                 if not name:
                     continue
                 if not self.model._match_player_indices(name):
                     not_found.add(name)
         try:
-            # Read the workbook once to obtain the list of sheet names
-            try:
-                xls = _pd.ExcelFile(workbook_path)
-            except Exception:
-                messagebox.showerror("Excel Import", f"Failed to read {os.path.basename(workbook_path)}")
-                loading_win.destroy()
-                return
-            for sheet_name in xls.sheet_names:
-                df: Any = None
+            dataframes: list[tuple[str, Any]] = []
+            file_ext = os.path.splitext(workbook_path)[1].lower()
+            if file_ext in (".csv", ".tsv", ".txt"):
                 try:
-                    df = cast(Any, xls.parse(sheet_name))
+                    df = cast(Any, _pd.read_csv(workbook_path, sep=None, engine="python"))
                 except Exception:
+                    messagebox.showerror("Excel Import", f"Failed to read {os.path.basename(workbook_path)}")
+                    loading_win.destroy()
+                    return
+                dataframes.append((os.path.basename(workbook_path), df))
+            else:
+                try:
+                    xls = _pd.ExcelFile(workbook_path)
+                except Exception:
+                    messagebox.showerror("Excel Import", f"Failed to read {os.path.basename(workbook_path)}")
+                    loading_win.destroy()
+                    return
+                for sheet_name in xls.sheet_names:
+                    sheet_label = str(sheet_name)
+                    df: Any = None
                     try:
-                        df = cast(Any, _pd.read_excel(workbook_path, sheet_name=sheet_name))
+                        df = cast(Any, xls.parse(sheet_label))
                     except Exception:
-                        df = None
-                if df is None:
-                    continue
-                name_column, categorized = categorize_columns(df)
+                        try:
+                            df = cast(Any, _pd.read_excel(workbook_path, sheet_name=sheet_label))
+                        except Exception:
+                            df = None
+                    if df is None:
+                        continue
+                    dataframes.append((sheet_label, df))
+            for sheet_name, df in dataframes:
+                name_column, name_columns, categorized = categorize_columns(df)
                 if not name_column or not categorized:
                     continue
+                if not name_columns:
+                    name_columns = [name_column]
                 for cat_name, column_names in categorized.items():
                     usable_columns: list[str] = []
                     for column_name in column_names:
@@ -6315,20 +7004,27 @@ class PlayerEditorApp(tk.Tk):
                             series = df[column_name]
                         except Exception:
                             continue
+                        drop = False
                         try:
                             if series.isna().all():
-                                continue
+                                drop = True
                         except Exception:
                             pass
-                        try:
-                            if series.astype(str).str.strip().eq("").all():
-                                continue
-                        except Exception:
-                            pass
+                        if not drop:
+                            try:
+                                if series.astype(str).str.strip().eq("").all():
+                                    drop = True
+                            except Exception:
+                                pass
+                        if drop:
+                            continue
                         usable_columns.append(column_name)
                     if not usable_columns:
                         continue
-                    subset_columns = [df.columns[0]] + usable_columns
+                    subset_columns = list(name_columns)
+                    for column_name in usable_columns:
+                        if column_name not in subset_columns:
+                            subset_columns.append(column_name)
                     try:
                         subset_df = df[subset_columns].copy()
                     except Exception:
@@ -6722,6 +7418,7 @@ class PlayerEditorApp(tk.Tk):
         scrollbar.config(command=self.team_players_listbox.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.team_players_listbox.bind("<Double-Button-1>", self._open_team_player_editor)
+        bind_mousewheel(self.team_players_listbox)
 
         # Save button
         self.btn_team_save = tk.Button(
@@ -7011,35 +7708,22 @@ class PlayerEditorApp(tk.Tk):
             else:
                 self.player_listbox.insert(tk.END, "No players available.")
         self.player_count_var.set("Players: 0")
-    def _on_player_list_mousewheel(self, event):
-        try:
-            delta = int(-1 * (event.delta / 120))
-        except Exception:
-            delta = -1 if getattr(event, 'delta', 0) > 0 else 1
-        self.player_listbox.yview_scroll(delta, "units")
-        return "break"
     def _on_team_selected(self, event=None):
         self._refresh_player_list()
     def _on_player_selected(self, event=None):
         selection = self.player_listbox.curselection()
-        if not selection:
-            self.selected_player = None
-        else:
-            idx = selection[0]
-            # Map the visible index back to the index within
-            # ``current_players`` using ``filtered_player_indices``.  If the
-            # mapping is out of range, clear the selection.
+        selected_players: list[Player] = []
+        for idx in selection:
             if idx < len(self.filtered_player_indices):
                 p_idx = self.filtered_player_indices[idx]
                 if p_idx < len(self.current_players):
-                    self.selected_player = self.current_players[p_idx]
-                else:
-                    self.selected_player = None
-            else:
-                self.selected_player = None
+                    selected_players.append(self.current_players[p_idx])
+        self.selected_players = selected_players
+        self.selected_player = selected_players[0] if selected_players else None
         self._update_detail_fields()
     def _update_detail_fields(self):
         p = self.selected_player
+        selection_count = len(self.selected_players)
         if not p:
             # Clear fields
             self.player_name_var.set("Select a player")
@@ -7058,6 +7742,8 @@ class PlayerEditorApp(tk.Tk):
                 pass
         else:
             display_name = p.full_name or f"Player {p.index}"
+            if selection_count > 1:
+                display_name = f"{display_name} (+{selection_count - 1} more)"
             self.player_name_var.set(display_name)
             initials = "".join(part[0].upper() for part in (p.first_name, p.last_name) if part) or "?"
             try:
@@ -7119,10 +7805,10 @@ class PlayerEditorApp(tk.Tk):
         # Refresh list to reflect potential name changes
         self._refresh_player_list()
     def _open_full_editor(self):
-        p = self.selected_player
-        if not p:
+        players = self.selected_players or ([self.selected_player] if self.selected_player else [])
+        if not players:
             return
-        editor = FullPlayerEditor(self, p, self.model)
+        editor = FullPlayerEditor(self, players, self.model)
         editor.grab_set()
     def _open_copy_dialog(self):
         """Open a dialog allowing the user to copy data from the selected player to another."""
@@ -7352,11 +8038,23 @@ class PlayerEditorApp(tk.Tk):
         self._start_scan()
 class FullPlayerEditor(tk.Toplevel):
     """A tabbed editor window for advanced player attributes."""
-    def __init__(self, parent: tk.Tk, player: Player, model: PlayerDataModel):
+    def __init__(self, parent: tk.Tk, players: Player | Collection[Player], model: PlayerDataModel):
         super().__init__(parent)
-        self.player = player
+        player_list: list[Player] = []
+        if isinstance(players, Player):
+            player_list = [players]
+        elif isinstance(players, CollectionABC) and not isinstance(players, (str, bytes)):
+            player_list = [p for p in players if isinstance(p, Player)]
+        if not player_list:
+            raise ValueError("FullPlayerEditor requires at least one player.")
+        self.target_players: list[Player] = player_list
+        self.player = self.target_players[0]
         self.model = model
-        self.title(f"Edit Player: {player.full_name}")
+        if len(self.target_players) == 1:
+            title = f"Edit Player: {self.player.full_name}"
+        else:
+            title = f"Edit {len(self.target_players)} Players (showing {self.player.full_name})"
+        self.title(title)
         # Dimensions: slightly larger for many fields
         self.geometry("700x500")
         self.configure(bg=PANEL_BG)
@@ -7485,7 +8183,7 @@ class FullPlayerEditor(tk.Toplevel):
         self.raw_field_inspector = RawFieldInspectorExtension(self)
         full_editor_context = {
             "notebook": notebook,
-            "player": player,
+            "player": self.player,
             "model": model,
             "inspector": self.raw_field_inspector,
         }
@@ -7566,6 +8264,7 @@ class FullPlayerEditor(tk.Toplevel):
         )
         canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set, bg=PANEL_BG)
+        bind_mousewheel(scroll_frame, canvas)
         # Pack canvas and scrollbar
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -7844,6 +8543,8 @@ class FullPlayerEditor(tk.Toplevel):
         """
         # Iterate similar to load
         any_error = False
+        targets = self.target_players or [self.player]
+        player_base_addr: int | None = None
         for category, fields in self.field_vars.items():
             for field_name, var in fields.items():
                 meta = self.field_meta.get((category, field_name))
@@ -7885,10 +8586,17 @@ class FullPlayerEditor(tk.Toplevel):
                             self.model.mem.open_process()
                         except Exception:
                             pass
-                        base_addr = self.model._resolve_player_table_base()
-                        if base_addr is not None:
-                            addr = base_addr + self.player.index * PLAYER_STRIDE + offset
-                            write_weight(self.model.mem, addr, wval)
+                        if player_base_addr is None:
+                            player_base_addr = self.model._resolve_player_table_base()
+                        if player_base_addr is None:
+                            any_error = True
+                            continue
+                        for target in targets:
+                            try:
+                                addr = player_base_addr + target.index * PLAYER_STRIDE + offset
+                                write_weight(self.model.mem, addr, wval)
+                            except Exception:
+                                any_error = True
                         continue
                     elif category in ("Attributes", "Durability"):  # Convert the UI rating back into a raw bitfield value.
                         try:
@@ -7936,22 +8644,26 @@ class FullPlayerEditor(tk.Toplevel):
                     else:
                         # For other categories, write the raw value directly
                         value_to_write = ui_value
-                    if not self.model.set_field_value(
-                        self.player.index,
-                        offset,
-                        start_bit,
-                        length,
-                        value_to_write,
-                        requires_deref=requires_deref,
-                        deref_offset=deref_offset,
-                    ):
-                        any_error = True
+                    for target in targets:
+                        if not self.model.set_field_value(
+                            target.index,
+                            offset,
+                            start_bit,
+                            length,
+                            value_to_write,
+                            requires_deref=requires_deref,
+                            deref_offset=deref_offset,
+                        ):
+                            any_error = True
                 except Exception:
                     any_error = True
         if any_error:
             messagebox.showerror("Save Error", "One or more fields could not be saved.")
         else:
-            messagebox.showinfo("Save Successful", "All fields saved successfully.")
+            if len(targets) > 1:
+                messagebox.showinfo("Save Successful", f"All fields saved for {len(targets)} players.")
+            else:
+                messagebox.showinfo("Save Successful", "All fields saved successfully.")
     def _adjust_category(self, category_name: str, action: str) -> None:
         """
         Adjust all values within a category according to the specified action.
@@ -8074,6 +8786,7 @@ class RandomizerWindow(tk.Toplevel):
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        bind_mousewheel(scroll_frame, canvas)
         # Header row
         tk.Label(scroll_frame, text="Field", bg="#F5F5F5", font=("Segoe UI", 10, "bold")).grid(row=0, column=0, sticky=tk.W, padx=(10, 5), pady=2)
         tk.Label(scroll_frame, text="Min", bg="#F5F5F5", font=("Segoe UI", 10, "bold")).grid(row=0, column=1, padx=5, pady=2)
@@ -8120,6 +8833,7 @@ class RandomizerWindow(tk.Toplevel):
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        bind_mousewheel(scroll_frame, canvas)
         # Obtain team names: prefer get_teams' ordering, otherwise use the raw team_list
         team_names = []
         try:
@@ -8256,6 +8970,7 @@ class TeamShuffleWindow(tk.Toplevel):
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        bind_mousewheel(scroll_frame, canvas)
         # Fetch team names: prefer get_teams' ordering, otherwise use team_list directly
         team_names = []
         try:
@@ -8463,6 +9178,7 @@ class BatchEditWindow(tk.Toplevel):
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        bind_mousewheel(scroll_frame, canvas)
         # Populate team checkboxes
         try:
             team_names = self.model.get_teams()
@@ -8753,10 +9469,10 @@ class BatchEditWindow(tk.Toplevel):
 
         attribute_fields = collect_numeric_fields(attr_key)
         durability_fields = collect_numeric_fields(durability_key)
-        potential_fields: list[dict[str, object]] = []
+        potential_fields: list[_NumericFieldSpec] = []
         for key in potential_keys:
             potential_fields.extend(collect_numeric_fields(key))
-        badge_fields: list[dict[str, object]] = []
+        badge_fields: list[_NumericFieldSpec] = []
         for key in badge_keys:
             badge_fields.extend(collect_numeric_fields(key, skip_enums=False))
         tendencies_fields = collect_numeric_fields(lower_map.get("tendencies"), skip_enums=True)
@@ -9012,6 +9728,7 @@ class ImportSummaryDialog(tk.Toplevel):
             canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
             rows_frame = tk.Frame(canvas, bg=PANEL_BG)
             canvas.create_window((0, 0), window=rows_frame, anchor="nw")
+            bind_mousewheel(rows_frame, canvas)
             def _on_configure(event):
                 canvas.configure(scrollregion=canvas.bbox("all"))
             rows_frame.bind("<Configure>", _on_configure)
