@@ -33,6 +33,7 @@ from ..core.config import (
     TEXT_PRIMARY,
     TEXT_SECONDARY,
 )
+from . import nba_data
 if TYPE_CHECKING:
     from typing import Protocol
 
@@ -46,6 +47,8 @@ if TYPE_CHECKING:
         filtered_player_indices: list[int]
         current_players: list[Any] | None
         player_listbox: tk.Listbox
+        staff_listbox: tk.Listbox
+        stadium_listbox: tk.Listbox
         team_var: tk.Variable
         team_edit_var: tk.Variable
         team_field_vars: Mapping[str, tk.Variable]
@@ -60,12 +63,18 @@ if TYPE_CHECKING:
         home_frame: tk.Misc
         players_frame: tk.Misc
         teams_frame: tk.Misc | None
+        staff_frame: tk.Misc | None
+        stadium_frame: tk.Misc | None
 
         def after(self, delay_ms: int, callback: Callable, *args: Any) -> Any: ...
 
         def _refresh_player_list(self) -> Any: ...
 
         def _filter_player_list(self) -> Any: ...
+
+        def _refresh_staff_list(self) -> Any: ...
+
+        def _refresh_stadium_list(self) -> Any: ...
 
         def _save_player(self) -> Any: ...
 
@@ -79,9 +88,19 @@ if TYPE_CHECKING:
 
         def show_teams(self) -> Any: ...
 
+        def show_staff(self) -> Any: ...
+
+        def show_stadium(self) -> Any: ...
+
+        def show_excel(self) -> Any: ...
+
         def get_ai_settings(self) -> dict[str, Any]: ...
 
         def _open_full_editor(self) -> Any: ...
+
+        def _open_full_staff_editor(self, staff_idx: int | None = None) -> Any: ...
+
+        def _open_full_stadium_editor(self, stadium_idx: int | None = None) -> Any: ...
 
         def _open_copy_dialog(self) -> Any: ...
 
@@ -278,6 +297,8 @@ class LLMControlBridge:
             "list_actions": lambda _p: self.available_actions(),
             "select_player": self._cmd_select_player,
             "select_team": self._cmd_select_team,
+            "select_staff": self._cmd_select_staff,
+            "select_stadium": self._cmd_select_stadium,
             "set_name_fields": self._cmd_set_name_fields,
             "set_search_filter": self._cmd_set_search_filter,
             "save_player": self._cmd_save_player,
@@ -285,12 +306,26 @@ class LLMControlBridge:
             "show_screen": self._cmd_show_screen,
             "invoke_feature": self._cmd_invoke_feature,
             "open_full_editor": self._cmd_open_full_editor,
+            "open_full_staff_editor": self._cmd_open_full_staff_editor,
+            "open_full_stadium_editor": self._cmd_open_full_stadium_editor,
             "set_detail_field": self._cmd_set_detail_field,
             "list_full_fields": self._cmd_list_full_fields,
             "set_full_field": self._cmd_set_full_field,
             "save_full_editor": self._cmd_save_full_editor,
             "set_full_fields": self._cmd_set_full_fields,
             "get_full_editor_state": self._cmd_get_full_editor_state,
+            "list_staff": lambda _p: self.list_staff(),
+            "list_stadiums": lambda _p: self.list_stadiums(),
+            "list_staff_fields": self._cmd_list_staff_fields,
+            "list_stadium_fields": self._cmd_list_stadium_fields,
+            "set_staff_field": self._cmd_set_staff_field,
+            "set_staff_fields": self._cmd_set_staff_fields,
+            "save_staff_editor": self._cmd_save_staff_editor,
+            "get_staff_editor_state": self._cmd_get_staff_editor_state,
+            "set_stadium_field": self._cmd_set_stadium_field,
+            "set_stadium_fields": self._cmd_set_stadium_fields,
+            "save_stadium_editor": self._cmd_save_stadium_editor,
+            "get_stadium_editor_state": self._cmd_get_stadium_editor_state,
         }
         handler = handlers.get(action)
         if handler is None:
@@ -301,6 +336,8 @@ class LLMControlBridge:
     def feature_actions() -> dict[str, str]:
         return {
             "open_full_editor": "_open_full_editor",
+            "open_full_staff_editor": "_open_full_staff_editor",
+            "open_full_stadium_editor": "_open_full_stadium_editor",
             "open_copy_dialog": "_open_copy_dialog",
             "open_randomizer": "_open_randomizer",
             "open_team_shuffle": "_open_team_shuffle",
@@ -319,10 +356,14 @@ class LLMControlBridge:
                     "describe_state",
                     "list_players",
                     "list_teams",
+                    "list_staff",
+                    "list_stadiums",
                     "get_team_state",
                     "list_actions",
                     "select_player",
                     "select_team",
+                    "select_staff",
+                    "select_stadium",
                     "set_name_fields",
                     "set_detail_field",
                     "set_search_filter",
@@ -334,6 +375,16 @@ class LLMControlBridge:
                     "set_full_field",
                     "set_full_fields",
                     "save_full_editor",
+                    "list_staff_fields",
+                    "set_staff_field",
+                    "set_staff_fields",
+                    "save_staff_editor",
+                    "get_staff_editor_state",
+                    "list_stadium_fields",
+                    "set_stadium_field",
+                    "set_stadium_fields",
+                    "save_stadium_editor",
+                    "get_stadium_editor_state",
                     "refresh_players",
                     "save_player",
                     "show_screen",
@@ -352,6 +403,18 @@ class LLMControlBridge:
             raise ValueError("Provide 'index' or 'name' to select a player.")
         return self._run_on_ui_thread(lambda: self._select_player_name(name))
 
+    def _cmd_select_staff(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if "index" not in payload:
+            raise ValueError("Provide 'index' to select a staff member.")
+        index = int(payload["index"])
+        return self._run_on_ui_thread(lambda: self._select_staff_index(index))
+
+    def _cmd_select_stadium(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if "index" not in payload:
+            raise ValueError("Provide 'index' to select a stadium.")
+        index = int(payload["index"])
+        return self._run_on_ui_thread(lambda: self._select_stadium_index(index))
+
     def _select_player_index(self, index: int) -> dict[str, Any]:
         app = self.app
         size = app.player_listbox.size()
@@ -363,6 +426,40 @@ class LLMControlBridge:
         app.player_listbox.see(index)
         app.player_listbox.event_generate("<<ListboxSelect>>")
         return self._gather_selection_summary()
+
+    def _select_staff_index(self, index: int) -> dict[str, Any]:
+        app = self.app
+        app.show_staff()
+        app._refresh_staff_list()
+        size = app.staff_listbox.size() if app.staff_listbox else 0
+        if index < 0 or index >= size:
+            raise ValueError(f"Index {index} out of bounds (0-{size - 1}).")
+        lb = app.staff_listbox
+        if lb is None:
+            raise RuntimeError("Staff listbox not initialized.")
+        lb.selection_clear(0, tk.END)
+        lb.selection_set(index)
+        lb.activate(index)
+        lb.see(index)
+        lb.event_generate("<<ListboxSelect>>")
+        return {"selected_index": index, "name": lb.get(index)}
+
+    def _select_stadium_index(self, index: int) -> dict[str, Any]:
+        app = self.app
+        app.show_stadium()
+        app._refresh_stadium_list()
+        size = app.stadium_listbox.size() if app.stadium_listbox else 0
+        if index < 0 or index >= size:
+            raise ValueError(f"Index {index} out of bounds (0-{size - 1}).")
+        lb = app.stadium_listbox
+        if lb is None:
+            raise RuntimeError("Stadium listbox not initialized.")
+        lb.selection_clear(0, tk.END)
+        lb.selection_set(index)
+        lb.activate(index)
+        lb.see(index)
+        lb.event_generate("<<ListboxSelect>>")
+        return {"selected_index": index, "name": lb.get(index)}
 
     def _select_player_name(self, name: str) -> dict[str, Any]:
         app = self.app
@@ -524,7 +621,7 @@ class LLMControlBridge:
     def _cmd_show_screen(self, payload: dict[str, Any]) -> dict[str, Any]:
         target = str(payload.get("screen", "")).strip().lower()
         if not target:
-            raise ValueError("Provide 'screen': home, players, or teams.")
+            raise ValueError("Provide 'screen': home, players, teams, staff, stadium, or excel.")
 
         def apply() -> dict[str, Any]:
             if target == "home":
@@ -533,6 +630,12 @@ class LLMControlBridge:
                 self.app.show_players()
             elif target == "teams":
                 self.app.show_teams()
+            elif target == "staff":
+                self.app.show_staff()
+            elif target == "stadium":
+                self.app.show_stadium()
+            elif target == "excel":
+                self.app.show_excel()
             else:
                 raise ValueError(f"Unknown screen '{target}'.")
             return {"screen": target}
@@ -574,6 +677,40 @@ class LLMControlBridge:
 
         return self._run_on_ui_thread(open_it)
 
+    def _cmd_open_full_staff_editor(self, payload: dict[str, Any]) -> dict[str, Any]:
+        idx = payload.get("index")
+
+        def open_it() -> dict[str, Any]:
+            if idx is not None:
+                try:
+                    self._select_staff_index(int(idx))
+                except Exception:
+                    pass
+            try:
+                self.app._open_full_staff_editor(idx if idx is not None else None)
+            except Exception as exc:
+                raise RuntimeError(f"Failed to open staff editor: {exc}")
+            return {"opened": True}
+
+        return self._run_on_ui_thread(open_it)
+
+    def _cmd_open_full_stadium_editor(self, payload: dict[str, Any]) -> dict[str, Any]:
+        idx = payload.get("index")
+
+        def open_it() -> dict[str, Any]:
+            if idx is not None:
+                try:
+                    self._select_stadium_index(int(idx))
+                except Exception:
+                    pass
+            try:
+                self.app._open_full_stadium_editor(idx if idx is not None else None)
+            except Exception as exc:
+                raise RuntimeError(f"Failed to open stadium editor: {exc}")
+            return {"opened": True}
+
+        return self._run_on_ui_thread(open_it)
+
     def _invoke_app_method(self, method_name: str) -> dict[str, Any]:
         method = getattr(self.app, method_name, None)
         if method is None:
@@ -603,6 +740,12 @@ class LLMControlBridge:
 
     def list_teams(self) -> list[str]:
         return self._run_on_ui_thread(lambda: list(self.app.model.get_teams()))
+
+    def list_staff(self) -> list[str]:
+        return self._run_on_ui_thread(lambda: list(self.app.model.get_staff()))
+
+    def list_stadiums(self) -> list[str]:
+        return self._run_on_ui_thread(lambda: list(self.app.model.get_stadiums()))
 
     def _save_player_and_refresh(self) -> dict[str, Any]:
         app = self.app
@@ -642,7 +785,27 @@ class LLMControlBridge:
         app = self.app
         for child in app.winfo_children():
             try:
-                if hasattr(child, "field_vars") and hasattr(child, "_save_all"):
+                if hasattr(child, "player") and hasattr(child, "_save_all"):
+                    return child
+            except Exception:
+                continue
+        return None
+
+    def _find_open_staff_editor(self) -> Any:
+        app = self.app
+        for child in app.winfo_children():
+            try:
+                if getattr(child, "_editor_type", "") == "staff" and hasattr(child, "_save_all"):
+                    return child
+            except Exception:
+                continue
+        return None
+
+    def _find_open_stadium_editor(self) -> Any:
+        app = self.app
+        for child in app.winfo_children():
+            try:
+                if getattr(child, "_editor_type", "") == "stadium" and hasattr(child, "_save_all"):
                     return child
             except Exception:
                 continue
@@ -836,6 +999,366 @@ class LLMControlBridge:
 
         return self._run_on_ui_thread(state)
 
+    # ---------------- Staff editor helpers ---------------- #
+    def _cmd_list_staff_fields(self, _payload: dict[str, Any]) -> dict[str, Any]:
+        def list_fields() -> dict[str, Any]:
+            editor = self._find_open_staff_editor()
+            if editor is None:
+                return {"open": False, "fields": {}}
+            result = {"open": True, "fields": {}}
+            for cat, mapping in editor.field_vars.items():
+                fields = []
+                for fname, var in mapping.items():
+                    meta = editor.field_meta.get((cat, fname))
+                    fields.append(
+                        {
+                            "name": fname,
+                            "value": (var.get() if hasattr(var, "get") else None),
+                            "offset": getattr(meta, "offset", None) if meta else None,
+                            "length": getattr(meta, "length", None) if meta else None,
+                            "values": getattr(meta, "values", None) if meta else None,
+                        }
+                    )
+                result["fields"][cat] = fields
+            return result
+
+        return self._run_on_ui_thread(list_fields)
+
+    def _cmd_set_staff_field(self, payload: dict[str, Any]) -> dict[str, Any]:
+        category = str(payload.get("category", "")).strip()
+        field = str(payload.get("field", "")).strip()
+        if not category or not field:
+            raise ValueError("Provide 'category' and 'field' for set_staff_field")
+        value = payload.get("value")
+        staff_index = payload.get("staff_index")
+
+        def set_field() -> dict[str, Any]:
+            if staff_index is not None:
+                try:
+                    self._select_staff_index(int(staff_index))
+                except Exception:
+                    pass
+            editor = self._find_open_staff_editor()
+            if editor is None:
+                try:
+                    self.app._open_full_staff_editor(staff_index if staff_index is not None else None)
+                except Exception:
+                    pass
+                editor = self._find_open_staff_editor()
+                if editor is None:
+                    raise RuntimeError("No open staff editor found and unable to open one.")
+            cat_key = None
+            for cat in editor.field_vars.keys():
+                if cat.strip().lower() == category.lower():
+                    cat_key = cat
+                    break
+            if cat_key is None:
+                raise ValueError(f"Unknown category '{category}'")
+            fname_key = None
+            for fname in editor.field_vars[cat_key].keys():
+                if fname.strip().lower() == field.lower():
+                    fname_key = fname
+                    break
+            if fname_key is None:
+                raise ValueError(f"Unknown field '{field}' in category '{cat_key}'")
+            var = editor.field_vars[cat_key][fname_key]
+            meta = editor.field_meta.get((cat_key, fname_key))
+            if meta and getattr(meta, "values", None):
+                vals = list(meta.values)
+                if isinstance(value, str):
+                    idx = None
+                    for i, v in enumerate(vals):
+                        if str(v).strip().lower() == value.strip().lower():
+                            idx = i
+                            break
+                    if idx is None:
+                        raise ValueError(f"Unknown enumerated value '{value}' for field '{fname_key}'")
+                else:
+                    if value is None:
+                        raise ValueError(f"Value for '{fname_key}' is required.")
+                    idx = int(value)
+                try:
+                    var.set(int(idx))
+                except Exception:
+                    pass
+                widget = getattr(meta, "widget", None)
+                if widget is not None and hasattr(widget, "set"):
+                    try:
+                        widget.set(vals[idx])
+                    except Exception:
+                        pass
+            else:
+                try:
+                    if hasattr(var, "set"):
+                        var.set(value)
+                    else:
+                        setattr(editor, fname_key, value)
+                except Exception as exc:
+                    raise RuntimeError(f"Failed to set field: {exc}")
+            return {"category": cat_key, "field": fname_key, "value": (var.get() if hasattr(var, "get") else None)}
+
+        return self._run_on_ui_thread(set_field)
+
+    def _cmd_set_staff_fields(self, payload: dict[str, Any]) -> dict[str, Any]:
+        fields = payload.get("fields")
+        if not isinstance(fields, list):
+            raise ValueError("Provide 'fields' as a list of {category, field, value} dicts.")
+        staff_index = payload.get("staff_index")
+
+        def set_many() -> dict[str, Any]:
+            if staff_index is not None:
+                try:
+                    self._select_staff_index(int(staff_index))
+                except Exception:
+                    pass
+            editor = self._find_open_staff_editor()
+            if editor is None:
+                try:
+                    self.app._open_full_staff_editor(staff_index if staff_index is not None else None)
+                except Exception:
+                    pass
+                editor = self._find_open_staff_editor()
+                if editor is None:
+                    raise RuntimeError("No open staff editor found and unable to open one.")
+            updated = []
+            errors = []
+            for entry in fields:
+                try:
+                    self._cmd_set_staff_field(
+                        {
+                            "category": entry.get("category"),
+                            "field": entry.get("field"),
+                            "value": entry.get("value"),
+                            "staff_index": staff_index,
+                        }
+                    )
+                    updated.append({"category": entry.get("category"), "field": entry.get("field")})
+                except Exception as exc:
+                    errors.append({"field": entry.get("field"), "error": str(exc)})
+            return {"updated": updated, "errors": errors}
+
+        return self._run_on_ui_thread(set_many)
+
+    def _cmd_save_staff_editor(self, payload: dict[str, Any]) -> dict[str, Any]:
+        close_after = bool(payload.get("close_after", False))
+
+        def save() -> dict[str, Any]:
+            editor = self._find_open_staff_editor()
+            if editor is None:
+                raise RuntimeError("No open Staff editor to save.")
+            try:
+                editor._save_all()
+            except Exception as exc:
+                raise RuntimeError(f"Saving failed: {exc}")
+            if close_after:
+                try:
+                    editor.destroy()
+                except Exception:
+                    pass
+            return {"saved": True}
+
+        return self._run_on_ui_thread(save)
+
+    def _cmd_get_staff_editor_state(self, _payload: dict[str, Any]) -> dict[str, Any]:
+        def state() -> dict[str, Any]:
+            editor = self._find_open_staff_editor()
+            if editor is None:
+                return {"open": False, "categories": {}}
+            data = {"open": True, "categories": {}}
+            for cat, mapping in editor.field_vars.items():
+                data["categories"][cat] = {}
+                for fname, var in mapping.items():
+                    meta = editor.field_meta.get((cat, fname))
+                    data["categories"][cat][fname] = {
+                        "value": (var.get() if hasattr(var, "get") else None),
+                        "offset": getattr(meta, "offset", None) if meta is not None else None,
+                        "length": getattr(meta, "length", None) if meta is not None else None,
+                        "values": getattr(meta, "values", None) if meta is not None else None,
+                    }
+            return data
+
+        return self._run_on_ui_thread(state)
+
+    # ---------------- Stadium editor helpers ---------------- #
+    def _cmd_list_stadium_fields(self, _payload: dict[str, Any]) -> dict[str, Any]:
+        def list_fields() -> dict[str, Any]:
+            editor = self._find_open_stadium_editor()
+            if editor is None:
+                return {"open": False, "fields": {}}
+            result = {"open": True, "fields": {}}
+            for cat, mapping in editor.field_vars.items():
+                fields = []
+                for fname, var in mapping.items():
+                    meta = editor.field_meta.get((cat, fname))
+                    fields.append(
+                        {
+                            "name": fname,
+                            "value": (var.get() if hasattr(var, "get") else None),
+                            "offset": getattr(meta, "offset", None) if meta else None,
+                            "length": getattr(meta, "length", None) if meta else None,
+                            "values": getattr(meta, "values", None) if meta else None,
+                        }
+                    )
+                result["fields"][cat] = fields
+            return result
+
+        return self._run_on_ui_thread(list_fields)
+
+    def _cmd_set_stadium_field(self, payload: dict[str, Any]) -> dict[str, Any]:
+        category = str(payload.get("category", "")).strip()
+        field = str(payload.get("field", "")).strip()
+        if not category or not field:
+            raise ValueError("Provide 'category' and 'field' for set_stadium_field")
+        value = payload.get("value")
+        stadium_index = payload.get("stadium_index")
+
+        def set_field() -> dict[str, Any]:
+            if stadium_index is not None:
+                try:
+                    self._select_stadium_index(int(stadium_index))
+                except Exception:
+                    pass
+            editor = self._find_open_stadium_editor()
+            if editor is None:
+                try:
+                    self.app._open_full_stadium_editor(stadium_index if stadium_index is not None else None)
+                except Exception:
+                    pass
+                editor = self._find_open_stadium_editor()
+                if editor is None:
+                    raise RuntimeError("No open stadium editor found and unable to open one.")
+            cat_key = None
+            for cat in editor.field_vars.keys():
+                if cat.strip().lower() == category.lower():
+                    cat_key = cat
+                    break
+            if cat_key is None:
+                raise ValueError(f"Unknown category '{category}'")
+            fname_key = None
+            for fname in editor.field_vars[cat_key].keys():
+                if fname.strip().lower() == field.lower():
+                    fname_key = fname
+                    break
+            if fname_key is None:
+                raise ValueError(f"Unknown field '{field}' in category '{cat_key}'")
+            var = editor.field_vars[cat_key][fname_key]
+            meta = editor.field_meta.get((cat_key, fname_key))
+            if meta and getattr(meta, "values", None):
+                vals = list(meta.values)
+                if isinstance(value, str):
+                    idx = None
+                    for i, v in enumerate(vals):
+                        if str(v).strip().lower() == value.strip().lower():
+                            idx = i
+                            break
+                    if idx is None:
+                        raise ValueError(f"Unknown enumerated value '{value}' for field '{fname_key}'")
+                else:
+                    if value is None:
+                        raise ValueError(f"Value for '{fname_key}' is required.")
+                    idx = int(value)
+                try:
+                    var.set(int(idx))
+                except Exception:
+                    pass
+                widget = getattr(meta, "widget", None)
+                if widget is not None and hasattr(widget, "set"):
+                    try:
+                        widget.set(vals[idx])
+                    except Exception:
+                        pass
+            else:
+                try:
+                    if hasattr(var, "set"):
+                        var.set(value)
+                    else:
+                        setattr(editor, fname_key, value)
+                except Exception as exc:
+                    raise RuntimeError(f"Failed to set field: {exc}")
+            return {"category": cat_key, "field": fname_key, "value": (var.get() if hasattr(var, "get") else None)}
+
+        return self._run_on_ui_thread(set_field)
+
+    def _cmd_set_stadium_fields(self, payload: dict[str, Any]) -> dict[str, Any]:
+        fields = payload.get("fields")
+        if not isinstance(fields, list):
+            raise ValueError("Provide 'fields' as a list of {category, field, value} dicts.")
+        stadium_index = payload.get("stadium_index")
+
+        def set_many() -> dict[str, Any]:
+            if stadium_index is not None:
+                try:
+                    self._select_stadium_index(int(stadium_index))
+                except Exception:
+                    pass
+            editor = self._find_open_stadium_editor()
+            if editor is None:
+                try:
+                    self.app._open_full_stadium_editor(stadium_index if stadium_index is not None else None)
+                except Exception:
+                    pass
+                editor = self._find_open_stadium_editor()
+                if editor is None:
+                    raise RuntimeError("No open stadium editor found and unable to open one.")
+            updated = []
+            errors = []
+            for entry in fields:
+                try:
+                    self._cmd_set_stadium_field(
+                        {
+                            "category": entry.get("category"),
+                            "field": entry.get("field"),
+                            "value": entry.get("value"),
+                            "stadium_index": stadium_index,
+                        }
+                    )
+                    updated.append({"category": entry.get("category"), "field": entry.get("field")})
+                except Exception as exc:
+                    errors.append({"field": entry.get("field"), "error": str(exc)})
+            return {"updated": updated, "errors": errors}
+
+        return self._run_on_ui_thread(set_many)
+
+    def _cmd_save_stadium_editor(self, payload: dict[str, Any]) -> dict[str, Any]:
+        close_after = bool(payload.get("close_after", False))
+
+        def save() -> dict[str, Any]:
+            editor = self._find_open_stadium_editor()
+            if editor is None:
+                raise RuntimeError("No open Stadium editor to save.")
+            try:
+                editor._save_all()
+            except Exception as exc:
+                raise RuntimeError(f"Saving failed: {exc}")
+            if close_after:
+                try:
+                    editor.destroy()
+                except Exception:
+                    pass
+            return {"saved": True}
+
+        return self._run_on_ui_thread(save)
+
+    def _cmd_get_stadium_editor_state(self, _payload: dict[str, Any]) -> dict[str, Any]:
+        def state() -> dict[str, Any]:
+            editor = self._find_open_stadium_editor()
+            if editor is None:
+                return {"open": False, "categories": {}}
+            data = {"open": True, "categories": {}}
+            for cat, mapping in editor.field_vars.items():
+                data["categories"][cat] = {}
+                for fname, var in mapping.items():
+                    meta = editor.field_meta.get((cat, fname))
+                    data["categories"][cat][fname] = {
+                        "value": (var.get() if hasattr(var, "get") else None),
+                        "offset": getattr(meta, "offset", None) if meta is not None else None,
+                        "length": getattr(meta, "length", None) if meta is not None else None,
+                        "values": getattr(meta, "values", None) if meta is not None else None,
+                    }
+            return data
+
+        return self._run_on_ui_thread(state)
+
     def _run_on_ui_thread(self, func: Callable[[], Any], timeout: float = 5.0) -> Any:
         result: dict[str, Any] = {}
         event = threading.Event()
@@ -905,6 +1428,7 @@ class PlayerAIAssistant:
             value="Provide scouting notes and suggested attribute tweaks."
         )
         self.status_var = tk.StringVar(value="Select a player and click Ask AI.")
+        nba_data.warm_cache_async()
         self._worker: threading.Thread | None = None
         self._build_panel(parent)
         try:
@@ -1059,6 +1583,14 @@ class PlayerAIAssistant:
                 pieces.append(f"{label}: {var.get()}")
             except Exception:
                 continue
+        lookup_names = [f"{first} {last}".strip(), name]
+        summary = nba_data.get_player_summary([n for n in lookup_names if n])
+        if summary:
+            pieces.append(f"NBA reference: {summary}")
+        else:
+            error = nba_data.last_error()
+            if error:
+                _EXT_LOGGER.debug("NBA data lookup unavailable: %s", error)
         request_text = self.prompt_var.get().strip() or "Provide a scouting report."
         return (
             "You are assisting with NBA 2K roster editing. "

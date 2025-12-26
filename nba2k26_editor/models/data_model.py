@@ -48,6 +48,8 @@ from ..core.offsets import (
     DUR_IMPORT_ORDER,
     FIELD_NAME_ALIASES,
     MAX_TEAMS_SCAN,
+    MAX_STAFF_SCAN,
+    MAX_STADIUM_SCAN,
     FIRST_NAME_ENCODING,
     LAST_NAME_ENCODING,
     MAX_DRAFT_PLAYERS,
@@ -76,6 +78,18 @@ from ..core.offsets import (
     TEAM_NAME_LENGTH,
     TEAM_NAME_OFFSET,
     TEND_IMPORT_ORDER,
+    STAFF_PTR_CHAINS,
+    STAFF_STRIDE,
+    STAFF_RECORD_SIZE,
+    STAFF_NAME_OFFSET,
+    STAFF_NAME_LENGTH,
+    STAFF_NAME_ENCODING,
+    STADIUM_PTR_CHAINS,
+    STADIUM_STRIDE,
+    STADIUM_RECORD_SIZE,
+    STADIUM_NAME_OFFSET,
+    STADIUM_NAME_LENGTH,
+    STADIUM_NAME_ENCODING,
     initialize_offsets,
     _load_categories,
 )
@@ -98,11 +112,15 @@ class PlayerDataModel:
         self.external_loaded = False
         self.team_name_map: Dict[int, str] = {}
         self.team_list: list[tuple[int, str]] = []
+        self.staff_list: list[tuple[int, str]] = []
+        self.stadium_list: list[tuple[int, str]] = []
         self._cached_free_agents: list[Player] = []
         self.draft_players: list[Player] = []
         self._resolved_player_base: int | None = None
         self._resolved_team_base: int | None = None
         self._resolved_draft_base: int | None = None
+        self._resolved_staff_base: int | None = None
+        self._resolved_stadium_base: int | None = None
         team_candidates = [
             "2K26 Team Data (10.18.24).txt",
             "2K26 Team Data.txt",
@@ -1801,6 +1819,26 @@ class PlayerDataModel:
             return None
         return base + team_index * TEAM_RECORD_SIZE
 
+    def _staff_record_address(self, staff_index: int | None = None) -> int | None:
+        if staff_index is None or staff_index < 0:
+            return None
+        if STAFF_RECORD_SIZE <= 0:
+            return None
+        base = self._resolve_staff_base_ptr()
+        if base is None:
+            return None
+        return base + staff_index * STAFF_RECORD_SIZE
+
+    def _stadium_record_address(self, stadium_index: int | None = None) -> int | None:
+        if stadium_index is None or stadium_index < 0:
+            return None
+        if STADIUM_RECORD_SIZE <= 0:
+            return None
+        base = self._resolve_stadium_base_ptr()
+        if base is None:
+            return None
+        return base + stadium_index * STADIUM_RECORD_SIZE
+
     def _resolve_pointer_from_chain(self, chain_entry: object) -> int | None:
         """
         Resolve a pointer chain entry produced by the offsets loader.
@@ -1945,6 +1983,60 @@ class PlayerDataModel:
                         pass
                     return base
         self._resolved_team_base = None
+        return None
+
+    def _resolve_staff_base_ptr(self) -> int | None:
+        if self._resolved_staff_base is not None:
+            return self._resolved_staff_base
+        try:
+            if not self.mem.open_process():
+                return None
+        except Exception:
+            return None
+
+        def _is_valid_staff_base(base_addr: int | None) -> bool:
+            if base_addr is None or STAFF_NAME_OFFSET <= 0 or STAFF_NAME_LENGTH <= 0:
+                return False
+            try:
+                name = self._read_string(base_addr + STAFF_NAME_OFFSET, STAFF_NAME_LENGTH, STAFF_NAME_ENCODING).strip()
+            except Exception:
+                return False
+            return bool(name)
+
+        if STAFF_PTR_CHAINS:
+            for chain in STAFF_PTR_CHAINS:
+                base = self._resolve_pointer_from_chain(chain)
+                if _is_valid_staff_base(base):
+                    self._resolved_staff_base = base
+                    return base
+        self._resolved_staff_base = None
+        return None
+
+    def _resolve_stadium_base_ptr(self) -> int | None:
+        if self._resolved_stadium_base is not None:
+            return self._resolved_stadium_base
+        try:
+            if not self.mem.open_process():
+                return None
+        except Exception:
+            return None
+
+        def _is_valid_stadium_base(base_addr: int | None) -> bool:
+            if base_addr is None or STADIUM_NAME_OFFSET <= 0 or STADIUM_NAME_LENGTH <= 0:
+                return False
+            try:
+                name = self._read_string(base_addr + STADIUM_NAME_OFFSET, STADIUM_NAME_LENGTH, STADIUM_NAME_ENCODING).strip()
+            except Exception:
+                return False
+            return bool(name)
+
+        if STADIUM_PTR_CHAINS:
+            for chain in STADIUM_PTR_CHAINS:
+                base = self._resolve_pointer_from_chain(chain)
+                if _is_valid_stadium_base(base):
+                    self._resolved_stadium_base = base
+                    return base
+        self._resolved_stadium_base = None
         return None
 
     def _resolve_draft_base_ptr(self) -> int | None:
@@ -2281,6 +2373,63 @@ class PlayerDataModel:
         ordered.extend(free_agents)
         ordered.extend(remaining_sorted)
         return ordered
+
+    def refresh_staff(self) -> list[tuple[int, str]]:
+        """Populate staff_list from live memory if pointers are available."""
+        self.staff_list = []
+        if STAFF_RECORD_SIZE <= 0 or STAFF_NAME_LENGTH <= 0 or STAFF_NAME_OFFSET <= 0:
+            return self.staff_list
+        try:
+            if not self.mem.open_process():
+                return self.staff_list
+        except Exception:
+            return self.staff_list
+        base_ptr = self._resolve_staff_base_ptr()
+        if base_ptr is None:
+            return self.staff_list
+        for idx in range(MAX_STAFF_SCAN):
+            rec_addr = base_ptr + idx * STAFF_RECORD_SIZE
+            try:
+                first = self._read_string(rec_addr + STAFF_NAME_OFFSET, STAFF_NAME_LENGTH, STAFF_NAME_ENCODING).strip()
+            except Exception:
+                continue
+            name = first
+            if not name:
+                continue
+            self.staff_list.append((idx, name))
+        return self.staff_list
+
+    def get_staff(self) -> list[str]:
+        """Return staff names in scan order."""
+        return [name for _, name in self.staff_list]
+
+    def refresh_stadiums(self) -> list[tuple[int, str]]:
+        """Populate stadium_list from live memory if pointers are available."""
+        self.stadium_list = []
+        if STADIUM_RECORD_SIZE <= 0 or STADIUM_NAME_LENGTH <= 0 or STADIUM_NAME_OFFSET <= 0:
+            return self.stadium_list
+        try:
+            if not self.mem.open_process():
+                return self.stadium_list
+        except Exception:
+            return self.stadium_list
+        base_ptr = self._resolve_stadium_base_ptr()
+        if base_ptr is None:
+            return self.stadium_list
+        for idx in range(MAX_STADIUM_SCAN):
+            rec_addr = base_ptr + idx * STADIUM_RECORD_SIZE
+            try:
+                name = self._read_string(rec_addr + STADIUM_NAME_OFFSET, STADIUM_NAME_LENGTH, STADIUM_NAME_ENCODING).strip()
+            except Exception:
+                continue
+            if not name:
+                continue
+            self.stadium_list.append((idx, name))
+        return self.stadium_list
+
+    def get_stadiums(self) -> list[str]:
+        """Return stadium names in scan order."""
+        return [name for _, name in self.stadium_list]
 
     def _build_team_display_list(self, teams: list[tuple[int, str]]) -> list[tuple[int, str]]:
         """Normalize and disambiguate team display names."""
@@ -3103,6 +3252,311 @@ class PlayerDataModel:
                 return False
         return self.set_team_field_value(
             team_index,
+            offset,
+            start_bit,
+            length,
+            int(value),
+            requires_deref=requires_deref,
+            deref_offset=deref_offset,
+            deref_cache=deref_cache,
+        )
+
+    # ------------------------------------------------------------------
+    # Staff/Stadium field access
+    # ------------------------------------------------------------------
+    def get_staff_field_value(
+        self,
+        staff_index: int,
+        offset: int,
+        start_bit: int,
+        length: int,
+        requires_deref: bool = False,
+        deref_offset: int = 0,
+    ) -> int | None:
+        try:
+            if not self.mem.open_process():
+                return None
+            record_addr = self._staff_record_address(staff_index)
+            if record_addr is None:
+                return None
+            if requires_deref and deref_offset:
+                struct_ptr = self.mem.read_uint64(record_addr + deref_offset)
+                if not struct_ptr:
+                    return None
+                addr = struct_ptr + offset
+            else:
+                addr = record_addr + offset
+            bits_needed = start_bit + length
+            bytes_needed = (bits_needed + 7) // 8
+            raw = self.mem.read_bytes(addr, bytes_needed)
+            value = int.from_bytes(raw, "little")
+            value >>= start_bit
+            mask = (1 << length) - 1
+            return value & mask
+        except Exception:
+            return None
+
+    def get_staff_field_value_typed(
+        self,
+        staff_index: int,
+        offset: int,
+        start_bit: int,
+        length: int,
+        *,
+        requires_deref: bool = False,
+        deref_offset: int = 0,
+        field_type: str | None = None,
+        byte_length: int = 0,
+    ) -> object | None:
+        ftype = (field_type or "").lower()
+        if "float" in ftype:
+            try:
+                if not self.mem.open_process():
+                    return None
+                record_addr = self._staff_record_address(staff_index)
+                if record_addr is None:
+                    return None
+                addr = record_addr + offset
+                if requires_deref and deref_offset:
+                    struct_ptr = self.mem.read_uint64(record_addr + deref_offset)
+                    if not struct_ptr:
+                        return None
+                    addr = struct_ptr + offset
+                byte_len = self._effective_byte_length(byte_length, length, default=4)
+                fmt = "<d" if byte_len >= 8 else "<f"
+                raw = self.mem.read_bytes(addr, 8 if fmt == "<d" else 4)
+                return struct.unpack(fmt, raw[: 8 if fmt == "<d" else 4])[0]
+            except Exception:
+                return None
+        return self.get_staff_field_value(
+            staff_index,
+            offset,
+            start_bit,
+            length,
+            requires_deref=requires_deref,
+            deref_offset=deref_offset,
+        )
+
+    def set_staff_field_value(
+        self,
+        staff_index: int,
+        offset: int,
+        start_bit: int,
+        length: int,
+        value: int,
+        *,
+        requires_deref: bool = False,
+        deref_offset: int = 0,
+        deref_cache: dict[int, int] | None = None,
+    ) -> bool:
+        try:
+            if not self.mem.open_process():
+                return False
+            record_addr = self._staff_record_address(staff_index)
+            if record_addr is None:
+                return False
+            return self._write_field_bits(
+                record_addr,
+                offset,
+                start_bit,
+                length,
+                value,
+                requires_deref=requires_deref,
+                deref_offset=deref_offset,
+                deref_cache=deref_cache,
+            )
+        except Exception:
+            return False
+
+    def set_staff_field_value_typed(
+        self,
+        staff_index: int,
+        offset: int,
+        start_bit: int,
+        length: int,
+        value: object,
+        *,
+        requires_deref: bool = False,
+        deref_offset: int = 0,
+        field_type: str | None = None,
+        byte_length: int = 0,
+        deref_cache: dict[int, int] | None = None,
+    ) -> bool:
+        ftype = (field_type or "").lower()
+        if "float" in ftype:
+            try:
+                if not self.mem.open_process():
+                    return False
+                record_addr = self._staff_record_address(staff_index)
+                if record_addr is None:
+                    return False
+                addr = record_addr + offset
+                if requires_deref and deref_offset:
+                    struct_ptr = self.mem.read_uint64(record_addr + deref_offset)
+                    if not struct_ptr:
+                        return False
+                    addr = struct_ptr + offset
+                byte_len = self._effective_byte_length(byte_length, length, default=4)
+                fmt = "<d" if byte_len >= 8 else "<f"
+                fval = float(value)
+                data = struct.pack(fmt, fval)
+                self.mem.write_bytes(addr, data[: 8 if fmt == "<d" else 4])
+                return True
+            except Exception:
+                return False
+        return self.set_staff_field_value(
+            staff_index,
+            offset,
+            start_bit,
+            length,
+            int(value),
+            requires_deref=requires_deref,
+            deref_offset=deref_offset,
+            deref_cache=deref_cache,
+        )
+
+    def get_stadium_field_value(
+        self,
+        stadium_index: int,
+        offset: int,
+        start_bit: int,
+        length: int,
+        requires_deref: bool = False,
+        deref_offset: int = 0,
+    ) -> int | None:
+        try:
+            if not self.mem.open_process():
+                return None
+            record_addr = self._stadium_record_address(stadium_index)
+            if record_addr is None:
+                return None
+            if requires_deref and deref_offset:
+                struct_ptr = self.mem.read_uint64(record_addr + deref_offset)
+                if not struct_ptr:
+                    return None
+                addr = struct_ptr + offset
+            else:
+                addr = record_addr + offset
+            bits_needed = start_bit + length
+            bytes_needed = (bits_needed + 7) // 8
+            raw = self.mem.read_bytes(addr, bytes_needed)
+            value = int.from_bytes(raw, "little")
+            value >>= start_bit
+            mask = (1 << length) - 1
+            return value & mask
+        except Exception:
+            return None
+
+    def get_stadium_field_value_typed(
+        self,
+        stadium_index: int,
+        offset: int,
+        start_bit: int,
+        length: int,
+        *,
+        requires_deref: bool = False,
+        deref_offset: int = 0,
+        field_type: str | None = None,
+        byte_length: int = 0,
+    ) -> object | None:
+        ftype = (field_type or "").lower()
+        if "float" in ftype:
+            try:
+                if not self.mem.open_process():
+                    return None
+                record_addr = self._stadium_record_address(stadium_index)
+                if record_addr is None:
+                    return None
+                addr = record_addr + offset
+                if requires_deref and deref_offset:
+                    struct_ptr = self.mem.read_uint64(record_addr + deref_offset)
+                    if not struct_ptr:
+                        return None
+                    addr = struct_ptr + offset
+                byte_len = self._effective_byte_length(byte_length, length, default=4)
+                fmt = "<d" if byte_len >= 8 else "<f"
+                raw = self.mem.read_bytes(addr, 8 if fmt == "<d" else 4)
+                return struct.unpack(fmt, raw[: 8 if fmt == "<d" else 4])[0]
+            except Exception:
+                return None
+        return self.get_stadium_field_value(
+            stadium_index,
+            offset,
+            start_bit,
+            length,
+            requires_deref=requires_deref,
+            deref_offset=deref_offset,
+        )
+
+    def set_stadium_field_value(
+        self,
+        stadium_index: int,
+        offset: int,
+        start_bit: int,
+        length: int,
+        value: int,
+        *,
+        requires_deref: bool = False,
+        deref_offset: int = 0,
+        deref_cache: dict[int, int] | None = None,
+    ) -> bool:
+        try:
+            if not self.mem.open_process():
+                return False
+            record_addr = self._stadium_record_address(stadium_index)
+            if record_addr is None:
+                return False
+            return self._write_field_bits(
+                record_addr,
+                offset,
+                start_bit,
+                length,
+                value,
+                requires_deref=requires_deref,
+                deref_offset=deref_offset,
+                deref_cache=deref_cache,
+            )
+        except Exception:
+            return False
+
+    def set_stadium_field_value_typed(
+        self,
+        stadium_index: int,
+        offset: int,
+        start_bit: int,
+        length: int,
+        value: object,
+        *,
+        requires_deref: bool = False,
+        deref_offset: int = 0,
+        field_type: str | None = None,
+        byte_length: int = 0,
+        deref_cache: dict[int, int] | None = None,
+    ) -> bool:
+        ftype = (field_type or "").lower()
+        if "float" in ftype:
+            try:
+                if not self.mem.open_process():
+                    return False
+                record_addr = self._stadium_record_address(stadium_index)
+                if record_addr is None:
+                    return False
+                addr = record_addr + offset
+                if requires_deref and deref_offset:
+                    struct_ptr = self.mem.read_uint64(record_addr + deref_offset)
+                    if not struct_ptr:
+                        return False
+                    addr = struct_ptr + offset
+                byte_len = self._effective_byte_length(byte_length, length, default=4)
+                fmt = "<d" if byte_len >= 8 else "<f"
+                fval = float(value)
+                data = struct.pack(fmt, fval)
+                self.mem.write_bytes(addr, data[: 8 if fmt == "<d" else 4])
+                return True
+            except Exception:
+                return False
+        return self.set_stadium_field_value(
+            stadium_index,
             offset,
             start_bit,
             length,

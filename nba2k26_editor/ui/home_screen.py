@@ -86,8 +86,10 @@ def build_home_overview_tab(app, parent: tk.Frame) -> None:
         fg=TEXT_PRIMARY,
     )
     app.status_label.pack(pady=(0, 15))
+    action_row = tk.Frame(parent, bg=PANEL_BG)
+    action_row.pack(pady=(0, 8))
     tk.Button(
-        parent,
+        action_row,
         text="Refresh",
         command=app._update_status,
         bg=BUTTON_BG,
@@ -95,7 +97,45 @@ def build_home_overview_tab(app, parent: tk.Frame) -> None:
         relief=tk.FLAT,
         activebackground=BUTTON_ACTIVE_BG,
         activeforeground=BUTTON_TEXT,
-    ).pack()
+    ).pack(side=tk.LEFT, padx=(0, 8))
+    tk.Button(
+        action_row,
+        text="Find Player/Team Bases",
+        command=app._start_dynamic_base_scan,
+        bg=BUTTON_BG,
+        fg=BUTTON_TEXT,
+        relief=tk.FLAT,
+        activebackground=BUTTON_ACTIVE_BG,
+        activeforeground=BUTTON_TEXT,
+    ).pack(side=tk.LEFT, padx=(0, 8))
+    tk.Button(
+        action_row,
+        text="Load Offsets File",
+        command=app._open_offset_file_dialog,
+        bg=BUTTON_BG,
+        fg=BUTTON_TEXT,
+        relief=tk.FLAT,
+        activebackground=BUTTON_ACTIVE_BG,
+        activeforeground=BUTTON_TEXT,
+    ).pack(side=tk.LEFT)
+    tk.Label(
+        parent,
+        textvariable=app.dynamic_scan_status_var,
+        bg=PANEL_BG,
+        fg=TEXT_SECONDARY,
+        font=("Segoe UI", 10, "italic"),
+        wraplength=480,
+        justify="left",
+    ).pack(anchor="w", pady=(0, 4))
+    tk.Label(
+        parent,
+        textvariable=app.offset_load_status_var,
+        bg=PANEL_BG,
+        fg=TEXT_SECONDARY,
+        font=("Segoe UI", 10, "italic"),
+        wraplength=480,
+        justify="left",
+    ).pack(anchor="w", pady=(0, 12))
     build_extension_loader(app, parent)
 
 

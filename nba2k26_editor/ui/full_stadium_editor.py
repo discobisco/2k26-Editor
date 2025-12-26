@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 
 from ..core.config import (
     PANEL_BG,
@@ -30,9 +30,11 @@ class FullStadiumEditor(tk.Toplevel):
         self.title("Stadium Editor")
         self.geometry("720x520")
         self.configure(bg=PANEL_BG)
+        self._editor_type = "stadium"
         self.field_vars: dict[tuple[str, str], tk.Variable] = {}
         self.field_meta: dict[tuple[str, str], FieldMetadata] = {}
         self._initializing = True
+        self._unsaved_changes: set[tuple[str, str]] = set()
 
         header = tk.Frame(self, bg=PANEL_BG)
         header.pack(fill=tk.X, padx=12, pady=(12, 4))
@@ -84,14 +86,15 @@ class FullStadiumEditor(tk.Toplevel):
         ).pack(side=tk.RIGHT, padx=(6, 0))
         tk.Button(
             btn_row,
-            text="Save (disabled - waiting for pointers)",
-            state=tk.DISABLED,
+            text="Save",
+            command=self._save_all,
             bg=ACCENT_BG,
             fg=TEXT_PRIMARY,
             relief=tk.FLAT,
             padx=14,
             pady=6,
         ).pack(side=tk.RIGHT, padx=(0, 6))
+        self._load_all_values()
         self._initializing = False
 
     def _build_category_tab(self, parent: tk.Frame, category_name: str, fields_obj: list | None = None) -> None:
@@ -131,7 +134,6 @@ class FullStadiumEditor(tk.Toplevel):
                     relief=tk.FLAT,
                     highlightbackground=ENTRY_BORDER,
                     highlightthickness=1,
-                    state=tk.DISABLED,
                 )
                 entry.grid(row=row, column=1, sticky=tk.W, padx=(0, 10), pady=2)
             else:
@@ -146,7 +148,6 @@ class FullStadiumEditor(tk.Toplevel):
                     relief=tk.FLAT,
                     highlightbackground=ENTRY_BORDER,
                     highlightthickness=1,
-                    state=tk.DISABLED,
                 )
                 entry.grid(row=row, column=1, sticky=tk.W, padx=(0, 10), pady=2)
             self.field_vars[(category_name, name)] = var
@@ -160,6 +161,72 @@ class FullStadiumEditor(tk.Toplevel):
                 data_type=field_type,
                 byte_length=byte_length,
             )
+            var.trace_add("write", lambda *_a, key=(category_name, name): self._mark_dirty(key))
+
+    def _mark_dirty(self, key: tuple[str, str]) -> None:
+        if self._initializing:
+            return
+        self._unsaved_changes.add(key)
+
+    def _load_all_values(self) -> None:
+        try:
+            self.model.refresh_stadiums()
+        except Exception:
+            return
+        for (cat, name), meta in self.field_meta.items():
+            var = self.field_vars.get((cat, name))
+            if var is None:
+                continue
+            try:
+                val = self.model.get_stadium_field_value_typed(
+                    self.stadium_index,
+                    meta.offset,
+                    meta.start_bit,
+                    meta.length,
+                    requires_deref=meta.requires_deref,
+                    deref_offset=meta.deref_offset,
+                    field_type=meta.data_type,
+                    byte_length=meta.byte_length,
+                )
+            except Exception:
+                val = None
+            if isinstance(var, tk.StringVar):
+                var.set("" if val is None else str(val))
+            else:
+                try:
+                    var.set(0 if val is None else int(val))
+                except Exception:
+                    var.set(0)
+        self._unsaved_changes.clear()
+
+    def _save_all(self) -> None:
+        errors: list[str] = []
+        for (cat, name), meta in self.field_meta.items():
+            var = self.field_vars.get((cat, name))
+            if var is None:
+                continue
+            try:
+                raw = var.get()
+            except Exception:
+                continue
+            success = self.model.set_stadium_field_value_typed(
+                self.stadium_index,
+                meta.offset,
+                meta.start_bit,
+                meta.length,
+                raw,
+                requires_deref=meta.requires_deref,
+                deref_offset=meta.deref_offset,
+                field_type=meta.data_type,
+                byte_length=meta.byte_length,
+            )
+            if not success:
+                errors.append(f"{cat} / {name}")
+        if errors:
+            messagebox.showerror("Stadium Editor", f"Failed to save fields:\n" + "\n".join(errors))
+        else:
+            messagebox.showinfo("Stadium Editor", "Saved stadium values.")
+            self._unsaved_changes.clear()
 
 
 __all__ = ["FullStadiumEditor"]

@@ -56,6 +56,7 @@ from ..core.conversions import (
     HEIGHT_MAX_INCHES,
 )
 from ..core import offsets as offsets_mod
+from ..core.dynamic_bases import find_dynamic_bases
 from ..core.extensions import (
     FULL_EDITOR_EXTENSIONS,
     PLAYER_PANEL_EXTENSIONS,
@@ -157,6 +158,8 @@ class PlayerEditorApp(tk.Tk):
         self.selected_team: str | None = None
         self.selected_player: Player | None = None
         self.scanning = False
+        self.dynamic_scan_in_progress = False
+        self.offset_load_status_var: tk.StringVar = tk.StringVar(value="Using packaged offsets.")
         # Common UI element placeholders to satisfy type checkers; populated during screen builds.
         self.player_detail_fields: dict[str, tk.Variable] = {}
         self.player_listbox: tk.Listbox | None = None
@@ -222,6 +225,7 @@ class PlayerEditorApp(tk.Tk):
         self.team_editor_detail_name_var: tk.StringVar = tk.StringVar()
         self.team_scan_status_var: tk.StringVar = tk.StringVar()
         self.status_var: tk.StringVar = tk.StringVar()
+        self.dynamic_scan_status_var: tk.StringVar = tk.StringVar(value="Dynamic base scan not started.")
         self.scan_status_var: tk.StringVar = tk.StringVar()
         self.player_count_var: tk.StringVar = tk.StringVar(value="Players: 0")
         self.btn_team_save: tk.Button | None = None
@@ -234,6 +238,16 @@ class PlayerEditorApp(tk.Tk):
         self.team_editor_listbox: tk.Listbox | None = None
         self.team_count_var: tk.StringVar = tk.StringVar()
         self.filtered_team_names: list[str] = []
+        self.staff_search_var: tk.StringVar = tk.StringVar()
+        self.staff_status_var: tk.StringVar = tk.StringVar(value="")
+        self.staff_count_var: tk.StringVar = tk.StringVar(value="Staff: 0")
+        self.staff_entries: list[tuple[int, str]] = []
+        self._filtered_staff_entries: list[tuple[int, str]] = []
+        self.stadium_search_var: tk.StringVar = tk.StringVar()
+        self.stadium_status_var: tk.StringVar = tk.StringVar(value="")
+        self.stadium_count_var: tk.StringVar = tk.StringVar(value="Stadiums: 0")
+        self.stadium_entries: list[tuple[int, str]] = []
+        self._filtered_stadium_entries: list[tuple[int, str]] = []
         self.team_editor_field_vars: dict[str, tk.StringVar] = {}
         self.team_field_vars: dict[str, tk.StringVar] = {}
         # Pending team selection when jumping from player panel before teams are loaded
@@ -519,7 +533,7 @@ class PlayerEditorApp(tk.Tk):
         # Staff and Stadium editor entry points (scaffolds until pointers exist)
         self.btn_staff = tk.Button(
             self.sidebar,
-            text="Staff (preview)",
+            text="Staff",
             command=self.show_staff,
             bg=BUTTON_BG,
             fg=BUTTON_TEXT,
@@ -530,7 +544,7 @@ class PlayerEditorApp(tk.Tk):
         self.btn_staff.pack(fill=tk.X, padx=10, pady=5)
         self.btn_stadium = tk.Button(
             self.sidebar,
-            text="Stadium (preview)",
+            text="Stadium",
             command=self.show_stadium,
             bg=BUTTON_BG,
             fg=BUTTON_TEXT,
@@ -1187,18 +1201,119 @@ class PlayerEditorApp(tk.Tk):
         self._hide_frames(self.home_frame, self.players_frame, self.teams_frame, self.ai_frame, self.stadium_frame, self.excel_frame)
         if self.staff_frame is not None:
             self.staff_frame.pack(fill=tk.BOTH, expand=True)
+            self._refresh_staff_list()
 
     def show_stadium(self):
         """Display the Stadium screen."""
         self._hide_frames(self.home_frame, self.players_frame, self.teams_frame, self.ai_frame, self.staff_frame, self.excel_frame)
         if self.stadium_frame is not None:
             self.stadium_frame.pack(fill=tk.BOTH, expand=True)
+            self._refresh_stadium_list()
 
     def show_excel(self):
         """Display the Excel import/export screen."""
         self._hide_frames(self.home_frame, self.players_frame, self.teams_frame, self.ai_frame, self.staff_frame, self.stadium_frame)
         if self.excel_frame is not None:
             self.excel_frame.pack(fill=tk.BOTH, expand=True)
+
+    def _current_staff_index(self) -> int | None:
+        if self.staff_listbox is None:
+            return None
+        try:
+            selection = self.staff_listbox.curselection()
+            if not selection:
+                return None
+            idx = selection[0]
+            if idx < 0 or idx >= len(self._filtered_staff_entries):
+                return None
+            return self._filtered_staff_entries[idx][0]
+        except Exception:
+            return None
+
+    def _refresh_staff_list(self) -> None:
+        try:
+            entries = self.model.refresh_staff()
+            self.staff_status_var.set("" if entries else "No staff detected; pointers may be missing.")
+        except Exception:
+            entries = []
+            self.staff_status_var.set("Unable to scan staff.")
+        self.staff_entries = entries
+        self._filter_staff_list()
+
+    def _filter_staff_list(self, *_args) -> None:
+        query = (self.staff_search_var.get() or "").strip().lower()
+        filtered = []
+        for entry in self.staff_entries:
+            name = entry[1]
+            if not query or query in name.lower():
+                filtered.append(entry)
+        self._filtered_staff_entries = filtered
+        if self.staff_listbox is None:
+            return
+        self.staff_listbox.delete(0, tk.END)
+        if not filtered:
+            self.staff_listbox.insert(tk.END, "No staff found.")
+        else:
+            for _, name in filtered:
+                self.staff_listbox.insert(tk.END, name)
+        self.staff_count_var.set(f"Staff: {len(filtered)}")
+        try:
+            self.staff_listbox.selection_clear(0, tk.END)
+        except Exception:
+            pass
+
+    def _on_staff_selected(self) -> None:
+        # Selection is handled on demand when opening the editor.
+        return
+
+    def _current_stadium_index(self) -> int | None:
+        if self.stadium_listbox is None:
+            return None
+        try:
+            selection = self.stadium_listbox.curselection()
+            if not selection:
+                return None
+            idx = selection[0]
+            if idx < 0 or idx >= len(self._filtered_stadium_entries):
+                return None
+            return self._filtered_stadium_entries[idx][0]
+        except Exception:
+            return None
+
+    def _refresh_stadium_list(self) -> None:
+        try:
+            entries = self.model.refresh_stadiums()
+            self.stadium_status_var.set("" if entries else "No stadiums detected; pointers may be missing.")
+        except Exception:
+            entries = []
+            self.stadium_status_var.set("Unable to scan stadiums.")
+        self.stadium_entries = entries
+        self._filter_stadium_list()
+
+    def _filter_stadium_list(self, *_args) -> None:
+        query = (self.stadium_search_var.get() or "").strip().lower()
+        filtered = []
+        for entry in self.stadium_entries:
+            name = entry[1]
+            if not query or query in name.lower():
+                filtered.append(entry)
+        self._filtered_stadium_entries = filtered
+        if self.stadium_listbox is None:
+            return
+        self.stadium_listbox.delete(0, tk.END)
+        if not filtered:
+            self.stadium_listbox.insert(tk.END, "No stadiums found.")
+        else:
+            for _, name in filtered:
+                self.stadium_listbox.insert(tk.END, name)
+        self.stadium_count_var.set(f"Stadiums: {len(filtered)}")
+        try:
+            self.stadium_listbox.selection_clear(0, tk.END)
+        except Exception:
+            pass
+
+    def _on_stadium_selected(self) -> None:
+        return
     # -----------------------------------------------------------------
     # Randomizer
     # -----------------------------------------------------------------
@@ -2147,18 +2262,22 @@ class PlayerEditorApp(tk.Tk):
         except Exception as exc:
             messagebox.showerror("Full Editor", f"Unable to open team editor: {exc}")
 
-    def _open_full_staff_editor(self) -> None:
-        """Open the staff editor scaffold (activates when staff pointers exist)."""
+    def _open_full_staff_editor(self, staff_idx: int | None = None) -> None:
+        """Open the staff editor (requires staff pointers/stride)."""
         try:
-            editor = FullStaffEditor(self, self.model)
+            if staff_idx is None:
+                staff_idx = self._current_staff_index() or 0
+            editor = FullStaffEditor(self, self.model, staff_idx)
             editor.grab_set()
         except Exception as exc:
             messagebox.showerror("Staff Editor", f"Unable to open staff editor: {exc}")
 
-    def _open_full_stadium_editor(self) -> None:
-        """Open the stadium editor scaffold (activates when stadium pointers exist)."""
+    def _open_full_stadium_editor(self, stadium_idx: int | None = None) -> None:
+        """Open the stadium editor (requires stadium pointers/stride)."""
         try:
-            editor = FullStadiumEditor(self, self.model)
+            if stadium_idx is None:
+                stadium_idx = self._current_stadium_index() or 0
+            editor = FullStadiumEditor(self, self.model, stadium_idx)
             editor.grab_set()
         except Exception as exc:
             messagebox.showerror("Stadium Editor", f"Unable to open stadium editor: {exc}")
@@ -2274,6 +2393,227 @@ class PlayerEditorApp(tk.Tk):
             self.status_var.set(f"{target_label} is running (PID {pid})")
         else:
             self.status_var.set(f"{target_label} not detected - launch the game to enable editing")
+
+    def _set_dynamic_scan_status(self, message: str) -> None:
+        """Update the dynamic base scan status label safely from worker threads."""
+        try:
+            self.after(0, lambda: self.dynamic_scan_status_var.set(message))
+        except Exception:
+            self.dynamic_scan_status_var.set(message)
+
+    def _open_offset_file_dialog(self) -> None:
+        """Allow the user to load a custom offsets JSON file."""
+        path = filedialog.askopenfilename(
+            title="Select offsets file",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        fname = Path(path).name
+        self.offset_load_status_var.set(f"Loading offsets from {fname}...")
+        target_exec = self.hook_target_var.get() or self.model.mem.module_name or MODULE_NAME
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                raw = json.load(fh)
+        except Exception as exc:
+            self.offset_load_status_var.set("Failed to read offsets file.")
+            self.after(0, lambda: messagebox.showerror("Offsets load failed", f"Could not read {fname}.\n{exc}"))
+            return
+
+        def _resolve_payload(raw_obj: object) -> dict | None:
+            converted = offsets_mod._convert_merged_offsets_schema(raw_obj, target_exec)
+            if converted:
+                return converted
+            selected = offsets_mod._select_merged_offset_entry(raw_obj, target_exec)
+            if selected and selected is not raw_obj:
+                converted_selected = offsets_mod._convert_merged_offsets_schema(selected, target_exec)
+                return converted_selected or selected
+            if isinstance(raw_obj, dict):
+                return raw_obj
+            return None
+
+        data = _resolve_payload(raw)
+        if not isinstance(data, dict):
+            self.offset_load_status_var.set("Offsets file format not recognized.")
+            self.after(
+                0,
+                lambda: messagebox.showerror(
+                    "Offsets load failed",
+                    f"{fname} does not look like a valid offsets file.",
+                ),
+            )
+            return
+        try:
+            offsets_mod._offset_file_path = Path(path)
+            offsets_mod._offset_config = data
+            offsets_mod.MODULE_NAME = target_exec
+            offsets_mod._current_offset_target = (target_exec or MODULE_NAME).lower()
+            base_overrides = getattr(offsets_mod, "_base_pointer_overrides", None)
+            if base_overrides:
+                offsets_mod._apply_base_pointer_overrides(data, base_overrides)
+            offsets_mod._apply_offset_config(data)
+            self.model.categories = offsets_mod._load_categories()
+            self.offset_load_status_var.set(f"Loaded offsets from {fname}")
+            self._update_status()
+            self._start_scan()
+            self.after(
+                0,
+                lambda: messagebox.showinfo(
+                    "Offsets loaded",
+                    f"Loaded offsets from {fname}",
+                ),
+            )
+        except Exception as exc:
+            self.offset_load_status_var.set("Failed to apply offsets file.")
+            self.after(
+                0,
+                lambda: messagebox.showerror(
+                    "Offsets load failed",
+                    f"Unable to apply offsets from {fname}.\n{exc}",
+                ),
+            )
+
+    def _start_dynamic_base_scan(self) -> None:
+        """Start a background dynamic base discovery run."""
+        if self.dynamic_scan_in_progress:
+            return
+        self.dynamic_scan_in_progress = True
+        self._set_dynamic_scan_status("Scanning for player and team bases...")
+        threading.Thread(target=self._run_dynamic_base_scan, daemon=True).start()
+
+    def _run_dynamic_base_scan(self) -> None:
+        """Worker that runs dynamic base discovery and applies overrides."""
+        try:
+            target_exec = self.hook_target_var.get() or self.model.mem.module_name or MODULE_NAME
+            self.model.mem.module_name = target_exec
+            target_label = self._hook_label_for(target_exec)
+            if not self.model.mem.open_process():
+                self._set_dynamic_scan_status(f"{target_label} is not running. Launch the game and try again.")
+                return
+            offset_target = self.model.mem.module_name or target_exec
+            try:
+                initialize_offsets(target_executable=offset_target, force=False)
+            except OffsetSchemaError as exc:
+                self._set_dynamic_scan_status("Offsets failed to load; cannot run dynamic discovery.")
+                self.after(0, lambda: messagebox.showerror("Offsets not loaded", str(exc)))
+                return
+            base_hints: dict[str, int] = {}
+            cfg = getattr(offsets_mod, "_offset_config", None)
+            target_key = getattr(offsets_mod, "_current_offset_target", None) or (offset_target or MODULE_NAME).lower()
+            if isinstance(cfg, dict):
+                base_map = cfg.get("base_pointers") if isinstance(cfg.get("base_pointers"), dict) else {}
+                versions = cfg.get("versions") if isinstance(cfg.get("versions"), dict) else {}
+                version_key = None
+                try:
+                    m = re.search(r"2k(\\d{2})", target_key, re.IGNORECASE)
+                    if m:
+                        version_key = f"2K{m.group(1)}"
+                except Exception:
+                    version_key = None
+                if version_key and isinstance(versions, dict):
+                    vinfo = versions.get(version_key)
+                    if isinstance(vinfo, dict) and isinstance(vinfo.get("base_pointers"), dict):
+                        base_map = vinfo.get("base_pointers") or base_map
+
+                def _extract_addr(label: str) -> int | None:
+                    entry = base_map.get(label) or base_map.get(label.lower())
+                    if not isinstance(entry, dict):
+                        return None
+                    addr = entry.get("address") or entry.get("rva") or entry.get("base")
+                    if addr is None:
+                        return None
+                    try:
+                        addr_int = int(addr)
+                    except Exception:
+                        return None
+                    absolute = entry.get("absolute")
+                    if absolute is None:
+                        absolute = entry.get("isAbsolute")
+                    if not absolute and self.model.mem.base_addr:
+                        addr_int = self.model.mem.base_addr + addr_int
+                    return addr_int
+
+                p_hint = _extract_addr("Player")
+                t_hint = _extract_addr("Team")
+                if p_hint:
+                    base_hints["Player"] = p_hint
+                if t_hint:
+                    base_hints["Team"] = t_hint
+            team_name_len = offsets_mod.TEAM_NAME_LENGTH if offsets_mod.TEAM_NAME_LENGTH > 0 else 24
+            try:
+                overrides, report = find_dynamic_bases(
+                    process_name=offset_target,
+                    player_stride=offsets_mod.PLAYER_STRIDE,
+                    team_stride=offsets_mod.TEAM_STRIDE,
+                    first_offset=offsets_mod.OFF_FIRST_NAME,
+                    last_offset=offsets_mod.OFF_LAST_NAME,
+                    team_name_offset=offsets_mod.TEAM_NAME_OFFSET,
+                    team_name_length=team_name_len,
+                    pid=self.model.mem.pid,
+                    player_base_hint=base_hints.get("Player"),
+                    team_base_hint=base_hints.get("Team"),
+                    run_parallel=True,
+                )
+            except Exception as exc:
+                self._set_dynamic_scan_status(f"Dynamic scan failed: {exc}")
+                self.after(
+                    0,
+                    lambda: messagebox.showwarning(
+                        "Dynamic base discovery",
+                        f"Dynamic base scan failed; using offsets file.\n{exc}",
+                    ),
+                )
+                return
+            if overrides:
+                try:
+                    initialize_offsets(
+                        target_executable=offset_target,
+                        force=False,
+                        base_pointer_overrides=overrides,
+                    )
+                    addr_parts = []
+                    player_addr = overrides.get("Player")
+                    team_addr = overrides.get("Team")
+                    if player_addr:
+                        addr_parts.append(f"Player 0x{int(player_addr):X}")
+                    if team_addr:
+                        addr_parts.append(f"Team 0x{int(team_addr):X}")
+                    summary = "Applied dynamic bases" + (f": {', '.join(addr_parts)}" if addr_parts else ".")
+                    self._set_dynamic_scan_status(summary)
+                    self.after(0, self._update_status)
+                    self.after(0, self._start_scan)
+                    self.after(
+                        0,
+                        lambda: messagebox.showinfo(
+                            "Dynamic base discovery",
+                            summary,
+                        ),
+                    )
+                except OffsetSchemaError as exc:
+                    self._set_dynamic_scan_status(f"Dynamic bases found but failed to apply: {exc}")
+                    self.after(
+                        0,
+                        lambda: messagebox.showwarning(
+                            "Dynamic base discovery",
+                            f"Dynamic bases found but failed to apply: {exc}",
+                        ),
+                    )
+            else:
+                fallback = ""
+                if isinstance(report, dict) and report.get("error"):
+                    fallback = str(report["error"])
+                if not fallback:
+                    fallback = "No dynamic bases were found; using offsets file values instead."
+                self._set_dynamic_scan_status(fallback)
+                self.after(
+                    0,
+                    lambda: messagebox.showinfo(
+                        "Dynamic base discovery",
+                        fallback,
+                    ),
+                )
+        finally:
+            self.dynamic_scan_in_progress = False
     # ---------------------------------------------------------------------
     # Scanning players
     # ---------------------------------------------------------------------

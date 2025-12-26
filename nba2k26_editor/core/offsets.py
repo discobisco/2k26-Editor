@@ -170,6 +170,23 @@ PLAYER_PANEL_OVR_FIELD: tuple[str, str] = ("Attributes", "CACHCED_OVR")
 UNIFIED_FILES = (OFFSETS_BUNDLE_FILE,)
 EXTRA_CATEGORY_FIELDS: dict[str, list[dict]] = {}
 
+# Staff/Stadium metadata (populated when offsets define them)
+STAFF_STRIDE = 0
+STAFF_PTR_CHAINS: list[dict[str, object]] = []
+STAFF_RECORD_SIZE = STAFF_STRIDE
+STAFF_NAME_OFFSET = 0
+STAFF_NAME_LENGTH = 0
+STAFF_NAME_ENCODING = "utf16"
+MAX_STAFF_SCAN = 400
+
+STADIUM_STRIDE = 0
+STADIUM_PTR_CHAINS: list[dict[str, object]] = []
+STADIUM_RECORD_SIZE = STADIUM_STRIDE
+STADIUM_NAME_OFFSET = 0
+STADIUM_NAME_LENGTH = 0
+STADIUM_NAME_ENCODING = "utf16"
+MAX_STADIUM_SCAN = 200
+
 ATTR_IMPORT_ORDER = [
     "LAYUP",
     "STDUNK",
@@ -1520,6 +1537,8 @@ def _apply_offset_config(data: dict | None) -> None:
     global FIRST_NAME_ENCODING, LAST_NAME_ENCODING, TEAM_NAME_ENCODING
     global TEAM_STRIDE, TEAM_NAME_OFFSET, TEAM_NAME_LENGTH, TEAM_PLAYER_SLOT_COUNT
     global TEAM_PTR_CHAINS, TEAM_RECORD_SIZE, TEAM_FIELD_DEFS
+    global STAFF_STRIDE, STAFF_RECORD_SIZE, STAFF_PTR_CHAINS, STAFF_NAME_OFFSET, STAFF_NAME_LENGTH, STAFF_NAME_ENCODING
+    global STADIUM_STRIDE, STADIUM_RECORD_SIZE, STADIUM_PTR_CHAINS, STADIUM_NAME_OFFSET, STADIUM_NAME_LENGTH, STADIUM_NAME_ENCODING
     if not data:
         raise OffsetSchemaError(f"{OFFSETS_BUNDLE_FILE} is missing or empty.")
     # Version-aware fallback helpers (in case the selected payload lost game_info/base_pointers)
@@ -1624,13 +1643,9 @@ def _apply_offset_config(data: dict | None) -> None:
         v_bp = cast(dict[str, Any], vinfo.get("base_pointers") or {})
         if v_bp:
             base_pointers = v_bp
-    if base_pointers and not any(
-        key.lower() in {"player", "team"}
-        for key in base_pointers.keys()
-    ):
+    if not isinstance(base_pointers, dict):
         base_pointers = {}
-    if not isinstance(base_pointers, dict) or not base_pointers:
-        base_pointers = {}
+    if not base_pointers:
         legacy_player_addr_raw = _legacy_lookup(legacy_base, "Player Base Address")
         legacy_player_chain = _legacy_lookup(legacy_base, "Player Offset Chain")
         if legacy_player_addr_raw is not None:
@@ -1733,6 +1748,16 @@ def _apply_offset_config(data: dict | None) -> None:
         )
         if extra_draft_candidates:
             _extend_pointer_candidates(DRAFT_PTR_CHAINS, extra_draft_candidates)
+        extra_staff_candidates = pointer_candidates.get("Staff") or pointer_candidates.get("staff")
+        if extra_staff_candidates:
+            _extend_pointer_candidates(STAFF_PTR_CHAINS, extra_staff_candidates)
+        extra_stadium_candidates = (
+            pointer_candidates.get("Stadium")
+            or pointer_candidates.get("stadium")
+            or pointer_candidates.get("Stadiums")
+        )
+        if extra_stadium_candidates:
+            _extend_pointer_candidates(STADIUM_PTR_CHAINS, extra_stadium_candidates)
     name_char_limit: int | None = None
 
     def _derive_char_capacity(offset_val: int, enc: str, length_val: int) -> int | None:
@@ -1856,6 +1881,64 @@ def _apply_offset_config(data: dict | None) -> None:
         TEAM_FIELD_DEFS[label] = (offset, length_val, encoding)
     if TEAM_STRIDE > 0:
         TEAM_RECORD_SIZE = TEAM_STRIDE
+    # Staff stride/name metadata
+    staff_stride_val = to_int(
+        game_info.get("staffSize")
+        or process_info.get("staffSize")
+        or _legacy_lookup(legacy_base, "Staff Offset Length")
+    )
+    if staff_stride_val <= 0:
+        vinfo = _version_info(version_label)
+        vgi = cast(dict[str, Any], vinfo.get("game_info") or {})
+        staff_stride_val = to_int(vgi.get("staffSize") or vgi.get("staff_size"))
+    STAFF_STRIDE = max(0, staff_stride_val or 0)
+    STAFF_RECORD_SIZE = STAFF_STRIDE
+    STAFF_PTR_CHAINS.clear()
+    staff_base = base_pointers.get("Staff")
+    staff_addr, staff_addr_defined = _pointer_address(staff_base)
+    if staff_addr_defined:
+        chains = _parse_pointer_chain_config(staff_base)
+        if chains:
+            STAFF_PTR_CHAINS.extend(chains)
+    staff_first_entry = _find_offset_entry("Staff Vitals - FIRSTNAME", "Staff")
+    staff_last_entry = _find_offset_entry("Staff Vitals - LASTNAME", "Staff")
+    staff_name_entry = staff_first_entry or staff_last_entry
+    if staff_name_entry:
+        STAFF_NAME_OFFSET = to_int(staff_name_entry.get("address")) or 0
+        entry_type = str(staff_name_entry.get("type", "")).lower()
+        STAFF_NAME_ENCODING = "ascii" if entry_type in ("string", "text") else "utf16"
+        STAFF_NAME_LENGTH = to_int(staff_name_entry.get("length")) or 0
+        if STAFF_NAME_LENGTH <= 0 and STAFF_STRIDE > 0 and STAFF_NAME_OFFSET > 0:
+            remaining = max(0, STAFF_STRIDE - STAFF_NAME_OFFSET)
+            STAFF_NAME_LENGTH = remaining // (2 if STAFF_NAME_ENCODING == "utf16" else 1)
+    # Stadium stride/name metadata
+    stadium_stride_val = to_int(
+        game_info.get("stadiumSize")
+        or process_info.get("stadiumSize")
+        or _legacy_lookup(legacy_base, "Stadium Offset Length")
+    )
+    if stadium_stride_val <= 0:
+        vinfo = _version_info(version_label)
+        vgi = cast(dict[str, Any], vinfo.get("game_info") or {})
+        stadium_stride_val = to_int(vgi.get("stadiumSize") or vgi.get("stadium_size"))
+    STADIUM_STRIDE = max(0, stadium_stride_val or 0)
+    STADIUM_RECORD_SIZE = STADIUM_STRIDE
+    STADIUM_PTR_CHAINS.clear()
+    stadium_base = base_pointers.get("Stadium")
+    stadium_addr, stadium_addr_defined = _pointer_address(stadium_base)
+    if stadium_addr_defined:
+        chains = _parse_pointer_chain_config(stadium_base)
+        if chains:
+            STADIUM_PTR_CHAINS.extend(chains)
+    stadium_name_entry = _find_offset_entry("Stadium Vitals - NAME", "Stadium")
+    if stadium_name_entry:
+        STADIUM_NAME_OFFSET = to_int(stadium_name_entry.get("address")) or 0
+        entry_type = str(stadium_name_entry.get("type", "")).lower()
+        STADIUM_NAME_ENCODING = "ascii" if entry_type in ("string", "text") else "utf16"
+        STADIUM_NAME_LENGTH = to_int(stadium_name_entry.get("length")) or 0
+        if STADIUM_NAME_LENGTH <= 0 and STADIUM_STRIDE > 0 and STADIUM_NAME_OFFSET > 0:
+            remaining = max(0, STADIUM_STRIDE - STADIUM_NAME_OFFSET)
+            STADIUM_NAME_LENGTH = remaining // (2 if STADIUM_NAME_ENCODING == "utf16" else 1)
     if errors:
         raise OffsetSchemaError(" ; ".join(errors))
     if warnings:
@@ -1934,6 +2017,20 @@ __all__ = [
     "PLAYER_PANEL_OVR_FIELD",
     "UNIFIED_FILES",
     "EXTRA_CATEGORY_FIELDS",
+    "STAFF_STRIDE",
+    "STAFF_PTR_CHAINS",
+    "STAFF_RECORD_SIZE",
+    "STAFF_NAME_OFFSET",
+    "STAFF_NAME_LENGTH",
+    "STAFF_NAME_ENCODING",
+    "MAX_STAFF_SCAN",
+    "STADIUM_STRIDE",
+    "STADIUM_PTR_CHAINS",
+    "STADIUM_RECORD_SIZE",
+    "STADIUM_NAME_OFFSET",
+    "STADIUM_NAME_LENGTH",
+    "STADIUM_NAME_ENCODING",
+    "MAX_STADIUM_SCAN",
     "ATTR_IMPORT_ORDER",
     "DUR_IMPORT_ORDER",
     "POTENTIAL_IMPORT_ORDER",

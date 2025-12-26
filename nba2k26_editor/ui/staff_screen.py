@@ -1,4 +1,4 @@
-"""Staff screen scaffold: mirrors players/teams layout but stays empty until pointers exist."""
+"""Staff screen hooked to live offsets when available."""
 from __future__ import annotations
 
 import tkinter as tk
@@ -31,7 +31,7 @@ def build_staff_screen(app) -> None:
     ).pack(side=tk.LEFT)
     tk.Label(
         header,
-        text="Staff editing will activate once staff base pointers/stride are added to offsets.json.",
+        textvariable=getattr(app, "staff_status_var", None),
         bg=PANEL_BG,
         fg=TEXT_SECONDARY,
     ).pack(side=tk.LEFT, padx=(10, 0))
@@ -39,12 +39,13 @@ def build_staff_screen(app) -> None:
     body = tk.Frame(app.staff_frame, bg=PRIMARY_BG)
     body.pack(fill=tk.BOTH, expand=True, padx=16, pady=12)
 
-    # Left: list placeholder
+    # Left: list
     left = tk.Frame(body, bg=PRIMARY_BG)
     left.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 12))
     tk.Label(left, text="Staff List", bg=PRIMARY_BG, fg=TEXT_PRIMARY, font=("Segoe UI", 11, "bold")).pack(anchor="w")
     search = tk.Entry(
         left,
+        textvariable=app.staff_search_var,
         bg=ENTRY_BG,
         fg=ENTRY_FG,
         relief=tk.FLAT,
@@ -53,11 +54,13 @@ def build_staff_screen(app) -> None:
         highlightthickness=1,
     )
     search.pack(fill=tk.X, pady=(4, 6))
+    app.staff_search_var.trace_add("write", lambda *_: app._filter_staff_list())
     listbox = tk.Listbox(left, height=20, bg=PANEL_BG, fg=TEXT_PRIMARY, selectbackground=BUTTON_ACTIVE_BG)
     listbox.pack(fill=tk.BOTH, expand=True)
-    listbox.insert(tk.END, "No staff available. Add pointers to enable scanning.")
+    listbox.bind("<<ListboxSelect>>", lambda *_: app._on_staff_selected())
+    listbox.bind("<Double-1>", lambda *_: app._open_full_staff_editor(app._current_staff_index()))
 
-    # Right: detail placeholder
+    # Right: detail
     right = tk.Frame(body, bg=PANEL_BG, bd=1, relief=tk.FLAT)
     right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     tk.Label(
@@ -69,7 +72,7 @@ def build_staff_screen(app) -> None:
     ).pack(anchor="w", padx=12, pady=(10, 4))
     tk.Label(
         right,
-        text="No staff loaded. Once base pointers exist, staff records will appear here.",
+        textvariable=app.staff_count_var,
         bg=PANEL_BG,
         fg=TEXT_SECONDARY,
         justify=tk.LEFT,
@@ -78,7 +81,7 @@ def build_staff_screen(app) -> None:
     tk.Button(
         right,
         text="Open Staff Editor",
-        command=app._open_full_staff_editor,
+        command=lambda: app._open_full_staff_editor(app._current_staff_index()),
         bg=BUTTON_BG,
         fg=BUTTON_TEXT,
         activebackground=BUTTON_ACTIVE_BG,
@@ -91,7 +94,7 @@ def build_staff_screen(app) -> None:
     # Expose widgets for future wiring
     app.staff_listbox = listbox
     app.staff_search = search
-    listbox.bind("<Double-1>", lambda *_: app._open_full_staff_editor())
+    app._refresh_staff_list()
 
 
 __all__ = ["build_staff_screen"]

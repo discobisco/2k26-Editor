@@ -82,21 +82,21 @@
       "source": "2k26_offsets.json",
       "game_info": {
         "executable": "NBA2K26.exe",
-        "version": "December 6th, 2025",
+        "version": "December 17th, 2025",
         "playerSize": 1176,
         "teamSize": 5672
       },
       "base_pointers": {
         "Player": {
-          "address": 130958888,
+          "address": 130958936,
           "chain": []
         },
         "Team": {
-          "address": 130959488,
+          "address": 130959536,
           "chain": []
         },
         "Cursor": {
-          "address": 110686816,
+          "address": 0,
           "chain": []
         }
       }
@@ -618,7 +618,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTARM",
-      "display_name": "Left Arm",
+      "display_name": "Left Arm Frequency",
       "variant_names": [
         "LEFT_ARM",
         "LEFT_ARM_FREQUENCY",
@@ -676,7 +676,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTARMAWAYCOLOR",
-      "display_name": "Left Arm Item Away Color",
+      "display_name": "Left Arm Away Color",
       "variant_names": [
         "LEFT_ARM_AWAY_COLOR",
         "Left Arm Away Color",
@@ -790,7 +790,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTELBOW",
-      "display_name": "Left Elbow",
+      "display_name": "Left Elbow Frequency",
       "variant_names": [
         "LEFT_ELBOW",
         "LEFT_ELBOW_FREQUENCY",
@@ -848,7 +848,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTELBOWAWAYCOLOR",
-      "display_name": "Left Elbow Item Away Color",
+      "display_name": "Left Elbow Away Color",
       "variant_names": [
         "LEFT_ELBOW_AWAY_COLOR",
         "Left Elbow Away Color",
@@ -905,7 +905,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTELBOWHOMECOLOR",
-      "display_name": "Left Elbow Home Color",
+      "display_name": "Left Elbow Item Home Color",
       "variant_names": [
         "LEFT_ELBOW_HOME_COLOR",
         "Left Elbow Home Color",
@@ -1249,7 +1249,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTKNEEHOMECOLOR",
-      "display_name": "Left Knee Item Home Color",
+      "display_name": "Left Knee Home Color",
       "variant_names": [
         "LEFT_KNEE_HOME_COLOR",
         "Left Knee Home Color",
@@ -1306,7 +1306,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTLEG",
-      "display_name": "Left Leg Frequency",
+      "display_name": "Left Leg",
       "variant_names": [
         "LEFT_LEG",
         "LEFT_LEG_FREQUENCY",
@@ -1364,7 +1364,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTLEGAWAYCOLOR",
-      "display_name": "Left Leg Item Away Color",
+      "display_name": "Left Leg Away Color",
       "variant_names": [
         "LEFT_LEG_AWAY_COLOR",
         "Left Leg Away Color",
@@ -1421,7 +1421,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTLEGHOMECOLOR",
-      "display_name": "Left Leg Home Color",
+      "display_name": "Left Leg Item Home Color",
       "variant_names": [
         "LEFT_LEG_HOME_COLOR",
         "Left Leg Home Color",
@@ -1478,7 +1478,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTWRIST",
-      "display_name": "Left Wrist",
+      "display_name": "Left Wrist Frequency",
       "variant_names": [
         "LEFT_WRIST",
         "LEFT_WRIST_FREQUENCY",
@@ -1706,7 +1706,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTANKLE",
-      "display_name": "Right Ankle",
+      "display_name": "Right Ankle Frequency",
       "variant_names": [
         "RIGHT_ANKLE",
         "RIGHT_ANKLE_FREQUENCY",
@@ -1821,7 +1821,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTANKLEHOMECOLOR",
-      "display_name": "Right Ankle Home Color",
+      "display_name": "Right Ankle Item Home Color",
       "variant_names": [
         "RIGHT_ANKLE_HOME_COLOR",
         "Right Ankle Home Color",
@@ -1936,7 +1936,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTARMAWAYCOLOR",
-      "display_name": "Right Arm Item Away Color",
+      "display_name": "Right Arm Away Color",
       "variant_names": [
         "RIGHT_ARM_AWAY_COLOR",
         "Right Arm Away Color",
@@ -2050,7 +2050,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTELBOW",
-      "display_name": "Right Elbow",
+      "display_name": "Right Elbow Frequency",
       "variant_names": [
         "RIGHT_ELBOW",
         "RIGHT_ELBOW_FREQUENCY",
@@ -2108,7 +2108,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTELBOWAWAYCOLOR",
-      "display_name": "Right Elbow Away Color",
+      "display_name": "Right Elbow Item Away Color",
       "variant_names": [
         "RIGHT_ELBOW_AWAY_COLOR",
         "Right Elbow Away Color",
@@ -2337,7 +2337,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTFINGERSHOMECOLOR",
-      "display_name": "Right Fingers Home Color",
+      "display_name": "Right Fingers Item Home Color",
       "variant_names": [
         "RIGHT_FINGERS_HOME_COLOR",
         "Right Fingers Home Color",
@@ -2452,7 +2452,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTKNEEAWAYCOLOR",
-      "display_name": "Right Knee Away Color",
+      "display_name": "Right Knee Item Away Color",
       "variant_names": [
         "RIGHT_KNEE_AWAY_COLOR",
         "Right Knee Away Color",
@@ -2509,7 +2509,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTKNEEHOMECOLOR",
-      "display_name": "Right Knee Home Color",
+      "display_name": "Right Knee Item Home Color",
       "variant_names": [
         "RIGHT_KNEE_HOME_COLOR",
         "Right Knee Home Color",
@@ -2566,7 +2566,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTLEG",
-      "display_name": "Right Leg Frequency",
+      "display_name": "Right Leg",
       "variant_names": [
         "RIGHT_LEG",
         "RIGHT_LEG_FREQUENCY",
@@ -2796,7 +2796,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTWRISTAWAYCOLOR",
-      "display_name": "Right Wrist Away Color",
+      "display_name": "Right Wrist Item Away Color",
       "variant_names": [
         "RIGHT_WRIST_AWAY_COLOR",
         "Right Wrist Away Color",
@@ -14019,7 +14019,7 @@
       "canonical_category": "Hotzones",
       "super_type": "Players",
       "normalized_name": "MIDRANGELEFT",
-      "display_name": "Mid-Range Left",
+      "display_name": "Mid Range Left Center",
       "variant_names": [
         "MID-RANGE_LEFT",
         "MID-RANGE_LEFT_CENTER",
@@ -21825,330 +21825,6 @@
       }
     },
     {
-      "canonical_category": "Team Pointers",
-      "super_type": "Players",
-      "normalized_name": "RETIREDNUMBERSPOINTER",
-      "display_name": "Retired Numbers Pointer",
-      "variant_names": [
-        "Retired Numbers Pointer"
-      ],
-      "versions": {
-        "2K26": {
-          "category": "Team Pointers",
-          "name": "Retired Numbers Pointer",
-          "address": 4080,
-          "hex": "0xFF0",
-          "type": "Pointer",
-          "length": 64
-        }
-      }
-    },
-    {
-      "canonical_category": "Team Retired Entry",
-      "super_type": "Players",
-      "normalized_name": "FIRSTNAME",
-      "display_name": "First Name",
-      "variant_names": [
-        "First Name"
-      ],
-      "versions": {
-        "2K26": {
-          "category": "Team Retired Entry",
-          "name": "First Name",
-          "address": 56,
-          "hex": "0x38",
-          "type": "String",
-          "length": 16
-        }
-      }
-    },
-    {
-      "canonical_category": "Team Retired Entry",
-      "super_type": "Players",
-      "normalized_name": "JERSEYNUMBER",
-      "display_name": "Jersey Number",
-      "variant_names": [
-        "Jersey Number"
-      ],
-      "versions": {
-        "2K26": {
-          "category": "Team Retired Entry",
-          "name": "Jersey Number",
-          "address": 16,
-          "hex": "0x10",
-          "type": "Integer",
-          "length": 16,
-          "startBit": 16
-        }
-      }
-    },
-    {
-      "canonical_category": "Team Retired Entry",
-      "super_type": "Players",
-      "normalized_name": "LASTNAME",
-      "display_name": "Last Name",
-      "variant_names": [
-        "Last Name"
-      ],
-      "versions": {
-        "2K26": {
-          "category": "Team Retired Entry",
-          "name": "Last Name",
-          "address": 76,
-          "hex": "0x4C",
-          "type": "String",
-          "length": 16
-        }
-      }
-    },
-    {
-      "canonical_category": "Team Retired Entry",
-      "super_type": "Players",
-      "normalized_name": "NEXTENTRYPOINTER",
-      "display_name": "Next Entry Pointer",
-      "variant_names": [
-        "Next Entry Pointer"
-      ],
-      "versions": {
-        "2K26": {
-          "category": "Team Retired Entry",
-          "name": "Next Entry Pointer",
-          "address": 0,
-          "hex": "0x0",
-          "type": "Pointer",
-          "length": 64
-        }
-      }
-    },
-    {
-      "canonical_category": "Team Retired Entry",
-      "super_type": "Players",
-      "normalized_name": "PLAYERSIGNATURE",
-      "display_name": "Player Signature",
-      "variant_names": [
-        "Player Signature"
-      ],
-      "versions": {
-        "2K26": {
-          "category": "Team Retired Entry",
-          "name": "Player Signature",
-          "address": 16,
-          "hex": "0x10",
-          "type": "Integer",
-          "length": 32
-        }
-      }
-    },
-    {
-      "canonical_category": "Team Retired Entry",
-      "super_type": "Players",
-      "normalized_name": "RETIREMENTYEAR",
-      "display_name": "Retirement Year",
-      "variant_names": [
-        "Retirement Year"
-      ],
-      "versions": {
-        "2K26": {
-          "category": "Team Retired Entry",
-          "name": "Retirement Year",
-          "address": 20,
-          "hex": "0x14",
-          "type": "Integer",
-          "length": 16
-        }
-      }
-    },
-    {
-      "canonical_category": "Team Retired Entry",
-      "super_type": "Players",
-      "normalized_name": "TEAMBACKPOINTER",
-      "display_name": "Team Back Pointer",
-      "variant_names": [
-        "Team Back Pointer"
-      ],
-      "versions": {
-        "2K26": {
-          "category": "Team Retired Entry",
-          "name": "Team Back Pointer",
-          "address": 8,
-          "hex": "0x8",
-          "type": "Pointer",
-          "length": 64
-        }
-      }
-    },
-    {
-      "canonical_category": "Team Retired Entry",
-      "super_type": "Players",
-      "normalized_name": "UNKNOWN16",
-      "display_name": "Unknown 16",
-      "variant_names": [
-        "Unknown 16"
-      ],
-      "versions": {
-        "2K26": {
-          "category": "Team Retired Entry",
-          "name": "Unknown 16",
-          "address": 22,
-          "hex": "0x16",
-          "type": "Integer",
-          "length": 16
-        }
-      }
-    },
-    {
-      "canonical_category": "Team Retired Entry",
-      "super_type": "Players",
-      "normalized_name": "YEARSBLOCKA1",
-      "display_name": "Years Block A - 1",
-      "variant_names": [
-        "Years Block A - 1"
-      ],
-      "versions": {
-        "2K26": {
-          "category": "Team Retired Entry",
-          "name": "Years Block A - 1",
-          "address": 24,
-          "hex": "0x18",
-          "type": "Integer",
-          "length": 16
-        }
-      }
-    },
-    {
-      "canonical_category": "Team Retired Entry",
-      "super_type": "Players",
-      "normalized_name": "YEARSBLOCKA2",
-      "display_name": "Years Block A - 2",
-      "variant_names": [
-        "Years Block A - 2"
-      ],
-      "versions": {
-        "2K26": {
-          "category": "Team Retired Entry",
-          "name": "Years Block A - 2",
-          "address": 26,
-          "hex": "0x1A",
-          "type": "Integer",
-          "length": 16
-        }
-      }
-    },
-    {
-      "canonical_category": "Team Retired Entry",
-      "super_type": "Players",
-      "normalized_name": "YEARSBLOCKA3POINT",
-      "display_name": "Years Block A - 3",
-      "variant_names": [
-        "Years Block A - 3"
-      ],
-      "versions": {
-        "2K26": {
-          "category": "Team Retired Entry",
-          "name": "Years Block A - 3",
-          "address": 28,
-          "hex": "0x1C",
-          "type": "Integer",
-          "length": 16
-        }
-      }
-    },
-    {
-      "canonical_category": "Team Retired Entry",
-      "super_type": "Players",
-      "normalized_name": "YEARSBLOCKA4",
-      "display_name": "Years Block A - 4",
-      "variant_names": [
-        "Years Block A - 4"
-      ],
-      "versions": {
-        "2K26": {
-          "category": "Team Retired Entry",
-          "name": "Years Block A - 4",
-          "address": 30,
-          "hex": "0x1E",
-          "type": "Integer",
-          "length": 16
-        }
-      }
-    },
-    {
-      "canonical_category": "Team Retired Entry",
-      "super_type": "Players",
-      "normalized_name": "YEARSBLOCKB1",
-      "display_name": "Years Block B - 1",
-      "variant_names": [
-        "Years Block B - 1"
-      ],
-      "versions": {
-        "2K26": {
-          "category": "Team Retired Entry",
-          "name": "Years Block B - 1",
-          "address": 32,
-          "hex": "0x20",
-          "type": "Integer",
-          "length": 16
-        }
-      }
-    },
-    {
-      "canonical_category": "Team Retired Entry",
-      "super_type": "Players",
-      "normalized_name": "YEARSBLOCKB2",
-      "display_name": "Years Block B - 2",
-      "variant_names": [
-        "Years Block B - 2"
-      ],
-      "versions": {
-        "2K26": {
-          "category": "Team Retired Entry",
-          "name": "Years Block B - 2",
-          "address": 34,
-          "hex": "0x22",
-          "type": "Integer",
-          "length": 16
-        }
-      }
-    },
-    {
-      "canonical_category": "Team Retired Entry",
-      "super_type": "Players",
-      "normalized_name": "YEARSBLOCKB3POINT",
-      "display_name": "Years Block B - 3",
-      "variant_names": [
-        "Years Block B - 3"
-      ],
-      "versions": {
-        "2K26": {
-          "category": "Team Retired Entry",
-          "name": "Years Block B - 3",
-          "address": 36,
-          "hex": "0x24",
-          "type": "Integer",
-          "length": 16
-        }
-      }
-    },
-    {
-      "canonical_category": "Team Retired Entry",
-      "super_type": "Players",
-      "normalized_name": "YEARSBLOCKB4",
-      "display_name": "Years Block B - 4",
-      "variant_names": [
-        "Years Block B - 4"
-      ],
-      "versions": {
-        "2K26": {
-          "category": "Team Retired Entry",
-          "name": "Years Block B - 4",
-          "address": 38,
-          "hex": "0x26",
-          "type": "Integer",
-          "length": 16
-        }
-      }
-    },
-    {
       "canonical_category": "Team Stadium",
       "super_type": "Players",
       "normalized_name": "ARENANAME",
@@ -22550,7 +22226,7 @@
       "canonical_category": "Tendencies",
       "super_type": "Players",
       "normalized_name": "3POINTCENTERSHOT",
-      "display_name": "Shot Three Center",
+      "display_name": "Shot Three Right Center",
       "variant_names": [
         "SHOT_THREE_CENTER_TENDENCY",
         "SHOT_THREE_RIGHT-CENTER_TENDENCY",
@@ -22784,7 +22460,7 @@
       "canonical_category": "Tendencies",
       "super_type": "Players",
       "normalized_name": "3POINTSHOT",
-      "display_name": "Spot Up Shot Three",
+      "display_name": "Shot Three",
       "variant_names": [
         "SHOT_THREE_TENDENCY",
         "SPOT_UP_SHOT_THREE_TENDENCY",
@@ -22844,7 +22520,7 @@
       "canonical_category": "Tendencies",
       "super_type": "Players",
       "normalized_name": "ALLEYOOP",
-      "display_name": "Alley-Oop",
+      "display_name": "Alley Oop Pass",
       "variant_names": [
         "ALLEY-OOP_PASS_TENDENCY",
         "ALLEY-OOP_TENDENCY",
@@ -23072,7 +22748,7 @@
       "canonical_category": "Tendencies",
       "super_type": "Players",
       "normalized_name": "CENTERMIDSHOT",
-      "display_name": "Shot Mid Right Center",
+      "display_name": "Shot Mid Center",
       "variant_names": [
         "SHOT_MID_CENTER_TENDENCY",
         "SHOT_MID_RIGHT-CENTER_TENDENCY",
@@ -23581,7 +23257,7 @@
       "canonical_category": "Tendencies",
       "super_type": "Players",
       "normalized_name": "DRIBBLECROSSOVER",
-      "display_name": "Driving Crossover",
+      "display_name": "Driving Double Crossover",
       "variant_names": [
         "DRIVE_CROSSOVER_TENDENCY",
         "DRIVING_DOUBLE_CROSSOVER_TENDENCY",
@@ -23641,7 +23317,7 @@
       "canonical_category": "Tendencies",
       "super_type": "Players",
       "normalized_name": "DRIBBLESPIN",
-      "display_name": "Dribble Half Spin",
+      "display_name": "Driving Half Spin",
       "variant_names": [
         "DRIVE_SPIN_TENDENCY",
         "DRIVING_HALF_SPIN_TENDENCY",
@@ -25164,7 +24840,7 @@
       "canonical_category": "Tendencies",
       "super_type": "Players",
       "normalized_name": "MIDSHOT",
-      "display_name": "Spot Up Shot Mid",
+      "display_name": "Shot Mid",
       "variant_names": [
         "SHOT_MID-RANGE_TENDENCY",
         "SPOT_UP_SHOT_MID-RANGE_TENDENCY",
@@ -30508,10 +30184,9 @@
       "canonical_category": "Vitals",
       "super_type": "Players",
       "normalized_name": "NICKNAME1",
-      "display_name": "Nickname 1",
+      "display_name": "NICKNAME1",
       "variant_names": [
-        "NICKNAME1",
-        "Nickname 1"
+        "NICKNAME1"
       ],
       "versions": {
         "2K22": {
@@ -30540,33 +30215,6 @@
           "startBit": 0,
           "length": 256,
           "type": "string"
-        },
-        "2K26": {
-          "category": "Vitals",
-          "name": "Nickname 1",
-          "address": 504,
-          "hex": "0x1F8",
-          "length": 20,
-          "type": "WString"
-        }
-      }
-    },
-    {
-      "canonical_category": "Vitals",
-      "super_type": "Players",
-      "normalized_name": "NICKNAME2",
-      "display_name": "Nickname 2",
-      "variant_names": [
-        "Nickname 2"
-      ],
-      "versions": {
-        "2K26": {
-          "category": "Vitals",
-          "name": "Nickname 2",
-          "address": 544,
-          "hex": "0x220",
-          "length": 20,
-          "type": "WString"
         }
       }
     },
@@ -34742,7 +34390,7 @@
           "name": "Player 1",
           "address": 0,
           "type": "Pointer",
-          "length": 8
+          "length": 0
         }
       }
     },
@@ -34767,7 +34415,7 @@
           "name": "Player 10",
           "address": 72,
           "type": "Pointer",
-          "length": 8
+          "length": 0
         }
       }
     },
@@ -34792,7 +34440,7 @@
           "name": "Player 11",
           "address": 80,
           "type": "Pointer",
-          "length": 8
+          "length": 0
         }
       }
     },
@@ -34817,7 +34465,7 @@
           "name": "Player 12",
           "address": 88,
           "type": "Pointer",
-          "length": 8
+          "length": 0
         }
       }
     },
@@ -34842,7 +34490,7 @@
           "name": "Player 13",
           "address": 96,
           "type": "Pointer",
-          "length": 8
+          "length": 0
         }
       }
     },
@@ -34867,7 +34515,7 @@
           "name": "Player 14",
           "address": 104,
           "type": "Pointer",
-          "length": 8
+          "length": 0
         }
       }
     },
@@ -34917,7 +34565,7 @@
           "name": "Player 2",
           "address": 8,
           "type": "Pointer",
-          "length": 8
+          "length": 0
         }
       }
     },
@@ -34942,7 +34590,7 @@
           "name": "Player 3",
           "address": 16,
           "type": "Pointer",
-          "length": 8
+          "length": 0
         }
       }
     },
@@ -34967,7 +34615,7 @@
           "name": "Player 4",
           "address": 24,
           "type": "Pointer",
-          "length": 8
+          "length": 0
         }
       }
     },
@@ -34992,7 +34640,7 @@
           "name": "Player 5",
           "address": 32,
           "type": "Pointer",
-          "length": 8
+          "length": 0
         }
       }
     },
@@ -35017,7 +34665,7 @@
           "name": "Player 6",
           "address": 40,
           "type": "Pointer",
-          "length": 8
+          "length": 0
         }
       }
     },
@@ -35042,7 +34690,7 @@
           "name": "Player 7",
           "address": 48,
           "type": "Pointer",
-          "length": 8
+          "length": 0
         }
       }
     },
@@ -35067,7 +34715,7 @@
           "name": "Player 8",
           "address": 56,
           "type": "Pointer",
-          "length": 8
+          "length": 0
         }
       }
     },
@@ -35092,7 +34740,7 @@
           "name": "Player 9",
           "address": 64,
           "type": "Pointer",
-          "length": 8
+          "length": 0
         }
       }
     },
@@ -35118,7 +34766,7 @@
       "canonical_category": "Teams",
       "super_type": "Teams",
       "normalized_name": "CITYNAME",
-      "display_name": "City Name",
+      "display_name": "Team Vitals - CITYNAME",
       "variant_names": [
         "City Name",
         "Team Vitals - CITYNAME"
