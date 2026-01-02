@@ -311,6 +311,16 @@ class FullTeamEditor(tk.Toplevel):
             return self._is_float_type(meta.data_type if meta else None)
         def _is_color_meta(meta: FieldMetadata | None) -> bool:
             return self._is_color_type(meta.data_type if meta else None)
+        def _safe_float(value: object) -> float | None:
+            try:
+                if isinstance(value, (int, float)):
+                    return float(value)
+                text = str(value).strip()
+                if not text:
+                    return None
+                return float(text)
+            except Exception:
+                return None
 
         for category, fields in self.field_vars.items():
             for field_name, var in fields.items():
@@ -363,7 +373,9 @@ class FullTeamEditor(tk.Toplevel):
                     if value is None:
                         continue
                     try:
-                        var.set(float(value))
+                        fval = _safe_float(value)
+                        if fval is not None:
+                            var.set(fval)
                     except Exception:
                         continue
                     continue
@@ -383,7 +395,8 @@ class FullTeamEditor(tk.Toplevel):
                     try:
                         bitlen = length if length > 0 else meta.byte_length * 8
                         width = max(1, (bitlen + 3) // 4)
-                        var.set(f"0x{int(value) & ((1 << bitlen) - 1):0{width}X}")
+                        int_val = to_int(value)
+                        var.set(f"0x{int_val & ((1 << bitlen) - 1):0{width}X}")
                     except Exception:
                         try:
                             var.set(str(value))
@@ -404,12 +417,13 @@ class FullTeamEditor(tk.Toplevel):
                     continue
                 if meta.values and isinstance(var, tk.IntVar):
                     try:
-                        var.set(int(value))
+                        int_val = to_int(value)
+                        var.set(int_val)
                         widget = meta.widget
                         vals = list(meta.values)
-                        if isinstance(widget, ttk.Combobox) and 0 <= int(value) < len(vals):
+                        if isinstance(widget, ttk.Combobox) and 0 <= int_val < len(vals):
                             try:
-                                widget.set(vals[int(value)])
+                                widget.set(vals[int_val])
                             except Exception:
                                 pass
                     except Exception:
@@ -419,7 +433,7 @@ class FullTeamEditor(tk.Toplevel):
                         if isinstance(var, tk.StringVar):
                             var.set(str(value))
                         else:
-                            var.set(int(value))
+                            var.set(to_int(value))
                     except Exception:
                         pass
 
@@ -432,6 +446,10 @@ class FullTeamEditor(tk.Toplevel):
 
         def _is_string_meta(meta: FieldMetadata | None) -> bool:
             return self._is_string_type(meta.data_type if meta else None)
+        def _is_float_meta(meta: FieldMetadata | None) -> bool:
+            return self._is_float_type(meta.data_type if meta else None)
+        def _is_color_meta(meta: FieldMetadata | None) -> bool:
+            return self._is_color_type(meta.data_type if meta else None)
 
         for category, fields in self.field_vars.items():
             for field_name, var in fields.items():

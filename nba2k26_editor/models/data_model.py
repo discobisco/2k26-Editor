@@ -557,14 +557,18 @@ class PlayerDataModel:
     # ------------------------------------------------------------------
     # Category helpers
     # ------------------------------------------------------------------
-    def _normalize_field_name(self, name: str) -> str:
+    def _normalize_field_name(self, name: object) -> str:
         norm = re.sub(r"[^A-Za-z0-9]", "", str(name)).upper()
         return FIELD_NAME_ALIASES.get(norm, norm)
 
-    def _normalize_header_name(self, name: str) -> str:
-        import re as _re
+    def _normalize_header_name(self, name: object) -> str:
+        norm = re.sub(r"[^A-Za-z0-9]", "", str(name).upper())
+        if not norm:
+            return ""
+        return FIELD_NAME_ALIASES.get(norm, norm)
 
-        norm = _re.sub(r"[^A-Za-z0-9]", "", str(name).upper())
+    def _normalize_coy_header_name(self, name: object) -> str:
+        norm = re.sub(r"[^A-Za-z0-9]", "", str(name).upper())
         if not norm:
             return ""
         header_synonyms = {
@@ -605,7 +609,8 @@ class PlayerDataModel:
             "DUR": "MISCDURABILITY",
             "POT": "POTENTIAL",
         }
-        return header_synonyms.get(norm, norm)
+        norm = header_synonyms.get(norm, norm)
+        return FIELD_NAME_ALIASES.get(norm, norm)
 
     def _get_import_order(self, category_name: str) -> list[str]:
         name = (category_name or "").strip().lower()
@@ -619,7 +624,7 @@ class PlayerDataModel:
             return POTENTIAL_IMPORT_ORDER
         return []
 
-    def _get_import_fields(self, category_name: str) -> list[dict]:
+    def _get_import_fields(self, category_name: str, context: str | None = None) -> list[dict]:
         """Return fields ordered according to the import layout for the category."""
         fields = self.categories.get(category_name, [])
         order_map: dict[str, list[str]] = {
@@ -631,10 +636,26 @@ class PlayerDataModel:
         import_order = order_map.get(category_name)
         if not fields or not import_order:
             return list(fields)
+        context_key = (context or "").strip().lower()
+        if context_key in {"excel", "excel_template"}:
+            remaining = list(fields)
+            selected: list[dict] = []
+            for hdr in import_order:
+                match_idx = -1
+                for idx, fdef in enumerate(remaining):
+                    if str(fdef.get("name", "")).strip() == hdr:
+                        match_idx = idx
+                        break
+                if match_idx >= 0:
+                    selected.append(remaining.pop(match_idx))
+            if remaining:
+                selected.extend(remaining)
+            return selected
+        norm_header = self._normalize_coy_header_name if context_key == "coy" else self._normalize_header_name
         remaining = list(fields)
         selected: list[dict] = []
         for hdr in import_order:
-            norm_hdr = self._normalize_header_name(hdr)
+            norm_hdr = norm_header(hdr)
             match_idx = -1
             for idx, fdef in enumerate(remaining):
                 norm_field = self._normalize_field_name(fdef.get("name", ""))
@@ -659,6 +680,7 @@ class PlayerDataModel:
         layout_raw = COY_IMPORT_LAYOUTS.get(category_name) if context == "coy" else None
         layout: dict[str, object] | None = layout_raw if isinstance(layout_raw, dict) else None
         if layout:
+            norm_header = self._normalize_coy_header_name
             value_columns_raw = layout.get("value_columns")
             value_columns = [int(col) for col in cast(Iterable[int | str], value_columns_raw)] if value_columns_raw else []
             column_headers_raw = layout.get("column_headers")
@@ -688,13 +710,13 @@ class PlayerDataModel:
                 if header_row is None:
                     header_row = [str(cell) for cell in rows[0]]
                 for idx, cell in enumerate(header_row):
-                    norm_cell = self._normalize_header_name(cell)
+                    norm_cell = norm_header(cell)
                     if norm_cell and norm_cell not in header_lookup:
                         header_lookup[norm_cell] = idx
             resolved_value_indices: list[int] = []
             if column_headers:
                 for hdr in column_headers:
-                    norm_hdr = self._normalize_header_name(hdr)
+                    norm_hdr = norm_header(hdr)
                     if norm_hdr and norm_hdr in header_lookup:
                         resolved_value_indices.append(header_lookup[norm_hdr])
                 if resolved_value_indices and len(resolved_value_indices) < max(4, len(column_headers) // 2):
@@ -742,7 +764,7 @@ class PlayerDataModel:
                     values = []
                     matched_count = 0
                     for hdr in column_headers:
-                        norm_hdr = self._normalize_header_name(hdr)
+                        norm_hdr = norm_header(hdr)
                         col_idx = header_lookup.get(norm_hdr)
                         if col_idx is None or col_idx >= len(normalized_row):
                             values.append("")
@@ -912,22 +934,28 @@ class PlayerDataModel:
             return [], ","
 
     @staticmethod
-    def _write_temp_rows(rows: list[list[object]], *, delimiter: str = ",") -> str:
+    def _write_temp_rows(rows: Sequence[Sequence[object]], *, delimiter: str = ",") -> str:
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv", mode="w", newline="", encoding="utf-8")
         writer = csv.writer(tmp, delimiter=delimiter)
         writer.writerows(rows)
         tmp.close()
         return tmp.name
 
-    def _extract_tendency_average_map(self, rows: list[list[object]]) -> dict[str, str]:
+    def _extract_tendency_average_map(self, rows: Sequence[Sequence[object]]) -> dict[str, str]:
         """Pull the row-2 averages (cols E-CY) from the TEND tab."""
         if not rows or len(rows) < 2:
             return {}
+        norm_header = self._normalize_coy_header_name
+        tend_headers = {
+            norm_header(name)
+            for name in TEND_IMPORT_ORDER
+            if norm_header(name)
+        }
         header_row = None
         avg_row = None
         for idx, row in enumerate(rows):
-            normalized = [self._normalize_header_name(cell) for cell in row]
-            score = sum(1 for norm in normalized if norm and norm.startswith("t/"))
+            normalized = [norm_header(cell) for cell in row]
+            score = sum(1 for norm in normalized if norm and norm in tend_headers)
             if score >= 3:
                 header_row = row
                 if idx > 0:
@@ -939,7 +967,7 @@ class PlayerDataModel:
         if avg_row is None:
             avg_row = rows[1] if len(rows) > 1 else []
         averages: dict[str, str] = {}
-        normalized_header = [self._normalize_header_name(cell) for cell in header_row]
+        normalized_header = [norm_header(cell) for cell in header_row]
         for col, norm in enumerate(normalized_header):
             if col < 4:  # start at column E
                 continue
@@ -951,10 +979,10 @@ class PlayerDataModel:
             averages[norm] = str(val).strip()
         return averages
 
-    def _sanitize_attributes_rows(self, rows: list[list[object]]) -> list[list[object]]:
+    def _sanitize_attributes_rows(self, rows: Sequence[Sequence[object]]) -> list[list[object]]:
         """Apply COY attribute rules: trim after AJ and fill averages/intangibles."""
         if not rows:
-            return rows
+            return []
         max_col = 35  # AJ
         intangibles_col = 34  # AI
         avg_row = rows[0] if rows else []
@@ -978,12 +1006,14 @@ class PlayerDataModel:
             sanitized.append(trimmed)
         return sanitized
 
-    def _sanitize_tendencies_rows(self, rows: list[list[object]], averages: dict[str, str]) -> list[list[object]]:
+    def _sanitize_tendencies_rows(
+        self, rows: Sequence[Sequence[object]], averages: dict[str, str]
+    ) -> list[list[object]]:
         """Fill blank tendencies with the averages from the TEND tab."""
         if not rows or not averages:
-            return rows
+            return [list(row) for row in rows]
         header = rows[0]
-        header_norm = [self._normalize_header_name(cell) for cell in header]
+        header_norm = [self._normalize_coy_header_name(cell) for cell in header]
         sanitized: list[list[object]] = [list(header)]
         for row in rows[1:]:
             trimmed = list(row)
@@ -1005,10 +1035,10 @@ class PlayerDataModel:
             sanitized.append(trimmed)
         return sanitized
 
-    def _sanitize_durability_rows(self, rows: list[list[object]]) -> list[list[object]]:
+    def _sanitize_durability_rows(self, rows: Sequence[Sequence[object]]) -> list[list[object]]:
         """Default durability blanks to 90 (cols D-S)."""
         if not rows:
-            return rows
+            return []
         start_col = 3  # D
         max_col = 18  # S
         sanitized: list[list[object]] = []
@@ -1023,10 +1053,10 @@ class PlayerDataModel:
             sanitized.append(trimmed)
         return sanitized
 
-    def _sanitize_potential_rows(self, rows: list[list[object]]) -> list[list[object]]:
+    def _sanitize_potential_rows(self, rows: Sequence[Sequence[object]]) -> list[list[object]]:
         """Fill missing potential averages and probabilities with defaults."""
         if not rows:
-            return rows
+            return []
         max_col = 9  # J
         defaults = {4: "74", 5: "76", 6: "86", 7: "30", 8: "55", 9: "15"}
         sanitized: list[list[object]] = []
@@ -1068,6 +1098,10 @@ class PlayerDataModel:
     def import_excel_tables(self, file_map: dict[str, str], *, match_by_name: bool = True) -> dict[str, int]:
         """Import tables produced by the Excel workflow."""
         return self._import_file_map(file_map, context="excel", match_by_name=match_by_name)
+
+    def import_excel_template_tables(self, file_map: dict[str, str], *, match_by_name: bool = False) -> dict[str, int]:
+        """Import tables produced by the Excel template workflow."""
+        return self._import_file_map(file_map, context="excel_template", match_by_name=match_by_name)
 
     def import_coy_tables(self, file_map: dict[str, str], *, aux_files: dict[str, str] | None = None) -> dict[str, int]:
         """Import tables produced by the COY workflow."""
@@ -1149,7 +1183,7 @@ class PlayerDataModel:
         """Export the specified category to a CSV file."""
         if not filepath:
             return 0
-        fields = self._get_import_fields(category_name) or self.categories.get(category_name, [])
+        fields = self._get_import_fields(category_name, context="excel_template") or self.categories.get(category_name, [])
         if not fields:
             return 0
         if not self.mem.open_process():
@@ -1190,17 +1224,18 @@ class PlayerDataModel:
                     if raw_val is None:
                         row.append("")
                         continue
+                    raw_int = to_int(raw_val)
                     if "float" in field_type:
                         row.append(str(raw_val))
                     elif category_name in ("Attributes", "Durability"):
-                        row.append(str(convert_raw_to_rating(raw_val, length or 8)))
+                        row.append(str(convert_raw_to_rating(raw_int, length or 8)))
                     elif category_name == "Potential":
                         if "min" in field_name or "max" in field_name:
-                            row.append(str(convert_raw_to_minmax_potential(raw_val, length or 8)))
+                            row.append(str(convert_raw_to_minmax_potential(raw_int, length or 8)))
                         else:
-                            row.append(str(convert_raw_to_rating(raw_val, length or 8)))
+                            row.append(str(convert_raw_to_rating(raw_int, length or 8)))
                     elif category_name == "Tendencies":
-                        row.append(str(convert_tendency_raw_to_rating(raw_val, length or 8)))
+                        row.append(str(convert_tendency_raw_to_rating(raw_int, length or 8)))
                     else:
                         row.append(str(raw_val))
                 writer.writerow(row)
@@ -1290,28 +1325,6 @@ class PlayerDataModel:
         lookup = super_map.get(category_name) or super_map.get(category_name.lower())
         return str(lookup or "Players")
 
-    def _normalized_field_map(self, fields: Sequence[dict]) -> dict[str, dict]:
-        """Build a lookup of normalized field names -> field metadata."""
-        mapping: dict[str, dict] = {}
-        for meta in fields:
-            if not isinstance(meta, dict):
-                continue
-            names: list[str] = []
-            for key in ("name", "label", "displayName", "display_name", "normalized_name"):
-                val = meta.get(key)
-                if isinstance(val, str):
-                    names.append(val)
-            variants = meta.get("variants") or meta.get("variant_names") or meta.get("aliases")
-            if isinstance(variants, (list, tuple, set)):
-                for val in variants:
-                    if isinstance(val, str):
-                        names.append(val)
-            for token in names:
-                norm = self._normalize_field_name(token)
-                if norm and norm not in mapping:
-                    mapping[norm] = meta
-        return mapping
-
     def _read_entity_string(
         self,
         base_addr: int,
@@ -1399,14 +1412,15 @@ class PlayerDataModel:
             return None
         if "float" in field_type:
             return raw_val
+        raw_int = to_int(raw_val)
         if category_name in ("Attributes", "Durability"):
-            return convert_raw_to_rating(raw_val, length or 8)
+            return convert_raw_to_rating(raw_int, length or 8)
         if category_name == "Potential":
             if "min" in field_name or "max" in field_name:
-                return convert_raw_to_minmax_potential(raw_val, length or 8)
-            return convert_raw_to_rating(raw_val, length or 8)
+                return convert_raw_to_minmax_potential(raw_int, length or 8)
+            return convert_raw_to_rating(raw_int, length or 8)
         if category_name == "Tendencies":
-            return convert_tendency_raw_to_rating(raw_val, length or 8)
+            return convert_tendency_raw_to_rating(raw_int, length or 8)
         return raw_val
 
     def _build_category_dataframe(
@@ -1428,7 +1442,14 @@ class PlayerDataModel:
             column_order = ["Player Name"] + [
                 str(f.get("name", f"Field {idx+1}")) for idx, f in enumerate(fields) if isinstance(f, dict)
             ]
-        spec_map = self._normalized_field_map(fields)
+        spec_map: dict[str, dict] = {}
+        for meta in fields:
+            if not isinstance(meta, dict):
+                continue
+            name = str(meta.get("name", "")).strip()
+            if not name:
+                continue
+            spec_map.setdefault(name, meta)
         rows: list[list[object]] = []
         if super_type.lower() == "players":
             if not self.mem.open_process():
@@ -1438,29 +1459,70 @@ class PlayerDataModel:
             entities = list(self.players or [])
             if not entities:
                 return None, 0
+            column_plan: list[tuple[str, dict | None]] = []
+            for col in column_order:
+                col_key = str(col).strip()
+                if col_key in {"Player Name", "Name"}:
+                    column_plan.append(("player_name", None))
+                    continue
+                if col_key == "First Name":
+                    column_plan.append(("first_name", spec_map.get(col_key)))
+                    continue
+                if col_key == "Last Name":
+                    column_plan.append(("last_name", spec_map.get(col_key)))
+                    continue
+                spec = spec_map.get(col_key)
+                if spec is None:
+                    column_plan.append(("blank", None))
+                else:
+                    column_plan.append(("field", spec))
             for player in entities:
                 try:
                     rec_ptr = self._player_record_address(player.index, record_ptr=getattr(player, "record_ptr", None))
                 except Exception:
                     rec_ptr = None
                 row: list[object] = []
-                for col in column_order:
-                    norm_col = self._normalize_header_name(col)
-                    if norm_col in {"PLAYERNAME", "NAME"}:
+                for kind, spec in column_plan:
+                    if kind == "player_name":
                         row.append(player.full_name)
                         continue
-                    spec = spec_map.get(norm_col)
-                    if spec is None:
-                        row.append("")
+                    if kind == "first_name":
+                        value = player.first_name
+                        if not value and spec is not None:
+                            val = self._decode_export_value(
+                                category_name,
+                                spec,
+                                entity_index=player.index,
+                                entity_type="player",
+                                record_ptr=rec_ptr,
+                            )
+                            value = "" if val is None else val
+                        row.append(value)
                         continue
-                    val = self._decode_export_value(
-                        category_name,
-                        spec,
-                        entity_index=player.index,
-                        entity_type="player",
-                        record_ptr=rec_ptr,
-                    )
-                    row.append("" if val is None else val)
+                    if kind == "last_name":
+                        value = player.last_name
+                        if not value and spec is not None:
+                            val = self._decode_export_value(
+                                category_name,
+                                spec,
+                                entity_index=player.index,
+                                entity_type="player",
+                                record_ptr=rec_ptr,
+                            )
+                            value = "" if val is None else val
+                        row.append(value)
+                        continue
+                    if kind == "field" and spec is not None:
+                        val = self._decode_export_value(
+                            category_name,
+                            spec,
+                            entity_index=player.index,
+                            entity_type="player",
+                            record_ptr=rec_ptr,
+                        )
+                        row.append("" if val is None else val)
+                        continue
+                    row.append("")
                 rows.append(row)
                 if progress_cb:
                     progress_cb(progress_offset + len(rows), progress_total or len(entities), category_name)
@@ -1470,26 +1532,35 @@ class PlayerDataModel:
             teams = self.get_teams()
             if not teams:
                 return None, 0
+            column_plan: list[tuple[str, dict | None]] = []
+            for col in column_order:
+                col_key = str(col).strip()
+                if col_key in {"Team Name", "Name"}:
+                    column_plan.append(("team_name", None))
+                    continue
+                spec = spec_map.get(col_key)
+                if spec is None:
+                    column_plan.append(("blank", None))
+                else:
+                    column_plan.append(("field", spec))
             for idx, name in enumerate(teams):
                 rec_ptr = self._team_record_address(idx)
                 row: list[object] = []
-                for col in column_order:
-                    norm_col = self._normalize_header_name(col)
-                    if norm_col in {"TEAMNAME", "NAME"}:
+                for kind, spec in column_plan:
+                    if kind == "team_name":
                         row.append(name)
                         continue
-                    spec = spec_map.get(norm_col)
-                    if spec is None:
-                        row.append("")
+                    if kind == "field" and spec is not None:
+                        val = self._decode_export_value(
+                            category_name,
+                            spec,
+                            entity_index=idx,
+                            entity_type="team",
+                            record_ptr=rec_ptr,
+                        )
+                        row.append("" if val is None else val)
                         continue
-                    val = self._decode_export_value(
-                        category_name,
-                        spec,
-                        entity_index=idx,
-                        entity_type="team",
-                        record_ptr=rec_ptr,
-                    )
-                    row.append("" if val is None else val)
+                    row.append("")
                 rows.append(row)
                 if progress_cb:
                     progress_cb(progress_offset + len(rows), progress_total or len(teams), category_name)
@@ -1516,7 +1587,7 @@ class PlayerDataModel:
         if not output_dir:
             return {}
         os.makedirs(output_dir, exist_ok=True)
-        template_dir = Path(BASE_DIR) / "Offsets"
+        template_dir = Path(BASE_DIR) / "importing"
         template_files = {
             "Players": template_dir / "ImportPlayers.xlsx",
             "Teams": template_dir / "ImportTeams.xlsx",
@@ -1525,7 +1596,7 @@ class PlayerDataModel:
         }
         available_templates = {k: v for k, v in template_files.items() if v.is_file()}
         if not available_templates:
-            raise RuntimeError("No Excel templates were found in the Offsets folder.")
+            raise RuntimeError("No Excel templates were found in the importing folder.")
         try:
             import pandas as _pd  # type: ignore
         except Exception as exc:  # pragma: no cover - handled at runtime
@@ -1541,9 +1612,7 @@ class PlayerDataModel:
             if not dest_tpl:
                 continue
             try:
-                xls = _pd.ExcelFile(dest_tpl)
-                if category not in xls.sheet_names:
-                    continue
+                _pd.ExcelFile(dest_tpl)
             except Exception:
                 continue
             template_targets.setdefault(dest_tpl, []).append(category)
@@ -1569,38 +1638,41 @@ class PlayerDataModel:
             writer_path = Path(output_dir) / tpl_path.name
             with _pd.ExcelWriter(writer_path, engine="openpyxl") as writer:
                 for sheet_name in tpl_reader.sheet_names:
-                    if sheet_name not in categories:
+                    sheet_key = str(sheet_name)
+                    if sheet_key not in categories:
                         # Preserve template structure for unused sheets
                         try:
-                            tpl_reader.parse(sheet_name).to_excel(writer, sheet_name=sheet_name, index=False)
+                            tpl_reader.parse(sheet_name).to_excel(writer, sheet_name=sheet_key, index=False)
                         except Exception:
-                            _pd.DataFrame().to_excel(writer, sheet_name=sheet_name, index=False)
+                            _pd.DataFrame().to_excel(writer, sheet_name=sheet_key, index=False)
                         continue
                     try:
                         tpl_df = tpl_reader.parse(sheet_name)
                     except Exception:
                         tpl_df = _pd.DataFrame()
+                    super_type = self._resolve_category_super(sheet_key)
                     columns = (
                         list(tpl_df.columns)
                         if not tpl_df.empty or tpl_df.columns.size
                         else list(tpl_reader.parse(sheet_name, nrows=0).columns)
                     )
                     df, count = self._build_category_dataframe(
-                        sheet_name,
+                        sheet_key,
                         columns,
-                        super_type=self._resolve_category_super(sheet_name),
+                        super_type=super_type,
                         progress_cb=progress_cb,
                         progress_offset=progress_done,
                         progress_total=total_rows,
                     )
                     if df is None:
-                        tpl_df.to_excel(writer, sheet_name=sheet_name, index=False)
+                        tpl_df.to_excel(writer, sheet_name=sheet_key, index=False)
                         continue
-                    df.to_excel(writer, sheet_name=sheet_name, index=False)
-                    results[sheet_name] = (str(writer_path), count)
+                    df_obj = cast(Any, df)
+                    df_obj.to_excel(writer, sheet_name=sheet_key, index=False)
+                    results[sheet_key] = (str(writer_path), count)
                     progress_done += count
                     if progress_cb:
-                        progress_cb(progress_done, total_rows, sheet_name)
+                        progress_cb(progress_done, total_rows, sheet_key)
         return results
 
     def export_offsets_long_form(self, filepath: str, categories: Sequence[str] | None = None) -> int:
@@ -1653,17 +1725,18 @@ class PlayerDataModel:
                     if raw_value is None:
                         display_val = None
                     else:
+                        raw_int = to_int(raw_value)
                         category = spec["category"]
                         field_name = str(spec.get("name", "")).lower()
                         if category in ("Attributes", "Durability"):
-                            display_val = convert_raw_to_rating(raw_value, spec["length"] or 8)
+                            display_val = convert_raw_to_rating(raw_int, spec["length"] or 8)
                         elif category == "Potential":
                             if "min" in field_name or "max" in field_name:
-                                display_val = convert_raw_to_minmax_potential(raw_value, spec["length"] or 8)
+                                display_val = convert_raw_to_minmax_potential(raw_int, spec["length"] or 8)
                             else:
-                                display_val = convert_raw_to_rating(raw_value, spec["length"] or 8)
+                                display_val = convert_raw_to_rating(raw_int, spec["length"] or 8)
                         elif category == "Tendencies":
-                            display_val = convert_tendency_raw_to_rating(raw_value, spec["length"] or 8)
+                            display_val = convert_tendency_raw_to_rating(raw_int, spec["length"] or 8)
                         else:
                             display_val = raw_value
                     writer.writerow(
@@ -3020,8 +3093,7 @@ class PlayerDataModel:
                 if not struct_ptr:
                     return False
                 target_addr = struct_ptr + offset
-            max_val = (1 << length) - 1
-            value = max(0, min(max_val, int(value)))
+            value = int(value)
             bits_needed = start_bit + length
             bytes_needed = (bits_needed + 7) // 8
             data = bytearray(self.mem.read_bytes(target_addr, bytes_needed))
@@ -3123,19 +3195,32 @@ class PlayerDataModel:
                     addr = struct_ptr + offset
                 byte_len = self._effective_byte_length(byte_length, length, default=4)
                 fmt = "<d" if byte_len >= 8 else "<f"
-                fval = float(value)
+                if isinstance(value, (int, float)):
+                    fval = float(value)
+                else:
+                    fval = float(str(value).strip())
                 data = struct.pack(fmt, fval)
                 data = data[: 8 if fmt == "<d" else 4]
                 self.mem.write_bytes(addr, data)
                 return True
             except Exception:
                 return False
+        try:
+            if isinstance(value, (int, float, bool)):
+                int_val = int(value)
+            else:
+                text = str(value).strip()
+                if not text:
+                    return False
+                int_val = int(text)
+        except Exception:
+            return False
         return self.set_field_value(
             player_index,
             offset,
             start_bit,
             length,
-            int(value),
+            int_val,
             requires_deref=requires_deref,
             deref_offset=deref_offset,
             record_ptr=record_ptr,
@@ -3244,18 +3329,31 @@ class PlayerDataModel:
                     addr = struct_ptr + offset
                 byte_len = self._effective_byte_length(byte_length, length, default=4)
                 fmt = "<d" if byte_len >= 8 else "<f"
-                fval = float(value)
+                if isinstance(value, (int, float)):
+                    fval = float(value)
+                else:
+                    fval = float(str(value).strip())
                 data = struct.pack(fmt, fval)
                 self.mem.write_bytes(addr, data[: 8 if fmt == "<d" else 4])
                 return True
             except Exception:
                 return False
+        try:
+            if isinstance(value, (int, float, bool)):
+                int_val = int(value)
+            else:
+                text = str(value).strip()
+                if not text:
+                    return False
+                int_val = int(text)
+        except Exception:
+            return False
         return self.set_team_field_value(
             team_index,
             offset,
             start_bit,
             length,
-            int(value),
+            int_val,
             requires_deref=requires_deref,
             deref_offset=deref_offset,
             deref_cache=deref_cache,
@@ -3398,18 +3496,31 @@ class PlayerDataModel:
                     addr = struct_ptr + offset
                 byte_len = self._effective_byte_length(byte_length, length, default=4)
                 fmt = "<d" if byte_len >= 8 else "<f"
-                fval = float(value)
+                if isinstance(value, (int, float)):
+                    fval = float(value)
+                else:
+                    fval = float(str(value).strip())
                 data = struct.pack(fmt, fval)
                 self.mem.write_bytes(addr, data[: 8 if fmt == "<d" else 4])
                 return True
             except Exception:
                 return False
+        try:
+            if isinstance(value, (int, float, bool)):
+                int_val = int(value)
+            else:
+                text = str(value).strip()
+                if not text:
+                    return False
+                int_val = int(text)
+        except Exception:
+            return False
         return self.set_staff_field_value(
             staff_index,
             offset,
             start_bit,
             length,
-            int(value),
+            int_val,
             requires_deref=requires_deref,
             deref_offset=deref_offset,
             deref_cache=deref_cache,
@@ -3549,18 +3660,31 @@ class PlayerDataModel:
                     addr = struct_ptr + offset
                 byte_len = self._effective_byte_length(byte_length, length, default=4)
                 fmt = "<d" if byte_len >= 8 else "<f"
-                fval = float(value)
+                if isinstance(value, (int, float)):
+                    fval = float(value)
+                else:
+                    fval = float(str(value).strip())
                 data = struct.pack(fmt, fval)
                 self.mem.write_bytes(addr, data[: 8 if fmt == "<d" else 4])
                 return True
             except Exception:
                 return False
+        try:
+            if isinstance(value, (int, float, bool)):
+                int_val = int(value)
+            else:
+                text = str(value).strip()
+                if not text:
+                    return False
+                int_val = int(text)
+        except Exception:
+            return False
         return self.set_stadium_field_value(
             stadium_index,
             offset,
             start_bit,
             length,
-            int(value),
+            int_val,
             requires_deref=requires_deref,
             deref_offset=deref_offset,
             deref_cache=deref_cache,

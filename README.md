@@ -1,46 +1,67 @@
-# Offset Hunter
+# NBA2K26 Editor Repository Guide
 
-Small Python CLI that consumes `offsets.json` (or a single `20xx_offsets.json`) to build a searchable map of NBA 2K offsets, find nearby unknown addresses, convert values to readable text, and optionally probe a running game process on Windows.
+This repository hosts a Python/Tkinter live-memory editor for NBA 2K26. The app
+attaches to the running game process, loads offsets from bundled data files, and
+exposes tools for editing players, teams, staff, and stadiums.
 
-## Quick start
+## What is included
+- GUI launcher + Windows batch launcher.
+- Win32 memory layer with structured logging.
+- Offset-driven schemas with per-version support (2K22-2K26).
+- Import/export for CSV and Excel templates, including 2KCOY flows.
+- AI Assistant panel with optional local/remote backends and HTTP control bridge.
+- Extension hooks for custom panels and full editor add-ons.
 
-```bash
-python offset_hunter.py gui --version 2K26  # launch GUI browser/converter
-python offset_hunter.py --help
-python offset_hunter.py search --query headband --version 2K26
-python offset_hunter.py show --name HEADBAND --version 2K26
-python offset_hunter.py verify --address 0x1EF --version 2K26 --radius 32
-python offset_hunter.py map --version 2K26 --output 2k26_map.json
-python offset_hunter.py convert --value 48656c6c6f --input hex --output text
-```
+## Quick start (development)
+1. Windows is required (the memory layer uses Win32 APIs).
+2. Run one of:
+   - `run_editor.bat`
+   - `python -m nba2k26_editor.entrypoints.gui`
+   - `python launch_editor.py`
+3. If the game is not running, the UI still opens but live memory reads/writes
+   will be unavailable.
 
-## GUI mode
+## Optional dependencies
+- `psutil`: more reliable process discovery.
+- `pandas` + `openpyxl`: Excel import/export and NBA data lookups in the AI panel.
 
-- Double-click `offset_hunter.py` (or run `python offset_hunter.py gui`) to launch directly into the GUI.
-- Browse offsets for a chosen version with search/filter and scroll; select an offset to see per-version details plus base pointers/game info for the active version.
-- Open a different offsets file with **Open offsets.json** (supports both combined and single-version files).
-- Convert values between hex/dec/text in the Converter tab (choose encodings and byte lengths for decimals).
-- Hex Viewer tab (Windows): choose a base pointer (Player/Team/Staff/Stadium), index, start offset, and span to read live memory. Known bytes from `offsets.json` are highlighted; unknown bytes are shaded separately. A table decodes any known offsets inside the block. You can search the live block for a value (hex/dec/text) to help hunt new offsets.
-- Live Probe tab (Windows): attach to the running NBA2K process (auto-detect by executable name), pick an offset name or hex value, select base pointer (or override address), stride, and index, then read and decode the live memory value.
-- Use GUI mode for lining up with the current game version, scrolling existing offsets, and spotting gaps for new discoveries.
+## Packaging
+- Build a standalone executable with:
+  - `pyinstaller NBA2K26Editor.spec`
+- Output lands in `nba2k26_editor\dist\NBA2K26Editor.exe`.
+- The spec bundles `nba2k26_editor\Offsets` and `nba2k26_editor\NBA Player Data`
+  as data resources.
 
-## Probing a running game (Windows)
+## Root files
+- `launch_editor.py`: PyInstaller-friendly launcher.
+- `NBA2K26Editor.spec`: PyInstaller build spec.
+- `run_editor.bat`: Windows launcher that prefers a local `.venv`.
+- `README.md`: this guide.
 
-```bash
-python offset_hunter.py probe --version 2K26 --offset HEADBAND --index 0
-```
+## Repository map
+- `nba2k26_editor\`: main package (see `nba2k26_editor\README.md`).
+- `nba2k26_editor\Offsets\`: offsets bundle and reference spreadsheets.
+- `nba2k26_editor\NBA Player Data\`: NBA reference workbook for the AI panel.
+- `nba2k26_editor\importing\`: CSV/Excel import logic and templates.
+- `nba2k26_editor\logs\`: runtime logs.
+- `nba2k26_editor\build\`, `nba2k26_editor\dist\`: PyInstaller artifacts.
 
-- The tool looks up the executable name from `offsets.json` (e.g., `NBA2K26.exe`) to find the PID, then reads from the relevant base pointer plus the offset.  
-- Use `--pid` to target a specific process, `--base-address` to override the base pointer, and `--stride` to override the entity size if needed.  
-- You may need to run the shell with elevated permissions to read another process' memory.
+## Documentation index
+- `nba2k26_editor\README.md`: package architecture and data flow.
+- `nba2k26_editor\ai\README.md`: AI assistant and control bridge.
+- `nba2k26_editor\core\README.md`: config, offsets, dynamic base scanning.
+- `nba2k26_editor\entrypoints\README.md`: launch entrypoints.
+- `nba2k26_editor\memory\README.md`: Win32 memory access layer.
+- `nba2k26_editor\models\README.md`: data models and import/export logic.
+- `nba2k26_editor\ui\README.md`: Tkinter UI screens and tools.
+- `nba2k26_editor\Offsets\README.md`: offsets data format and templates.
+- `nba2k26_editor\NBA Player Data\README.md`: NBA workbook schema.
+- `nba2k26_editor\logs\README.md`: log format and retention notes.
+- `nba2k26_editor\build\README.md`: PyInstaller build cache.
+- `nba2k26_editor\dist\README.md`: packaged output.
 
-## Commands
-
-- `search`: substring search across display names and variants.  
-- `show`: detailed view of a single offset across versions.  
-- `map`: build a per-version mapping (print counts or write JSON).  
-- `verify`: locate the nearest known offsets around an unknown address.  
-- `convert`: helper to turn hex/dec/text into a different representation.  
-- `probe`: read and decode bytes from a running NBA 2K process.
-
-Pass `--offsets-file` to point at a different offsets source if you are not using the bundled `offsets.json`.
+## Runtime-generated files
+- `nba2k26_editor\ai_settings.json`: AI backend config.
+- `nba2k26_editor\autoload_extensions.json`: extension autoload list.
+- `nba2k26_editor\dual_base_mirror.json`: dual-base mirror settings.
+- `nba2k26_editor\logs\memory.log`: memory read/write audit log.

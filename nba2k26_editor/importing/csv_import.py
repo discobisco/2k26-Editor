@@ -34,9 +34,33 @@ def prepare_import_rows(model, category_name: str, rows: Sequence[Sequence[str]]
     """Normalize a CSV/TSV sheet into a PreparedImportRows payload."""
     if not rows:
         return None
-    layout_raw = COY_IMPORT_LAYOUTS.get(category_name) if context == "coy" else None
+    context_key = (context or "").strip().lower()
+    if context_key == "excel_template":
+        header = [str(cell) for cell in rows[0]]
+        if not header:
+            return None
+        data_rows = []
+        for row in rows[1:]:
+            normalized_row = [str(cell) for cell in row]
+            if any(str(cell).strip() for cell in normalized_row):
+                data_rows.append(normalized_row)
+        if not data_rows:
+            return None
+        return cast(
+            PreparedImportRows,
+            {
+                "header": header,
+                "data_rows": data_rows,
+                "name_col": -1,
+                "value_columns": list(range(len(header))),
+                "fixed_mapping": True,
+                "allow_missing_names": True,
+            },
+        )
+    layout_raw = COY_IMPORT_LAYOUTS.get(category_name) if context_key == "coy" else None
     layout: dict[str, object] | None = layout_raw if isinstance(layout_raw, dict) else None
     if layout:
+        normalize_header = model._normalize_coy_header_name
         value_columns_raw = layout.get("value_columns")
         value_columns = [int(col) for col in cast(Iterable[int | str], value_columns_raw)] if value_columns_raw else []
         column_headers_raw = layout.get("column_headers")
@@ -66,13 +90,13 @@ def prepare_import_rows(model, category_name: str, rows: Sequence[Sequence[str]]
             if header_row is None:
                 header_row = [str(cell) for cell in rows[0]]
             for idx, cell in enumerate(header_row):
-                norm_cell = model._normalize_header_name(cell)
+                norm_cell = normalize_header(cell)
                 if norm_cell and norm_cell not in header_lookup:
                     header_lookup[norm_cell] = idx
         resolved_value_indices: list[int] = []
         if column_headers:
             for hdr in column_headers:
-                norm_hdr = model._normalize_header_name(hdr)
+                norm_hdr = normalize_header(hdr)
                 if norm_hdr and norm_hdr in header_lookup:
                     resolved_value_indices.append(header_lookup[norm_hdr])
             if resolved_value_indices and len(resolved_value_indices) < max(4, len(column_headers) // 2):
@@ -119,7 +143,7 @@ def prepare_import_rows(model, category_name: str, rows: Sequence[Sequence[str]]
                 values: list[str] = []
                 matched_count = 0
                 for hdr in column_headers:
-                    norm_hdr = model._normalize_header_name(hdr)
+                    norm_hdr = normalize_header(hdr)
                     col_idx = header_lookup.get(norm_hdr)
                     if col_idx is None or col_idx >= len(normalized_row):
                         values.append("")
@@ -157,6 +181,29 @@ def prepare_import_rows(model, category_name: str, rows: Sequence[Sequence[str]]
                 "data_rows": data_rows,
                 "name_col": 0,
                 "value_columns": list(range(1, len(order_headers))),
+            },
+        )
+    if context_key == "excel":
+        header = [str(cell) for cell in rows[0]]
+        if not header:
+            return None
+        name_col = 0
+        skip_value_cols = {name_col}
+        value_columns = [idx for idx in range(len(header)) if idx not in skip_value_cols]
+        data_rows = [
+            [str(cell) for cell in row]
+            for row in rows[1:]
+            if any(str(cell).strip() for cell in row)
+        ]
+        if not value_columns or not data_rows:
+            return None
+        return cast(
+            PreparedImportRows,
+            {
+                "header": header,
+                "data_rows": data_rows,
+                "name_col": name_col,
+                "value_columns": value_columns,
             },
         )
     header = [str(cell) for cell in rows[0]]
@@ -274,6 +321,7 @@ def import_table(
     data_rows = info["data_rows"]
     name_col = info["name_col"]
     value_columns = info["value_columns"]
+    allow_missing_names = bool(info.get("allow_missing_names"))
 
     def _resolve_optional_index(value: Any) -> int | None:
         if isinstance(value, int):
@@ -284,12 +332,13 @@ def import_table(
             return None
         return idx if idx >= 0 else None
 
-    field_defs = model._get_import_fields(category_name) or model.categories.get(category_name, [])
+    field_defs = model._get_import_fields(category_name, context=context_key) or model.categories.get(category_name, [])
     if not field_defs:
         return 0
     first_name_col: int | None = _resolve_optional_index(info.get("first_name_col"))
     last_name_col: int | None = _resolve_optional_index(info.get("last_name_col"))
-    if header and (first_name_col is None or last_name_col is None):
+    if header and (first_name_col is None or last_name_col is None) and context_key not in {"excel", "excel_template"}:
+        normalize_header = model._normalize_coy_header_name if context_key == "coy" else model._normalize_header_name
         first_name_markers = {"FIRSTNAME", "FIRST", "PLAYERFIRST", "PLAYERFIRSTNAME", "FNAME", "GIVENNAME"}
         last_name_markers = {"LASTNAME", "LAST", "PLAYERLAST", "PLAYERLASTNAME", "LNAME", "SURNAME", "FAMILYNAME"}
 
@@ -319,7 +368,7 @@ def import_table(
         for idx, column_name in enumerate(header):
             if first_name_col is not None and last_name_col is not None and idx not in (first_name_col, last_name_col):
                 continue
-            normalized_name = model._normalize_header_name(column_name)
+            normalized_name = normalize_header(column_name)
             if not normalized_name:
                 continue
             if first_name_col is None and _looks_like_first(normalized_name):
@@ -327,6 +376,7 @@ def import_table(
                 continue
             if last_name_col is None and _looks_like_last(normalized_name):
                 last_name_col = idx
+    normalize_header = model._normalize_coy_header_name if context_key == "coy" else model._normalize_header_name
     fixed_mapping = bool(info.get("fixed_mapping"))
     header = info.get("header") or []
     selected_columns: list[int] = []
@@ -337,23 +387,56 @@ def import_table(
     if last_name_col is not None:
         skip_match_cols.add(last_name_col)
     if header and not fixed_mapping:
-        normalized_headers = [
-            model._normalize_header_name(h) if idx not in skip_match_cols else ""
-            for idx, h in enumerate(header)
-        ]
         remaining_fields = list(field_defs)
-        for idx, norm_hdr in enumerate(normalized_headers):
-            if idx == name_col or not norm_hdr:
-                continue
-            match_idx = -1
-            for j, fdef in enumerate(remaining_fields):
-                norm_field = model._normalize_field_name(fdef.get("name", ""))
-                if norm_hdr == norm_field or norm_hdr in norm_field or norm_field in norm_hdr:
-                    match_idx = j
-                    break
-            if match_idx >= 0:
-                mappings.append(remaining_fields.pop(match_idx))
-                selected_columns.append(idx)
+        if context_key == "excel":
+            header_tokens = [
+                str(h).strip() if idx not in skip_match_cols else ""
+                for idx, h in enumerate(header)
+            ]
+            for idx, token in enumerate(header_tokens):
+                if idx == name_col or not token:
+                    continue
+                match_idx = -1
+                for j, fdef in enumerate(remaining_fields):
+                    if not isinstance(fdef, dict):
+                        continue
+                    candidates: list[str] = []
+                    for key in ("name", "label", "displayName", "display_name"):
+                        val = fdef.get(key)
+                        if isinstance(val, str):
+                            val = val.strip()
+                            if val:
+                                candidates.append(val)
+                    variants = fdef.get("variants") or fdef.get("variant_names") or fdef.get("aliases")
+                    if isinstance(variants, (list, tuple, set)):
+                        for val in variants:
+                            if isinstance(val, str):
+                                val = val.strip()
+                                if val:
+                                    candidates.append(val)
+                    if token in candidates:
+                        match_idx = j
+                        break
+                if match_idx >= 0:
+                    mappings.append(remaining_fields.pop(match_idx))
+                    selected_columns.append(idx)
+        else:
+            normalized_headers = [
+                normalize_header(h) if idx not in skip_match_cols else ""
+                for idx, h in enumerate(header)
+            ]
+            for idx, norm_hdr in enumerate(normalized_headers):
+                if idx == name_col or not norm_hdr:
+                    continue
+                match_idx = -1
+                for j, fdef in enumerate(remaining_fields):
+                    norm_field = model._normalize_field_name(fdef.get("name", ""))
+                    if norm_hdr == norm_field or norm_hdr in norm_field or norm_field in norm_hdr:
+                        match_idx = j
+                        break
+                if match_idx >= 0:
+                    mappings.append(remaining_fields.pop(match_idx))
+                    selected_columns.append(idx)
     else:
         selected_columns = value_columns[: len(field_defs)]
         mappings = list(field_defs[: len(selected_columns)])
@@ -414,6 +497,11 @@ def import_table(
     column_specs = list(zip(selected_columns, field_specs))
     players_updated = 0
     name_match_mode = bool(match_by_name)
+    template_names: list[str] | None = None
+    if name_match_mode and context_key == "excel_template":
+        raw_names = getattr(model, "_excel_template_row_names", None)
+        if isinstance(raw_names, list):
+            template_names = [str(name) for name in raw_names]
     player_sequence: list[int] = []
     seq_index = 0
     if not name_match_mode:
@@ -469,7 +557,7 @@ def import_table(
                 return None
 
     partial_matches: dict[str, list[dict[str, object]]] = {}
-    for row in data_rows:
+    for row_index, row in enumerate(data_rows):
         if not row:
             continue
         row_len = len(row)
@@ -477,13 +565,16 @@ def import_table(
         has_first = first_name_col is not None and 0 <= first_name_col < row_len
         has_last = last_name_col is not None and 0 <= last_name_col < row_len
         if not (has_name_col or has_first or has_last):
-            continue
+            if not allow_missing_names:
+                continue
         first_piece = _get_cell(row, first_name_col)
         last_piece = _get_cell(row, last_name_col)
         raw_name_parts = [part for part in (first_piece, last_piece) if part]
         raw_name = " ".join(raw_name_parts).strip()
         if not raw_name and has_name_col:
             raw_name = str(row[name_col]).strip()
+        if not raw_name and template_names is not None and row_index < len(template_names):
+            raw_name = str(template_names[row_index]).strip()
         row_first_name = ""
         row_last_name = ""
         if not name_match_mode and context_key != "coy":
@@ -512,7 +603,8 @@ def import_table(
                 continue
         else:
             if not (row_first_name or row_last_name):
-                break
+                if not allow_missing_names:
+                    break
             if seq_index >= len(player_sequence):
                 break
             idxs = [player_sequence[seq_index]]

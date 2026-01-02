@@ -112,7 +112,8 @@ def build_teams_screen(app) -> None:
     team_scroll.pack(side=tk.RIGHT, fill=tk.Y)
     app.team_editor_listbox.configure(yscrollcommand=team_scroll.set)
     detail_container = tk.Frame(content, bg="#16213E", width=460)
-    detail_container.pack(side=tk.RIGHT, fill=tk.BOTH, expand=False, padx=(20, 0))
+    # Let the detail pane expand so longer team fields are fully visible.
+    detail_container.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(20, 0))
     detail_container.pack_propagate(False)
     app.team_editor_detail_name_var = tk.StringVar(value="Select a team")
     tk.Label(

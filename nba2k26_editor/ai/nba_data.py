@@ -153,7 +153,8 @@ def _load_data() -> None:
             }
 
         per_game_cache: dict[str, dict[str, Any]] = {}
-        for norm, group in per_game_df.groupby("norm"):
+        for raw_norm, group in per_game_df.groupby("norm"):
+            norm = _clean_text(raw_norm)
             if not norm:
                 continue
             try:

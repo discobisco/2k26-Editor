@@ -525,6 +525,16 @@ class FullPlayerEditor(tk.Toplevel):
                 return False
             dtype = meta.data_type.lower()
             return any(tag in dtype for tag in ("color", "pointer"))
+        def _safe_float(value: object) -> float | None:
+            try:
+                if isinstance(value, (int, float)):
+                    return float(value)
+                text = str(value).strip()
+                if not text:
+                    return None
+                return float(text)
+            except Exception:
+                return None
         # Iterate over each category and field to load values using stored
         # metadata.  The metadata is stored in ``self.field_meta`` keyed by
         # (category, field_name).  We then set the associated variable.
@@ -582,7 +592,9 @@ class FullPlayerEditor(tk.Toplevel):
                     )
                     if value is not None:
                         try:
-                            var.set(float(value))
+                            fval = _safe_float(value)
+                            if fval is not None:
+                                var.set(fval)
                         except Exception:
                             pass
                     continue
@@ -605,7 +617,8 @@ class FullPlayerEditor(tk.Toplevel):
                             byte_len = 4
                         width = max(1, byte_len * 2)
                         try:
-                            var.set(f"0x{int(value) & ((1 << (width * 4)) - 1):0{width}X}")
+                            int_val = _to_int(value)
+                            var.set(f"0x{int_val & ((1 << (width * 4)) - 1):0{width}X}")
                         except Exception:
                             var.set(str(value))
                     continue
@@ -712,7 +725,7 @@ class FullPlayerEditor(tk.Toplevel):
             if not meta or not meta.data_type:
                 return False
             dtype = meta.data_type.lower()
-            return any(tag in dtype for tag in ("color", "pointer", "binary"))
+            return any(tag in dtype for tag in ("color", "pointer"))
         for category, fields in self.field_vars.items():
             for field_name, var in fields.items():
                 meta = self.field_meta.get((category, field_name))

@@ -196,6 +196,7 @@ def _scan_player_names(
     search_high: int = 0x7FFFFFFFFFFF,
     vote_break_threshold: int = 151,
     stop_on_first_hit: bool = False,
+    skip_bases: set[int] | None = None,
 ) -> tuple[list[dict], list[int], bool]:
     hits: list[dict] = []
     base_candidates: list[int] = []
@@ -225,8 +226,11 @@ def _scan_player_names(
                     if base < 0:
                         break
                     base_candidates.append(base)
-            counts = _summarize_candidates(base_candidates)
-            if stop_on_first_hit or (counts and counts[0][1] >= vote_break_threshold):
+            counts = _summarize_candidates(base_candidates, skip_bases)
+            if stop_on_first_hit and not skip_bases:
+                early_exit = True
+                break
+            if counts and counts[0][1] >= vote_break_threshold:
                 early_exit = True
                 break
     if not early_exit:
@@ -280,10 +284,13 @@ def _find_team_table(
     return candidates
 
 
-def _summarize_candidates(values: list[int]) -> list[tuple[int, int]]:
+def _summarize_candidates(values: list[int], skip_bases: set[int] | None = None) -> list[tuple[int, int]]:
     from collections import Counter
 
     counts = Counter(values)
+    if skip_bases:
+        for base in skip_bases:
+            counts.pop(base, None)
     return counts.most_common(5)
 
 
@@ -298,6 +305,7 @@ def _scan_players_with_ranges(
     *,
     stop_on_first_hit: bool = False,
     max_workers: int = 1,
+    skip_bases: set[int] | None = None,
 ) -> tuple[list[dict], list[int]]:
     player_hits: list[dict] = []
     player_base_votes: list[int] = []
@@ -314,12 +322,13 @@ def _scan_players_with_ranges(
                 search_high=high,
                 vote_break_threshold=vote_break_threshold,
                 stop_on_first_hit=stop_on_first_hit,
+                skip_bases=skip_bases,
             )
             player_hits.extend(hits)
             player_base_votes.extend(votes)
             if early:
                 break
-            if stop_on_first_hit and len(player_hits) > hits_before:
+            if stop_on_first_hit and len(player_hits) > hits_before and not skip_bases:
                 break
         return player_hits, player_base_votes
 
@@ -336,6 +345,7 @@ def _scan_players_with_ranges(
                 search_high=high,
                 vote_break_threshold=vote_break_threshold,
                 stop_on_first_hit=stop_on_first_hit,
+                skip_bases=skip_bases,
             )
             for low, high in ranges
         ]
@@ -355,6 +365,7 @@ def _scan_teams_with_ranges(
     ranges: list[tuple[int, int]],
     *,
     max_workers: int = 1,
+    skip_bases: set[int] | None = None,
 ) -> list[int]:
     team_candidates: list[int] = []
     if max_workers <= 1 or len(ranges) <= 1:
@@ -369,6 +380,8 @@ def _scan_teams_with_ranges(
                 search_high=high,
             )
             if team_candidates:
+                if skip_bases and all(candidate in skip_bases for candidate in team_candidates):
+                    continue
                 break
         return team_candidates
 
@@ -442,6 +455,8 @@ def find_dynamic_bases(
     bases: dict[str, int] = {}
     report: dict[str, object] = {"pid": proc_pid}
     min_player_votes = 151
+    skip_player_bases = {int(player_base_hint)} if player_base_hint else set()
+    skip_team_bases = {int(team_base_hint)} if team_base_hint else set()
     start_ts = time.time()
     try:
         # Player scan (hinted window first, then full if no candidates)
@@ -471,7 +486,9 @@ def find_dynamic_bases(
         player_hits: list[dict] = []
         player_base_votes: list[int] = []
         top_player: list[tuple[int, int]] = []
+        top_player_all: list[tuple[int, int]] = []
         top_team: list[tuple[int, int]] = []
+        top_team_all: list[tuple[int, int]] = []
 
         if run_parallel:
             with ThreadPoolExecutor(max_workers=2) as executor:
@@ -486,6 +503,7 @@ def find_dynamic_bases(
                     vote_break_threshold=151,
                     stop_on_first_hit=True,
                     max_workers=4,
+                    skip_bases=skip_player_bases,
                 )
                 fut_team = executor.submit(
                     _scan_teams_with_ranges,
@@ -496,14 +514,18 @@ def find_dynamic_bases(
                     teams,
                     t_ranges,
                     max_workers=4,
+                    skip_bases=skip_team_bases,
                 )
                 team_candidates = fut_team.result()
-                top_team = _summarize_candidates(team_candidates)
+                top_team_all = _summarize_candidates(team_candidates)
+                top_team = _summarize_candidates(team_candidates, skip_team_bases) if skip_team_bases else top_team_all
                 player_hits: list[dict] = []
                 player_base_votes: list[int] = []
                 top_player: list[tuple[int, int]] = []
+                top_player_all: list[tuple[int, int]] = []
                 player_hits, player_base_votes = fut_player.result()
-                top_player = _summarize_candidates(player_base_votes)
+                top_player_all = _summarize_candidates(player_base_votes)
+                top_player = _summarize_candidates(player_base_votes, skip_player_bases) if skip_player_bases else top_player_all
         else:
             team_candidates = _scan_teams_with_ranges(
                 handle,
@@ -513,8 +535,10 @@ def find_dynamic_bases(
                 teams,
                 t_ranges,
                 max_workers=4,
+                skip_bases=skip_team_bases,
             )
-            top_team = _summarize_candidates(team_candidates)
+            top_team_all = _summarize_candidates(team_candidates)
+            top_team = _summarize_candidates(team_candidates, skip_team_bases) if skip_team_bases else top_team_all
             player_hits, player_base_votes = _scan_players_with_ranges(
                 handle,
                 stride,
@@ -525,8 +549,10 @@ def find_dynamic_bases(
                 vote_break_threshold=151,
                 stop_on_first_hit=True,
                 max_workers=4,
+                skip_bases=skip_player_bases,
             )
-            top_player = _summarize_candidates(player_base_votes)
+            top_player_all = _summarize_candidates(player_base_votes)
+            top_player = _summarize_candidates(player_base_votes, skip_player_bases) if skip_player_bases else top_player_all
     finally:
         CloseHandle(handle)
     report["elapsed_sec"] = round(time.time() - start_ts, 3)
@@ -534,17 +560,21 @@ def find_dynamic_bases(
         {"target": h["target"], "address": f"0x{int(h['address']):X}"} for h in player_hits
     ]
     report["player_candidates"] = [
-        {"address": f"0x{addr:X}", "votes": votes} for addr, votes in top_player
+        {"address": f"0x{addr:X}", "votes": votes} for addr, votes in top_player_all
     ]
-    report["team_candidates"] = [{"address": f"0x{addr:X}", "votes": votes} for addr, votes in top_team]
-    if top_player and "Player" not in bases:
-        best_addr, best_votes = top_player[0]
-        if best_votes >= min_player_votes:
-            bases["Player"] = int(best_addr)
-        else:
-            report["player_rejected_votes"] = best_votes
-    if top_team and "Team" not in bases:
-        bases["Team"] = int(top_team[0][0])
+    report["team_candidates"] = [{"address": f"0x{addr:X}", "votes": votes} for addr, votes in top_team_all]
+    chosen_player = None
+    if top_player and top_player[0][1] >= min_player_votes:
+        chosen_player = top_player[0]
+    elif top_player_all and top_player_all[0][1] >= min_player_votes:
+        chosen_player = top_player_all[0]
+    if chosen_player and "Player" not in bases:
+        bases["Player"] = int(chosen_player[0])
+    elif top_player_all:
+        report["player_rejected_votes"] = top_player_all[0][1]
+    chosen_team = top_team[0] if top_team else (top_team_all[0] if top_team_all else None)
+    if chosen_team and "Team" not in bases:
+        bases["Team"] = int(chosen_team[0])
 
     # If nothing was resolved, fall back to the offsets-file hints so we don’t exit empty-handed.
     if not bases and player_base_hint and team_base_hint:

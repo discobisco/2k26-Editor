@@ -31,7 +31,7 @@ def build_staff_screen(app) -> None:
     ).pack(side=tk.LEFT)
     tk.Label(
         header,
-        textvariable=getattr(app, "staff_status_var", None),
+        textvariable=app.staff_status_var,
         bg=PANEL_BG,
         fg=TEXT_SECONDARY,
     ).pack(side=tk.LEFT, padx=(10, 0))

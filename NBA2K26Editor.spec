@@ -9,7 +9,9 @@ a = Analysis(
         ('nba2k26_editor\\Offsets', 'nba2k26_editor\\Offsets'),
         ('nba2k26_editor\\NBA Player Data', 'nba2k26_editor\\NBA Player Data'),
     ],
-    hiddenimports=[],
+    hiddenimports=[
+        'nba2k26_editor.dual_base_mirror',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

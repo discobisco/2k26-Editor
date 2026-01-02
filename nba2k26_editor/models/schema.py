@@ -12,6 +12,8 @@ class PreparedImportRows(TypedDict):
     value_columns: list[int]
     first_name_col: NotRequired[int | None]
     last_name_col: NotRequired[int | None]
+    fixed_mapping: NotRequired[bool]
+    allow_missing_names: NotRequired[bool]
 
 
 class CoyImportLayout(TypedDict, total=False):

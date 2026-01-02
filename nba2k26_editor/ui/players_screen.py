@@ -152,7 +152,8 @@ def build_players_screen(app) -> None:
     list_scroll.pack(side=tk.RIGHT, fill=tk.Y)
     app.player_listbox.configure(yscrollcommand=list_scroll.set)
     detail_container = tk.Frame(content, bg=PANEL_BG, width=420)
-    detail_container.pack(side=tk.RIGHT, fill=tk.BOTH, expand=False, padx=(20, 0))
+    # Allow the detail pane to grow with the window so longer labels/fields are not cramped.
+    detail_container.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(20, 0))
     detail_container.pack_propagate(False)
     app.player_portrait = tk.Canvas(detail_container, width=150, height=150, bg=PANEL_BG, highlightthickness=0)
     app.player_portrait.pack(pady=(30, 15))

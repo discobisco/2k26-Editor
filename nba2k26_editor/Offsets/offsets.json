@@ -561,7 +561,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTANKLEHOMECOLOR",
-      "display_name": "Left Ankle Home Color",
+      "display_name": "Left Ankle Item Home Color",
       "variant_names": [
         "LEFT_ANKLE_HOME_COLOR",
         "Left Ankle Home Color",
@@ -618,7 +618,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTARM",
-      "display_name": "Left Arm Frequency",
+      "display_name": "Left Arm",
       "variant_names": [
         "LEFT_ARM",
         "LEFT_ARM_FREQUENCY",
@@ -962,7 +962,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTFINGERS",
-      "display_name": "Left Fingers",
+      "display_name": "Left Fingers Frequency",
       "variant_names": [
         "LEFT_FINGERS",
         "LEFT_FINGERS_FREQUENCY",
@@ -1134,7 +1134,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTKNEE",
-      "display_name": "Left Knee Frequency",
+      "display_name": "Left Knee",
       "variant_names": [
         "LEFT_KNEE",
         "LEFT_KNEE_FREQUENCY",
@@ -1306,7 +1306,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTLEG",
-      "display_name": "Left Leg",
+      "display_name": "Left Leg Frequency",
       "variant_names": [
         "LEFT_LEG",
         "LEFT_LEG_FREQUENCY",
@@ -1364,7 +1364,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTLEGAWAYCOLOR",
-      "display_name": "Left Leg Away Color",
+      "display_name": "Left Leg Item Away Color",
       "variant_names": [
         "LEFT_LEG_AWAY_COLOR",
         "Left Leg Away Color",
@@ -1421,7 +1421,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTLEGHOMECOLOR",
-      "display_name": "Left Leg Item Home Color",
+      "display_name": "Left Leg Home Color",
       "variant_names": [
         "LEFT_LEG_HOME_COLOR",
         "Left Leg Home Color",
@@ -1478,7 +1478,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTWRIST",
-      "display_name": "Left Wrist Frequency",
+      "display_name": "Left Wrist",
       "variant_names": [
         "LEFT_WRIST",
         "LEFT_WRIST_FREQUENCY",
@@ -1593,7 +1593,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "LEFTWRISTHOMECOLOR",
-      "display_name": "Left Wrist Item Home Color",
+      "display_name": "Left Wrist Home Color",
       "variant_names": [
         "LEFT_WRIST_HOME_COLOR",
         "Left Wrist Home Color",
@@ -1821,7 +1821,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTANKLEHOMECOLOR",
-      "display_name": "Right Ankle Item Home Color",
+      "display_name": "Right Ankle Home Color",
       "variant_names": [
         "RIGHT_ANKLE_HOME_COLOR",
         "Right Ankle Home Color",
@@ -1936,7 +1936,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTARMAWAYCOLOR",
-      "display_name": "Right Arm Away Color",
+      "display_name": "Right Arm Item Away Color",
       "variant_names": [
         "RIGHT_ARM_AWAY_COLOR",
         "Right Arm Away Color",
@@ -2050,7 +2050,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTELBOW",
-      "display_name": "Right Elbow Frequency",
+      "display_name": "Right Elbow",
       "variant_names": [
         "RIGHT_ELBOW",
         "RIGHT_ELBOW_FREQUENCY",
@@ -2108,7 +2108,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTELBOWAWAYCOLOR",
-      "display_name": "Right Elbow Item Away Color",
+      "display_name": "Right Elbow Away Color",
       "variant_names": [
         "RIGHT_ELBOW_AWAY_COLOR",
         "Right Elbow Away Color",
@@ -2165,7 +2165,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTELBOWHOMECOLOR",
-      "display_name": "Right Elbow Item Home Color",
+      "display_name": "Right Elbow Home Color",
       "variant_names": [
         "RIGHT_ELBOW_HOME_COLOR",
         "Right Elbow Home Color",
@@ -2280,7 +2280,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTFINGERSAWAYCOLOR",
-      "display_name": "Right Fingers Item Away Color",
+      "display_name": "Right Fingers Away Color",
       "variant_names": [
         "RIGHT_FINGERS_AWAY_COLOR",
         "Right Fingers Away Color",
@@ -2394,7 +2394,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTKNEE",
-      "display_name": "Right Knee",
+      "display_name": "Right Knee Frequency",
       "variant_names": [
         "RIGHT_KNEE",
         "RIGHT_KNEE_FREQUENCY",
@@ -2452,7 +2452,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTKNEEAWAYCOLOR",
-      "display_name": "Right Knee Item Away Color",
+      "display_name": "Right Knee Away Color",
       "variant_names": [
         "RIGHT_KNEE_AWAY_COLOR",
         "Right Knee Away Color",
@@ -2509,7 +2509,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTKNEEHOMECOLOR",
-      "display_name": "Right Knee Item Home Color",
+      "display_name": "Right Knee Home Color",
       "variant_names": [
         "RIGHT_KNEE_HOME_COLOR",
         "Right Knee Home Color",
@@ -2624,7 +2624,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTLEGAWAYCOLOR",
-      "display_name": "Right Leg Away Color",
+      "display_name": "Right Leg Item Away Color",
       "variant_names": [
         "RIGHT_LEG_AWAY_COLOR",
         "Right Leg Away Color",
@@ -2796,7 +2796,7 @@
       "canonical_category": "Accessories",
       "super_type": "Players",
       "normalized_name": "RIGHTWRISTAWAYCOLOR",
-      "display_name": "Right Wrist Item Away Color",
+      "display_name": "Right Wrist Away Color",
       "variant_names": [
         "RIGHT_WRIST_AWAY_COLOR",
         "Right Wrist Away Color",
@@ -13617,7 +13617,7 @@
       "canonical_category": "Hotzones",
       "super_type": "Players",
       "normalized_name": "3POINTCENTER",
-      "display_name": "Three Center",
+      "display_name": "Three Right-Center",
       "variant_names": [
         "3_RIGHT-CENTER",
         "CENTER_3",
@@ -13676,7 +13676,7 @@
       "canonical_category": "Hotzones",
       "super_type": "Players",
       "normalized_name": "3POINTLEFT",
-      "display_name": "Three Left-Center",
+      "display_name": "Three Left",
       "variant_names": [
         "3_LEFT-CENTER",
         "LEFT_3",
@@ -13959,7 +13959,7 @@
       "canonical_category": "Hotzones",
       "super_type": "Players",
       "normalized_name": "MIDRANGECENTER",
-      "display_name": "Mid-Range Center",
+      "display_name": "Mid Range Center",
       "variant_names": [
         "MID-RANGE_RIGHT_CENTER",
         "MID_CENTER",
@@ -14019,7 +14019,7 @@
       "canonical_category": "Hotzones",
       "super_type": "Players",
       "normalized_name": "MIDRANGELEFT",
-      "display_name": "Mid Range Left Center",
+      "display_name": "Mid-Range Left-Center",
       "variant_names": [
         "MID-RANGE_LEFT",
         "MID-RANGE_LEFT_CENTER",
@@ -22226,7 +22226,7 @@
       "canonical_category": "Tendencies",
       "super_type": "Players",
       "normalized_name": "3POINTCENTERSHOT",
-      "display_name": "Shot Three Right Center",
+      "display_name": "Shot 3pt Center",
       "variant_names": [
         "SHOT_THREE_CENTER_TENDENCY",
         "SHOT_THREE_RIGHT-CENTER_TENDENCY",
@@ -22286,7 +22286,7 @@
       "canonical_category": "Tendencies",
       "super_type": "Players",
       "normalized_name": "3POINTLEFTSHOT",
-      "display_name": "Shot 3pt Left Center",
+      "display_name": "Shot 3pt Left",
       "variant_names": [
         "SHOT_THREE_LEFT-CENTER_TENDENCY",
         "SHOT_THREE_LEFT_TENDENCY",
@@ -22460,7 +22460,7 @@
       "canonical_category": "Tendencies",
       "super_type": "Players",
       "normalized_name": "3POINTSHOT",
-      "display_name": "Shot Three",
+      "display_name": "Spot Up Shot 3pt",
       "variant_names": [
         "SHOT_THREE_TENDENCY",
         "SPOT_UP_SHOT_THREE_TENDENCY",
@@ -22520,7 +22520,7 @@
       "canonical_category": "Tendencies",
       "super_type": "Players",
       "normalized_name": "ALLEYOOP",
-      "display_name": "Alley Oop Pass",
+      "display_name": "Alley Oop",
       "variant_names": [
         "ALLEY-OOP_PASS_TENDENCY",
         "ALLEY-OOP_TENDENCY",
@@ -22748,7 +22748,7 @@
       "canonical_category": "Tendencies",
       "super_type": "Players",
       "normalized_name": "CENTERMIDSHOT",
-      "display_name": "Shot Mid Center",
+      "display_name": "Shot Mid Right Center",
       "variant_names": [
         "SHOT_MID_CENTER_TENDENCY",
         "SHOT_MID_RIGHT-CENTER_TENDENCY",
@@ -23257,7 +23257,7 @@
       "canonical_category": "Tendencies",
       "super_type": "Players",
       "normalized_name": "DRIBBLECROSSOVER",
-      "display_name": "Driving Double Crossover",
+      "display_name": "Driving Crossover",
       "variant_names": [
         "DRIVE_CROSSOVER_TENDENCY",
         "DRIVING_DOUBLE_CROSSOVER_TENDENCY",
@@ -23317,7 +23317,7 @@
       "canonical_category": "Tendencies",
       "super_type": "Players",
       "normalized_name": "DRIBBLESPIN",
-      "display_name": "Driving Half Spin",
+      "display_name": "Dribble Half Spin",
       "variant_names": [
         "DRIVE_SPIN_TENDENCY",
         "DRIVING_HALF_SPIN_TENDENCY",
@@ -24670,7 +24670,7 @@
       "canonical_category": "Tendencies",
       "super_type": "Players",
       "normalized_name": "LEFTMIDSHOT",
-      "display_name": "Shot Mid Left",
+      "display_name": "Shot Mid Left Center",
       "variant_names": [
         "SHOT_MID_LEFT-CENTER_TENDENCY",
         "SHOT_MID_LEFT_TENDENCY",

@@ -32,7 +32,9 @@ def open_import_dialog(app: Any) -> None:
         match_response = messagebox.askyesnocancel(
             "Excel Import",
             "Match players by name?\n\nYes = match each row to a roster player by name.\n"
-            "No = overwrite players in current roster order.\nCancel = abort import.",
+            "No = overwrite players in current roster order.\n"
+            "Note: template XLSX match-by-name requires the Vitals sheet (FIRSTNAME/LASTNAME).\n"
+            "Cancel = abort import.",
         )
         if match_response is None:
             return

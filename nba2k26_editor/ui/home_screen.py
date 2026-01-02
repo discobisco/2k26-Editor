@@ -149,8 +149,8 @@ def build_extension_loader(app, parent: tk.Frame) -> None:
         bg=PANEL_BG,
         fg=TEXT_PRIMARY,
     ).pack(anchor="w")
-    files = extensions_ui.discover_extension_files()
-    if not files:
+    entries = extensions_ui.discover_extension_files()
+    if not entries:
         tk.Label(
             container,
             text="No additional Python modules detected in the editor directory.",
@@ -161,16 +161,17 @@ def build_extension_loader(app, parent: tk.Frame) -> None:
     else:
         list_frame = tk.Frame(container, bg=PANEL_BG)
         list_frame.pack(fill=tk.X, pady=(4, 0))
-        for path in files:
-            key = str(path.resolve())
-            already_loaded = extensions_ui.is_extension_loaded(app, path)
+        for entry in entries:
+            key = entry.key
+            label = entry.label
+            already_loaded = extensions_ui.is_extension_loaded(app, key)
             var = tk.BooleanVar(value=already_loaded)
             app.extension_vars[key] = var
             chk = tk.Checkbutton(
                 list_frame,
-                text=path.name,
+                text=label,
                 variable=var,
-                command=lambda p=path, v=var: extensions_ui.toggle_extension_module(app, p, v),
+                command=lambda k=key, l=label, v=var: extensions_ui.toggle_extension_module(app, k, l, v),
                 bg=PANEL_BG,
                 fg=TEXT_PRIMARY,
                 activebackground=PANEL_BG,

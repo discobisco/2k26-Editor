@@ -38,11 +38,15 @@ MEMORY_LOGGER = get_memory_logger()
 class GameMemory:
     """Utility class encapsulating process lookup and memory access."""
 
+    _dual_base_patched: bool = False
+
     def __init__(self, module_name: str = MODULE_NAME):
         self.module_name = module_name
         self.pid: int | None = None
         self.hproc: wintypes.HANDLE | None = None
         self.base_addr: int | None = None
+        self.last_dynamic_base_report: dict[str, object] | None = None
+        self.last_dynamic_base_overrides: dict[str, int] | None = None
 
     def _log_event(self, level: int, op: str, addr: int, length: int, status: str, **extra: object) -> None:
         """Write a structured entry to the memory operation log."""

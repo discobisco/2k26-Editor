@@ -9,7 +9,7 @@ from typing import Any, Iterable, cast
 import pandas as pd  # type: ignore
 
 from . import csv_import
-from ..core.config import COY_SHEET_TABS
+from ..core.config import BASE_DIR, COY_SHEET_TABS
 from ..models.schema import PreparedImportRows
 
 
@@ -30,17 +30,17 @@ def categorize_columns(model, df: Any) -> tuple[str | None, list[str], dict[str,
     def _collect_name_columns(cols: Iterable[str]) -> list[str]:
         name_cols: list[str] = []
         for idx, column_name in enumerate(cols):
-            normalized = model._normalize_header_name(column_name)
+            token = str(column_name).strip()
             if idx == 0:
                 if column_name not in name_cols:
                     name_cols.append(column_name)
                 continue
-            if not normalized:
+            if not token:
                 continue
-            if normalized in first_name_markers and column_name not in name_cols:
+            if token in first_name_markers and column_name not in name_cols:
                 name_cols.append(column_name)
                 continue
-            if normalized in last_name_markers and column_name not in name_cols:
+            if token in last_name_markers and column_name not in name_cols:
                 name_cols.append(column_name)
         return name_cols
 
@@ -50,23 +50,34 @@ def categorize_columns(model, df: Any) -> tuple[str | None, list[str], dict[str,
         for field in fields:
             if not isinstance(field, dict):
                 continue
-            fname = str(field.get("name", "")).strip()
-            if not fname:
+            names: list[str] = []
+            for key in ("name",):
+                val = field.get(key)
+                if isinstance(val, str):
+                    val = val.strip()
+                    if val:
+                        names.append(val)
+            variants = field.get("variants") or field.get("variant_names") or field.get("aliases")
+            if isinstance(variants, (list, tuple, set)):
+                for val in variants:
+                    if isinstance(val, str):
+                        val = val.strip()
+                        if val:
+                            names.append(val)
+            if not names:
                 continue
-            normalized = model._normalize_field_name(fname)
-            if not normalized:
-                continue
-            entries = field_lookup.setdefault(normalized, [])
-            if not any(existing_cat == cat_name and existing_name == fname for existing_cat, existing_name in entries):
-                entries.append((cat_name, fname))
+            for fname in names:
+                entries = field_lookup.setdefault(fname, [])
+                if not any(existing_cat == cat_name and existing_name == fname for existing_cat, existing_name in entries):
+                    entries.append((cat_name, fname))
     categorized: dict[str, list[str]] = {}
     for idx, column_name in enumerate(columns):
         if idx == 0:
             continue
-        normalized = model._normalize_header_name(column_name)
-        if not normalized:
+        token = str(column_name).strip()
+        if not token:
             continue
-        cat_entries = field_lookup.get(normalized)
+        cat_entries = field_lookup.get(token)
         if not cat_entries:
             continue
         first_entry = cat_entries[0]
@@ -96,21 +107,111 @@ def dataframe_to_temp_csv(df: Any) -> str | None:
     """Persist a DataFrame to a temporary CSV path and return the filename."""
     if df is None or getattr(df, "empty", False):
         return None
+    tmp = None
     try:
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv", mode="w", encoding="utf-8")
         df.to_csv(tmp.name, index=False)
     except Exception:
-        try:
-            tmp.close()
-        except Exception:
-            pass
-        try:
-            os.unlink(tmp.name)
-        except Exception:
-            pass
+        if tmp is not None:
+            try:
+                tmp.close()
+            except Exception:
+                pass
+            try:
+                os.unlink(tmp.name)
+            except Exception:
+                pass
         return None
     tmp.close()
     return tmp.name
+
+
+def _dataframe_to_rows(df: Any) -> list[list[str]]:
+    """Convert a pandas DataFrame into a list of string rows (header + data)."""
+    if df is None:
+        return []
+    try:
+        columns = [str(col) for col in df.columns]
+    except Exception:
+        return []
+    rows: list[list[str]] = [columns]
+    try:
+        safe_df = df.where(pd.notna(df), "")
+        values = safe_df.values.tolist()
+    except Exception:
+        try:
+            values = df.values.tolist()
+        except Exception:
+            values = []
+    for row in values:
+        rows.append([str(cell) for cell in row])
+    return rows
+
+
+def _extract_template_row_names(model, df: Any) -> list[str]:
+    """Extract player names from a Vitals template sheet."""
+    rows = _dataframe_to_rows(df)
+    if not rows:
+        return []
+    info = csv_import.prepare_import_rows(model, "Vitals", rows, context="excel_template")
+    if not info:
+        return []
+    names: list[str] = []
+    for row in info["data_rows"]:
+        names.append(csv_import.compose_import_row_name(info, row))
+    return names
+
+
+def _is_player_sheet(model, sheet_name: str) -> bool:
+    categories = getattr(model, "categories", None)
+    if isinstance(categories, dict) and sheet_name not in categories:
+        return False
+    resolver = getattr(model, "_resolve_category_super", None)
+    if callable(resolver):
+        try:
+            return str(resolver(sheet_name)).strip().lower() == "players"
+        except Exception:
+            return False
+    return False
+
+
+def _load_template_headers() -> dict[str, list[list[str]]]:
+    """Return a mapping of sheet name -> list of header rows from bundled templates."""
+    template_dir = Path(BASE_DIR) / "importing"
+    template_files = [
+        template_dir / "ImportPlayers.xlsx",
+        template_dir / "ImportTeams.xlsx",
+        template_dir / "ImportStaff.xlsx",
+        template_dir / "ImportStadiums.xlsx",
+    ]
+    available = [path for path in template_files if path.is_file()]
+    if not available:
+        fallback_dir = Path(BASE_DIR) / "Offsets"
+        template_files = [
+            fallback_dir / "ImportPlayers.xlsx",
+            fallback_dir / "ImportTeams.xlsx",
+            fallback_dir / "ImportStaff.xlsx",
+            fallback_dir / "ImportStadiums.xlsx",
+        ]
+        available = [path for path in template_files if path.is_file()]
+    headers: dict[str, list[list[str]]] = {}
+    for path in available:
+        try:
+            xls = pd.ExcelFile(path)
+        except Exception:
+            continue
+        for sheet_name in xls.sheet_names:
+            try:
+                df = xls.parse(sheet_name, nrows=0)
+            except Exception:
+                try:
+                    df = pd.read_excel(path, sheet_name=sheet_name, nrows=0)
+                except Exception:
+                    df = None
+            if df is None:
+                continue
+            headers.setdefault(str(sheet_name), []).append([str(col) for col in df.columns])
+    return headers
 
 
 def import_excel_workbook(model, workbook_path: str, *, match_by_name: bool = True) -> dict[str, int]:
@@ -122,12 +223,8 @@ def import_excel_workbook(model, workbook_path: str, *, match_by_name: bool = Tr
         import pandas as _pd  # type: ignore
     except Exception:
         raise RuntimeError("Pandas is required for Excel import. Install with: pip install pandas openpyxl") from None
-    file_map: dict[str, str] = {}
-    not_found: set[str] = set()
-    category_tables: dict[str, dict[str, object]] = {}
-    category_frames: dict[str, Any] = {}
-    dataframes: list[tuple[str, Any]] = []
     file_ext = os.path.splitext(workbook_path)[1].lower()
+    dataframes: list[tuple[str, Any]] = []
     if file_ext in (".csv", ".tsv", ".txt"):
         try:
             df = cast(Any, _pd.read_csv(workbook_path, sep=None, engine="python"))
@@ -152,6 +249,35 @@ def import_excel_workbook(model, workbook_path: str, *, match_by_name: bool = Tr
             if df is None:
                 continue
             dataframes.append((sheet_label, df))
+    if file_ext not in (".csv", ".tsv", ".txt"):
+        template_headers = _load_template_headers()
+        if not template_headers:
+            raise RuntimeError("No Excel templates were found in the importing folder.")
+        template_frames: dict[str, Any] = {}
+        for sheet_name, df in dataframes:
+            if sheet_name in template_headers:
+                template_frames[sheet_name] = df
+        if template_frames:
+            file_map: dict[str, str] = {}
+            try:
+                for sheet_name, df in template_frames.items():
+                    tmp_path = dataframe_to_temp_csv(df)
+                    if tmp_path:
+                        file_map[sheet_name] = tmp_path
+                if not file_map:
+                    return {}
+                return model.import_excel_template_tables(file_map, match_by_name=False)  # type: ignore[attr-defined]
+            finally:
+                for p in file_map.values():
+                    try:
+                        if p and os.path.isfile(p):
+                            os.remove(p)
+                    except Exception:
+                        pass
+    file_map: dict[str, str] = {}
+    not_found: set[str] = set()
+    category_tables: dict[str, dict[str, object]] = {}
+    category_frames: dict[str, Any] = {}
     for sheet_name, df in dataframes:
         name_column, name_columns, categorized = categorize_columns(model, df)
         if not name_column or not categorized:
