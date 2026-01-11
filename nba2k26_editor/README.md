@@ -29,18 +29,15 @@ access, offsets, data models, import/export logic, and the Tkinter UI.
   alternate bases; its settings are stored in `dual_base_mirror.json`.
 
 ## Import/export data flow
-- CSV import/export uses `importing.csv_import` and the model's
-  `import_table`/`export_category_to_csv` helpers.
-- Excel import/export uses `importing.excel_import` and template spreadsheets.
-- COY (2KCOY) imports can download Google Sheet CSVs based on
-  `core.config.COY_SHEET_ID` and use specialized column layouts.
+- Excel import/export uses `importing.excel_import` and template spreadsheets
+  stored under `Offsets`.
 
 ## Subpackages
 - `ai\`: AI assistant UI, control bridge, and NBA data loader.
 - `core\`: shared config, conversions, offsets, dynamic base scanning, and
   extension registration.
 - `entrypoints\`: executable entrypoints (GUI bootstrap).
-- `importing\`: CSV/Excel import helpers and templates.
+- `importing\`: Excel import helpers and shared CSV parsing utilities.
 - `memory\`: Win32 process and memory access.
 - `models\`: data model and schema helpers.
 - `ui\`: Tkinter UI screens, dialogs, and editor windows.
@@ -48,7 +45,7 @@ access, offsets, data models, import/export logic, and the Tkinter UI.
 ## Data and generated folders
 - `Offsets\`: merged offsets bundle and reference spreadsheets.
 - `NBA Player Data\`: NBA reference workbook for the AI assistant.
-- `logs\`: runtime logs (memory read/write audit).
+- `logs\`: runtime logs (memory read/write audit when dev logging is enabled).
 - `build\`: PyInstaller intermediate artifacts.
 - `dist\`: PyInstaller output executable.
 - `__pycache__\`, `cache\`: Python caches (generated).

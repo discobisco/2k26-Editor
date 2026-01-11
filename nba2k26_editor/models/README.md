@@ -8,7 +8,7 @@ and memory access into UI-ready data and import/export flows.
 - `Player`: lightweight dataclass with identity and roster metadata.
 - `FieldMetadata`: offsets/bitfield metadata used to build editors.
 - `FieldWriteSpec`: tuple signature used for batch writes.
-- `PreparedImportRows`: normalized import rows for CSV/Excel data.
+- `PreparedImportRows`: normalized import rows for Excel template data.
 - `ExportFieldSpec`: row metadata for long-form exports.
 
 ## PlayerDataModel (data_model.py)
@@ -32,14 +32,10 @@ The main model encapsulates live memory access and editor logic:
   - Converts ratings and tendencies to display scales and back.
   - Exposes typed accessors for players/teams/staff/stadiums.
 - Import flows:
-  - CSV import via `importing.csv_import.import_table`.
   - Excel import via `importing.excel_import.import_excel_workbook`.
   - Template XLSX support with optional match-by-name (Vitals sheet required).
-  - COY (2KCOY) imports sanitize Attributes/Tendencies/Potential/Durability
-    and can auto-download sheets via Google Sheet CSV URLs.
   - Tracks partial name matches in `import_partial_matches` for UI review.
 - Export flows:
-  - Per-category CSV export and multi-category directory export.
   - Raw player record dumps to `player_records\`.
   - Excel template export preserving bundled template structure.
   - Long-form offsets export with raw and display values.

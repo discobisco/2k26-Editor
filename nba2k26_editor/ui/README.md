@@ -41,9 +41,7 @@ screen builders, dialogs, and advanced editor windows.
 
 ## Import/export flows
 - `import_flows.py`:
-  - Multi-file import UI for Excel and delimited data.
-  - CSV category auto-detection for Attributes/Tendencies/Durability.
-  - COY import flow with Google Sheet auto-download and missing-player summary.
+  - Multi-file Excel template import UI.
 - Excel hub in `app.py` provides a combined import/export window with progress
   feedback and optional match-by-name handling.
 

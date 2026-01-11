@@ -10,8 +10,8 @@ import/export pipelines.
   lists).
 - `models.data_model` consumes those constants for live memory reads/writes and
   for building the UI category definitions.
-- `importing.excel_import` validates Excel sheets against the bundled
-  templates; it falls back to this folder if the `importing` folder is missing.
+- `importing.excel_import` validates Excel sheets against the bundled templates
+  stored in this folder.
 - `NBA2K26Editor.spec` bundles this folder into the packaged application.
 
 ## offsets.json (merged offsets bundle)
@@ -42,16 +42,6 @@ Field spec notes:
 - `type` values include `Integer`, `Float`, `String`, `WString`, `Pointer`,
   `combo`, `slider`, and `number`.
 
-## Reference workbooks (versioned offsets)
-These sheets are human-readable references for offsets data. Each row
-summarizes a field and its per-version metadata.
-
-- `LeagueData.xlsx`: base pointers and game info by version.
-- `Players.xlsx`: player categories (Vitals, Attributes, Tendencies, etc).
-- `Teams.xlsx`: team categories (Teams, Team Players, Jersey).
-- `Staff.xlsx`: staff categories (Vitals, Attributes, Style, Coaching).
-- `Stadiums.xlsx`: stadium category definitions.
-
 ## Import/export templates
 These spreadsheets match the exact column names used by import/export flows:
 - `ImportPlayers.xlsx`
@@ -64,8 +54,3 @@ These spreadsheets match the exact column names used by import/export flows:
 - `_derive_offset_candidates()` probes per-version names such as
   `2k26_offsets.json` before falling back to `DEFAULT_OFFSET_FILES`.
 - After loading, UI categories and field metadata are rebuilt on the fly.
-
-## Related copies
-- Import templates also live under `nba2k26_editor\importing\` and are the
-  preferred source for template-based import/export. The loader falls back to
-  this folder if the importing directory is missing.

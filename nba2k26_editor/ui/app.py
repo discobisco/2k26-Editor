@@ -2,22 +2,16 @@
 from __future__ import annotations
 
 import copy
-import csv
-import io
 import json
-import queue
 import os
+import queue
 import random
 import re
 import sys
-import tempfile
 import threading
 import time
-import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import Any, Dict, TYPE_CHECKING, Callable, Sequence, cast
-import difflib
 
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -32,8 +26,6 @@ from ..core.config import (
     BUTTON_ACTIVE_BG,
     BUTTON_BG,
     BUTTON_TEXT,
-    COY_SHEET_ID,
-    COY_SHEET_TABS,
     ENTRY_ACTIVE_BG,
     ENTRY_BG,
     ENTRY_BORDER,
@@ -72,11 +64,9 @@ from ..core.offsets import (
     _offset_config,
     _current_offset_target,
 )
-from ..importing import csv_import, excel_import
 from ..models.data_model import PlayerDataModel
 from ..models.player import Player
 from .batch_edit import BatchEditWindow
-from .dialogs import CategorySelectionDialog, ImportSummaryDialog
 from .full_player_editor import FullPlayerEditor
 from .full_team_editor import FullTeamEditor
 from .full_staff_editor import FullStaffEditor
@@ -85,20 +75,22 @@ from .randomizer import RandomizerWindow
 from .team_shuffle import TeamShuffleWindow
 from .theme import apply_base_theme
 from .widgets import bind_mousewheel
+from .dialogs import ImportSummaryDialog
 
 if TYPE_CHECKING:
+    from ..ai.assistant import PlayerAIAssistant
+
     class RawFieldInspectorExtension:  # minimal stub for type checkers
         ...
-from . import import_flows, extensions_ui
+from . import extensions_ui
 from .home_screen import build_home_screen
 from .ai_screen import build_ai_screen
 from .players_screen import build_players_screen
 from .teams_screen import build_teams_screen
 from .staff_screen import build_staff_screen
 from .stadium_screen import build_stadium_screen
+from .excel_screen import build_excel_screen
 from ..ai.assistant import ensure_control_bridge
-
-_EXTENSION_LOGGER = __import__('logging').getLogger('nba2k26.extensions')
 class PlayerEditorApp(tk.Tk):
     def _read_team_field_bits(self, base_addr, offset, size_bytes=1, bit_start=0, bit_length=None):
         raw = self._read_bytes(base_addr + offset, size_bytes)
@@ -200,16 +192,29 @@ class PlayerEditorApp(tk.Tk):
         self.ai_api_key_var = tk.StringVar()
         self.ai_model_var = tk.StringVar()
         self.ai_api_timeout_var = tk.StringVar()
+        # Local process / Python backend
+        self.ai_local_backend_var = tk.StringVar(value="cli")  # 'cli' or 'python'
         self.ai_local_command_var = tk.StringVar()
         self.ai_local_args_var = tk.StringVar()
         self.ai_local_workdir_var = tk.StringVar()
+        # Python backend options
+        self.ai_python_backend_var = tk.StringVar()  # 'llama_cpp' or 'transformers'
+        self.ai_model_path_var = tk.StringVar()
+        self.ai_model_max_tokens_var = tk.StringVar(value="256")
+        self.ai_model_temperature_var = tk.StringVar(value="0.4")
         self.ai_test_status_var = tk.StringVar(value="")
+        # Persona/profile settings
+        self.ai_persona_choice_var = tk.StringVar(value="none")  # selected persona for Assistant (none/base/team:<id>)
+        self.ai_base_persona_var = tk.StringVar()
+        self.ai_active_team_count_var = tk.StringVar(value="12")
         self._ai_remote_inputs: list[tk.Widget] = []
         self._ai_local_inputs: list[tk.Widget] = []
+        self._ai_python_inputs: list[tk.Widget] = []
+        self._ai_persona_widgets: list[tk.Widget] = []
         self.ai_status_label: tk.Label | None = None
         self.ai_detected_listbox: tk.Listbox | None = None
         self.local_ai_inventory: list[LocalAIDetectionResult] = []
-        self.ai_assistant = None
+        self.ai_assistant: PlayerAIAssistant | None = None
         self.control_bridge = None
         self._load_ai_settings_into_vars()
         # Extension loader state
@@ -232,6 +237,13 @@ class PlayerEditorApp(tk.Tk):
         self.dynamic_scan_status_var: tk.StringVar = tk.StringVar(value="Dynamic base scan not started.")
         self.scan_status_var: tk.StringVar = tk.StringVar()
         self.player_count_var: tk.StringVar = tk.StringVar(value="Players: 0")
+        self.excel_status_var: tk.StringVar = tk.StringVar(value="")
+        self.excel_progress_var: tk.DoubleVar = tk.DoubleVar(value=0)
+        self.excel_progress: ttk.Progressbar | None = None
+        self._excel_export_queue: queue.Queue[tuple] | None = None
+        self._excel_export_thread: threading.Thread | None = None
+        self._excel_export_polling = False
+        self._excel_export_entity_label = ""
         self.btn_team_save: tk.Button | None = None
         self.btn_team_full: tk.Button | None = None
         self.btn_save: tk.Button | None = None
@@ -265,8 +277,8 @@ class PlayerEditorApp(tk.Tk):
         self._build_teams_screen()
         build_staff_screen(self)
         build_stadium_screen(self)
+        build_excel_screen(self)
         build_ai_screen(self)
-        self._build_excel_screen()
         # Show home by default
         self.show_home()
         # Control bridge for external AI agents
@@ -306,10 +318,19 @@ class PlayerEditorApp(tk.Tk):
         self.ai_model_var.set(str(remote.get("model", "")) if isinstance(remote, dict) else "")
         timeout_val = remote.get("timeout") if isinstance(remote, dict) else ""
         self.ai_api_timeout_var.set(str(timeout_val) if timeout_val not in (None, "") else "")
+        self.ai_local_backend_var.set(str(local.get("backend", "cli")) if isinstance(local, dict) else "cli")
         self.ai_local_command_var.set(str(local.get("command", "")) if isinstance(local, dict) else "")
         self.ai_local_args_var.set(str(local.get("arguments", "")) if isinstance(local, dict) else "")
         self.ai_local_workdir_var.set(str(local.get("working_dir", "")) if isinstance(local, dict) else "")
+        self.ai_python_backend_var.set(str(local.get("python_backend", "")) if isinstance(local, dict) else "")
+        self.ai_model_path_var.set(str(local.get("model_path", "")) if isinstance(local, dict) else "")
+        self.ai_model_max_tokens_var.set(str(local.get("max_tokens", 256)) if isinstance(local, dict) else "256")
+        self.ai_model_temperature_var.set(str(local.get("temperature", 0.4)) if isinstance(local, dict) else "0.4")
         self.ai_test_status_var.set("")
+        # Load persona-related vars
+        profiles = settings.get("profiles") if isinstance(settings, dict) else {}
+        self.ai_base_persona_var.set(str(profiles.get("base", "")) if isinstance(profiles, dict) else "")
+        self.ai_active_team_count_var.set(str(profiles.get("active_count", 12)) if isinstance(profiles, dict) else "12")
 
     def _load_ai_settings(self) -> dict[str, object]:
         base = copy.deepcopy(DEFAULT_AI_SETTINGS)
@@ -320,7 +341,18 @@ class PlayerEditorApp(tk.Tk):
                     if isinstance(data, dict):
                         self._merge_dict(base, data)
         except Exception:
-            _EXTENSION_LOGGER.exception("Failed to load AI settings; using defaults.")
+            pass
+        # Ensure we have sensible team profiles based on known teams (if available)
+        try:
+            from ..ai.personas import ensure_default_profiles
+            teams = list(self.model.get_teams()) if hasattr(self, "model") and getattr(self.model, "get_teams", None) else []
+            profiles_raw = base.get("profiles")
+            profiles = profiles_raw if isinstance(profiles_raw, dict) else {}
+            active_raw = profiles.get("active_count", 12)
+            active_count = self._coerce_int(active_raw, default=12)
+            ensure_default_profiles(base, teams, active_count)
+        except Exception:
+            pass
         return base
 
     def _save_ai_settings(self, settings: dict[str, object]) -> None:
@@ -339,8 +371,28 @@ class PlayerEditorApp(tk.Tk):
             else:
                 target[key] = value
 
+    def _get_ai_profiles(self) -> dict[str, object]:
+        profiles = self.ai_settings.get("profiles")
+        return profiles if isinstance(profiles, dict) else {}
+
+    def _ensure_ai_profiles(self) -> dict[str, object]:
+        profiles = self.ai_settings.get("profiles")
+        if isinstance(profiles, dict):
+            return profiles
+        profiles = {}
+        self.ai_settings["profiles"] = profiles
+        return profiles
+
+    def _get_team_profiles(self) -> list[dict[str, object]]:
+        profiles = self._get_ai_profiles()
+        team_profiles = profiles.get("team_profiles")
+        if isinstance(team_profiles, list):
+            return cast(list[dict[str, object]], team_profiles)
+        return []
+
     def _collect_ai_settings(self) -> dict[str, object]:
         mode = self.ai_mode_var.get().strip() or "none"
+        team_profiles = self._get_team_profiles()
         settings: dict[str, object] = {
             "mode": mode,
             "remote": {
@@ -350,9 +402,20 @@ class PlayerEditorApp(tk.Tk):
                 "timeout": self._coerce_int(self.ai_api_timeout_var.get(), default=30),
             },
             "local": {
+                "backend": self.ai_local_backend_var.get().strip() or "cli",
                 "command": self.ai_local_command_var.get().strip(),
                 "arguments": self.ai_local_args_var.get().strip(),
                 "working_dir": self.ai_local_workdir_var.get().strip(),
+                "python_backend": self.ai_python_backend_var.get().strip(),
+                "model_path": self.ai_model_path_var.get().strip(),
+                "max_tokens": self._coerce_int(self.ai_model_max_tokens_var.get(), default=256),
+                "temperature": float(self.ai_model_temperature_var.get() or 0.4),
+            },
+            "profiles": {
+                "base": self.ai_base_persona_var.get().strip(),
+                "active_count": self._coerce_int(self.ai_active_team_count_var.get(), default=12),
+                # team_profiles managed by persona helpers / UI
+                "team_profiles": team_profiles,
             },
         }
         return settings
@@ -362,17 +425,36 @@ class PlayerEditorApp(tk.Tk):
         return copy.deepcopy(self.ai_settings)
 
     @staticmethod
-    def _coerce_int(value: str, default: int = 0) -> int:
-        try:
+    def _coerce_int(value: object, default: int = 0) -> int:
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
             return int(value)
-        except (ValueError, TypeError):
-            return default
+        if isinstance(value, str):
+            try:
+                return int(value)
+            except (ValueError, TypeError):
+                return default
+        return default
 
     def _save_ai_settings_from_ui(self) -> None:
         settings = self._collect_ai_settings()
         self.ai_settings = settings
         self._save_ai_settings(settings)
+        # Ensure persona defaults reflect active count and existing teams
+        try:
+            from ..ai.personas import ensure_default_profiles
+            teams = list(self.model.get_teams()) if hasattr(self, "model") and getattr(self.model, "get_teams", None) else []
+            profiles = self._get_ai_profiles()
+            active_raw = profiles.get("active_count", 12)
+            active_count = self._coerce_int(active_raw, default=12)
+            ensure_default_profiles(self.ai_settings, teams, active_count)
+            # persist any generated profiles
+            self._save_ai_settings(self.ai_settings)
+        except Exception:
+            pass
         self._set_ai_status("AI settings saved.", success=True)
+        self._refresh_persona_choices()
 
     def _on_ai_mode_change(self) -> None:
         self._update_ai_field_state()
@@ -388,6 +470,7 @@ class PlayerEditorApp(tk.Tk):
         mode = self.ai_mode_var.get()
         remote_state = tk.NORMAL if mode == "remote" else tk.DISABLED
         local_state = tk.NORMAL if mode == "local" else tk.DISABLED
+        python_state = tk.NORMAL if (mode == "local" and str(self.ai_local_backend_var.get()).strip().lower() == "python") else tk.DISABLED
         for widget in self._ai_remote_inputs:
             try:
                 widget.configure({"state": remote_state})
@@ -396,6 +479,11 @@ class PlayerEditorApp(tk.Tk):
         for widget in self._ai_local_inputs:
             try:
                 widget.configure({"state": local_state})
+            except Exception:
+                pass
+        for widget in self._ai_python_inputs:
+            try:
+                widget.configure({"state": python_state})
             except Exception:
                 pass
 
@@ -483,6 +571,72 @@ class PlayerEditorApp(tk.Tk):
                 self.ai_status_label.configure(fg="#6FB06F" if success else "#D96C6C")
             except Exception:
                 pass
+
+    def _generate_persona_defaults(self) -> None:
+        try:
+            from ..ai.personas import ensure_default_profiles
+            teams = list(self.model.get_teams()) if hasattr(self, "model") and getattr(self.model, "get_teams", None) else []
+            active = int(self.ai_active_team_count_var.get())
+            ensure_default_profiles(self.ai_settings, teams, active)
+            self._save_ai_settings(self.ai_settings)
+            self._set_ai_status(f"Generated {active} team persona defaults.", success=True)
+            self._refresh_persona_choices()
+        except Exception as exc:
+            self._set_ai_status(f"Failed to generate defaults: {exc}", success=False)
+
+    def _open_persona_editor(self) -> None:
+        try:
+            if hasattr(self, "_open_persona_editor_impl"):
+                self._open_persona_editor_impl()
+        except Exception as exc:
+            self._set_ai_status(f"Failed to open persona editor: {exc}", success=False)
+
+    def _open_edit_base_persona(self) -> None:
+        win = tk.Toplevel(self)
+        win.title("Edit base persona")
+        win.transient(self)
+        win.grab_set()
+        txt = tk.Text(win, height=12, width=80)
+        txt.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+        txt.insert(tk.END, str(self.ai_base_persona_var.get() or ""))
+
+        def _save_and_close() -> None:
+            val = txt.get("1.0", tk.END).strip()
+            self.ai_base_persona_var.set(val)
+            # persist to settings immediately
+            try:
+                profiles = self._ensure_ai_profiles()
+                profiles["base"] = val
+                self._save_ai_settings(self.ai_settings)
+                self._set_ai_status("Base persona saved.", success=True)
+            except Exception as exc:
+                messagebox.showerror("Save Persona", f"Failed to save persona: {exc}")
+            finally:
+                win.grab_release()
+                win.destroy()
+
+        tk.Button(win, text="Save", command=_save_and_close, bg=BUTTON_BG, fg=BUTTON_TEXT).pack(padx=8, pady=(0, 8))
+
+    def _refresh_persona_choices(self) -> None:
+        # Notify assistant UI to update its persona dropdown
+        assistant = self.ai_assistant
+        if assistant is None:
+            return
+        try:
+            assistant._refresh_persona_dropdown()
+        except Exception:
+            pass
+
+    def get_persona_choice_items(self) -> list[tuple[str, str]]:
+        # Returns list of (label, value) tuples for persona selector
+        items: list[tuple[str, str]] = [("None", "none"), ("Base", "base")]
+        profiles = self._get_team_profiles()
+        for t in profiles:
+            label = f"Team {t.get('id')}: {t.get('name')}"
+            value = f"team:{t.get('id')}"
+            items.append((label, value))
+        return items
+
     # ---------------------------------------------------------------------
     # Sidebar and navigation
     # ---------------------------------------------------------------------
@@ -559,6 +713,17 @@ class PlayerEditorApp(tk.Tk):
             activeforeground=BUTTON_TEXT,
         )
         self.btn_stadium.pack(fill=tk.X, padx=10, pady=5)
+        self.btn_excel = tk.Button(
+            self.sidebar,
+            text="Excel",
+            command=self.show_excel,
+            bg=BUTTON_BG,
+            fg=BUTTON_TEXT,
+            relief=tk.FLAT,
+            activebackground=BUTTON_ACTIVE_BG,
+            activeforeground=BUTTON_TEXT,
+        )
+        self.btn_excel.pack(fill=tk.X, padx=10, pady=5)
         # Randomizer button
         self.btn_randomizer = tk.Button(
             self.sidebar,
@@ -571,37 +736,6 @@ class PlayerEditorApp(tk.Tk):
             activeforeground=BUTTON_TEXT,
         )
         self.btn_randomizer.pack(fill=tk.X, padx=10, pady=5)
-        # 2K COY button
-        # This button imports player data from external tables (e.g. Google
-        # Sheets export) and applies it to the roster.  It expects the
-        # import files to follow the same column ordering as the batch
-        # import functionality already implemented.  When complete it
-        # displays a summary of how many players were updated and
-        # lists any players that could not be found.  See
-        # ``_open_2kcoy`` for details.
-        self.btn_coy = tk.Button(
-            self.sidebar,
-            text="2K COY",
-            command=self._open_2kcoy,
-            bg=BUTTON_BG,
-            fg=BUTTON_TEXT,
-            relief=tk.FLAT,
-            activebackground=BUTTON_ACTIVE_BG,
-            activeforeground=BUTTON_TEXT,
-        )
-        self.btn_coy.pack(fill=tk.X, padx=10, pady=5)
-        # Excel I/O hub button (import/export templates)
-        self.btn_excel_hub = tk.Button(
-            self.sidebar,
-            text="Excel Import / Export",
-            command=self.show_excel,
-            bg=BUTTON_BG,
-            fg=BUTTON_TEXT,
-            relief=tk.FLAT,
-            activebackground=BUTTON_ACTIVE_BG,
-            activeforeground=BUTTON_TEXT,
-        )
-        self.btn_excel_hub.pack(fill=tk.X, padx=10, pady=5)
         # Team Shuffle button
         self.btn_shuffle = tk.Button(
             self.sidebar,
@@ -648,8 +782,146 @@ class PlayerEditorApp(tk.Tk):
         return extensions_ui.load_extension_module(key)
 
     def _build_ai_settings_tab(self, parent: tk.Frame) -> None:
+        # ---- persona editor helpers ----
+        def _edit_team_profile(team_id: int) -> None:
+            # Open inline editor for a single team profile
+            teams = self._get_team_profiles()
+            selected = next((t for t in teams if self._coerce_int(t.get("id"), default=-1) == team_id), None)
+            if selected is None:
+                messagebox.showerror("Edit Persona", f"Team profile {team_id} not found.")
+                return
+            win = tk.Toplevel(self)
+            win.title(f"Edit persona — {selected.get('name', f'Team {team_id}')}")
+            win.transient(self)
+            win.grab_set()
+            enabled_var = tk.BooleanVar(value=bool(selected.get("enabled", False)))
+            tk.Checkbutton(win, text="Enabled", variable=enabled_var, bg=PANEL_BG, fg=TEXT_PRIMARY).pack(anchor="w", padx=8, pady=(8, 0))
+            txt = tk.Text(win, height=10, width=60)
+            txt.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+            txt.insert(tk.END, str(selected.get("persona", "")))
+
+            def _save_and_close() -> None:
+                try:
+                    selected["enabled"] = bool(enabled_var.get())
+                    selected["persona"] = txt.get("1.0", tk.END).strip()
+                    # write back into ai_settings and save
+                    teams_list = list(teams)
+                    for i, t in enumerate(teams_list):
+                        if self._coerce_int(t.get("id"), default=-1) == team_id:
+                            teams_list[i] = selected
+                            break
+                    else:
+                        teams_list.append(selected)
+                    profiles = self._ensure_ai_profiles()
+                    profiles["team_profiles"] = teams_list
+                    self._save_ai_settings(self.ai_settings)
+                    self._set_ai_status("Persona saved.", success=True)
+                    self._refresh_persona_choices()
+                except Exception as exc:
+                    messagebox.showerror("Save Persona", f"Failed to save persona: {exc}")
+                finally:
+                    win.grab_release()
+                    win.destroy()
+
+            tk.Button(win, text="Save", command=_save_and_close, bg=BUTTON_BG, fg=BUTTON_TEXT).pack(padx=8, pady=(0, 8))
+
+        def _open_persona_editor_impl() -> None:
+            # Main persona editor: list teams and edit selected
+            win = tk.Toplevel(self)
+            win.title("Team personas")
+            win.transient(self)
+            win.grab_set()
+            frame = tk.Frame(win, bg=PANEL_BG)
+            frame.pack(fill=tk.BOTH, expand=True)
+            listbox = tk.Listbox(frame, width=30)
+            listbox.pack(side=tk.LEFT, fill=tk.Y, padx=(8, 0), pady=8)
+            details = tk.Frame(frame, bg=PANEL_BG)
+            details.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=8, pady=8)
+            tk.Label(details, text="Team persona", bg=PANEL_BG, fg=TEXT_PRIMARY).pack(anchor="w")
+            txt = tk.Text(details, height=12)
+            txt.pack(fill=tk.BOTH, expand=True)
+            enabled_var = tk.BooleanVar()
+            chk = tk.Checkbutton(details, text="Enabled", variable=enabled_var, bg=PANEL_BG, fg=TEXT_PRIMARY)
+            chk.pack(anchor="w", pady=(4, 0))
+
+            profiles = self._get_team_profiles()
+            for t in profiles:
+                label = f"{t.get('id')} - {t.get('name')} {'(disabled)' if not t.get('enabled') else ''}"
+                listbox.insert(tk.END, label)
+
+            def _on_select(evt=None) -> None:
+                try:
+                    idx = listbox.curselection()
+                    if not idx:
+                        return
+                    sel = profiles[idx[0]]
+                    txt.delete("1.0", tk.END)
+                    txt.insert(tk.END, str(sel.get("persona", "")))
+                    enabled_var.set(bool(sel.get("enabled", False)))
+                except Exception:
+                    pass
+
+            def _save_selected() -> None:
+                try:
+                    idx = listbox.curselection()
+                    if not idx:
+                        return
+                    sel = profiles[idx[0]]
+                    sel["persona"] = txt.get("1.0", tk.END).strip()
+                    sel["enabled"] = bool(enabled_var.get())
+                    profiles_dict = self._ensure_ai_profiles()
+                    profiles_dict["team_profiles"] = profiles
+                    self._save_ai_settings(self.ai_settings)
+                    self._set_ai_status("Persona saved.", success=True)
+                    self._refresh_persona_choices()
+                except Exception as exc:
+                    messagebox.showerror("Save", f"Failed to save persona: {exc}")
+
+            listbox.bind("<<ListboxSelect>>", _on_select)
+            btns = tk.Frame(details, bg=PANEL_BG)
+            btns.pack(fill=tk.X, pady=(8, 0))
+            tk.Button(btns, text="Save", command=_save_selected, bg=BUTTON_BG, fg=BUTTON_TEXT).pack(side=tk.LEFT)
+
+        # Attach the inline helpers to instance methods so other methods can call them
+        self._open_persona_editor_impl = _open_persona_editor_impl
+        self._edit_team_profile = _edit_team_profile
+
         for widget_list in (self._ai_remote_inputs, self._ai_local_inputs):
             widget_list.clear()
+        tk.Label(
+            parent,
+            text="AI Settings",
+            font=("Segoe UI", 14, "bold"),
+            bg=PANEL_BG,
+            fg=TEXT_PRIMARY,
+        ).pack(anchor="w", padx=4, pady=(0, 4))
+        tk.Label(
+            parent,
+            text="Connect a local model or remote API to power the AI Assistant.",
+            font=("Segoe UI", 10),
+            bg=PANEL_BG,
+            fg=TEXT_SECONDARY,
+            wraplength=520,
+            justify="left",
+        ).pack(anchor="w", padx=4, pady=(0, 10))
+        quick_frame = tk.Frame(parent, bg=PANEL_BG)
+        quick_frame.pack(anchor="w", padx=4, pady=(0, 12))
+        tk.Label(
+            quick_frame,
+            text="Quick start",
+            font=("Segoe UI", 11, "bold"),
+            bg=PANEL_BG,
+            fg=TEXT_PRIMARY,
+        ).pack(anchor="w")
+        tk.Label(
+            quick_frame,
+            text="1) Choose a mode. 2) Fill in the settings below. 3) Save Settings and open the AI Assistant.",
+            font=("Segoe UI", 9),
+            bg=PANEL_BG,
+            fg=TEXT_SECONDARY,
+            wraplength=520,
+            justify="left",
+        ).pack(anchor="w", pady=(2, 0))
         tk.Label(
             parent,
             text="AI integration mode",
@@ -680,19 +952,111 @@ class PlayerEditorApp(tk.Tk):
         remote_frame.configure(labelanchor="nw")
         remote_frame.pack(fill=tk.X, padx=4, pady=(0, 12))
         self._ai_remote_inputs.extend(self._build_labeled_entry(remote_frame, "Base URL", self.ai_api_base_var))
-        self._ai_remote_inputs.extend(self._build_labeled_entry(remote_frame, "API Key", self.ai_api_key_var, show="*"))
+        api_key_widgets = self._build_labeled_entry(remote_frame, "API Key", self.ai_api_key_var, show="*")
+        self._ai_remote_inputs.extend(api_key_widgets)
+        api_key_entry = cast(tk.Entry, api_key_widgets[0]) if api_key_widgets else None
+        show_key_var = tk.BooleanVar(value=False)
+
+        def _toggle_api_key_visibility() -> None:
+            if api_key_entry is None:
+                return
+            api_key_entry.configure(show="" if show_key_var.get() else "*")
+
+        show_key_chk = tk.Checkbutton(
+            remote_frame,
+            text="Show API key",
+            variable=show_key_var,
+            command=_toggle_api_key_visibility,
+            bg=PANEL_BG,
+            fg=TEXT_PRIMARY,
+            activebackground=PANEL_BG,
+            activeforeground=TEXT_PRIMARY,
+            selectcolor=ACCENT_BG,
+        )
+        show_key_chk.pack(anchor="w", padx=12, pady=(0, 6))
+        self._ai_remote_inputs.append(show_key_chk)
         self._ai_remote_inputs.extend(self._build_labeled_entry(remote_frame, "Model", self.ai_model_var))
         self._ai_remote_inputs.extend(self._build_labeled_entry(remote_frame, "Timeout (s)", self.ai_api_timeout_var))
+        tk.Label(
+            remote_frame,
+            text="Base URL should point at the /v1 root for OpenAI-compatible servers.",
+            bg=PANEL_BG,
+            fg=TEXT_SECONDARY,
+            font=("Segoe UI", 9, "italic"),
+            wraplength=480,
+            justify="left",
+        ).pack(anchor="w", padx=12, pady=(0, 6))
+
+        # Persona settings
+        persona_frame = tk.LabelFrame(parent, text="AI Personas", bg=PANEL_BG, fg=TEXT_PRIMARY)
+        persona_frame.configure(labelanchor="nw")
+        persona_frame.pack(fill=tk.X, padx=4, pady=(0, 12))
+        # Inline base persona editor: opens a multi-line editor dialog
+        row = tk.Frame(persona_frame, bg=PANEL_BG)
+        row.pack(fill=tk.X, padx=12)
+        tk.Label(row, text="Base persona", bg=PANEL_BG, fg=TEXT_PRIMARY).pack(side=tk.LEFT)
+        tk.Button(row, text="Edit…", command=self._open_edit_base_persona, bg=BUTTON_BG, fg=BUTTON_TEXT, relief=tk.FLAT).pack(side=tk.LEFT, padx=(8, 0))
+        self._ai_persona_widgets.append(row)
+        # Active team count
+        tk.Label(persona_frame, text="Active team profiles (12-36)", bg=PANEL_BG, fg=TEXT_PRIMARY).pack(anchor="w", padx=12)
+        spin = tk.Spinbox(persona_frame, from_=12, to=36, textvariable=self.ai_active_team_count_var, width=6)
+        spin.pack(anchor="w", padx=12, pady=(0, 6))
+        self._ai_persona_widgets.append(spin)
+        # Buttons to generate defaults and edit team personas
+        btn_row = tk.Frame(persona_frame, bg=PANEL_BG)
+        btn_row.pack(anchor="w", padx=12, pady=(0, 6))
+        tk.Button(btn_row, text="Generate defaults", command=self._generate_persona_defaults, bg=BUTTON_BG, fg=BUTTON_TEXT, relief=tk.FLAT).pack(side=tk.LEFT)
+        tk.Button(btn_row, text="Edit team personas", command=self._open_persona_editor, bg=BUTTON_BG, fg=BUTTON_TEXT, relief=tk.FLAT).pack(side=tk.LEFT, padx=(8, 0))
+        tk.Button(btn_row, text="Refresh personas", command=self._refresh_persona_choices, bg=BUTTON_BG, fg=BUTTON_TEXT, relief=tk.FLAT).pack(side=tk.LEFT, padx=(8, 0))
+        tk.Label(
+            persona_frame,
+            text="Base persona is prepended to prompts when 'Base' is selected. Team personas act as role constraints when a team is selected.",
+            bg=PANEL_BG,
+            fg=TEXT_SECONDARY,
+            font=("Segoe UI", 9, "italic"),
+            wraplength=480,
+            justify="left",
+        ).pack(anchor="w", padx=12, pady=(0, 6))
 
         local_frame = tk.LabelFrame(parent, text="Local AI Process", bg=PANEL_BG, fg=TEXT_PRIMARY)
         local_frame.configure(labelanchor="nw")
         local_frame.pack(fill=tk.X, padx=4, pady=(0, 12))
+        # Backend selector (cli or python)
+        backend_row = tk.Frame(local_frame, bg=PANEL_BG)
+        backend_row.pack(anchor="w", pady=(6, 4))
+        tk.Label(backend_row, text="Backend", bg=PANEL_BG, fg=TEXT_PRIMARY).pack(side=tk.LEFT)
+        backend_menu = ttk.Combobox(backend_row, values=["cli", "python"], textvariable=self.ai_local_backend_var, state="readonly", width=10)
+        backend_menu.pack(side=tk.LEFT, padx=(8, 0))
+        self._ai_local_inputs.append(backend_menu)
+        # CLI fields
         command_widgets = self._build_labeled_entry(local_frame, "Command / Executable", self.ai_local_command_var)
         self._ai_local_inputs.extend(command_widgets)
         args_widgets = self._build_labeled_entry(local_frame, "Arguments", self.ai_local_args_var)
         self._ai_local_inputs.extend(args_widgets)
         workdir_widgets = self._build_labeled_entry(local_frame, "Working Directory", self.ai_local_workdir_var)
         self._ai_local_inputs.extend(workdir_widgets)
+        # Python backend fields
+        widgets = self._build_labeled_entry(local_frame, "Python backend (llama_cpp/transformers)", self.ai_python_backend_var)
+        self._ai_local_inputs.extend(widgets)
+        self._ai_python_inputs.extend(widgets)
+        widgets = self._build_labeled_entry(local_frame, "Model path / HF id", self.ai_model_path_var)
+        self._ai_local_inputs.extend(widgets)
+        self._ai_python_inputs.extend(widgets)
+        widgets = self._build_labeled_entry(local_frame, "Max tokens", self.ai_model_max_tokens_var)
+        self._ai_local_inputs.extend(widgets)
+        self._ai_python_inputs.extend(widgets)
+        widgets = self._build_labeled_entry(local_frame, "Temperature", self.ai_model_temperature_var)
+        self._ai_local_inputs.extend(widgets)
+        self._ai_python_inputs.extend(widgets)
+        tk.Label(
+            local_frame,
+            text="Local mode can either run a CLI that reads stdin, or use an in-process Python backend (llama-cpp-python or Hugging Face transformers).",
+            bg=PANEL_BG,
+            fg=TEXT_SECONDARY,
+            font=("Segoe UI", 9, "italic"),
+            wraplength=480,
+            justify="left",
+        ).pack(anchor="w", padx=12, pady=(0, 6))
 
         detected_frame = tk.LabelFrame(parent, text="Detected Local AI Launchers", bg=PANEL_BG, fg=TEXT_PRIMARY)
         detected_frame.configure(labelanchor="nw")
@@ -1048,19 +1412,6 @@ class PlayerEditorApp(tk.Tk):
             font=("Segoe UI", 11, "bold"),
         )
         team_value_label.grid(row=2, column=1, sticky="w", pady=4, padx=(8, 0))
-        edit_team_btn = tk.Button(
-            form,
-            text="Edit Team",
-            command=self._open_team_editor_from_player,
-            bg=BUTTON_BG,
-            fg=BUTTON_TEXT,
-            activebackground=BUTTON_ACTIVE_BG,
-            activeforeground=BUTTON_TEXT,
-            relief=tk.FLAT,
-            padx=10,
-            pady=4,
-        )
-        edit_team_btn.grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
         form.columnconfigure(1, weight=1)
         panel_context = {
             "panel_parent": detail_container,
@@ -1075,25 +1426,10 @@ class PlayerEditorApp(tk.Tk):
         for factory in PLAYER_PANEL_EXTENSIONS:
             try:
                 factory(self, panel_context)
-            except Exception as exc:
-                _EXTENSION_LOGGER.exception("Player panel extension failed: %s", exc)
+            except Exception:
+                pass
         btn_row = tk.Frame(detail_container, bg="#16213E")
         btn_row.pack(pady=(20, 0))
-        self.btn_save = tk.Button(
-            btn_row,
-            text="Save",
-            command=self._save_player,
-            bg=BUTTON_BG,
-            fg=BUTTON_TEXT,
-            disabledforeground=BUTTON_TEXT,
-            activebackground=BUTTON_ACTIVE_BG,
-            activeforeground=BUTTON_TEXT,
-            relief=tk.FLAT,
-            state=tk.DISABLED,
-            padx=16,
-            pady=6,
-        )
-        self.btn_save.pack(side=tk.LEFT, padx=5)
         self.btn_edit = tk.Button(
             btn_row,
             text="Edit Player",
@@ -1124,32 +1460,6 @@ class PlayerEditorApp(tk.Tk):
             pady=6,
         )
         self.btn_copy.pack(side=tk.LEFT, padx=5)
-        self.btn_import = tk.Button(
-            btn_row,
-            text="Import Data",
-            command=self._open_import_dialog,
-            bg=BUTTON_BG,
-            fg=BUTTON_TEXT,
-            activebackground=BUTTON_ACTIVE_BG,
-            activeforeground=BUTTON_TEXT,
-            relief=tk.FLAT,
-            padx=16,
-            pady=6,
-        )
-        self.btn_import.pack(side=tk.LEFT, padx=5)
-        self.btn_export = tk.Button(
-            btn_row,
-            text="Export CSV",
-            command=self._open_export_dialog,
-            bg=BUTTON_BG,
-            fg=BUTTON_TEXT,
-            activebackground=BUTTON_ACTIVE_BG,
-            activeforeground=BUTTON_TEXT,
-            relief=tk.FLAT,
-            padx=16,
-            pady=6,
-        )
-        self.btn_export.pack(side=tk.LEFT, padx=5)
         self.current_players = []
         self.filtered_player_indices = []
         self.selected_player = None
@@ -1167,11 +1477,16 @@ class PlayerEditorApp(tk.Tk):
         explicitly hidden here.  Without forgetting those frames, their
         widgets could remain visible atop the Home screen after navigation.
         """
-        self._hide_frames(self.players_frame, self.teams_frame, self.ai_frame, self.staff_frame, self.stadium_frame, self.excel_frame)
+        self._hide_frames(
+            self.players_frame,
+            self.teams_frame,
+            self.ai_frame,
+            self.staff_frame,
+            self.stadium_frame,
+            self.excel_frame,
+        )
         if self.home_frame is not None:
             self.home_frame.pack(fill=tk.BOTH, expand=True)
-        self._update_status()
-
     def show_players(self):
         """
         Display the Players screen and hide other panes.
@@ -1179,7 +1494,14 @@ class PlayerEditorApp(tk.Tk):
         Teams and Stadiums panes.  This prevents UI elements from
         overlapping when switching between tabs.
         """
-        self._hide_frames(self.home_frame, self.teams_frame, self.ai_frame, self.staff_frame, self.stadium_frame, self.excel_frame)
+        self._hide_frames(
+            self.home_frame,
+            self.teams_frame,
+            self.ai_frame,
+            self.staff_frame,
+            self.stadium_frame,
+            self.excel_frame,
+        )
         if self.players_frame is not None:
             self.players_frame.pack(fill=tk.BOTH, expand=True)
         # Kick off a background scan to load players and teams
@@ -1187,7 +1509,14 @@ class PlayerEditorApp(tk.Tk):
 
     def show_teams(self):
         """Display the Teams screen and start scanning if necessary."""
-        self._hide_frames(self.home_frame, self.players_frame, self.ai_frame, self.staff_frame, self.stadium_frame, self.excel_frame)
+        self._hide_frames(
+            self.home_frame,
+            self.players_frame,
+            self.ai_frame,
+            self.staff_frame,
+            self.stadium_frame,
+            self.excel_frame,
+        )
         if self.teams_frame is not None:
             self.teams_frame.pack(fill=tk.BOTH, expand=True)
         # Kick off a scan if we don't have team names yet
@@ -1199,27 +1528,55 @@ class PlayerEditorApp(tk.Tk):
 
     def show_ai(self):
         """Display the AI Assistant screen."""
-        self._hide_frames(self.home_frame, self.players_frame, self.teams_frame, self.staff_frame, self.stadium_frame, self.excel_frame)
+        self._hide_frames(
+            self.home_frame,
+            self.players_frame,
+            self.teams_frame,
+            self.staff_frame,
+            self.stadium_frame,
+            self.excel_frame,
+        )
         if self.ai_frame is not None:
             self.ai_frame.pack(fill=tk.BOTH, expand=True)
 
     def show_staff(self):
         """Display the Staff screen."""
-        self._hide_frames(self.home_frame, self.players_frame, self.teams_frame, self.ai_frame, self.stadium_frame, self.excel_frame)
+        self._hide_frames(
+            self.home_frame,
+            self.players_frame,
+            self.teams_frame,
+            self.ai_frame,
+            self.stadium_frame,
+            self.excel_frame,
+        )
         if self.staff_frame is not None:
             self.staff_frame.pack(fill=tk.BOTH, expand=True)
             self._refresh_staff_list()
 
     def show_stadium(self):
         """Display the Stadium screen."""
-        self._hide_frames(self.home_frame, self.players_frame, self.teams_frame, self.ai_frame, self.staff_frame, self.excel_frame)
+        self._hide_frames(
+            self.home_frame,
+            self.players_frame,
+            self.teams_frame,
+            self.ai_frame,
+            self.staff_frame,
+            self.excel_frame,
+        )
         if self.stadium_frame is not None:
             self.stadium_frame.pack(fill=tk.BOTH, expand=True)
             self._refresh_stadium_list()
 
     def show_excel(self):
         """Display the Excel import/export screen."""
-        self._hide_frames(self.home_frame, self.players_frame, self.teams_frame, self.ai_frame, self.staff_frame, self.stadium_frame)
+        self._hide_frames(
+            self.home_frame,
+            self.players_frame,
+            self.teams_frame,
+            self.ai_frame,
+            self.staff_frame,
+            self.stadium_frame,
+        )
         if self.excel_frame is not None:
             self.excel_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -1368,591 +1725,291 @@ class PlayerEditorApp(tk.Tk):
             import traceback
             messagebox.showerror("Batch Edit", f"Failed to open batch edit window: {exc}")
             traceback.print_exc()
-    def _open_2kcoy(self) -> None:
-        import_flows.open_2kcoy(self)
+
+    # -----------------------------------------------------------------
+    # Excel import/export
+    # -----------------------------------------------------------------
+    def _open_import_dialog(self) -> None:
+        """Open the Excel import screen."""
+        self.show_excel()
+
+    def _open_export_dialog(self) -> None:
+        """Open the Excel export screen."""
+        self.show_excel()
 
     def _open_load_excel(self) -> None:
-        """
-        Prompt the user to import player updates from a single Excel workbook.
-        Uses the bundled Excel import logic to read the workbook and apply
-        matching tabs directly (Attributes/Tendencies/etc). Avoids the COY flow.
-        """
-        # Refresh players to ensure we have up-to-date indices
+        """Open the Excel screen (alias for older control bridge calls)."""
+        self.show_excel()
+
+    def _reset_excel_progress(self) -> None:
+        progress = self.excel_progress
+        if progress is None:
+            return
         try:
-            self.model.refresh_players()
+            progress.stop()
         except Exception:
             pass
-        # Require the game to be running
-        if not self.model.mem.hproc:
-            messagebox.showinfo(
-                "Excel Import",
-                "NBA 2K26 does not appear to be running. Please launch the game and "
-                "load a roster before importing."
-            )
+        progress.configure(mode="determinate", maximum=100)
+        self.excel_progress_var.set(0)
+        self.update_idletasks()
+
+    def _apply_excel_progress(
+        self,
+        verb: str,
+        entity_label: str,
+        current: int,
+        total: int,
+        sheet_name: str | None,
+    ) -> None:
+        progress = self.excel_progress
+        if progress is not None and total > 0:
+            try:
+                maximum = int(progress.cget("maximum"))
+            except Exception:
+                maximum = 0
+            if maximum != total:
+                progress.configure(maximum=total)
+            self.excel_progress_var.set(current)
+        status = f"{verb} {entity_label}"
+        if sheet_name:
+            status = f"{status} ({sheet_name})"
+        if total > 0:
+            status = f"{status} {current}/{total}"
+        self.excel_status_var.set(status)
+        self.update_idletasks()
+
+    def _excel_progress_callback(
+        self,
+        verb: str,
+        entity_label: str,
+    ) -> Callable[[int, int, str | None], None]:
+        def _callback(current: int, total: int, sheet_name: str | None) -> None:
+            self._apply_excel_progress(verb, entity_label, current, total, sheet_name)
+
+        return _callback
+
+    def _queue_excel_export_progress(self, current: int, total: int, sheet_name: str | None) -> None:
+        if self._excel_export_queue is None:
             return
-        # Prompt for the Excel workbook first
-        workbook_path = filedialog.askopenfilename(
-            title="Select Excel or CSV File",
-            filetypes=[("Excel/CSV files", "*.xlsx *.xls *.csv *.tsv"), ("All files", "*.*")],
-        )
-        if not workbook_path:
+        self._excel_export_queue.put(("progress", current, total, sheet_name))
+
+    def _poll_excel_export(self) -> None:
+        if self._excel_export_queue is None:
+            self._excel_export_polling = False
             return
-        match_response = messagebox.askyesnocancel(
-            "Excel Import",
-            "Match players by name?\n\nYes = match each row to a roster player by name.\n"
-            "No = overwrite players in current roster order.\n"
-            "Note: template XLSX match-by-name requires the Vitals sheet (FIRSTNAME/LASTNAME).\n"
-            "Cancel = abort import.",
-        )
-        if match_response is None:
-            return
-        match_by_name = bool(match_response)
-        loading_win: tk.Toplevel | None = None
+        done_seen = False
+        done_result = None
+        done_error = None
         try:
-            loading_win = tk.Toplevel(self)
-            loading_win.title("Loading")
-            loading_win.geometry("350x120")
-            loading_win.resizable(False, False)
-            tk.Label(
-                loading_win,
-                text="Loading data... Please wait and do not click the updater.",
-                wraplength=320,
-                justify="left",
-            ).pack(padx=20, pady=20)
-            loading_win.update_idletasks()
-            results = excel_import.import_excel_workbook(self.model, workbook_path, match_by_name=match_by_name)
+            while True:
+                item = self._excel_export_queue.get_nowait()
+                if not item:
+                    continue
+                kind = item[0]
+                if kind == "progress":
+                    current = int(item[1]) if len(item) > 1 else 0
+                    total = int(item[2]) if len(item) > 2 else 0
+                    sheet_name = item[3] if len(item) > 3 else None
+                    self._apply_excel_progress(
+                        "Exporting",
+                        self._excel_export_entity_label,
+                        current,
+                        total,
+                        sheet_name,
+                    )
+                elif kind == "done":
+                    done_seen = True
+                    done_result = item[1] if len(item) > 1 else None
+                    done_error = item[2] if len(item) > 2 else None
+        except queue.Empty:
+            pass
+        if done_seen:
+            self._finish_excel_export(done_result, done_error)
+            return
+        if self._excel_export_thread is not None and self._excel_export_thread.is_alive():
+            self._excel_export_polling = True
+            self.after(100, self._poll_excel_export)
+        else:
+            self._excel_export_polling = False
+
+    def _finish_excel_export(self, result: object | None, error: object | None) -> None:
+        self._excel_export_thread = None
+        self._excel_export_queue = None
+        self._excel_export_polling = False
+        self._reset_excel_progress()
+        self.excel_status_var.set("")
+        if error is not None:
+            messagebox.showerror("Excel Export", f"Export failed: {error}")
+            return
+        if result is None:
+            messagebox.showerror("Excel Export", "Export failed: Unknown error.")
+            return
+        try:
+            summary = result.summary_text()  # type: ignore[union-attr]
+        except Exception:
+            summary = "Export completed."
+        messagebox.showinfo("Excel Export", summary)
+
+    def _import_excel(self, entity_type: str) -> None:
+        try:
+            from ..importing.excel_import import import_excel_workbook, template_path_for
         except Exception as exc:
-            messagebox.showerror("Excel Import", f"Failed to import workbook:\n{exc}")
-            if loading_win is not None:
-                try:
-                    loading_win.destroy()
-                except Exception:
-                    pass
+            messagebox.showerror("Excel Import", f"Import helpers not available: {exc}")
             return
-        finally:
-            if loading_win is not None:
-                try:
-                    loading_win.destroy()
-                except Exception:
-                    pass
+        if not self.model.mem.open_process():
+            messagebox.showerror("Excel Import", "NBA 2K26 is not running.")
+            return
+        entity_key = (entity_type or "").strip().lower()
+        template = template_path_for(entity_key)
+        path = filedialog.askopenfilename(
+            title="Select Excel workbook to import",
+            initialdir=str(template.parent),
+            initialfile=str(template.name),
+            filetypes=[("Excel files", "*.xlsx")],
+        )
+        if not path:
+            return
         try:
-            self.model.refresh_players()
-        except Exception:
-            pass
-        missing_bucket = getattr(self.model, "import_partial_matches", {}).get("excel_missing", {}) or {}
-        not_found = list(missing_bucket.keys())
-        msg_lines = ["Excel import completed."]
-        if not match_by_name:
-            msg_lines.append("\nImport applied using roster order (names were not matched).")
-        if results:
-            msg_lines.append("\nPlayers updated:")
-            for cat, cnt in results.items():
-                msg_lines.append(f"  {cat}: {cnt}")
-        if not_found:
-            msg_lines.append(f"\nPlayers not found: {len(not_found)}")
-        summary = "\n".join(msg_lines)
-        self._show_import_summary(
-            title="Excel Import",
-            summary_lines=msg_lines,
-            missing_players=sorted(not_found),
-            apply_callback=None,
-            context="excel",
-        )
-    def _show_import_summary(
-        self,
-        title: str,
-        summary_lines: list[str],
-        missing_players: list[str],
-        apply_callback: Callable[[dict[str, str]], None] | None = None,
-        *,
-        context: str = "default",
-    ) -> None:
-        """Display an import summary with optional lookup helpers for missing players."""
-        summary_text = "\n".join(summary_lines)
-        roster_names = [p.full_name for p in self.model.players if (p.first_name or p.last_name)]
-        if not missing_players or not roster_names:
-            messagebox.showinfo(title, summary_text)
-            return
-        partial_matches = getattr(self.model, "import_partial_matches", {}) or {}
-        suggestions: dict[str, str] = {}
-        suggestion_scores: dict[str, float] = {}
-        score_threshold = 0.92 if context != "coy" else 0.0
-        for mapping in partial_matches.values():
-            if not mapping:
-                continue
-            for raw_name, candidates in mapping.items():
-                if not candidates:
-                    continue
-                first = candidates[0]
-                candidate_name = ""
-                candidate_score: float | None = None
-                if isinstance(first, dict):
-                    candidate_name = str(first.get("name", "")).strip()
-                    raw_score = first.get("score")
-                    if isinstance(raw_score, (int, float)):
-                        candidate_score = float(raw_score)
-                elif isinstance(first, (tuple, list)) and first:
-                    candidate_name = str(first[0]).strip()
-                    if len(first) > 1 and isinstance(first[1], (int, float)):
-                        candidate_score = float(first[1])
-                else:
-                    candidate_name = str(first).strip()
-                key = str(raw_name or "").strip()
-                if not key or not candidate_name:
-                    continue
-                if candidate_score is None:
-                    if score_threshold <= 0.0 and context == "coy":
-                        suggestions.setdefault(key, candidate_name)
-                elif candidate_score >= score_threshold:
-                    if key not in suggestions:
-                        suggestions[key] = candidate_name
-                    suggestion_scores.setdefault(key, candidate_score)
-        if context == "coy":
-            roster_lookup = {name.lower(): name for name in roster_names}
-            for raw_name in missing_players:
-                key = str(raw_name or "").strip()
-                if not key or key in suggestions:
-                    continue
-                best_candidate = roster_lookup.get(key.lower())
-                best_score = 1.0 if best_candidate else 0.0
-                if not best_candidate:
-                    matches = difflib.get_close_matches(key, roster_names, n=1, cutoff=0.0)
-                    if matches:
-                        candidate = matches[0]
-                        best_candidate = candidate
-                        best_score = difflib.SequenceMatcher(
-                            None, key.lower(), candidate.lower()
-                        ).ratio()
-                    else:
-                        lower_matches = difflib.get_close_matches(
-                            key.lower(), list(roster_lookup.keys()), n=1, cutoff=0.0
-                        )
-                        if lower_matches:
-                            candidate = roster_lookup.get(lower_matches[0])
-                            if candidate:
-                                best_candidate = candidate
-                                best_score = difflib.SequenceMatcher(
-                                    None, key.lower(), candidate.lower()
-                                ).ratio()
-                    if best_candidate:
-                        suggestions[key] = best_candidate
-                        suggestion_scores.setdefault(key, best_score)
-        ImportSummaryDialog(
-            self,
-            title,
-            summary_text,
-            missing_players,
-            roster_names,
-            apply_callback=apply_callback,
-            suggestions=suggestions if suggestions else None,
-            suggestion_scores=suggestion_scores if suggestion_scores else None,
-            require_confirmation=context == "coy",
-        )
-
-    def _open_excel_hub(self) -> None:
-        """Unified Excel import/export window with per-category controls."""
-        try:
-            self.model.refresh_players()
-        except Exception:
-            pass
-        if self._excel_hub_win and tk.Toplevel.winfo_exists(self._excel_hub_win):
-            try:
-                self._excel_hub_win.lift()
-                return
-            except Exception:
-                self._excel_hub_win = None
-        hub = tk.Toplevel(self)
-        self._excel_hub_win = hub
-        hub.title("Excel Import / Export")
-        hub.geometry("780x520")
-        hub.resizable(True, True)
-        hub.configure(bg=PANEL_BG)
-        main = tk.Frame(hub, bg=PANEL_BG)
-        main.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        # Import section
-        import_frame = tk.LabelFrame(main, text="Import Excel", bg=PANEL_BG, fg=TEXT_PRIMARY)
-        import_frame.configure(labelanchor="nw")
-        import_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10), pady=4)
-        import_path_var = tk.StringVar()
-        import_controls: list[tk.Widget] = []
-        tk.Label(import_frame, text="Workbook", bg=PANEL_BG, fg=TEXT_PRIMARY).grid(row=0, column=0, sticky="w", padx=6, pady=(8, 2))
-        import_entry = tk.Entry(import_frame, textvariable=import_path_var, width=38, bg=INPUT_BG, fg=INPUT_TEXT_FG, relief=tk.FLAT)
-        import_entry.grid(row=0, column=1, sticky="we", padx=(0, 6), pady=(8, 2))
-        import_controls.append(import_entry)
-
-        def _browse_import():
-            path = filedialog.askopenfilename(
-                parent=hub,
-                title="Select Excel or CSV File",
-                filetypes=[("Excel/CSV files", "*.xlsx *.xls *.csv *.tsv"), ("All files", "*.*")],
-            )
-            if path:
-                import_path_var.set(path)
-
-        browse_btn = tk.Button(import_frame, text="Browse", command=_browse_import, bg=BUTTON_BG, fg=BUTTON_TEXT, relief=tk.FLAT)
-        browse_btn.grid(row=0, column=2, padx=(0, 6), pady=(8, 2))
-        import_controls.append(browse_btn)
-        match_var = tk.BooleanVar(value=True)
-        match_chk = tk.Checkbutton(
-            import_frame,
-            text="Match players by name (templates use Vitals names)",
-            variable=match_var,
-            bg=PANEL_BG,
-            fg=TEXT_PRIMARY,
-            activebackground=PANEL_BG,
-            activeforeground=TEXT_PRIMARY,
-            selectcolor=ACCENT_BG,
-        )
-        match_chk.grid(row=1, column=1, sticky="w", padx=(0, 6), pady=(2, 6))
-        import_controls.append(match_chk)
-        import_status = tk.StringVar(value="")
-        tk.Label(import_frame, textvariable=import_status, bg=PANEL_BG, fg=TEXT_SECONDARY, justify="left").grid(
-            row=2, column=0, columnspan=3, sticky="w", padx=6, pady=(4, 2)
-        )
-        import_frame.columnconfigure(1, weight=1)
-
-        def _set_import_state(state: str) -> None:
-            for widget in import_controls:
-                try:
-                    cast(Any, widget).configure(state=state)
-                except tk.TclError:
-                    pass
-
-        def _run_import():
-            path = import_path_var.get().strip()
-            if not path:
-                messagebox.showinfo("Excel Import", "Choose a workbook to import.")
-                return
-            if not self.model.mem.hproc:
-                messagebox.showinfo(
-                    "Excel Import",
-                    "NBA 2K26 does not appear to be running. Please launch the game and load a roster before importing.",
-                )
-                return
-            match_by_name = bool(match_var.get())
-            import_status.set("Importing...")
-            _set_import_state(tk.DISABLED)
-            progress_queue: queue.Queue[tuple] = queue.Queue()
-            try:
-                loading = tk.Toplevel(hub)
-                loading.title("Importing...")
-                loading.geometry("300x110")
-                loading.resizable(False, False)
-                tk.Label(loading, text="Importing workbook...\nPlease wait.", justify="center").pack(padx=20, pady=20)
-                loading.update_idletasks()
-            except Exception:
-                loading = None
-
-            def worker() -> None:
-                try:
-                    results = excel_import.import_excel_workbook(self.model, path, match_by_name=match_by_name)
-                    try:
-                        self.model.refresh_players()
-                    except Exception:
-                        pass
-                    missing_bucket = getattr(self.model, "import_partial_matches", {}).get("excel_missing", {}) or {}
-                    progress_queue.put(("done", results, missing_bucket, None))
-                except Exception as exc:
-                    progress_queue.put(("done", None, None, exc))
-
-            def pump_queue() -> None:
-                try:
-                    if not hub.winfo_exists():
-                        return
-                except tk.TclError:
-                    return
-                try:
-                    while True:
-                        msg = progress_queue.get_nowait()
-                        if msg[0] == "done":
-                            _, results, missing_bucket, exc = msg
-                            _set_import_state(tk.NORMAL)
-                            if loading:
-                                try:
-                                    loading.destroy()
-                                except Exception:
-                                    pass
-                            if exc:
-                                import_status.set(f"Import failed: {exc}")
-                                return
-                            not_found = len(missing_bucket or {})
-                            lines = [f"Imported {sum(results.values()) if results else 0} players."]
-                            if results:
-                                for cat, cnt in results.items():
-                                    lines.append(f"  {cat}: {cnt}")
-                            if not_found:
-                                lines.append(f"Players not found: {not_found}")
-                            import_status.set("\n".join(lines))
-                            return
-                except queue.Empty:
-                    pass
-                hub.after(80, pump_queue)
-
-            threading.Thread(target=worker, daemon=True).start()
-            hub.after(80, pump_queue)
-
-        import_btn = tk.Button(import_frame, text="Import Workbook", command=_run_import, bg=BUTTON_BG, fg=BUTTON_TEXT, relief=tk.FLAT)
-        import_btn.grid(row=3, column=1, sticky="w", padx=(0, 6), pady=(6, 10))
-        import_controls.append(import_btn)
-        # Export section
-        export_frame = tk.LabelFrame(main, text="Export Excel", bg=PANEL_BG, fg=TEXT_PRIMARY)
-        export_frame.configure(labelanchor="nw")
-        export_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 0), pady=4)
-        categories = self.model.categories or {}
-        super_map = getattr(offsets_mod, "CATEGORY_SUPER_TYPES", {}) or {}
-        super_map_lower = {str(k).lower(): str(v) for k, v in super_map.items()}
-        grouped: dict[str, list[str]] = {}
-        allowed_supers = {"players", "teams", "staff", "stadiums"}
-        for cat in categories:
-            sup = super_map.get(cat) or super_map_lower.get(cat.lower())
-            if not sup or str(sup).lower() not in allowed_supers:
-                continue
-            grouped.setdefault(str(sup), []).append(cat)
-        export_vars: dict[str, tk.BooleanVar] = {}
-        export_controls: list[tk.Widget] = []
-        group_container = tk.Frame(export_frame, bg=PANEL_BG)
-        group_container.pack(fill=tk.BOTH, expand=True, padx=6, pady=4)
-        for sup, cats in sorted(grouped.items(), key=lambda kv: kv[0]):
-            lf = tk.LabelFrame(group_container, text=sup.title(), bg=PANEL_BG, fg=TEXT_PRIMARY)
-            lf.configure(labelanchor="nw")
-            lf.pack(fill=tk.X, padx=4, pady=4)
-            cols = 2
-            for idx, cat in enumerate(sorted(cats)):
-                var = tk.BooleanVar(value=(sup.lower() == "players"))
-                export_vars[cat] = var
-                chk = tk.Checkbutton(
-                    lf,
-                    text=cat,
-                    variable=var,
-                    bg=PANEL_BG,
-                    fg=TEXT_PRIMARY,
-                    activebackground=PANEL_BG,
-                    activeforeground=TEXT_PRIMARY,
-                    selectcolor=ACCENT_BG,
-                )
-                chk.grid(row=idx // cols, column=idx % cols, sticky="w", padx=4, pady=2)
-                export_controls.append(chk)
-            lf.columnconfigure(0, weight=1)
-            lf.columnconfigure(1, weight=1)
-        tk.Label(export_frame, text="Output Folder", bg=PANEL_BG, fg=TEXT_PRIMARY).pack(anchor="w", padx=6, pady=(6, 0))
-        export_dir_var = tk.StringVar()
-        dir_row = tk.Frame(export_frame, bg=PANEL_BG)
-        dir_row.pack(fill=tk.X, padx=6, pady=(0, 6))
-        export_entry = tk.Entry(
-            dir_row,
-            textvariable=export_dir_var,
-            width=42,
-            bg=INPUT_BG,
-            fg=INPUT_TEXT_FG,
-            relief=tk.FLAT,
-        )
-        export_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
-        export_controls.append(export_entry)
-
-        def _browse_export():
-            path = filedialog.askdirectory(parent=hub, title="Select export folder")
-            if path:
-                export_dir_var.set(path)
-
-        browse_btn = tk.Button(dir_row, text="Browse", command=_browse_export, bg=BUTTON_BG, fg=BUTTON_TEXT, relief=tk.FLAT)
-        browse_btn.pack(side=tk.LEFT)
-        export_controls.append(browse_btn)
-        raw_var = tk.BooleanVar(value=False)
-        raw_chk = tk.Checkbutton(
-            export_frame,
-            text="Also export raw player records",
-            variable=raw_var,
-            bg=PANEL_BG,
-            fg=TEXT_PRIMARY,
-            activebackground=PANEL_BG,
-            activeforeground=TEXT_PRIMARY,
-            selectcolor=ACCENT_BG,
-        )
-        raw_chk.pack(anchor="w", padx=6, pady=(0, 4))
-        export_controls.append(raw_chk)
-        prog_frame = tk.Frame(export_frame, bg=PANEL_BG)
-        prog_frame.pack(fill=tk.X, padx=6, pady=(4, 6))
-        prog_var = tk.IntVar(value=0)
-        prog_max = tk.IntVar(value=100)
-        prog_bar = ttk.Progressbar(
-            prog_frame, orient=tk.HORIZONTAL, mode="determinate", variable=prog_var, maximum=prog_max.get(), length=300
-        )
-        prog_bar.pack(fill=tk.X, expand=True)
-        exp_status = tk.StringVar(value="")
-        tk.Label(export_frame, textvariable=exp_status, bg=PANEL_BG, fg=TEXT_SECONDARY, justify="left").pack(
-            anchor="w", padx=6, pady=(2, 8)
-        )
-
-        def _export_progress(done: int, total: int, label: str) -> None:
-            try:
-                if total > 0:
-                    prog_max.set(total)
-                    prog_bar.configure(maximum=total)
-                prog_var.set(done)
-                exp_status.set(f"{label}: {done}/{total if total else '?'}")
-                prog_frame.update_idletasks()
-            except Exception:
-                pass
-
-        def _set_export_state(state: str) -> None:
-            for widget in export_controls:
-                try:
-                    cast(Any, widget).configure(state=state)
-                except tk.TclError:
-                    pass
-
-        def _run_export():
-            selected = [cat for cat, var in export_vars.items() if var.get()]
-            if not selected:
-                messagebox.showinfo("Export Excel", "Select at least one category to export.")
-                return
-            export_dir = export_dir_var.get().strip()
-            if not export_dir:
-                messagebox.showinfo("Export Excel", "Choose an output folder.")
-                return
-            raw_enabled = bool(raw_var.get())
-            _export_progress(0, 100, "Starting")
-            exp_status.set("Exporting...")
-            _set_export_state(tk.DISABLED)
-            progress_queue: queue.Queue[tuple] = queue.Queue()
-            last_done = 0
-            last_total = 100
-
-            def progress_cb(done: int, total: int, label: str) -> None:
-                progress_queue.put(("progress", done, total, label))
-
-            def worker() -> None:
-                try:
-                    results = self.model.export_to_excel_templates(selected, export_dir, progress_cb=progress_cb)
-                    if raw_enabled:
-                        progress_queue.put(("label", "Raw Player Records"))
-                        raw_path, raw_count = self.model.export_player_raw_records(export_dir)
-                        if raw_count > 0:
-                            results["Raw Player Records"] = (raw_path, raw_count)
-                    progress_queue.put(("done", results, None))
-                except Exception as exc:
-                    progress_queue.put(("done", None, exc))
-
-            def pump_queue() -> None:
-                nonlocal last_done, last_total
-                try:
-                    if not hub.winfo_exists():
-                        return
-                except tk.TclError:
-                    return
-                try:
-                    while True:
-                        msg = progress_queue.get_nowait()
-                        kind = msg[0]
-                        if kind == "progress":
-                            _, done, total, label = msg
-                            last_done = done
-                            last_total = total
-                            _export_progress(done, total, label)
-                        elif kind == "label":
-                            _, label = msg
-                            _export_progress(last_done, last_total, label)
-                        elif kind == "done":
-                            _, results, exc = msg
-                            _set_export_state(tk.NORMAL)
-                            if exc:
-                                exp_status.set(f"Export failed: {exc}")
-                                return
-                            if not results:
-                                exp_status.set("No Excel files were created.")
-                                return
-                            lines = []
-                            for cat in selected:
-                                if cat in results:
-                                    path, cnt = results[cat]
-                                    lines.append(f"{cat}: {cnt} rows -> {os.path.basename(path)}")
-                            if "Raw Player Records" in results:
-                                path, cnt = results["Raw Player Records"]
-                                lines.append(f"Raw Player Records: {cnt} -> {os.path.basename(path)}")
-                            exp_status.set("\n".join(lines))
-                            return
-                except queue.Empty:
-                    pass
-                hub.after(80, pump_queue)
-
-            threading.Thread(target=worker, daemon=True).start()
-            hub.after(80, pump_queue)
-
-        export_btn = tk.Button(export_frame, text="Export Selected", command=_run_export, bg=BUTTON_BG, fg=BUTTON_TEXT, relief=tk.FLAT)
-        export_btn.pack(anchor="w", padx=6, pady=(2, 8))
-        export_controls.append(export_btn)
-    def _apply_manual_import(
-        self,
-        mapping: dict[str, str],
-        category_tables: dict[str, dict[str, object]],
-        title: str,
-        *,
-        context: str | None = None,
-    ) -> None:
-        if not mapping:
-            messagebox.showinfo(title, "No player matches were selected.")
-            return
-        import csv as _csv
-        map_lookup = {str(k or "").strip().lower(): v for k, v in mapping.items() if v}
-        if not map_lookup:
-            messagebox.showinfo(title, "No valid player matches were provided.")
-            return
-        temp_files: dict[str, str] = {}
-        try:
-            for cat, table in category_tables.items():
-                rows_obj = table.get("rows")
-                if not isinstance(rows_obj, list) or len(rows_obj) < 2:
-                    continue
-                rows = [list(row) for row in rows_obj]
-                header = rows[0]
-                filtered = [header]
-                for row in rows[1:]:
-                    if not row:
-                        continue
-                    sheet_name = str(row[0]).strip()
-                    mapped = map_lookup.get(sheet_name.lower())
-                    if not mapped:
-                        continue
-                    new_row = list(row)
-                    new_row[0] = mapped
-                    filtered.append(new_row)
-                if len(filtered) <= 1:
-                    continue
-                delimiter_obj = table.get("delimiter")
-                delimiter = delimiter_obj if isinstance(delimiter_obj, str) else ","
-                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv", mode="w", newline='', encoding='utf-8')
-                writer = _csv.writer(tmp, delimiter=delimiter)
-                writer.writerows(filtered)
-                tmp.close()
-                temp_files[cat] = tmp.name
-            if not temp_files:
-                messagebox.showinfo(title, "No matching rows were found for the selected players.")
-                return
-            if context == "coy":
-                results = self.model.import_coy_tables(temp_files)
-            elif context == "excel":
-                results = self.model.import_excel_tables(temp_files)
-            else:
-                results = self.model.import_all(temp_files)
-            try:
+            if entity_key in ("players", "teams"):
                 self.model.refresh_players()
-            except Exception:
-                pass
-            msg_lines = [f"{title} completed."]
-            if results:
-                msg_lines.append("\nPlayers updated:")
-                for cat, cnt in results.items():
-                    msg_lines.append(f"  {cat}: {cnt}")
-            messagebox.showinfo(title, "\n".join(msg_lines))
-        finally:
-            for path in temp_files.values():
+            elif entity_key == "staff":
+                self.model.refresh_staff()
+            elif entity_key in ("stadiums", "stadium"):
+                self.model.refresh_stadiums()
+        except Exception:
+            pass
+        self._reset_excel_progress()
+        self.excel_status_var.set(f"Importing {entity_key}...")
+        progress_cb = self._excel_progress_callback("Importing", entity_key.title())
+        try:
+            result = import_excel_workbook(self.model, path, entity_key, progress_cb=progress_cb)
+        except Exception as exc:
+            self.excel_status_var.set("")
+            self._reset_excel_progress()
+            messagebox.showerror("Excel Import", f"Import failed: {exc}")
+            return
+        self.excel_status_var.set("")
+        self._reset_excel_progress()
+        if result.missing_names:
+            roster_names: list[str]
+            if entity_key == "players":
+                roster_names = [p.full_name for p in self.model.players]
+                missing_label = "Players not found - type to search the current roster"
+            elif entity_key == "teams":
+                roster_names = self.model.get_teams()
+                missing_label = "Teams not found - type to search the current list"
+            elif entity_key == "staff":
+                roster_names = self.model.get_staff()
+                missing_label = "Staff not found - type to search the current list"
+            else:
+                roster_names = self.model.get_stadiums()
+                missing_label = "Stadiums not found - type to search the current list"
+
+            def _apply_mapping(mapping: dict[str, str]) -> None:
+                if not mapping:
+                    return
+                self._reset_excel_progress()
                 try:
-                    os.remove(path)
-                except Exception:
-                    pass
-    # ---------------------------------------------------------------------
-    # Teams screen
-    # ---------------------------------------------------------------------
+                    follow = import_excel_workbook(
+                        self.model,
+                        path,
+                        entity_key,
+                        name_overrides=mapping,
+                        only_names=set(mapping.keys()),
+                        progress_cb=progress_cb,
+                    )
+                except Exception as exc:
+                    self._reset_excel_progress()
+                    messagebox.showerror("Excel Import", f"Import failed: {exc}")
+                    return
+                self._reset_excel_progress()
+                messagebox.showinfo("Excel Import", follow.summary_text())
+
+            ImportSummaryDialog(
+                self,
+                f"{entity_key.title()} Import Summary",
+                result.summary_text(),
+                result.missing_names,
+                roster_names,
+                apply_callback=_apply_mapping,
+                missing_label=missing_label,
+            )
+        else:
+            messagebox.showinfo("Excel Import", result.summary_text())
+
+    def _export_excel(self, entity_type: str) -> None:
+        try:
+            from ..importing.excel_import import export_excel_workbook, template_path_for
+        except Exception as exc:
+            messagebox.showerror("Excel Export", f"Export helpers not available: {exc}")
+            return
+        if self._excel_export_thread is not None and self._excel_export_thread.is_alive():
+            messagebox.showinfo("Excel Export", "An export is already running.")
+            return
+        if not self.model.mem.open_process():
+            messagebox.showerror("Excel Export", "NBA 2K26 is not running.")
+            return
+        entity_key = (entity_type or "").strip().lower()
+        template = template_path_for(entity_key)
+        default_name = template.name.replace(".xlsx", "_export.xlsx")
+        path = filedialog.asksaveasfilename(
+            title="Save export workbook",
+            initialdir=str(template.parent),
+            initialfile=default_name,
+            defaultextension=".xlsx",
+            filetypes=[("Excel files", "*.xlsx")],
+        )
+        if not path:
+            return
+        self._reset_excel_progress()
+        use_cached = False
+        if entity_key == "players":
+            use_cached = bool(self.model.players)
+        elif entity_key == "teams":
+            use_cached = bool(self.model.team_list)
+        elif entity_key == "staff":
+            use_cached = bool(self.model.staff_list)
+        elif entity_key in ("stadiums", "stadium"):
+            use_cached = bool(self.model.stadium_list)
+        status_label = f"Exporting {entity_key}..."
+        if use_cached:
+            status_label = f"Exporting {entity_key} (cached scan)..."
+        self.excel_status_var.set(status_label)
+        self._excel_export_entity_label = entity_key.title()
+        self._excel_export_queue = queue.Queue()
+        progress_cb = self._queue_excel_export_progress
+
+        def _run_export() -> None:
+            try:
+                if entity_key == "players":
+                    if not self.model.players:
+                        self.model.refresh_players()
+                elif entity_key == "teams":
+                    if not self.model.team_list:
+                        self.model.refresh_players()
+                elif entity_key == "staff":
+                    if not self.model.staff_list:
+                        self.model.refresh_staff()
+                elif entity_key in ("stadiums", "stadium"):
+                    if not self.model.stadium_list:
+                        self.model.refresh_stadiums()
+                result = export_excel_workbook(
+                    self.model,
+                    path,
+                    entity_key,
+                    template_path=template,
+                    progress_cb=progress_cb,
+                )
+                if self._excel_export_queue is not None:
+                    self._excel_export_queue.put(("done", result, None))
+            except Exception as exc:
+                if self._excel_export_queue is not None:
+                    self._excel_export_queue.put(("done", None, exc))
+
+        self._excel_export_thread = threading.Thread(target=_run_export, daemon=True)
+        self._excel_export_thread.start()
+        if not self._excel_export_polling:
+            self._poll_excel_export()
     def _build_teams_screen(self):
         """Construct the Teams editing screen."""
         self.teams_frame = tk.Frame(self, bg="#0F1C2E")
@@ -2117,7 +2174,7 @@ class PlayerEditorApp(tk.Tk):
         self.btn_team_save.pack(side=tk.LEFT, padx=(0, 8))
         self.btn_team_full = tk.Button(
             btn_row,
-            text="Full Editor",
+            text="Edit Team",
             command=self._open_full_team_editor,
             bg=BUTTON_BG,
             fg=BUTTON_TEXT,
@@ -2349,31 +2406,31 @@ class PlayerEditorApp(tk.Tk):
         """Open the full team editor window for the selected team."""
         team_name = self.team_edit_var.get()
         if not team_name:
-            messagebox.showinfo("Full Editor", "Please select a team first.")
+            messagebox.showinfo("Edit Team", "Please select a team first.")
             return
         teams = self.model.get_teams()
         if not teams:
-            messagebox.showinfo("Full Editor", "No teams available. Refresh and try again.")
+            messagebox.showinfo("Edit Team", "No teams available. Refresh and try again.")
             return
         team_idx = self.model._team_index_for_display_name(team_name)
         if team_idx is None:
             try:
                 team_idx = teams.index(team_name)
             except ValueError:
-                messagebox.showerror("Full Editor", "Selected team could not be resolved.")
+                messagebox.showerror("Edit Team", "Selected team could not be resolved.")
                 return
         try:
             self.model.mem.open_process()
         except Exception:
             pass
         if not self.model.mem.hproc:
-            messagebox.showinfo("Full Editor", "NBA 2K26 is not running. Launch the game to edit team data.")
+            messagebox.showinfo("Edit Team", "NBA 2K26 is not running. Launch the game to edit team data.")
             return
         try:
             editor = FullTeamEditor(self, team_idx, team_name, self.model)
             editor.grab_set()
         except Exception as exc:
-            messagebox.showerror("Full Editor", f"Unable to open team editor: {exc}")
+            messagebox.showerror("Edit Team", f"Unable to open team editor: {exc}")
 
     def _open_full_staff_editor(self, staff_idx: int | None = None) -> None:
         """Open the staff editor (requires staff pointers/stride)."""
@@ -2498,11 +2555,16 @@ class PlayerEditorApp(tk.Tk):
             if _offset_config is None or _current_offset_target != actual_lower:
                 try:
                     initialize_offsets(target_executable=actual_exec, force=True)
+                    self.model.invalidate_base_cache()
                 except OffsetSchemaError as exc:
                     messagebox.showerror("Offset schema error", str(exc))
                     self.status_var.set(f"{target_label} detected but offsets failed to load")
                     return
             self.model.mem.module_name = target_exec
+            try:
+                self.model.prime_bases(open_process=False)
+            except Exception:
+                pass
             self.status_var.set(f"{target_label} is running (PID {pid})")
         else:
             self.status_var.set(f"{target_label} not detected - launch the game to enable editing")
@@ -2567,6 +2629,7 @@ class PlayerEditorApp(tk.Tk):
             offsets_mod._apply_offset_config(data)
             self.model.categories = offsets_mod._load_categories()
             self.offset_load_status_var.set(f"Loaded offsets from {fname}")
+            self.model.invalidate_base_cache()
             self._update_status()
             self._start_scan()
             self.after(
@@ -2697,6 +2760,7 @@ class PlayerEditorApp(tk.Tk):
                         force=False,
                         base_pointer_overrides=overrides,
                     )
+                    self.model.invalidate_base_cache()
                     addr_parts = []
                     player_addr = overrides.get("Player")
                     team_addr = overrides.get("Team")
@@ -2783,6 +2847,15 @@ class PlayerEditorApp(tk.Tk):
             self.team_var.set(team)
         except Exception:
             pass
+        if team.lower() == "all players" and not self.model.players:
+            if self.scanning:
+                status_msg = "Scanning... please wait"
+            elif not self.model.mem.hproc:
+                status_msg = "NBA 2K26 is not running."
+            else:
+                status_msg = "Players not loaded. Click Scan to load players."
+            self.scan_status_var.set(status_msg)
+            self.team_scan_status_var.set(status_msg)
         # Get the players for the selected team.  Store them in
         # ``current_players`` so the search filter can operate on
         # a stable list without hitting the model repeatedly.
@@ -2825,25 +2898,35 @@ class PlayerEditorApp(tk.Tk):
             search = ""
         if self.player_listbox is None:
             return
-        self.player_listbox.delete(0, tk.END)
+        listbox = self.player_listbox
+        listbox.delete(0, tk.END)
         self.filtered_player_indices = []
         if not self.current_players:
             if not self.model.mem.hproc:
-                self.player_listbox.insert(tk.END, "NBA 2K26 is not running.")
+                listbox.insert(tk.END, "NBA 2K26 is not running.")
             else:
-                self.player_listbox.insert(tk.END, "No players available.")
+                listbox.insert(tk.END, "No players available.")
             self.player_count_var.set("Players: 0")
             return
-        for idx, player in enumerate(self.current_players):
-            name = (player.full_name or "").lower()
-            if not search or search in name:
-                self.filtered_player_indices.append(idx)
-                self.player_listbox.insert(tk.END, player.full_name)
-        if not self.filtered_player_indices:
+        visible_names: list[str] = []
+        if not search:
+            self.filtered_player_indices = list(range(len(self.current_players)))
+            visible_names = [player.full_name for player in self.current_players]
+        else:
+            for idx, player in enumerate(self.current_players):
+                if search in player.full_name.lower():
+                    self.filtered_player_indices.append(idx)
+                    visible_names.append(player.full_name)
+        if not visible_names:
             if self.current_players:
-                self.player_listbox.insert(tk.END, "No players match the current filter.")
+                listbox.insert(tk.END, "No players match the current filter.")
             else:
-                self.player_listbox.insert(tk.END, "No players available.")
+                listbox.insert(tk.END, "No players available.")
+        else:
+            # Insert in chunks to avoid thousands of Tk calls on large rosters.
+            chunk_size = 500
+            for start in range(0, len(visible_names), chunk_size):
+                listbox.insert(tk.END, *visible_names[start:start + chunk_size])
         self.player_count_var.set(f"Players: {len(self.filtered_player_indices)}")
     def _on_team_selected(self, event=None):
         """Handle team selection from the players screen."""
@@ -2920,7 +3003,9 @@ class PlayerEditorApp(tk.Tk):
                 self.player_ovr_var.set("OVR --")
             def _format_detail(label: str, value: object) -> str:
                 if label == "Height" and isinstance(value, (int, float)):
-                    inches_val = raw_height_to_inches(int(value))
+                    inches_val = int(value)
+                    if inches_val > HEIGHT_MAX_INCHES:
+                        inches_val = raw_height_to_inches(inches_val)
                     inches_val = max(HEIGHT_MIN_INCHES, min(HEIGHT_MAX_INCHES, inches_val))
                     return format_height_inches(inches_val)
                 if value is None:
@@ -3068,439 +3153,5 @@ class PlayerEditorApp(tk.Tk):
             win.destroy()
         tk.Button(btn_frame, text="Copy", command=do_copy, bg="#84A98C", fg="white", relief=tk.FLAT).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="Cancel", command=win.destroy, bg="#B0413E", fg="white", relief=tk.FLAT).pack(side=tk.LEFT, padx=5)
-
-    def _build_excel_screen(self) -> None:
-        """Build the inline Excel import/export screen."""
-        self.excel_frame = tk.Frame(self, bg=PANEL_BG)
-        main = tk.Frame(self.excel_frame, bg=PANEL_BG)
-        main.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        # Import pane
-        import_frame = tk.LabelFrame(main, text="Import Excel", bg=PANEL_BG, fg=TEXT_PRIMARY)
-        import_frame.configure(labelanchor="nw")
-        import_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10), pady=4)
-        import_path_var = tk.StringVar()
-        import_controls: list[tk.Widget] = []
-        tk.Label(import_frame, text="Workbook", bg=PANEL_BG, fg=TEXT_PRIMARY).grid(row=0, column=0, sticky="w", padx=6, pady=(8, 2))
-        import_entry = tk.Entry(import_frame, textvariable=import_path_var, width=38, bg=INPUT_BG, fg=INPUT_TEXT_FG, relief=tk.FLAT)
-        import_entry.grid(row=0, column=1, sticky="we", padx=(0, 6), pady=(8, 2))
-        import_controls.append(import_entry)
-
-        def _browse_import() -> None:
-            path = filedialog.askopenfilename(
-                parent=self,
-                title="Select Excel or CSV File",
-                filetypes=[("Excel/CSV files", "*.xlsx *.xls *.csv *.tsv"), ("All files", "*.*")],
-            )
-            if path:
-                import_path_var.set(path)
-
-        browse_btn = tk.Button(import_frame, text="Browse", command=_browse_import, bg=BUTTON_BG, fg=BUTTON_TEXT, relief=tk.FLAT)
-        browse_btn.grid(row=0, column=2, padx=(0, 6), pady=(8, 2))
-        import_controls.append(browse_btn)
-        match_var = tk.BooleanVar(value=True)
-        match_chk = tk.Checkbutton(
-            import_frame,
-            text="Match players by name (templates use Vitals names)",
-            variable=match_var,
-            bg=PANEL_BG,
-            fg=TEXT_PRIMARY,
-            activebackground=PANEL_BG,
-            activeforeground=TEXT_PRIMARY,
-            selectcolor=ACCENT_BG,
-        )
-        match_chk.grid(row=1, column=1, sticky="w", padx=(0, 6), pady=(2, 6))
-        import_controls.append(match_chk)
-        import_status = tk.StringVar(value="")
-        tk.Label(import_frame, textvariable=import_status, bg=PANEL_BG, fg=TEXT_SECONDARY, justify="left").grid(
-            row=2, column=0, columnspan=3, sticky="w", padx=6, pady=(4, 2)
-        )
-        import_frame.columnconfigure(1, weight=1)
-
-        def _set_import_state(state: str) -> None:
-            for widget in import_controls:
-                try:
-                    cast(Any, widget).configure(state=state)
-                except tk.TclError:
-                    pass
-
-        def _run_import() -> None:
-            path = import_path_var.get().strip()
-            if not path:
-                messagebox.showinfo("Excel Import", "Choose a workbook to import.")
-                return
-            if not self.model.mem.hproc:
-                messagebox.showinfo(
-                    "Excel Import",
-                    "NBA 2K26 does not appear to be running. Please launch the game and load a roster before importing.",
-                )
-                return
-            match_by_name = bool(match_var.get())
-            import_status.set("Importing...")
-            _set_import_state(tk.DISABLED)
-            progress_queue: queue.Queue[tuple] = queue.Queue()
-            loading = None
-            try:
-                loading = tk.Toplevel(self)
-                loading.title("Importing...")
-                loading.geometry("300x110")
-                loading.resizable(False, False)
-                tk.Label(loading, text="Importing workbook...\nPlease wait.", justify="center").pack(padx=20, pady=20)
-                loading.update_idletasks()
-            except Exception:
-                loading = None
-
-            def worker() -> None:
-                try:
-                    results = excel_import.import_excel_workbook(self.model, path, match_by_name=match_by_name)
-                    try:
-                        self.model.refresh_players()
-                    except Exception:
-                        pass
-                    missing_bucket = getattr(self.model, "import_partial_matches", {}).get("excel_missing", {}) or {}
-                    progress_queue.put(("done", results, missing_bucket, None))
-                except Exception as exc:
-                    progress_queue.put(("done", None, None, exc))
-
-            def pump_queue() -> None:
-                try:
-                    if not self.winfo_exists():
-                        return
-                except tk.TclError:
-                    return
-                try:
-                    while True:
-                        msg = progress_queue.get_nowait()
-                        if msg[0] == "done":
-                            _, results, missing_bucket, exc = msg
-                            _set_import_state(tk.NORMAL)
-                            if loading:
-                                try:
-                                    loading.destroy()
-                                except Exception:
-                                    pass
-                            if exc:
-                                import_status.set(f"Import failed: {exc}")
-                                return
-                            not_found = len(missing_bucket or {})
-                            lines = [f"Imported {sum(results.values()) if results else 0} players."]
-                            if results:
-                                for cat, cnt in results.items():
-                                    lines.append(f"  {cat}: {cnt}")
-                            if not_found:
-                                lines.append(f"Players not found: {not_found}")
-                            import_status.set("\n".join(lines))
-                            return
-                except queue.Empty:
-                    pass
-                self.after(80, pump_queue)
-
-            threading.Thread(target=worker, daemon=True).start()
-            self.after(80, pump_queue)
-
-        import_btn = tk.Button(import_frame, text="Import Workbook", command=_run_import, bg=BUTTON_BG, fg=BUTTON_TEXT, relief=tk.FLAT)
-        import_btn.grid(row=3, column=1, sticky="w", padx=(0, 6), pady=(6, 10))
-        import_controls.append(import_btn)
-        # Export pane
-        export_frame = tk.LabelFrame(main, text="Export Excel", bg=PANEL_BG, fg=TEXT_PRIMARY)
-        export_frame.configure(labelanchor="nw")
-        export_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 0), pady=4)
-        categories = self.model.categories or {}
-        super_map = getattr(offsets_mod, "CATEGORY_SUPER_TYPES", {}) or {}
-        super_map_lower = {str(k).lower(): str(v) for k, v in super_map.items()}
-        grouped: dict[str, list[str]] = {}
-        allowed_supers = {"players", "teams", "staff", "stadiums"}
-        for cat in categories:
-            sup = super_map.get(cat) or super_map_lower.get(cat.lower())
-            if not sup or str(sup).lower() not in allowed_supers:
-                continue
-            grouped.setdefault(str(sup), []).append(cat)
-        export_vars: dict[str, tk.BooleanVar] = {}
-        export_controls: list[tk.Widget] = []
-        group_container = tk.Frame(export_frame, bg=PANEL_BG)
-        group_container.pack(fill=tk.BOTH, expand=True, padx=6, pady=4)
-        for sup, cats in sorted(grouped.items(), key=lambda kv: kv[0]):
-            lf = tk.LabelFrame(group_container, text=sup.title(), bg=PANEL_BG, fg=TEXT_PRIMARY)
-            lf.configure(labelanchor="nw")
-            lf.pack(fill=tk.X, padx=4, pady=4)
-            cols = 2
-            for idx, cat in enumerate(sorted(cats)):
-                var = tk.BooleanVar(value=(sup.lower() == "players"))
-                export_vars[cat] = var
-                chk = tk.Checkbutton(
-                    lf,
-                    text=cat,
-                    variable=var,
-                    bg=PANEL_BG,
-                    fg=TEXT_PRIMARY,
-                    activebackground=PANEL_BG,
-                    activeforeground=TEXT_PRIMARY,
-                    selectcolor=ACCENT_BG,
-                )
-                chk.grid(row=idx // cols, column=idx % cols, sticky="w", padx=4, pady=2)
-                export_controls.append(chk)
-            lf.columnconfigure(0, weight=1)
-            lf.columnconfigure(1, weight=1)
-        tk.Label(export_frame, text="Output Folder", bg=PANEL_BG, fg=TEXT_PRIMARY).pack(anchor="w", padx=6, pady=(6, 0))
-        export_dir_var = tk.StringVar()
-        dir_row = tk.Frame(export_frame, bg=PANEL_BG)
-        dir_row.pack(fill=tk.X, padx=6, pady=(0, 6))
-        export_entry = tk.Entry(
-            dir_row,
-            textvariable=export_dir_var,
-            width=42,
-            bg=INPUT_BG,
-            fg=INPUT_TEXT_FG,
-            relief=tk.FLAT,
-        )
-        export_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
-        export_controls.append(export_entry)
-
-        def _browse_export() -> None:
-            path = filedialog.askdirectory(parent=self, title="Select export folder")
-            if path:
-                export_dir_var.set(path)
-
-        browse_btn = tk.Button(dir_row, text="Browse", command=_browse_export, bg=BUTTON_BG, fg=BUTTON_TEXT, relief=tk.FLAT)
-        browse_btn.pack(side=tk.LEFT)
-        export_controls.append(browse_btn)
-        raw_var = tk.BooleanVar(value=False)
-        raw_chk = tk.Checkbutton(
-            export_frame,
-            text="Also export raw player records",
-            variable=raw_var,
-            bg=PANEL_BG,
-            fg=TEXT_PRIMARY,
-            activebackground=PANEL_BG,
-            activeforeground=TEXT_PRIMARY,
-            selectcolor=ACCENT_BG,
-        )
-        raw_chk.pack(anchor="w", padx=6, pady=(0, 4))
-        export_controls.append(raw_chk)
-        prog_frame = tk.Frame(export_frame, bg=PANEL_BG)
-        prog_frame.pack(fill=tk.X, padx=6, pady=(4, 6))
-        prog_var = tk.IntVar(value=0)
-        prog_max = tk.IntVar(value=100)
-        prog_bar = ttk.Progressbar(
-            prog_frame, orient=tk.HORIZONTAL, mode="determinate", variable=prog_var, maximum=prog_max.get(), length=300
-        )
-        prog_bar.pack(fill=tk.X, expand=True)
-        exp_status = tk.StringVar(value="")
-        tk.Label(export_frame, textvariable=exp_status, bg=PANEL_BG, fg=TEXT_SECONDARY, justify="left").pack(
-            anchor="w", padx=6, pady=(2, 8)
-        )
-
-        def _export_progress(done: int, total: int, label: str) -> None:
-            try:
-                if total > 0:
-                    prog_max.set(total)
-                    prog_bar.configure(maximum=total)
-                prog_var.set(done)
-                exp_status.set(f"{label}: {done}/{total if total else '?'}")
-                prog_frame.update_idletasks()
-            except Exception:
-                pass
-
-        def _set_export_state(state: str) -> None:
-            for widget in export_controls:
-                try:
-                    cast(Any, widget).configure(state=state)
-                except tk.TclError:
-                    pass
-
-        def _run_export() -> None:
-            selected = [cat for cat, var in export_vars.items() if var.get()]
-            if not selected:
-                messagebox.showinfo("Export Excel", "Select at least one category to export.")
-                return
-            export_dir = export_dir_var.get().strip()
-            if not export_dir:
-                messagebox.showinfo("Export Excel", "Choose an output folder.")
-                return
-            raw_enabled = bool(raw_var.get())
-            _export_progress(0, 100, "Starting")
-            exp_status.set("Exporting...")
-            _set_export_state(tk.DISABLED)
-            progress_queue: queue.Queue[tuple] = queue.Queue()
-            last_done = 0
-            last_total = 100
-
-            def progress_cb(done: int, total: int, label: str) -> None:
-                progress_queue.put(("progress", done, total, label))
-
-            def worker() -> None:
-                try:
-                    results = self.model.export_to_excel_templates(selected, export_dir, progress_cb=progress_cb)
-                    if raw_enabled:
-                        progress_queue.put(("label", "Raw Player Records"))
-                        raw_path, raw_count = self.model.export_player_raw_records(export_dir)
-                        if raw_count > 0:
-                            results["Raw Player Records"] = (raw_path, raw_count)
-                    progress_queue.put(("done", results, None))
-                except Exception as exc:
-                    progress_queue.put(("done", None, exc))
-
-            def pump_queue() -> None:
-                nonlocal last_done, last_total
-                try:
-                    if not self.winfo_exists():
-                        return
-                except tk.TclError:
-                    return
-                try:
-                    while True:
-                        msg = progress_queue.get_nowait()
-                        kind = msg[0]
-                        if kind == "progress":
-                            _, done, total, label = msg
-                            last_done = done
-                            last_total = total
-                            _export_progress(done, total, label)
-                        elif kind == "label":
-                            _, label = msg
-                            _export_progress(last_done, last_total, label)
-                        elif kind == "done":
-                            _, results, exc = msg
-                            _set_export_state(tk.NORMAL)
-                            if exc:
-                                exp_status.set(f"Export failed: {exc}")
-                                return
-                            if not results:
-                                exp_status.set("No Excel files were created.")
-                                return
-                            lines = []
-                            for cat in selected:
-                                if cat in results:
-                                    path, cnt = results[cat]
-                                    lines.append(f"{cat}: {cnt} rows -> {os.path.basename(path)}")
-                            if "Raw Player Records" in results:
-                                path, cnt = results["Raw Player Records"]
-                                lines.append(f"Raw Player Records: {cnt} -> {os.path.basename(path)}")
-                            exp_status.set("\n".join(lines))
-                            return
-                except queue.Empty:
-                    pass
-                self.after(80, pump_queue)
-
-            threading.Thread(target=worker, daemon=True).start()
-            self.after(80, pump_queue)
-
-        export_btn = tk.Button(export_frame, text="Export Selected", command=_run_export, bg=BUTTON_BG, fg=BUTTON_TEXT, relief=tk.FLAT)
-        export_btn.pack(anchor="w", padx=6, pady=(2, 8))
-        export_controls.append(export_btn)
-
-    def _open_export_dialog(self) -> None:
-        """Prompt the user to export selected roster categories to CSV files."""
-        try:
-            if not self.model.mem.open_process():
-                messagebox.showerror("Export Data", "Unable to connect to NBA 2K. Launch the game and try again.")
-                return
-        except Exception:
-            messagebox.showerror("Export Data", "Failed to access the game process. Make sure NBA 2K is running.")
-            return
-        # Ensure we have an up-to-date player list before exporting
-        try:
-            self.model.refresh_players()
-        except Exception:
-            pass
-        if not self.model.players:
-            messagebox.showerror("Export Data", "No players were detected. Refresh the roster and try again.")
-            return
-        player_categories = [
-            cat
-            for cat, super_type in (getattr(offsets_mod, "CATEGORY_SUPER_TYPES", {}) or {}).items()
-            if str(super_type).lower() == "players" and cat in self.model.categories
-        ]
-        available_categories = player_categories or [cat for cat in ("Attributes", "Tendencies", "Durability", "Potential") if cat in self.model.categories]
-        if not available_categories:
-            messagebox.showerror("Export Data", "No exportable categories were found in the current offsets configuration.")
-            return
-        dlg = CategorySelectionDialog(
-            self,
-            available_categories,
-            title="Select categories to export",
-            message="Export the following categories:",
-        )
-        self.wait_window(dlg)
-        export_raw = bool(getattr(dlg, "export_full_records", False))
-        selected_categories = dlg.selected or []
-        if not selected_categories and not export_raw:
-            return
-        export_dir = filedialog.askdirectory(parent=self, title="Select export folder")
-        if not export_dir:
-            return
-        # Progress dialog
-        progress_win = tk.Toplevel(self)
-        progress_win.title("Exporting...")
-        progress_win.geometry("360x140")
-        progress_win.resizable(False, False)
-        tk.Label(progress_win, text="Exporting players...", justify="left").pack(padx=12, pady=(14, 6), anchor="w")
-        progress_var = tk.IntVar(value=0)
-        progress_max = tk.IntVar(value=100)
-        progress_label_var = tk.StringVar(value="")
-        bar = ttk.Progressbar(progress_win, orient=tk.HORIZONTAL, length=320, mode="determinate", variable=progress_var, maximum=progress_max.get())
-        bar.pack(padx=12, pady=6)
-        tk.Label(progress_win, textvariable=progress_label_var, justify="left").pack(padx=12, pady=(0, 10), anchor="w")
-
-        def progress_cb(done: int, total: int, label: str) -> None:
-            try:
-                if total > 0:
-                    progress_max.set(total)
-                    bar.configure(maximum=total)
-                progress_var.set(done)
-                progress_label_var.set(f"{label}: {done}/{total if total else '?'}")
-                progress_win.update_idletasks()
-            except Exception:
-                pass
-
-        try:
-            results = self.model.export_to_excel_templates(selected_categories, export_dir, progress_cb=progress_cb)
-            if export_raw:
-                progress_cb(progress_var.get(), progress_max.get(), "Raw Player Records")
-                raw_path, raw_count = self.model.export_player_raw_records(export_dir)
-                if raw_count > 0:
-                    results["Raw Player Records"] = (raw_path, raw_count)
-        except RuntimeError as exc:
-            messagebox.showerror("Export Data", str(exc))
-            try:
-                progress_win.destroy()
-            except Exception:
-                pass
-            return
-        except Exception as exc:  # Safety net
-            messagebox.showerror("Export Data", f"Failed to export roster data:\n{exc}")
-            try:
-                progress_win.destroy()
-            except Exception:
-                pass
-            return
-        try:
-            progress_win.destroy()
-        except Exception:
-            pass
-        if not results:
-            messagebox.showinfo(
-                "Export Data",
-                "No Excel files were created. Ensure the selected categories have templates in the Offsets folder.",
-            )
-            return
-        lines: list[str] = []
-        for cat in selected_categories:
-            info = results.get(cat)
-            if info:
-                path, count = info
-                lines.append(f"{cat}: exported {count} players to {os.path.basename(path)}")
-        for key in ("All Offsets", "Raw Player Records"):
-            info = results.get(key)
-            if not info:
-                continue
-            path, count = info
-            basename = os.path.basename(path) or path
-            lines.append(f"{key}: exported {count} entries to {basename}")
-        summary = "\n".join(lines) if lines else "Export completed."
-        messagebox.showinfo("Export Data", summary)
-
-    def _open_import_dialog(self):
-        import_flows.open_import_dialog(self)
-
 
 __all__ = ["PlayerEditorApp"]

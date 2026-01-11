@@ -29,8 +29,11 @@ bridge for automation.
 
 ## AI backends
 - Local mode:
-  - Builds a command from settings and runs it with stdin/stdout pipes.
-  - Uses `shlex.split` for arguments and supports a working directory.
+  - Builds a command from settings and runs it with stdin/stdout pipes, or uses an in-process Python backend.
+  - Python backend (set `local.backend` to `python`) supports `llama-cpp-python` (`llama_cpp`) and Hugging Face `transformers`.
+- Helper utilities are available in `ai.backend_helpers` for loading model instances and performing synchronous or asynchronous generation (useful for UI-driven progress updates).
+- Transformers streaming: when available, the helpers use `transformers.TextIteratorStreamer` for real streaming token-by-token; otherwise they fall back to chunked emission to simulate streaming.
+  - Uses `shlex.split` for CLI arguments and supports a working directory for CLI mode.
   - Enforces a timeout and surfaces stderr on failure.
 - Remote mode:
   - Sends OpenAI-compatible `chat/completions` requests to `remote.base_url`.
@@ -58,7 +61,7 @@ The dispatcher supports:
 - Navigation (`show_screen`: `home`, `players`, `teams`, `staff`,
   `stadium`, `excel`).
 - Tool invocation (`invoke_feature`, `open_full_editor`, `open_randomizer`,
-  `open_team_shuffle`, `open_batch_edit`, `open_coy_importer`, etc).
+  `open_team_shuffle`, `open_batch_edit`, etc).
 - Full editor field APIs for player/staff/stadium editors.
 
 ## NBA data integration

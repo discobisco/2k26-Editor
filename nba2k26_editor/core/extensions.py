@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 from typing import Any, Callable
 
@@ -16,13 +15,9 @@ FullEditorExtension = Callable[[object, dict[str, Any]], None]
 PLAYER_PANEL_EXTENSIONS: list[PlayerPanelExtension] = []
 FULL_EDITOR_EXTENSIONS: list[FullEditorExtension] = []
 
-_EXTENSION_LOGGER = logging.getLogger("nba2k26.extensions")
-
-
 def register_player_panel_extension(factory: PlayerPanelExtension, *, prepend: bool = False) -> None:
     """Register a hook executed after the player detail panel is built."""
     if not callable(factory):
-        _EXTENSION_LOGGER.debug("Ignoring non-callable player panel extension: %r", factory)
         return
     if prepend:
         PLAYER_PANEL_EXTENSIONS.insert(0, factory)
@@ -33,7 +28,6 @@ def register_player_panel_extension(factory: PlayerPanelExtension, *, prepend: b
 def register_full_editor_extension(factory: FullEditorExtension, *, prepend: bool = False) -> None:
     """Register a hook executed after a full player editor window is created."""
     if not callable(factory):
-        _EXTENSION_LOGGER.debug("Ignoring non-callable full editor extension: %r", factory)
         return
     if prepend:
         FULL_EDITOR_EXTENSIONS.insert(0, factory)

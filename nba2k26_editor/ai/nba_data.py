@@ -6,7 +6,6 @@ loaded lazily and reused across requests.
 """
 from __future__ import annotations
 
-import logging
 import math
 import threading
 import time
@@ -15,8 +14,6 @@ from typing import Any, Iterable, Sequence
 
 from ..core.config import BASE_DIR
 from ..core.conversions import format_height_inches
-
-LOG = logging.getLogger("nba2k26.ai.nba_data")
 
 NBA_DATA_PATH = BASE_DIR / "NBA Player Data" / "NBA DATA Master.xlsx"
 
@@ -188,7 +185,6 @@ def _load_data() -> None:
             _PER_GAME_CACHE = per_game_cache
             _LAST_ERROR = None
     except Exception as exc:  # noqa: BLE001
-        LOG.exception("Failed to load NBA player data workbook")
         with _LOCK:
             _LAST_ERROR = str(exc)
     finally:

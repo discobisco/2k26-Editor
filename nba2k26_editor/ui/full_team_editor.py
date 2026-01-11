@@ -304,126 +304,29 @@ class FullTeamEditor(tk.Toplevel):
 
     def _load_all_values(self) -> None:
         """Populate all fields from live memory."""
-
-        def _is_string_meta(meta: FieldMetadata | None) -> bool:
-            return self._is_string_type(meta.data_type if meta else None)
-        def _is_float_meta(meta: FieldMetadata | None) -> bool:
-            return self._is_float_type(meta.data_type if meta else None)
-        def _is_color_meta(meta: FieldMetadata | None) -> bool:
-            return self._is_color_type(meta.data_type if meta else None)
-        def _safe_float(value: object) -> float | None:
-            try:
-                if isinstance(value, (int, float)):
-                    return float(value)
-                text = str(value).strip()
-                if not text:
-                    return None
-                return float(text)
-            except Exception:
-                return None
-
         for category, fields in self.field_vars.items():
             for field_name, var in fields.items():
                 meta = self.field_meta.get((category, field_name))
                 if not meta:
                     continue
-                offset = meta.offset
-                start_bit = meta.start_bit
-                length = meta.length
-                requires_deref = meta.requires_deref
-                deref_offset = meta.deref_offset
-                if _is_string_meta(meta):
-                    try:
-                        self.model.mem.open_process()
-                    except Exception:
-                        continue
-                    record_addr = self.model._team_record_address(self.team_index)
-                    if record_addr is None:
-                        continue
-                    try:
-                        addr = record_addr + offset
-                        if requires_deref and deref_offset:
-                            struct_ptr = self.model.mem.read_uint64(record_addr + deref_offset)
-                            if not struct_ptr:
-                                continue
-                            addr = struct_ptr + offset
-                        char_limit = length if length > 0 else meta.byte_length
-                        if char_limit <= 0:
-                            char_limit = 64
-                        enc_tag = meta.data_type or "utf16"
-                        enc_norm = self.model._normalize_encoding_tag(enc_tag)
-                        if enc_norm == "utf16" and meta.byte_length and meta.byte_length % 2 == 0:
-                            char_limit = max(char_limit, meta.byte_length // 2)
-                        text_val = self.model._read_string(addr, char_limit, enc_tag)
-                        var.set(text_val)
-                    except Exception:
-                        continue
-                    continue
-                if _is_float_meta(meta):
-                    value = self.model.get_team_field_value_typed(
-                        self.team_index,
-                        offset,
-                        start_bit,
-                        length,
-                        requires_deref=requires_deref,
-                        deref_offset=deref_offset,
-                        field_type=meta.data_type,
-                        byte_length=meta.byte_length,
-                    )
-                    if value is None:
-                        continue
-                    try:
-                        fval = _safe_float(value)
-                        if fval is not None:
-                            var.set(fval)
-                    except Exception:
-                        continue
-                    continue
-                if _is_color_meta(meta):
-                    value = self.model.get_team_field_value_typed(
-                        self.team_index,
-                        offset,
-                        start_bit,
-                        length,
-                        requires_deref=requires_deref,
-                        deref_offset=deref_offset,
-                        field_type=meta.data_type,
-                        byte_length=meta.byte_length,
-                    )
-                    if value is None:
-                        continue
-                    try:
-                        bitlen = length if length > 0 else meta.byte_length * 8
-                        width = max(1, (bitlen + 3) // 4)
-                        int_val = to_int(value)
-                        var.set(f"0x{int_val & ((1 << bitlen) - 1):0{width}X}")
-                    except Exception:
-                        try:
-                            var.set(str(value))
-                        except Exception:
-                            pass
-                    continue
-                value = self.model.get_team_field_value_typed(
-                    self.team_index,
-                    offset,
-                    start_bit,
-                    length,
-                    requires_deref=requires_deref,
-                    deref_offset=deref_offset,
-                    field_type=meta.data_type,
-                    byte_length=meta.byte_length,
+                value = self.model.decode_field_value(
+                    entity_type="team",
+                    entity_index=self.team_index,
+                    category=category,
+                    field_name=field_name,
+                    meta=meta,
                 )
                 if value is None:
                     continue
                 if meta.values and isinstance(var, tk.IntVar):
                     try:
-                        int_val = to_int(value)
-                        var.set(int_val)
+                        idx = to_int(value)
+                        var.set(idx)
                         widget = meta.widget
                         vals = list(meta.values)
-                        if isinstance(widget, ttk.Combobox) and 0 <= int_val < len(vals):
+                        if isinstance(widget, ttk.Combobox) and 0 <= idx < len(vals):
                             try:
-                                widget.set(vals[int_val])
+                                widget.set(vals[idx])
                             except Exception:
                                 pass
                     except Exception:
@@ -432,6 +335,11 @@ class FullTeamEditor(tk.Toplevel):
                     try:
                         if isinstance(var, tk.StringVar):
                             var.set(str(value))
+                        elif isinstance(var, tk.DoubleVar):
+                            if isinstance(value, (int, float)):
+                                var.set(float(value))
+                            else:
+                                var.set(float(str(value)))
                         else:
                             var.set(to_int(value))
                     except Exception:
@@ -443,149 +351,25 @@ class FullTeamEditor(tk.Toplevel):
             messagebox.showerror("Save Error", "NBA 2K26 is not running.")
             return
         any_error = False
-
-        def _is_string_meta(meta: FieldMetadata | None) -> bool:
-            return self._is_string_type(meta.data_type if meta else None)
-        def _is_float_meta(meta: FieldMetadata | None) -> bool:
-            return self._is_float_type(meta.data_type if meta else None)
-        def _is_color_meta(meta: FieldMetadata | None) -> bool:
-            return self._is_color_type(meta.data_type if meta else None)
-
         for category, fields in self.field_vars.items():
             for field_name, var in fields.items():
                 meta = self.field_meta.get((category, field_name))
                 if not meta:
-                    continue
-                offset = meta.offset
-                start_bit = meta.start_bit
-                length = meta.length
-                requires_deref = meta.requires_deref
-                deref_offset = meta.deref_offset
-                if _is_string_meta(meta):
-                    try:
-                        text_val = str(var.get())
-                    except Exception:
-                        text_val = ""
-                    try:
-                        record_addr = self.model._team_record_address(self.team_index)
-                        if record_addr is None:
-                            any_error = True
-                            continue
-                        addr = record_addr + offset
-                        if requires_deref and deref_offset:
-                            struct_ptr = self.model.mem.read_uint64(record_addr + deref_offset)
-                            if not struct_ptr:
-                                any_error = True
-                                continue
-                            addr = struct_ptr + offset
-                        char_limit = length if length > 0 else meta.byte_length
-                        if char_limit <= 0:
-                            char_limit = max(len(text_val), 1)
-                        enc_tag = meta.data_type or "utf16"
-                        enc_norm = self.model._normalize_encoding_tag(enc_tag)
-                        if enc_norm == "utf16" and meta.byte_length and meta.byte_length % 2 == 0:
-                            char_limit = max(char_limit, meta.byte_length // 2)
-                        self.model._write_string(addr, text_val, char_limit, enc_tag)
-                    except Exception:
-                        any_error = True
-                    continue
-                if _is_float_meta(meta):
-                    try:
-                        ui_val = float(var.get())
-                    except Exception:
-                        any_error = True
-                        continue
-                    try:
-                        ok = self.model.set_team_field_value_typed(
-                            self.team_index,
-                            offset,
-                            start_bit,
-                            length,
-                            ui_val,
-                            requires_deref=requires_deref,
-                            deref_offset=deref_offset,
-                            field_type=meta.data_type,
-                            byte_length=meta.byte_length,
-                        )
-                        any_error = any_error or not ok
-                    except Exception:
-                        any_error = True
-                    continue
-                if _is_color_meta(meta):
-                    try:
-                        raw_text = str(var.get()).strip()
-                    except Exception:
-                        raw_text = ""
-                    parsed_val: int | None = None
-                    if raw_text:
-                        try:
-                            cleaned = raw_text
-                            if cleaned.startswith("#"):
-                                cleaned = cleaned[1:]
-                            parsed_val = int(cleaned, 16) if cleaned.lower().startswith("0x") or raw_text.startswith("#") else int(cleaned, 0)
-                        except Exception:
-                            try:
-                                parsed_val = int(float(raw_text))
-                            except Exception:
-                                parsed_val = None
-                    if parsed_val is None:
-                        any_error = True
-                        continue
-                    try:
-                        ok = self.model.set_team_field_value_typed(
-                            self.team_index,
-                            offset,
-                            start_bit,
-                            length,
-                            parsed_val,
-                            requires_deref=requires_deref,
-                            deref_offset=deref_offset,
-                            field_type=meta.data_type,
-                            byte_length=meta.byte_length,
-                        )
-                        any_error = any_error or not ok
-                    except Exception:
-                        any_error = True
                     continue
                 try:
                     ui_value = var.get()
                 except Exception:
                     any_error = True
                     continue
-                if meta.values:
-                    try:
-                        max_raw = (1 << length) - 1
-                    except Exception:
-                        max_raw = len(meta.values) - 1
-                    try:
-                        idx_val = int(ui_value)
-                    except Exception:
-                        idx_val = 0
-                    if idx_val < 0:
-                        idx_val = 0
-                    if max_raw > 0 and idx_val > max_raw:
-                        idx_val = max_raw
-                    if idx_val >= len(meta.values):
-                        idx_val = len(meta.values) - 1
-                    value_to_write = idx_val
-                else:
-                    try:
-                        value_to_write = int(ui_value)
-                    except Exception:
-                        any_error = True
-                        continue
-                if not self.model.set_team_field_value_typed(
-                    self.team_index,
-                    offset,
-                    start_bit,
-                    length,
-                    value_to_write,
-                    requires_deref=requires_deref,
-                    deref_offset=deref_offset,
-                    field_type=meta.data_type,
-                    byte_length=meta.byte_length,
-                ):
-                    any_error = True
+                ok = self.model.encode_field_value(
+                    entity_type="team",
+                    entity_index=self.team_index,
+                    category=category,
+                    field_name=field_name,
+                    meta=meta,
+                    display_value=ui_value,
+                )
+                any_error = any_error or not ok
         if any_error:
             messagebox.showerror("Save Error", "One or more fields could not be saved.")
         else:

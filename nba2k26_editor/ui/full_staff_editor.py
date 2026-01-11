@@ -117,17 +117,64 @@ class FullStaffEditor(tk.Toplevel):
             length = _to_int(field.get("length", 8))
             byte_length = _to_int(field.get("size") or field.get("length") or 0)
             field_type = str(field.get("type", "")).lower()
+            values_list = field.get("values") if isinstance(field, dict) else None
             tk.Label(scroll_frame, text=name + ":", bg=PANEL_BG, fg=TEXT_PRIMARY).grid(
                 row=row, column=0, sticky=tk.W, padx=(10, 5), pady=2
             )
             is_string = any(tag in field_type for tag in ("string", "text", "wstring", "wide", "utf16", "char"))
+            is_float = "float" in field_type
+            is_color = any(tag in field_type for tag in ("color", "pointer"))
             var: tk.Variable
-            if is_string:
+            if values_list:
+                var = tk.IntVar(value=0)
+                combo = ttk.Combobox(
+                    scroll_frame,
+                    values=values_list,
+                    state="readonly",
+                    width=20,
+                )
+                combo.grid(row=row, column=1, sticky=tk.W, padx=(0, 10), pady=2)
+                def on_enum_selected(event=None, v=var, c=combo, vals=values_list):
+                    try:
+                        v.set(vals.index(c.get()))
+                    except Exception:
+                        v.set(0)
+                combo.bind("<<ComboboxSelected>>", on_enum_selected)
+                entry = combo
+            elif is_string:
                 var = tk.StringVar(value="")
                 entry = tk.Entry(
                     scroll_frame,
                     textvariable=var,
                     width=28,
+                    bg=ENTRY_BG,
+                    fg=ENTRY_FG,
+                    insertbackground=ENTRY_FG,
+                    relief=tk.FLAT,
+                    highlightbackground=ENTRY_BORDER,
+                    highlightthickness=1,
+                )
+                entry.grid(row=row, column=1, sticky=tk.W, padx=(0, 10), pady=2)
+            elif is_float:
+                var = tk.DoubleVar(value=0.0)
+                entry = tk.Entry(
+                    scroll_frame,
+                    textvariable=var,
+                    width=16,
+                    bg=ENTRY_BG,
+                    fg=ENTRY_FG,
+                    insertbackground=ENTRY_FG,
+                    relief=tk.FLAT,
+                    highlightbackground=ENTRY_BORDER,
+                    highlightthickness=1,
+                )
+                entry.grid(row=row, column=1, sticky=tk.W, padx=(0, 10), pady=2)
+            elif is_color:
+                var = tk.StringVar(value="")
+                entry = tk.Entry(
+                    scroll_frame,
+                    textvariable=var,
+                    width=16,
                     bg=ENTRY_BG,
                     fg=ENTRY_FG,
                     insertbackground=ENTRY_FG,
@@ -158,6 +205,7 @@ class FullStaffEditor(tk.Toplevel):
                 requires_deref=bool(field.get("requiresDereference") or field.get("requires_deref")),
                 deref_offset=_to_int(field.get("dereferenceAddress") or field.get("deref_offset")),
                 widget=entry,
+                values=tuple(str(v) for v in values_list) if values_list else None,
                 data_type=field_type,
                 byte_length=byte_length,
             )
@@ -177,24 +225,38 @@ class FullStaffEditor(tk.Toplevel):
             var = self.field_vars.get((cat, name))
             if var is None:
                 continue
-            try:
-                val = self.model.get_staff_field_value_typed(
-                    self.staff_index,
-                    meta.offset,
-                    meta.start_bit,
-                    meta.length,
-                    requires_deref=meta.requires_deref,
-                    deref_offset=meta.deref_offset,
-                    field_type=meta.data_type,
-                    byte_length=meta.byte_length,
-                )
-            except Exception:
-                val = None
-            if isinstance(var, tk.StringVar):
-                var.set("" if val is None else str(val))
+            val = self.model.decode_field_value(
+                entity_type="staff",
+                entity_index=self.staff_index,
+                category=cat,
+                field_name=name,
+                meta=meta,
+            )
+            if val is None:
+                continue
+            if meta.values and isinstance(var, tk.IntVar):
+                try:
+                    idx = int(val)
+                except Exception:
+                    idx = 0
+                var.set(idx)
+                widget = meta.widget
+                vals = list(meta.values)
+                if isinstance(widget, ttk.Combobox) and 0 <= idx < len(vals):
+                    try:
+                        widget.set(vals[idx])
+                    except Exception:
+                        pass
+            elif isinstance(var, tk.StringVar):
+                var.set(str(val))
+            elif isinstance(var, tk.DoubleVar):
+                try:
+                    var.set(float(val))
+                except Exception:
+                    pass
             else:
                 try:
-                    var.set(0 if val is None else int(val))
+                    var.set(int(val))
                 except Exception:
                     var.set(0)
         self._unsaved_changes.clear()
@@ -209,16 +271,13 @@ class FullStaffEditor(tk.Toplevel):
                 raw = var.get()
             except Exception:
                 continue
-            success = self.model.set_staff_field_value_typed(
-                self.staff_index,
-                meta.offset,
-                meta.start_bit,
-                meta.length,
-                raw,
-                requires_deref=meta.requires_deref,
-                deref_offset=meta.deref_offset,
-                field_type=meta.data_type,
-                byte_length=meta.byte_length,
+            success = self.model.encode_field_value(
+                entity_type="staff",
+                entity_index=self.staff_index,
+                category=cat,
+                field_name=name,
+                meta=meta,
+                display_value=raw,
             )
             if not success:
                 errors.append(f"{cat} / {name}")

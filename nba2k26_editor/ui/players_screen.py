@@ -1,7 +1,6 @@
 """Players screen builder extracted from PlayerEditorApp."""
 from __future__ import annotations
 
-import logging
 import tkinter as tk
 from tkinter import ttk
 from typing import cast
@@ -19,8 +18,6 @@ from ..core.config import (
 )
 from ..core.extensions import PLAYER_PANEL_EXTENSIONS
 from .widgets import bind_mousewheel
-
-_EXTENSION_LOGGER = logging.getLogger("nba2k26.extensions")
 
 
 def build_players_screen(app) -> None:
@@ -216,39 +213,11 @@ def build_players_screen(app) -> None:
     info_grid.columnconfigure(3, weight=1)
     form = tk.Frame(detail_container, bg=PANEL_BG)
     form.pack(padx=35, pady=(10, 0), fill=tk.X)
-    tk.Label(form, text="First Name", bg=PANEL_BG, fg="#E0E1DD", font=("Segoe UI", 11)).grid(row=0, column=0, sticky="w", pady=4)
     app.var_first = tk.StringVar()
-    first_entry = tk.Entry(
-        form,
-        textvariable=app.var_first,
-        relief=tk.FLAT,
-        width=20,
-        fg=ENTRY_FG,
-        bg=ENTRY_BG,
-        insertbackground=ENTRY_FG,
-        highlightthickness=1,
-        highlightbackground=ENTRY_BORDER,
-        disabledbackground=ENTRY_BG,
-        disabledforeground=ENTRY_FG,
-    )
-    first_entry.grid(row=0, column=1, sticky="ew", pady=4, padx=(8, 0))
-    tk.Label(form, text="Last Name", bg=PANEL_BG, fg="#E0E1DD", font=("Segoe UI", 11)).grid(row=1, column=0, sticky="w", pady=4)
     app.var_last = tk.StringVar()
-    last_entry = tk.Entry(
-        form,
-        textvariable=app.var_last,
-        relief=tk.FLAT,
-        width=20,
-        fg=ENTRY_FG,
-        bg=ENTRY_BG,
-        insertbackground=ENTRY_FG,
-        highlightthickness=1,
-        highlightbackground=ENTRY_BORDER,
-        disabledbackground=ENTRY_BG,
-        disabledforeground=ENTRY_FG,
-    )
-    last_entry.grid(row=1, column=1, sticky="ew", pady=4, padx=(8, 0))
-    tk.Label(form, text="Team", bg="#16213E", fg="#E0E1DD", font=("Segoe UI", 11)).grid(row=2, column=0, sticky="w", pady=4)
+    first_entry = None
+    last_entry = None
+    tk.Label(form, text="Team", bg="#16213E", fg="#E0E1DD", font=("Segoe UI", 11)).grid(row=0, column=0, sticky="w", pady=4)
     app.var_player_team = tk.StringVar()
     team_value_label = tk.Label(
         form,
@@ -257,23 +226,10 @@ def build_players_screen(app) -> None:
         fg="#9BA4B5",
         font=("Segoe UI", 11, "bold"),
     )
-    team_value_label.grid(row=2, column=1, sticky="w", pady=4, padx=(8, 0))
-    edit_team_btn = tk.Button(
-        form,
-        text="Edit Team",
-        command=app._open_team_editor_from_player,
-        bg=BUTTON_BG,
-        fg=BUTTON_TEXT,
-        activebackground=BUTTON_ACTIVE_BG,
-        activeforeground=BUTTON_TEXT,
-        relief=tk.FLAT,
-        padx=10,
-        pady=4,
-    )
-    edit_team_btn.grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
+    team_value_label.grid(row=0, column=1, sticky="w", pady=4, padx=(8, 0))
     form.columnconfigure(1, weight=1)
-    app.first_name_entry = first_entry
-    app.last_name_entry = last_entry
+    app.first_name_entry = None
+    app.last_name_entry = None
     app.team_value_label = team_value_label
     panel_context = {
         "panel_parent": detail_container,
@@ -288,25 +244,10 @@ def build_players_screen(app) -> None:
     for factory in PLAYER_PANEL_EXTENSIONS:
         try:
             factory(app, panel_context)
-        except Exception as exc:
-            _EXTENSION_LOGGER.exception("Player panel extension failed: %s", exc)
+        except Exception:
+            pass
     btn_row = tk.Frame(detail_container, bg="#16213E")
     btn_row.pack(pady=(20, 0))
-    app.btn_save = tk.Button(
-        btn_row,
-        text="Save",
-        command=app._save_player,
-        bg=BUTTON_BG,
-        fg=BUTTON_TEXT,
-        disabledforeground=BUTTON_TEXT,
-        activebackground=BUTTON_ACTIVE_BG,
-        activeforeground=BUTTON_TEXT,
-        relief=tk.FLAT,
-        state=tk.DISABLED,
-        padx=16,
-        pady=6,
-    )
-    app.btn_save.pack(side=tk.LEFT, padx=5)
     app.btn_edit = tk.Button(
         btn_row,
         text="Edit Player",
@@ -337,32 +278,6 @@ def build_players_screen(app) -> None:
         pady=6,
     )
     app.btn_copy.pack(side=tk.LEFT, padx=5)
-    app.btn_import = tk.Button(
-        btn_row,
-        text="Import Data",
-        command=app._open_import_dialog,
-        bg=BUTTON_BG,
-        fg=BUTTON_TEXT,
-        activebackground=BUTTON_ACTIVE_BG,
-        activeforeground=BUTTON_TEXT,
-        relief=tk.FLAT,
-        padx=16,
-        pady=6,
-    )
-    app.btn_import.pack(side=tk.LEFT, padx=5)
-    app.btn_export = tk.Button(
-        btn_row,
-        text="Export CSV",
-        command=app._open_export_dialog,
-        bg=BUTTON_BG,
-        fg=BUTTON_TEXT,
-        activebackground=BUTTON_ACTIVE_BG,
-        activeforeground=BUTTON_TEXT,
-        relief=tk.FLAT,
-        padx=16,
-        pady=6,
-    )
-    app.btn_export.pack(side=tk.LEFT, padx=5)
     app.current_players = []
     app.filtered_player_indices = []
     app.selected_player = None

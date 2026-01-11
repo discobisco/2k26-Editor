@@ -2,17 +2,11 @@
 from __future__ import annotations
 
 import tkinter as tk
+from typing import cast
 from tkinter import ttk
 
-from ..core.conversions import (
-    convert_minmax_potential_to_raw,
-    convert_rating_to_raw,
-    convert_rating_to_tendency_raw,
-    height_inches_to_raw,
-    write_weight,
-    to_int,
-)
-from ..core.offsets import PLAYER_STRIDE, TEAM_RECORD_SIZE
+from ..core.conversions import to_int
+from ..core.offsets import PLAYER_STRIDE
 from ..models.data_model import PlayerDataModel
 from ..models.schema import FieldWriteSpec
 from .widgets import bind_mousewheel
@@ -177,29 +171,32 @@ class BatchEditWindow(tk.Toplevel):
         raw_values = field_def.get("values")
         values_list = list(raw_values) if isinstance(raw_values, (list, tuple)) else None
         if values_list:
-            sel_idx = self.value_widget.current() if isinstance(self.value_widget, ttk.Combobox) else 0
-            if sel_idx < 0:
-                mb.showinfo("Batch Edit", "Please select a value.")
-                return
-            value_to_write = sel_idx
-            max_val = (1 << length) - 1 if length else len(values_list) - 1
-            if value_to_write > max_val:
-                value_to_write = max_val
+            if isinstance(self.value_widget, ttk.Combobox):
+                sel_idx = self.value_widget.current()
+                if sel_idx < 0:
+                    mb.showinfo("Batch Edit", "Please select a value.")
+                    return
+                display_value: object = self.value_widget.get()
+                if not str(display_value).strip():
+                    mb.showinfo("Batch Edit", "Please select a value.")
+                    return
+            else:
+                display_value = 0
         else:
             try:
-                numeric_val = float(self.value_var.get()) if self.value_var else 0
+                display_value = self.value_var.get() if self.value_var else 0
             except Exception:
-                numeric_val = 0
-            lname = field_name.lower()
-            if category in ("Attributes", "Durability"):
-                value_to_write = convert_rating_to_raw(numeric_val, length)
-            elif category == "Tendencies":
-                value_to_write = convert_rating_to_tendency_raw(numeric_val, length)
-            elif category == "Potential" and ("min" in lname or "max" in lname):
-                value_to_write = convert_minmax_potential_to_raw(numeric_val, length)
-            else:
-                max_val = (1 << length) - 1 if length else 255
-                value_to_write = int(max(0, min(max_val, numeric_val)))
+                display_value = 0
+        kind, value, _char_limit, _enc = self.model.coerce_field_value(
+            entity_type="player",
+            category=category,
+            field_name=field_name,
+            meta=field_def,
+            display_value=display_value,
+        )
+        if kind == "skip":
+            mb.showinfo("Batch Edit", "Invalid value provided for the selected field.")
+            return
         if not self.model.mem.hproc or self.model.external_loaded or not self.model.mem.open_process():
             mb.showinfo("Batch Edit", "NBA 2K26 is not running or roster loaded from external files. Cannot apply changes.")
             return
@@ -219,24 +216,41 @@ class BatchEditWindow(tk.Toplevel):
         if not target_players:
             mb.showinfo("Batch Edit", "No players matched the selected teams.")
             return
-        assignment: FieldWriteSpec = (
-            offset_val,
-            start_bit,
-            length,
-            int(value_to_write),
-            requires_deref,
-            deref_offset,
-        )
         total_changed = 0
         seen_indices: set[int] = set()
-        for player in target_players:
-            if player.index in seen_indices:
-                continue
-            seen_indices.add(player.index)
-            record_addr = player_base + player.index * PLAYER_STRIDE
-            applied = self.model._apply_field_assignments(record_addr, (assignment,))
-            if applied:
-                total_changed += 1
+        if kind == "int":
+            assignment: FieldWriteSpec = (
+                offset_val,
+                start_bit,
+                length,
+                to_int(value),
+                requires_deref,
+                deref_offset,
+            )
+            for player in target_players:
+                if player.index in seen_indices:
+                    continue
+                seen_indices.add(player.index)
+                record_addr = player_base + player.index * PLAYER_STRIDE
+                applied = self.model._apply_field_assignments(record_addr, (assignment,))
+                if applied:
+                    total_changed += 1
+        else:
+            for player in target_players:
+                if player.index in seen_indices:
+                    continue
+                seen_indices.add(player.index)
+                ok = self.model.encode_field_value(
+                    entity_type="player",
+                    entity_index=player.index,
+                    category=category,
+                    field_name=field_name,
+                    meta=field_def,
+                    display_value=display_value,
+                    record_ptr=getattr(player, "record_ptr", None),
+                )
+                if ok:
+                    total_changed += 1
         mb.showinfo("Batch Edit", f"Applied value to {total_changed} player(s).")
         try:
             self.model.refresh_players()
@@ -302,6 +316,8 @@ class BatchEditWindow(tk.Toplevel):
                 results.append(
                     _NumericFieldSpec(
                         name=str(field.get("name", "")),
+                        category=cat_name,
+                        meta=field,
                         offset=offset_val,
                         start_bit=start_bit,
                         length=length,
@@ -340,33 +356,33 @@ class BatchEditWindow(tk.Toplevel):
             "tendencies": [],
             "vitals": [],
         }
-        post_weight_specs: list[tuple[int, float]] = []
+        post_actions: list[tuple[_NumericFieldSpec, object]] = []
+
+        def _queue_assignment(group_key: str, spec: _NumericFieldSpec, display_value: object) -> None:
+            kind, value, _char_limit, _enc = self.model.coerce_field_value(
+                entity_type="player",
+                category=str(spec.get("category") or ""),
+                field_name=str(spec.get("name", "")),
+                meta=cast(dict, spec.get("meta")),
+                display_value=display_value,
+            )
+            if kind == "int":
+                group_assignments[group_key].append(
+                    (
+                        int(spec["offset"]),
+                        int(spec["start_bit"]),
+                        int(spec["length"]),
+                        to_int(value),
+                        bool(spec["requires_deref"]),
+                        int(spec["deref_offset"]),
+                    )
+                )
+            elif kind != "skip":
+                post_actions.append((spec, display_value))
         for spec in attribute_fields:
-            length_bits = int(spec["length"])
-            raw_val = convert_rating_to_raw(25, length_bits)
-            group_assignments["attributes"].append(
-                (
-                    int(spec["offset"]),
-                    int(spec["start_bit"]),
-                    length_bits,
-                    raw_val,
-                    bool(spec["requires_deref"]),
-                    int(spec["deref_offset"]),
-                )
-            )
+            _queue_assignment("attributes", spec, 25)
         for spec in durability_fields:
-            length_bits = int(spec["length"])
-            raw_val = convert_rating_to_raw(25, length_bits)
-            group_assignments["durability"].append(
-                (
-                    int(spec["offset"]),
-                    int(spec["start_bit"]),
-                    length_bits,
-                    raw_val,
-                    bool(spec["requires_deref"]),
-                    int(spec["deref_offset"]),
-                )
-            )
+            _queue_assignment("durability", spec, 25)
         for spec in potential_fields:
             field_name = str(spec.get("name", "")).lower()
             if "min" in field_name:
@@ -375,76 +391,21 @@ class BatchEditWindow(tk.Toplevel):
                 target_rating = 41
             else:
                 continue
-            length_bits = int(spec["length"])
-            raw_val = convert_minmax_potential_to_raw(target_rating, length_bits)
-            group_assignments["potential"].append(
-                (
-                    int(spec["offset"]),
-                    int(spec["start_bit"]),
-                    length_bits,
-                    raw_val,
-                    bool(spec["requires_deref"]),
-                    int(spec["deref_offset"]),
-                )
-            )
+            _queue_assignment("potential", spec, target_rating)
         for spec in badge_fields:
-            length_bits = int(spec["length"])
-            raw_val = 0
-            group_assignments["badges"].append(
-                (
-                    int(spec["offset"]),
-                    int(spec["start_bit"]),
-                    length_bits,
-                    raw_val,
-                    bool(spec["requires_deref"]),
-                    int(spec["deref_offset"]),
-                )
-            )
+            _queue_assignment("badges", spec, 0)
         for spec in tendencies_fields:
             field_name = str(spec.get("name", "")).lower()
-            length_bits = int(spec["length"])
             target_rating = 100 if "foul" in field_name else 0
-            raw_val = convert_rating_to_tendency_raw(target_rating, length_bits)
-            group_assignments["tendencies"].append(
-                (
-                    int(spec["offset"]),
-                    int(spec["start_bit"]),
-                    length_bits,
-                    raw_val,
-                    bool(spec["requires_deref"]),
-                    int(spec["deref_offset"]),
-                )
-            )
-        height_raw = height_inches_to_raw(60)
+            _queue_assignment("tendencies", spec, target_rating)
         for spec in vitals_fields:
             field_name = str(spec.get("name", "")).lower()
-            length_bits = int(spec["length"])
-            offset_val = int(spec["offset"])
             if "birth" in field_name and "year" in field_name:
-                raw_val = 2007
-                group_assignments["vitals"].append(
-                    (
-                        offset_val,
-                        int(spec["start_bit"]),
-                        length_bits,
-                        raw_val,
-                        bool(spec["requires_deref"]),
-                        int(spec["deref_offset"]),
-                    )
-                )
+                _queue_assignment("vitals", spec, 2007)
             elif field_name == "height":
-                group_assignments["vitals"].append(
-                    (
-                        offset_val,
-                        int(spec["start_bit"]),
-                        length_bits,
-                        height_raw,
-                        bool(spec["requires_deref"]),
-                        int(spec["deref_offset"]),
-                    )
-                )
+                _queue_assignment("vitals", spec, 60)
             elif field_name == "weight":
-                post_weight_specs.append((offset_val, 100.0))
+                post_actions.append((spec, 100.0))
         total_updated = 0
         for player in players_to_update:
             record_addr = player_base + player.index * PLAYER_STRIDE
@@ -453,12 +414,18 @@ class BatchEditWindow(tk.Toplevel):
                     continue
                 if self.model._apply_field_assignments(record_addr, tuple(assignments)):
                     total_updated += 1
-            for offset, weight_val in post_weight_specs:
-                try:
-                    write_weight(self.model.mem, record_addr + offset, float(weight_val))
+            for spec, value in post_actions:
+                ok = self.model.encode_field_value(
+                    entity_type="player",
+                    entity_index=player.index,
+                    category=str(spec.get("category") or ""),
+                    field_name=str(spec.get("name", "")),
+                    meta=cast(dict, spec.get("meta")),
+                    display_value=value,
+                    record_ptr=getattr(player, "record_ptr", None),
+                )
+                if ok:
                     total_updated += 1
-                except Exception:
-                    pass
         mb.showinfo("Batch Edit", f"Reset core fields for {len(players_to_update)} player(s).")
         try:
             self.model.refresh_players()

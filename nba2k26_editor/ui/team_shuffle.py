@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import random
-import struct
 import tkinter as tk
 
 from ..core.conversions import to_int
@@ -110,7 +109,7 @@ class TeamShuffleWindow(tk.Toplevel):
             for p in players_to_pool:
                 try:
                     p_addr = player_base + p.index * PLAYER_STRIDE
-                    self.model.mem.write_bytes(p_addr + OFF_TEAM_PTR, struct.pack("<Q", free_ptr))
+                    self.model.mem.write_pointer(p_addr + OFF_TEAM_PTR, free_ptr)
                     p.team = "Free Agents"
                     p.team_id = free_agent_idx
                 except Exception:
@@ -128,7 +127,7 @@ class TeamShuffleWindow(tk.Toplevel):
                     pos += 1
                     try:
                         p_addr = player_base + player.index * PLAYER_STRIDE
-                        self.model.mem.write_bytes(p_addr + OFF_TEAM_PTR, struct.pack("<Q", ptr))
+                        self.model.mem.write_pointer(p_addr + OFF_TEAM_PTR, ptr)
                         player.team = team
                         player.team_id = name_to_idx.get(team, player.team_id)
                         total_assigned += 1

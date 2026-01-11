@@ -184,7 +184,7 @@ def build_teams_screen(app) -> None:
     app.btn_team_save.pack(side=tk.LEFT, padx=(0, 8))
     app.btn_team_full = tk.Button(
         btn_row,
-        text="Full Editor",
+        text="Edit Team",
         command=app._open_full_team_editor,
         bg=BUTTON_BG,
         fg=BUTTON_TEXT,

@@ -226,45 +226,6 @@ ATTR_IMPORT_ORDER = [
     "Misc Durability",
     "Potential",
 ]
-# COY import should only map through HSTL (columns B-AJ). Durability/Potential are handled
-# by their dedicated tabs.
-COY_ATTR_COLUMN_HEADERS = [
-    "LAYUP",
-    "STDUNK",
-    "DUNK",
-    "CLOSE",
-    "MID",
-    "3PT",
-    "FT",
-    "PHOOK",
-    "PFADE",
-    "POSTC",
-    "FOUL",
-    "SHOTIQ",
-    "BALL",
-    "SPD/BALL",
-    "HANDS",
-    "PASS",
-    "PASS_IQ",
-    "VISION",
-    "OCNST",
-    "ID",
-    "PD",
-    "STEAL",
-    "BLOCK",
-    "OREB",
-    "DREB",
-    "HELPIQ",
-    "PSPER",
-    "DCNST",
-    "SPEED",
-    "AGIL",
-    "STR",
-    "VERT",
-    "STAM",
-    "INTNGBL",
-    "HSTL",
-]
 DUR_IMPORT_ORDER = [
     "Back Durability",
     "Head Durability",
@@ -288,44 +249,6 @@ POTENTIAL_IMPORT_ORDER = [
     "Potential",
     "Maximum Potential",
 ]
-
-
-def _col_to_index(col: str) -> int:
-    """Convert a 1-based spreadsheet column label (e.g. 'B', 'AA') to a 0-based index."""
-    col = (col or "").strip().upper()
-    if not col:
-        return 0
-    acc = 0
-    for ch in col:
-        if not ("A" <= ch <= "Z"):
-            continue
-        acc = acc * 26 + (ord(ch) - ord("A") + 1)
-    return max(acc - 1, 0)
-
-
-COY_IMPORT_LAYOUTS: dict[str, dict[str, object]] = {
-    "Attributes": {
-        "name_columns": [_col_to_index("B"), _col_to_index("A")],
-        "skip_names": {"player_name"},
-        "column_headers": COY_ATTR_COLUMN_HEADERS,
-    },
-    "Tendencies": {
-        "name_columns": [_col_to_index("B"), _col_to_index("A")],
-        "value_columns": list(range(_col_to_index("B"), _col_to_index("CY") + 1)),
-        "skip_names": {"player_name"},
-    },
-    "Durability": {
-        "name_columns": [_col_to_index("B"), _col_to_index("A")],
-        "value_columns": list(range(_col_to_index("D"), _col_to_index("S") + 1)),
-        "skip_names": {"player_name"},
-    },
-    "Potential": {
-        "name_columns": [_col_to_index("B"), _col_to_index("A")],
-        # Include probability columns (H-J) so we can validate/fill them even if they are not imported.
-        "value_columns": list(range(_col_to_index("E"), _col_to_index("J") + 1)),
-        "skip_names": {"player_name"},
-    },
-}
 
 NAME_SYNONYMS: dict[str, list[str]] = {
     "cam": ["Cameron"],
@@ -608,9 +531,16 @@ def _convert_merged_offsets_schema(raw: object, target_exe: str | None) -> dict 
         v_entry = per_version.get(version_key)
         if not isinstance(v_entry, dict):
             continue
-        address = to_int(v_entry.get("address"))
+        address_raw = v_entry.get("address")
+        if address_raw in (None, ""):
+            address_raw = v_entry.get("hex")
+        address = to_int(address_raw)
+        ftype = v_entry.get("type")
         length = to_int(v_entry.get("length"))
-        if address < 0 or length <= 0:
+        if length < 0:
+            length = 0
+        is_pointer = isinstance(ftype, str) and ("pointer" in ftype.lower() or "ptr" in ftype.lower())
+        if address < 0 or (length == 0 and not is_pointer):
             continue
         start_bit = to_int(v_entry.get("startBit") or v_entry.get("start_bit"))
         category = (
@@ -637,7 +567,6 @@ def _convert_merged_offsets_schema(raw: object, target_exe: str | None) -> dict 
             "length": length,
             "startBit": start_bit,
         }
-        ftype = v_entry.get("type")
         if isinstance(ftype, str):
             new_entry["type"] = ftype
         if v_entry.get("requiresDereference") is True or v_entry.get("requires_deref") is True:
@@ -657,8 +586,6 @@ def _convert_merged_offsets_schema(raw: object, target_exe: str | None) -> dict 
         converted["category_normalization"] = raw["category_normalization"]
     if isinstance(raw.get("super_type_map"), dict):
         converted["super_type_map"] = raw["super_type_map"]
-    if isinstance(raw.get("source_files"), dict):
-        converted["source_files"] = raw["source_files"]
     converted["versions"] = {version_key: version_info}
     base_ptrs = version_info.get("base_pointers") if isinstance(version_info.get("base_pointers"), dict) else None
     if base_ptrs:
@@ -788,6 +715,14 @@ def _load_categories() -> dict[str, list[dict]]:
     except Exception:
         super_type_map = {}
 
+    super_type_mismatches: set[str] = set()
+
+    def _emit_super_type_warnings() -> None:
+        if not super_type_mismatches:
+            return
+        warning_text = " ; ".join(sorted(super_type_mismatches))
+        print(f"Offset warnings: super_type_map overrides: {warning_text}")
+
     def _register_category_metadata(cat_label: str, entry: dict | None = None) -> None:
         """Capture super type and canonical label for a category."""
         if not cat_label:
@@ -800,6 +735,8 @@ def _load_categories() -> dict[str, list[dict]]:
             map_super = super_type_map.get(cat_key.lower())
             # Allow explicit mapping to override mis-labeled entries (e.g., team tabs tagged as Players).
             if map_super:
+                if entry_super and str(entry_super).lower() != str(map_super).lower():
+                    super_type_mismatches.add(f"{cat_key}: {entry_super} -> {map_super}")
                 entry_super = map_super
             if entry_super is None:
                 cat_lower = cat_key.lower()
@@ -842,18 +779,20 @@ def _load_categories() -> dict[str, list[dict]]:
                 provided_hex = f"0x{offset_int:X}"
         if provided_hex is not None:
             field["hex"] = provided_hex
-        start_val = start_bit_val
-        if start_val is None:
-            start_val = to_int(field.get("startBit") or field.get("start_bit"))
-        field["startBit"] = int(start_val or 0)
-        if "start_bit" in field:
+        if "startBit" not in field or field.get("startBit") in (None, ""):
+            start_val = start_bit_val
+            if start_val is None:
+                start_val = to_int(field.get("start_bit"))
+            field["startBit"] = int(start_val or 0)
+        if "start_bit" in field and "startBit" in field:
             field.pop("start_bit", None)
-        length = length_val
-        if length is None:
-            length = to_int(field.get("length") or field.get("size"))
-        if length is not None and length > 0:
-            field["length"] = int(length)
-        if source_entry is not None and source_entry.get("type"):
+        if "length" not in field or to_int(field.get("length")) <= 0:
+            length = length_val
+            if length is None:
+                length = to_int(field.get("length") or field.get("size"))
+            if length is not None and length > 0:
+                field["length"] = int(length)
+        if source_entry is not None and source_entry.get("type") and not field.get("type"):
             field["type"] = source_entry.get("type")
 
     def _entry_to_field(entry: dict, display_name: str, target_category: str | None = None) -> dict | None:
@@ -1305,6 +1244,7 @@ def _load_categories() -> dict[str, list[dict]]:
                                 categories[key_local] = vals
                 if categories:
                     _ensure_potential_category(categories)
+                    _emit_super_type_warnings()
                     return categories
         except Exception:
             pass
@@ -1312,6 +1252,7 @@ def _load_categories() -> dict[str, list[dict]]:
         categories = {key: list(value) for key, value in base_categories.items()}
         if categories:
             _ensure_potential_category(categories)
+            _emit_super_type_warnings()
             return categories
     return {}
 
@@ -1787,11 +1728,11 @@ def _apply_offset_config(data: dict | None) -> None:
 
     def _derive_char_capacity(offset_val: int, enc: str, length_val: int) -> int | None:
         if length_val > 0:
-            return (length_val // 2) if enc == "utf16" else length_val
+            return length_val
         if PLAYER_STRIDE > 0 and offset_val >= 0:
             try:
                 remaining = max(0, PLAYER_STRIDE - offset_val)
-                return (remaining // 2) if enc == "utf16" else remaining
+                return remaining
             except Exception:
                 return None
         return None
@@ -1863,7 +1804,7 @@ def _apply_offset_config(data: dict | None) -> None:
         TEAM_NAME_OFFSET = to_int(_legacy_lookup(legacy_base, "Offset Team Name", "Team Name Offset")) or 0
         TEAM_NAME_ENCODING = "utf16"
         if TEAM_NAME_OFFSET > 0 and TEAM_STRIDE > 0:
-            TEAM_NAME_LENGTH = max(0, TEAM_STRIDE - TEAM_NAME_OFFSET) // 2
+            TEAM_NAME_LENGTH = max(0, TEAM_STRIDE - TEAM_NAME_OFFSET)
             OFF_TEAM_NAME = TEAM_NAME_OFFSET
             warnings.append("Teams.Team Name missing; using Base offset and derived length.")
         else:
@@ -1881,7 +1822,7 @@ def _apply_offset_config(data: dict | None) -> None:
         if TEAM_NAME_LENGTH <= 0:
             if TEAM_STRIDE > 0 and TEAM_NAME_OFFSET >= 0:
                 remaining = max(0, TEAM_STRIDE - TEAM_NAME_OFFSET)
-                TEAM_NAME_LENGTH = remaining // (2 if TEAM_NAME_ENCODING == "utf16" else 1)
+                TEAM_NAME_LENGTH = remaining
             if TEAM_NAME_LENGTH <= 0:
                 warnings.append("Team Name length unavailable; team names disabled.")
         OFF_TEAM_NAME = TEAM_NAME_OFFSET
@@ -1935,7 +1876,7 @@ def _apply_offset_config(data: dict | None) -> None:
         STAFF_NAME_LENGTH = to_int(staff_name_entry.get("length")) or 0
         if STAFF_NAME_LENGTH <= 0 and STAFF_STRIDE > 0 and STAFF_NAME_OFFSET > 0:
             remaining = max(0, STAFF_STRIDE - STAFF_NAME_OFFSET)
-            STAFF_NAME_LENGTH = remaining // (2 if STAFF_NAME_ENCODING == "utf16" else 1)
+            STAFF_NAME_LENGTH = remaining
     # Stadium stride/name metadata
     stadium_stride_val = to_int(
         game_info.get("stadiumSize")
@@ -1963,7 +1904,7 @@ def _apply_offset_config(data: dict | None) -> None:
         STADIUM_NAME_LENGTH = to_int(stadium_name_entry.get("length")) or 0
         if STADIUM_NAME_LENGTH <= 0 and STADIUM_STRIDE > 0 and STADIUM_NAME_OFFSET > 0:
             remaining = max(0, STADIUM_STRIDE - STADIUM_NAME_OFFSET)
-            STADIUM_NAME_LENGTH = remaining // (2 if STADIUM_NAME_ENCODING == "utf16" else 1)
+            STADIUM_NAME_LENGTH = remaining
     if errors:
         raise OffsetSchemaError(" ; ".join(errors))
     if warnings:
@@ -2061,7 +2002,6 @@ __all__ = [
     "POTENTIAL_IMPORT_ORDER",
     "TEND_IMPORT_ORDER",
     "FIELD_NAME_ALIASES",
-    "COY_IMPORT_LAYOUTS",
     "NAME_SYNONYMS",
     "NAME_SUFFIXES",
     "_load_categories",

@@ -1,7 +1,6 @@
 """Full player editor window (verbatim port from the monolithic editor)."""
 from __future__ import annotations
 
-import logging
 import tkinter as tk
 from collections.abc import Collection as CollectionABC
 from typing import Collection, Dict, Sequence, TYPE_CHECKING
@@ -21,24 +20,12 @@ from ..core.config import (
     ENTRY_FG,
     ENTRY_BORDER,
 )
-from ..core import offsets as offsets_module
-from ..core.offsets import PLAYER_PANEL_FIELDS, PLAYER_PANEL_OVR_FIELD, ATTR_IMPORT_ORDER, TEND_IMPORT_ORDER, DUR_IMPORT_ORDER
 from ..core.conversions import (
     BADGE_LEVEL_NAMES,
     BADGE_NAME_TO_VALUE,
     HEIGHT_MAX_INCHES,
     HEIGHT_MIN_INCHES,
-    convert_minmax_potential_to_raw,
-    convert_raw_to_minmax_potential,
-    convert_raw_to_rating,
-    convert_tendency_raw_to_rating,
-    convert_rating_to_raw,
-    convert_rating_to_tendency_raw,
-    height_inches_to_raw,
-    raw_height_to_inches,
-    read_weight,
     to_int as _to_int,
-    write_weight,
 )
 from ..core.extensions import FULL_EDITOR_EXTENSIONS
 from ..models.data_model import PlayerDataModel
@@ -48,8 +35,6 @@ from .widgets import bind_mousewheel
 
 if TYPE_CHECKING:
     class RawFieldInspectorExtension: ...
-
-_EXTENSION_LOGGER = logging.getLogger("nba2k26.extensions")
 
 
 class FullPlayerEditor(tk.Toplevel):
@@ -140,8 +125,8 @@ class FullPlayerEditor(tk.Toplevel):
         for factory in FULL_EDITOR_EXTENSIONS:
             try:
                 factory(self, full_editor_context)
-            except Exception as exc:
-                _EXTENSION_LOGGER.exception("Full editor extension failed: %s", exc)
+            except Exception:
+                pass
         # Action buttons at bottom
         btn_frame = tk.Frame(self, bg=PANEL_BG)
         btn_frame.pack(fill=tk.X, pady=5)
@@ -254,10 +239,6 @@ class FullPlayerEditor(tk.Toplevel):
             if is_string_field:
                 max_chars = length if length > 0 else byte_length
                 enc_tag = field_type or "utf16"
-                enc_norm = self.model._normalize_encoding_tag(enc_tag)
-                # For UTF-16 strings the length from offsets is typically bytes; convert to chars when even.
-                if enc_norm == "utf16" and max_chars > 0 and max_chars % 2 == 0:
-                    max_chars = max_chars // 2
                 if max_chars <= 0:
                     max_chars = 64
                 var = tk.StringVar(value="")
@@ -507,202 +488,51 @@ class FullPlayerEditor(tk.Toplevel):
                     self._unsaved_changes.add((cat, field_name))
                 var.trace_add("write", on_spin_change)
     def _load_all_values(self) -> None:
-        """
-        Populate all spinboxes with current values from memory.  This
-        iterates over the categories and fields stored in
-        ``self.field_vars`` and calls ``model.get_field_value`` for
-        each one.
-        """
-        def _is_string_meta(meta: FieldMetadata | None) -> bool:
-            if not meta or not meta.data_type:
-                return False
-            dtype = meta.data_type.lower()
-            return any(tag in dtype for tag in ("string", "text", "char", "wstr", "utf", "wide"))
-        def _is_float_meta(meta: FieldMetadata | None) -> bool:
-            return bool(meta and meta.data_type and "float" in meta.data_type.lower())
-        def _is_color_meta(meta: FieldMetadata | None) -> bool:
-            if not meta or not meta.data_type:
-                return False
-            dtype = meta.data_type.lower()
-            return any(tag in dtype for tag in ("color", "pointer"))
-        def _safe_float(value: object) -> float | None:
-            try:
-                if isinstance(value, (int, float)):
-                    return float(value)
-                text = str(value).strip()
-                if not text:
-                    return None
-                return float(text)
-            except Exception:
-                return None
-        # Iterate over each category and field to load values using stored
-        # metadata.  The metadata is stored in ``self.field_meta`` keyed by
-        # (category, field_name).  We then set the associated variable.
+        """Populate UI variables with current values from memory."""
+        record_ptr = getattr(self.player, "record_ptr", None)
         for category, fields in self.field_vars.items():
             for field_name, var in fields.items():
                 meta = self.field_meta.get((category, field_name))
                 if not meta:
                     continue
-                offset = meta.offset
-                start_bit = meta.start_bit
-                length = meta.length
-                requires_deref = meta.requires_deref
-                deref_offset = meta.deref_offset
-                if _is_string_meta(meta):
-                    try:
-                        self.model.mem.open_process()
-                    except Exception:
-                        continue
-                    record_addr = self.model._player_record_address(
-                        self.player.index, record_ptr=getattr(self.player, "record_ptr", None)
-                    )
-                    if record_addr is None:
-                        continue
-                    try:
-                        addr = record_addr + offset
-                        if requires_deref and deref_offset:
-                            struct_ptr = self.model.mem.read_uint64(record_addr + deref_offset)
-                            if not struct_ptr:
-                                continue
-                            addr = struct_ptr + offset
-                        char_limit = length if length > 0 else meta.byte_length
-                        if char_limit <= 0:
-                            char_limit = 64
-                        enc_tag = meta.data_type or "utf16"
-                        enc_norm = self.model._normalize_encoding_tag(enc_tag)
-                        if enc_norm == "utf16" and meta.byte_length and meta.byte_length % 2 == 0:
-                            # Convert byte length to characters for wide strings when applicable.
-                            char_limit = max(char_limit, meta.byte_length // 2)
-                        text_val = self.model._read_string(addr, char_limit, enc_tag)
-                        var.set(text_val)
-                    except Exception:
-                        continue
-                    continue
-                if _is_float_meta(meta):
-                    value = self.model.get_field_value_typed(
-                        self.player.index,
-                        offset,
-                        start_bit,
-                        length,
-                        requires_deref=requires_deref,
-                        deref_offset=deref_offset,
-                        field_type=meta.data_type,
-                        byte_length=meta.byte_length,
-                        record_ptr=getattr(self.player, "record_ptr", None),
-                    )
-                    if value is not None:
-                        try:
-                            fval = _safe_float(value)
-                            if fval is not None:
-                                var.set(fval)
-                        except Exception:
-                            pass
-                    continue
-                if _is_color_meta(meta):
-                    value = self.model.get_field_value_typed(
-                        self.player.index,
-                        offset,
-                        start_bit,
-                        length,
-                        requires_deref=requires_deref,
-                        deref_offset=deref_offset,
-                        field_type=meta.data_type,
-                        byte_length=meta.byte_length,
-                        record_ptr=getattr(self.player, "record_ptr", None),
-                    )
-                    if value is not None:
-                        try:
-                            byte_len = self.model._effective_byte_length(meta.byte_length, meta.length, default=4)
-                        except Exception:
-                            byte_len = 4
-                        width = max(1, byte_len * 2)
-                        try:
-                            int_val = _to_int(value)
-                            var.set(f"0x{int_val & ((1 << (width * 4)) - 1):0{width}X}")
-                        except Exception:
-                            var.set(str(value))
-                    continue
-                value = self.model.get_field_value(
-                    self.player.index,
-                    offset,
-                    start_bit,
-                    length,
-                    requires_deref=requires_deref,
-                    deref_offset=deref_offset,
-                    record_ptr=getattr(self.player, "record_ptr", None),
+                value = self.model.decode_field_value(
+                    entity_type="player",
+                    entity_index=self.player.index,
+                    category=category,
+                    field_name=field_name,
+                    meta=meta,
+                    record_ptr=record_ptr,
                 )
-                if value is not None:
+                if value is None:
+                    continue
+                if meta.values:
                     try:
-                        # Convert raw bitfield values to user‑friendly values
-                        field_name_lower = field_name.lower()
-                        if field_name_lower == "height":
-                            inches_val = raw_height_to_inches(int(value))
-                            inches_val = max(HEIGHT_MIN_INCHES, min(HEIGHT_MAX_INCHES, inches_val))
-                            var.set(inches_val)
-                        elif field_name_lower == "weight":
+                        idx = _to_int(value)
+                    except Exception:
+                        idx = 0
+                    var.set(idx)
+                    widget = meta.widget
+                    if isinstance(widget, ttk.Combobox):
+                        vals = list(meta.values)
+                        if 0 <= idx < len(vals):
                             try:
-                                self.model.mem.open_process()
+                                widget.set(vals[idx])
                             except Exception:
                                 pass
-                            record_addr = self.model._player_record_address(
-                                self.player.index, record_ptr=getattr(self.player, "record_ptr", None)
-                            )
-                            if record_addr is not None:
-                                wval = read_weight(self.model.mem, record_addr + offset)
-                                var.set(int(round(wval)))
-                            else:
-                                var.set(0)
-                        elif category in ("Attributes", "Durability"):  # Map the raw bitfield value into the 25-99 rating scale
-                            rating = convert_raw_to_rating(int(value), length)
-                            var.set(int(rating))
-                        elif category == "Potential":
-                            if "min" in field_name_lower or "max" in field_name_lower:
-                                rating = convert_raw_to_minmax_potential(int(value), length)
-                                var.set(int(rating))
-                            else:
-                                rating = convert_raw_to_rating(int(value), length)
-                                var.set(int(rating))
-                        elif category == "Tendencies":
-                            # Tendencies use a 0–100 scale
-                            rating = convert_tendency_raw_to_rating(int(value), length)
-                            var.set(int(rating))
-                        elif category == "Badges":
-                            # Badges are stored as 3‑bit fields; clamp to 0–4
-                            lvl = int(value)
-                            if lvl < 0:
-                                lvl = 0
-                            elif lvl > 4:
-                                lvl = 4
-                            var.set(lvl)
-                            # Update combobox display if present
-                            widget = meta.widget
-                            if isinstance(widget, ttk.Combobox):
-                                try:
-                                    widget.set(BADGE_LEVEL_NAMES[lvl])
-                                except Exception:
-                                    pass
-                        elif meta.values:
-                            # Enumerated field: clamp the raw value to the index range
-                            vals = meta.values
-                            values_len = len(vals)
-                            if values_len == 0:
-                                continue
-                            idx = int(value)
-                            if idx < 0:
-                                idx = 0
-                            elif idx >= values_len:
-                                idx = values_len - 1
-                            var.set(idx)
-                            # Update combobox display
-                            widget = meta.widget
-                            if isinstance(widget, ttk.Combobox):
-                                try:
-                                    widget.set(vals[idx])
-                                except Exception:
-                                    pass
+                    continue
+                if isinstance(var, tk.StringVar):
+                    var.set("" if value is None else str(value))
+                elif isinstance(var, tk.DoubleVar):
+                    try:
+                        if isinstance(value, (int, float)):
+                            var.set(float(value))
                         else:
-                            # Other categories are shown as their raw integer values
-                            var.set(int(value))
+                            var.set(float(str(value)))
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        var.set(_to_int(value))
                     except Exception:
                         pass
     def _save_all(self) -> None:
@@ -710,231 +540,29 @@ class FullPlayerEditor(tk.Toplevel):
         Iterate over all fields and write the current values back to the
         player's record in memory.
         """
-        # Iterate similar to load
         any_error = False
         targets = self.target_players or [self.player]
-        player_base_addr: int | None = None
-        def _is_string_meta(meta: FieldMetadata | None) -> bool:
-            if not meta or not meta.data_type:
-                return False
-            dtype = meta.data_type.lower()
-            return any(tag in dtype for tag in ("string", "text", "char", "wstr", "utf", "wide"))
-        def _is_float_meta(meta: FieldMetadata | None) -> bool:
-            return bool(meta and meta.data_type and "float" in meta.data_type.lower())
-        def _is_color_meta(meta: FieldMetadata | None) -> bool:
-            if not meta or not meta.data_type:
-                return False
-            dtype = meta.data_type.lower()
-            return any(tag in dtype for tag in ("color", "pointer"))
         for category, fields in self.field_vars.items():
             for field_name, var in fields.items():
                 meta = self.field_meta.get((category, field_name))
                 if not meta:
                     continue
                 try:
-                    offset = meta.offset
-                    start_bit = meta.start_bit
-                    length = meta.length
-                    requires_deref = meta.requires_deref
-                    deref_offset = meta.deref_offset
-                    if _is_string_meta(meta):
-                        try:
-                            self.model.mem.open_process()
-                        except Exception:
-                            any_error = True
-                            continue
-                        try:
-                            text_val = str(var.get())
-                        except Exception:
-                            text_val = ""
-                        char_limit = length if length > 0 else meta.byte_length
-                        if char_limit <= 0:
-                            char_limit = max(len(text_val), 1)
-                        enc_tag = meta.data_type or "utf16"
-                        enc_norm = self.model._normalize_encoding_tag(enc_tag)
-                        if enc_norm == "utf16" and meta.byte_length and meta.byte_length % 2 == 0:
-                            char_limit = max(char_limit, meta.byte_length // 2)
-                        for target in targets:
-                            try:
-                                record_addr = self.model._player_record_address(
-                                    target.index, record_ptr=getattr(target, "record_ptr", None)
-                                )
-                                if record_addr is None:
-                                    any_error = True
-                                    continue
-                                addr = record_addr + offset
-                                if requires_deref and deref_offset:
-                                    struct_ptr = self.model.mem.read_uint64(record_addr + deref_offset)
-                                    if not struct_ptr:
-                                        any_error = True
-                                        continue
-                                    addr = struct_ptr + offset
-                                self.model._write_string(addr, text_val, char_limit, enc_tag)
-                            except Exception:
-                                any_error = True
-                        continue
-                    if _is_float_meta(meta):
-                        try:
-                            ui_val = float(var.get())
-                        except Exception:
-                            any_error = True
-                            continue
-                        for target in targets:
-                            ok = self.model.set_field_value_typed(
-                                target.index,
-                                offset,
-                                start_bit,
-                                length,
-                                ui_val,
-                                requires_deref=requires_deref,
-                                deref_offset=deref_offset,
-                                field_type=meta.data_type,
-                                byte_length=meta.byte_length,
-                                record_ptr=getattr(target, "record_ptr", None),
-                            )
-                            any_error = any_error or not ok
-                        continue
-                    if _is_color_meta(meta):
-                        try:
-                            raw_text = str(var.get())
-                        except Exception:
-                            raw_text = ""
-                        parsed_val: int | None = None
-                        if raw_text:
-                            try:
-                                cleaned = raw_text.strip()
-                                if cleaned.startswith("#"):
-                                    cleaned = cleaned[1:]
-                                parsed_val = int(cleaned, 16) if cleaned.lower().startswith("0x") or raw_text.strip().startswith("#") else int(cleaned, 0)
-                            except Exception:
-                                try:
-                                    parsed_val = int(float(raw_text))
-                                except Exception:
-                                    parsed_val = None
-                        if parsed_val is None:
-                            any_error = True
-                            continue
-                        # Clamp to bit-length if available
-                        if length > 0:
-                            mask = (1 << length) - 1
-                            parsed_val &= mask
-                        for target in targets:
-                            ok = self.model.set_field_value_typed(
-                                target.index,
-                                offset,
-                                start_bit,
-                                length,
-                                parsed_val,
-                                requires_deref=requires_deref,
-                                deref_offset=deref_offset,
-                                field_type=meta.data_type,
-                                byte_length=meta.byte_length,
-                                record_ptr=getattr(target, "record_ptr", None),
-                            )
-                            any_error = any_error or not ok
-                        continue
-                    # Retrieve the value from the UI
                     ui_value = var.get()
-                    # Convert rating back to raw bitfield for Attributes,
-                    # Durability and Tendencies.  Observations indicate
-                    # that ratings are stored with an offset of 10 (i.e., a
-                    # rating of 25 corresponds to raw 15 and a rating of 99
-                    # corresponds to raw 89).  Therefore we simply
-                    # subtract 10 from the rating and clamp the result to
-                    # the valid bitfield range.  Other categories are
-                    # written as-is.
-                    field_name_lower = field_name.lower()
-                    if field_name_lower == "height":
-                        try:
-                            inches_val = int(ui_value)
-                        except Exception:
-                            inches_val = HEIGHT_MIN_INCHES
-                        if inches_val < HEIGHT_MIN_INCHES:
-                            inches_val = HEIGHT_MIN_INCHES
-                        elif inches_val > HEIGHT_MAX_INCHES:
-                            inches_val = HEIGHT_MAX_INCHES
-                        value_to_write = height_inches_to_raw(inches_val)
-                    elif field_name_lower == "weight":
-                        try:
-                            wval = float(ui_value)
-                        except Exception:
-                            wval = 0.0
-                        try:
-                            self.model.mem.open_process()
-                        except Exception:
-                            pass
-                        for target in targets:
-                            try:
-                                addr = self.model._player_record_address(
-                                    target.index, record_ptr=getattr(target, "record_ptr", None)
-                                )
-                                if addr is None:
-                                    any_error = True
-                                    continue
-                                write_weight(self.model.mem, addr + offset, wval)
-                            except Exception:
-                                any_error = True
-                        continue
-                    elif category in ("Attributes", "Durability"):  # Convert the UI rating back into a raw bitfield value.
-                        try:
-                            rating_val = int(ui_value)
-                        except Exception:
-                            rating_val = 25
-                        value_to_write = convert_rating_to_raw(rating_val, length)
-                    elif category == "Tendencies":
-                        # Tendencies: convert the 0–100 rating back to raw bitfield
-                        try:
-                            rating_val = float(ui_value)
-                        except Exception:
-                            rating_val = 0.0
-                        value_to_write = convert_rating_to_tendency_raw(rating_val, length)
-                    elif category == "Badges":
-                        # Badges: clamp UI value (0-4) to the underlying bitfield
-                        try:
-                            lvl = int(ui_value)
-                        except Exception:
-                            lvl = 0
-                        if lvl < 0:
-                            lvl = 0
-                        max_raw = (1 << length) - 1
-                        if lvl > max_raw:
-                            lvl = max_raw
-                        value_to_write = lvl
-                    elif meta.values:
-                        # Enumerated field: clamp UI value to the bitfield range
-                        values_tuple = meta.values
-                        values_len = len(values_tuple)
-                        if values_len == 0:
-                            continue
-                        try:
-                            idx_val = int(ui_value)
-                        except Exception:
-                            idx_val = 0
-                        if idx_val < 0:
-                            idx_val = 0
-                        max_raw = (1 << length) - 1
-                        if idx_val > max_raw:
-                            idx_val = max_raw
-                        if idx_val >= values_len:
-                            idx_val = values_len - 1
-                        value_to_write = idx_val
-                    else:
-                        # For other categories, write the raw value directly
-                        value_to_write = ui_value
-                    for target in targets:
-                        if not self.model.set_field_value(
-                            target.index,
-                            offset,
-                            start_bit,
-                            length,
-                            value_to_write,
-                            requires_deref=requires_deref,
-                            deref_offset=deref_offset,
-                            record_ptr=getattr(target, "record_ptr", None),
-                        ):
-                            any_error = True
                 except Exception:
                     any_error = True
+                    continue
+                for target in targets:
+                    ok = self.model.encode_field_value(
+                        entity_type="player",
+                        entity_index=target.index,
+                        category=category,
+                        field_name=field_name,
+                        meta=meta,
+                        display_value=ui_value,
+                        record_ptr=getattr(target, "record_ptr", None),
+                    )
+                    any_error = any_error or not ok
         if any_error:
             messagebox.showerror("Save Error", "One or more fields could not be saved.")
         else:

@@ -7,13 +7,12 @@ base address, and perform reads/writes.
 from __future__ import annotations
 
 import ctypes
-import logging
 import struct
 import sys
 from ctypes import wintypes
 
 from ..core.config import ALLOWED_MODULE_NAMES, MODULE_NAME
-from ..core.logging import get_memory_logger
+from ..logs.logging import MEMORY_LOGGER, LOG_ERROR, LOG_INFO
 from .win32 import (
     PROCESS_ALL_ACCESS,
     TH32CS_SNAPMODULE,
@@ -32,8 +31,6 @@ from .win32 import (
     WriteProcessMemory,
 )
 
-MEMORY_LOGGER = get_memory_logger()
-
 
 class GameMemory:
     """Utility class encapsulating process lookup and memory access."""
@@ -45,8 +42,49 @@ class GameMemory:
         self.pid: int | None = None
         self.hproc: wintypes.HANDLE | None = None
         self.base_addr: int | None = None
+        self.pointer_size = ctypes.sizeof(ctypes.c_void_p)
         self.last_dynamic_base_report: dict[str, object] | None = None
         self.last_dynamic_base_overrides: dict[str, int] | None = None
+
+    def _detect_pointer_size(self, handle: wintypes.HANDLE | None) -> int:
+        default = ctypes.sizeof(ctypes.c_void_p)
+        if sys.platform != "win32" or not handle:
+            return default
+        try:
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        except Exception:
+            return default
+        try:
+            is_wow64_process2 = getattr(kernel32, "IsWow64Process2", None)
+            if is_wow64_process2:
+                process_machine = wintypes.USHORT()
+                native_machine = wintypes.USHORT()
+                is_wow64_process2.argtypes = [
+                    wintypes.HANDLE,
+                    ctypes.POINTER(wintypes.USHORT),
+                    ctypes.POINTER(wintypes.USHORT),
+                ]
+                is_wow64_process2.restype = wintypes.BOOL
+                if is_wow64_process2(handle, ctypes.byref(process_machine), ctypes.byref(native_machine)):
+                    if process_machine.value != 0:
+                        return 4
+                    if native_machine.value in (0x8664, 0xAA64):
+                        return 8
+                    return 4
+        except Exception:
+            pass
+        try:
+            is_wow64_process = getattr(kernel32, "IsWow64Process", None)
+            if is_wow64_process:
+                wow64 = wintypes.BOOL()
+                is_wow64_process.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.BOOL)]
+                is_wow64_process.restype = wintypes.BOOL
+                if is_wow64_process(handle, ctypes.byref(wow64)):
+                    if wow64.value:
+                        return 4
+        except Exception:
+            pass
+        return default
 
     def _log_event(self, level: int, op: str, addr: int, length: int, status: str, **extra: object) -> None:
         """Write a structured entry to the memory operation log."""
@@ -152,6 +190,7 @@ class GameMemory:
         self.pid = pid
         self.hproc = handle
         self.base_addr = base
+        self.pointer_size = self._detect_pointer_size(handle)
         return True
 
     def close(self) -> None:
@@ -164,6 +203,7 @@ class GameMemory:
         self.pid = None
         self.hproc = None
         self.base_addr = None
+        self.pointer_size = ctypes.sizeof(ctypes.c_void_p)
 
     def _get_module_base(self, pid: int, module_name: str) -> int | None:
         """Return the base address of module_name in the given process."""
@@ -193,7 +233,7 @@ class GameMemory:
     def _check_open(self, op: str | None = None, addr: int | None = None, length: int | None = None) -> None:
         if self.hproc is None or self.base_addr is None:
             if op is not None and addr is not None and length is not None:
-                self._log_event(logging.ERROR, op, addr, length, "process-closed", validation="not-open")
+                self._log_event(LOG_ERROR, op, addr, length, "process-closed", validation="not-open")
             raise RuntimeError("Game process not opened")
 
     def read_bytes(self, addr: int, length: int) -> bytes:
@@ -205,7 +245,7 @@ class GameMemory:
             ok = ReadProcessMemory(self.hproc, ctypes.c_void_p(addr), buf, length, ctypes.byref(read_count))
         except Exception as exc:
             self._log_event(
-                logging.ERROR,
+                LOG_ERROR,
                 "read",
                 addr,
                 length,
@@ -217,7 +257,7 @@ class GameMemory:
         if not ok:
             winerr = ctypes.get_last_error()
             self._log_event(
-                logging.ERROR,
+                LOG_ERROR,
                 "read",
                 addr,
                 length,
@@ -227,7 +267,7 @@ class GameMemory:
             raise RuntimeError(f"Failed to read memory at 0x{addr:X} (error {winerr})")
         if read_count.value != length:
             self._log_event(
-                logging.ERROR,
+                LOG_ERROR,
                 "read",
                 addr,
                 length,
@@ -235,7 +275,7 @@ class GameMemory:
                 validation=f"bytes={read_count.value}",
             )
             raise RuntimeError(f"Partial read at 0x{addr:X}: {read_count.value}/{length} bytes")
-        self._log_event(logging.INFO, "read", addr, length, "success", validation="exact")
+        self._log_event(LOG_INFO, "read", addr, length, "success", validation="exact")
         return bytes(buf)
 
     def write_bytes(self, addr: int, data: bytes) -> None:
@@ -248,7 +288,7 @@ class GameMemory:
             ok = WriteProcessMemory(self.hproc, ctypes.c_void_p(addr), buf, length, ctypes.byref(written))
         except Exception as exc:
             self._log_event(
-                logging.ERROR,
+                LOG_ERROR,
                 "write",
                 addr,
                 length,
@@ -260,7 +300,7 @@ class GameMemory:
         if not ok:
             winerr = ctypes.get_last_error()
             self._log_event(
-                logging.ERROR,
+                LOG_ERROR,
                 "write",
                 addr,
                 length,
@@ -270,7 +310,7 @@ class GameMemory:
             raise RuntimeError(f"Failed to write memory at 0x{addr:X} (error {winerr})")
         if written.value != length:
             self._log_event(
-                logging.ERROR,
+                LOG_ERROR,
                 "write",
                 addr,
                 length,
@@ -278,7 +318,16 @@ class GameMemory:
                 validation=f"bytes={written.value}",
             )
             raise RuntimeError(f"Partial write at 0x{addr:X}: {written.value}/{length} bytes")
-        self._log_event(logging.INFO, "write", addr, length, "success", validation="exact")
+        self._log_event(LOG_INFO, "write", addr, length, "success", validation="exact")
+
+    def write_pointer(self, addr: int, value: int) -> None:
+        """Write a pointer-sized value to absolute address addr."""
+        size = self.pointer_size or ctypes.sizeof(ctypes.c_void_p)
+        if size <= 4:
+            data = struct.pack("<I", int(value) & 0xFFFFFFFF)
+        else:
+            data = struct.pack("<Q", int(value) & 0xFFFFFFFFFFFFFFFF)
+        self.write_bytes(addr, data)
 
     def read_uint32(self, addr: int) -> int:
         data = self.read_bytes(addr, 4)

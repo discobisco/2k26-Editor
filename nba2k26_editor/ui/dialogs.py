@@ -35,6 +35,7 @@ class ImportSummaryDialog(tk.Toplevel):
         suggestions: dict[str, str] | None = None,
         suggestion_scores: dict[str, float] | None = None,
         require_confirmation: bool = False,
+        missing_label: str | None = None,
     ) -> None:
         super().__init__(parent)
         self.title(title)
@@ -78,7 +79,7 @@ class ImportSummaryDialog(tk.Toplevel):
         if missing_players:
             missing_frame = tk.LabelFrame(
                 self,
-                text="Players not found - type to search the current roster",
+                text=missing_label or "Players not found - type to search the current roster",
                 bg=PANEL_BG,
                 fg=TEXT_PRIMARY,
                 labelanchor="n",

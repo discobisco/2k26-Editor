@@ -33,18 +33,6 @@ HOOK_TARGETS: tuple[tuple[str, str], ...] = (
 HOOK_TARGET_LABELS = {exe.lower(): label for label, exe in HOOK_TARGETS}
 ALLOWED_MODULE_NAMES = {exe.lower() for _, exe in HOOK_TARGETS}
 
-# COY Google Sheet defaults
-COY_SHEET_ID: str = "1pxWukEO6oOofSZdPKyu--R_8EyvHOflArT2tJFBzzzo"
-COY_SHEET_TABS: dict[str, str] = {
-    # Only import from the live player tabs; skip helper/archival sheets like ATR or Sheet20.
-    "Attributes": "Attributes",
-    "Tendencies": "Tendencies",
-    "Durability": "Durabilities",
-    "Potential": "POTENTIAL",
-}
-# Separate helper tab that carries per-column tendency averages (row 2, cols E-CY).
-COY_TENDENCY_AVERAGE_TAB: str = "TEND"
-
 # UI palette (used by Tk theme helpers)
 PRIMARY_BG = "#0C1220"
 PANEL_BG = "#0E1729"
@@ -78,9 +66,6 @@ __all__ = [
     "HOOK_TARGETS",
     "HOOK_TARGET_LABELS",
     "ALLOWED_MODULE_NAMES",
-    "COY_SHEET_ID",
-    "COY_SHEET_TABS",
-    "COY_TENDENCY_AVERAGE_TAB",
     "CACHE_DIR",
     "PRIMARY_BG",
     "PANEL_BG",

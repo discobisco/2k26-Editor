@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import importlib
 import importlib.util
 import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -75,6 +76,23 @@ def extension_label_for_key(key: str) -> str:
     return key
 
 
+def _build_restart_command() -> list[str]:
+    executable = sys.executable or "python"
+    if getattr(sys, "frozen", False):
+        return [executable, *sys.argv[1:]]
+    main_module = sys.modules.get("__main__")
+    spec = getattr(main_module, "__spec__", None)
+    module_name = getattr(spec, "name", None) if spec else None
+    if module_name:
+        return [executable, "-m", module_name, *sys.argv[1:]]
+    main_file = getattr(main_module, "__file__", None)
+    if main_file:
+        return [executable, main_file, *sys.argv[1:]]
+    if sys.argv:
+        return [executable, *sys.argv]
+    return [executable]
+
+
 def reload_with_selected_extensions(app: Any) -> None:
     selected: list[str] = []
     for key, var in app.extension_vars.items():
@@ -88,13 +106,17 @@ def reload_with_selected_extensions(app: Any) -> None:
     except Exception as exc:
         messagebox.showerror("Extensions", f"Failed to save selected extensions:\n{exc}")
         return
+    restart_cmd = _build_restart_command()
+    try:
+        subprocess.Popen(restart_cmd, close_fds=True)
+    except Exception as exc:
+        messagebox.showerror("Extensions", f"Failed to restart the editor:\n{exc}")
+        return
     try:
         app.destroy()
     except Exception:
         pass
-    python = sys.executable or "python"
-    argv = sys.argv[1:] if len(sys.argv) > 1 else []
-    os.execl(python, python, *argv)
+    os._exit(0)
 
 
 def autoload_extensions_from_file(app: Any) -> None:
@@ -229,11 +251,6 @@ def toggle_extension_module(app: Any, key: str, label: str, var: tk.BooleanVar) 
     if load_extension_module(key):
         app.loaded_extensions.add(key)
         app.extension_status_var.set(f"Loaded extension: {display_name}")
-        if hasattr(app, "btn_import"):
-            try:
-                app.btn_import.configure(command=lambda app=app: app._open_import_dialog())
-            except Exception:
-                pass
     else:
         var.set(False)
 

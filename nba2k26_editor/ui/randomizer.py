@@ -5,7 +5,7 @@ import random
 import tkinter as tk
 from tkinter import ttk
 
-from ..core.conversions import convert_rating_to_raw, convert_rating_to_tendency_raw, to_int
+from ..core.conversions import to_int
 from ..models.data_model import PlayerDataModel
 from .widgets import bind_mousewheel
 
@@ -139,30 +139,21 @@ class RandomizerWindow(tk.Toplevel):
                         offset_raw = field.get("offset")
                         if offset_raw in (None, ""):
                             continue
-                        offset_val = to_int(offset_raw)
-                        start_bit = to_int(field.get("startBit", field.get("start_bit", 0)))
-                        length = to_int(field.get("length", 8))
-                        requires_deref = bool(field.get("requiresDereference") or field.get("requires_deref"))
-                        deref_offset = to_int(field.get("dereferenceAddress") or field.get("deref_offset"))
                         min_val = self.min_vars[key].get()
                         max_val = self.max_vars[key].get()
                         if min_val > max_val:
                             min_val, max_val = max_val, min_val
                         rating = random.randint(min_val, max_val)
-                        if cat == "Tendencies":
-                            raw_val = convert_rating_to_tendency_raw(rating, length)
-                        else:
-                            raw_val = convert_rating_to_raw(rating, length)
-                        if self.model.set_field_value(
-                            player.index,
-                            offset_val,
-                            start_bit,
-                            length,
-                            raw_val,
-                            requires_deref=requires_deref,
-                            deref_offset=deref_offset,
+                        ok = self.model.encode_field_value(
+                            entity_type="player",
+                            entity_index=player.index,
+                            category=cat,
+                            field_name=fname,
+                            meta=field,
+                            display_value=rating,
                             record_ptr=getattr(player, "record_ptr", None),
-                        ):
+                        )
+                        if ok:
                             player_updated = True
                 if player_updated:
                     updated_players += 1

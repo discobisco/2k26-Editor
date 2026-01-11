@@ -10,7 +10,6 @@ loading, conversions, dynamic base scanning, logging, and extension hooks.
 - Offsets bundle list: `DEFAULT_OFFSET_FILES`.
 - Game targeting: `MODULE_NAME`, `HOOK_TARGETS`, `HOOK_TARGET_LABELS`,
   `ALLOWED_MODULE_NAMES`.
-- COY defaults: `COY_SHEET_ID`, `COY_SHEET_TABS`, `COY_TENDENCY_AVERAGE_TAB`.
 - UI palette: shared colors consumed by Tk widgets and theme helpers.
 
 ## Offsets system (offsets.py)
@@ -32,11 +31,6 @@ loading, conversions, dynamic base scanning, logging, and extension hooks.
   `_offset_file_path` and target in `_current_offset_target`.
 - Raises `OffsetSchemaError` when required schema components are missing.
 
-## COY import layouts (offsets.py)
-- `COY_IMPORT_LAYOUTS` defines column positions for Attributes, Tendencies,
-  Durability, and Potential imports.
-- `COY_ATTR_COLUMN_HEADERS` limits Attributes to the HSTL column (columns B-AJ).
-
 ## Dynamic base scanning (dynamic_bases.py)
 - Uses Win32 APIs (and optional `psutil`) to locate the running game process.
 - Scans memory for player/team name patterns to infer base addresses.
@@ -55,8 +49,8 @@ loading, conversions, dynamic base scanning, logging, and extension hooks.
 - Reads/writes `autoload_extensions.json` for persistent autoload lists.
 
 ## Logging (logging.py)
-- `get_memory_logger()` configures `logs\memory.log` with UTC timestamps and
-  avoids duplicate handlers.
+- `get_memory_logger()` delegates to `dev_memory_logging.py` when available to
+  configure `logs\memory.log` with UTC timestamps; builds use a no-op logger.
 
 ## Files
 - `__init__.py`: package marker.

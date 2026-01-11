@@ -8,7 +8,21 @@ from ..core.config import AI_SETTINGS_PATH
 DEFAULT_AI_SETTINGS: dict[str, Any] = {
     "mode": "none",
     "remote": {"base_url": "", "api_key": "", "model": "", "timeout": 30},
-    "local": {"command": "", "arguments": "", "working_dir": ""},
+    "local": {
+        "backend": "cli",
+        "command": "",
+        "arguments": "",
+        "working_dir": "",
+        "python_backend": "",
+        "model_path": "",
+        "max_tokens": 256,
+        "temperature": 0.4,
+    },
+    "profiles": {
+        "base": "You are an experienced NBA general manager focused on building a competitive roster. Prioritize win-now trades while balancing future cap and development. Keep replies concise and actionable.",
+        "active_count": 12,
+        "team_profiles": [],
+    },
 }
 
 

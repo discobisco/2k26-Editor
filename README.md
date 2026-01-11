@@ -8,7 +8,7 @@ exposes tools for editing players, teams, staff, and stadiums.
 - GUI launcher + Windows batch launcher.
 - Win32 memory layer with structured logging.
 - Offset-driven schemas with per-version support (2K22-2K26).
-- Import/export for CSV and Excel templates, including 2KCOY flows.
+- Import/export for Excel templates.
 - AI Assistant panel with optional local/remote backends and HTTP control bridge.
 - Extension hooks for custom panels and full editor add-ons.
 
@@ -42,7 +42,7 @@ exposes tools for editing players, teams, staff, and stadiums.
 - `nba2k26_editor\`: main package (see `nba2k26_editor\README.md`).
 - `nba2k26_editor\Offsets\`: offsets bundle and reference spreadsheets.
 - `nba2k26_editor\NBA Player Data\`: NBA reference workbook for the AI panel.
-- `nba2k26_editor\importing\`: CSV/Excel import logic and templates.
+- `nba2k26_editor\importing\`: Excel import logic and shared CSV parsing utilities.
 - `nba2k26_editor\logs\`: runtime logs.
 - `nba2k26_editor\build\`, `nba2k26_editor\dist\`: PyInstaller artifacts.
 

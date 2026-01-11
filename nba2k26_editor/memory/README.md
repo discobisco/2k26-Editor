@@ -7,7 +7,7 @@ editor, implemented with Win32 ctypes bindings.
 - `win32.py` exposes Win32 constants and ctypes wrappers for Toolhelp and
   process APIs.
 - `game_memory.py` wraps process discovery, module base resolution, and
-  read/write operations with structured logging.
+  read/write operations with structured logging when dev logging is enabled.
 
 ## GameMemory workflow
 - `find_pid()`:
@@ -18,7 +18,8 @@ editor, implemented with Win32 ctypes bindings.
   - Opens the process with `PROCESS_ALL_ACCESS` and resolves the module base.
   - Caches the handle, PID, and base address for later reads/writes.
 - `read_bytes()`/`write_bytes()`:
-  - Enforce full-length reads/writes and log results to `logs\memory.log`.
+  - Enforce full-length reads/writes and log results to `logs\memory.log` when
+    `dev_memory_logging.py` is present.
   - Raise errors when the process is not open.
 - Typed helpers:
   - `read_uint32`, `read_uint64`, `read_wstring`, `read_ascii`.
@@ -27,6 +28,8 @@ editor, implemented with Win32 ctypes bindings.
 ## Logging
 - All memory operations flow through `_log_event()` which writes structured
   entries including address, length, PID, and RVA when available.
+- File logging is enabled only when `dev_memory_logging.py` is available;
+  builds fall back to a no-op logger.
 
 ## Files
 - `__init__.py`: package marker.

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 from typing import Iterable
 
@@ -22,8 +21,6 @@ from nba2k26_editor.core.config import (
 )
 from nba2k26_editor.core.extensions import register_player_panel_extension
 from nba2k26_editor.memory.game_memory import GameMemory
-
-_LOG = logging.getLogger("nba2k26.dualbase")
 CONFIG_PATH = CONFIG_DIR / "dual_base_mirror.json"
 
 
@@ -108,8 +105,7 @@ class DualBaseMirror:
             return
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except Exception as exc:  # pragma: no cover - defensive
-            _LOG.debug("Failed to load dual-base config: %s", exc)
+        except Exception:  # pragma: no cover - defensive
             return
         self.enabled = bool(data.get("enabled"))
         player_alt = data.get("player_alt_base")
@@ -126,8 +122,8 @@ class DualBaseMirror:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        except Exception as exc:  # pragma: no cover - defensive
-            _LOG.debug("Failed to persist dual-base config: %s", exc)
+        except Exception:  # pragma: no cover - defensive
+            pass
 
     def update_primary_from_model(self) -> None:
         """Refresh cached primary bases from the live process."""
@@ -208,8 +204,8 @@ def _patch_game_memory() -> None:
             try:
                 for mirror_addr in mirror.mirror_addresses(addr, len(data)):
                     original_write_bytes(self, mirror_addr, data)
-            except Exception as exc:  # pragma: no cover - defensive
-                _LOG.debug("Mirror write failed: %s", exc)
+            except Exception:  # pragma: no cover - defensive
+                pass
         return result
 
     GameMemory.write_bytes = _write_bytes_with_mirror  # type: ignore[assignment]

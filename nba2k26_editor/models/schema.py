@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TypedDict, NotRequired, Sequence
+from typing import TypedDict, NotRequired
 
 
 class PreparedImportRows(TypedDict):
@@ -14,14 +14,6 @@ class PreparedImportRows(TypedDict):
     last_name_col: NotRequired[int | None]
     fixed_mapping: NotRequired[bool]
     allow_missing_names: NotRequired[bool]
-
-
-class CoyImportLayout(TypedDict, total=False):
-    name_columns: Sequence[int]
-    name_col: int
-    value_columns: Sequence[int]
-    column_headers: Sequence[str]
-    skip_names: Sequence[str]
 
 
 @dataclass
@@ -52,4 +44,4 @@ class ExportFieldSpec(TypedDict):
     meta: dict[str, object]
 
 
-__all__ = ["PreparedImportRows", "CoyImportLayout", "FieldMetadata", "FieldWriteSpec", "ExportFieldSpec"]
+__all__ = ["PreparedImportRows", "FieldMetadata", "FieldWriteSpec", "ExportFieldSpec"]
