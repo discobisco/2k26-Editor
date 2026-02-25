@@ -1,25 +1,12 @@
-"""Full player editor window (verbatim port from the monolithic editor)."""
+"""Full player editor window built with Dear PyGui."""
 from __future__ import annotations
 
-import tkinter as tk
 from collections.abc import Collection as CollectionABC
-from typing import Collection, Dict, Sequence, TYPE_CHECKING
-from tkinter import ttk, messagebox
+from typing import Collection, TYPE_CHECKING, Any, cast
 
-from ..core.config import (
-    PANEL_BG,
-    INPUT_BG,
-    PRIMARY_BG,
-    TEXT_PRIMARY,
-    TEXT_SECONDARY,
-    ACCENT_BG,
-    BUTTON_BG,
-    BUTTON_ACTIVE_BG,
-    BUTTON_TEXT,
-    ENTRY_BG,
-    ENTRY_FG,
-    ENTRY_BORDER,
-)
+import dearpygui.dearpygui as dpg
+
+from ..core.config import TEXT_SECONDARY
 from ..core.conversions import (
     BADGE_LEVEL_NAMES,
     BADGE_NAME_TO_VALUE,
@@ -31,580 +18,897 @@ from ..core.extensions import FULL_EDITOR_EXTENSIONS
 from ..models.data_model import PlayerDataModel
 from ..models.player import Player
 from ..models.schema import FieldMetadata
-from .widgets import bind_mousewheel
 
 if TYPE_CHECKING:
     class RawFieldInspectorExtension: ...
 
 
-class FullPlayerEditor(tk.Toplevel):
-    """A tabbed editor window for advanced player attributes."""
-    def __init__(self, parent: tk.Tk, players: Player | Collection[Player], model: PlayerDataModel):
-        super().__init__(parent)
-        player_list: list[Player] = []
-        if isinstance(players, Player):
-            player_list = [players]
-        elif isinstance(players, CollectionABC) and not isinstance(players, (str, bytes)):
-            player_list = [p for p in players if isinstance(p, Player)]
-        if not player_list:
-            raise ValueError("FullPlayerEditor requires at least one player.")
-        self.target_players: list[Player] = player_list
-        self.player = self.target_players[0]
+class FullPlayerEditor:
+    """Tabbed editor for advanced player attributes (Dear PyGui)."""
+
+    _DPG_INT_MIN = -(1 << 31)
+    _DPG_INT_MAX = (1 << 31) - 1
+    _WIDTH_INT = 140
+    _WIDTH_TEXT = 140
+    _WIDTH_COMBO = 140
+    _WIDTH_FLOAT = 140
+    _SEASON_STATS_TAB = "Season Stats"
+    _PLAYER_STATS_IDS_CATEGORY = "Stats - IDs"
+    _PLAYER_STATS_SEASON_CATEGORY = "Stats - Season"
+    _PLAYER_STATS_AWARDS_CATEGORY = "Stats - Awards"
+    _SEASON_SLOT_SELECTOR_NAME = "Season Stat Slot"
+    _SEASON_STATS_POINTER_KEYS: tuple[str, ...] = ()
+    _EXACT_STRING_TYPES: set[str] = {
+        "string",
+        "text",
+        "wstring",
+        "wstr",
+        "utf16",
+        "wide",
+        "char",
+        "ptr_string",
+        "pointer_string",
+    }
+    _EXACT_FLOAT_TYPES: set[str] = {"float", "double"}
+    _EXACT_POINTER_TEXT_TYPES: set[str] = {"pointer", "ptr", "ptr_string", "pointer_string"}
+    _EXACT_COLOR_TEXT_TYPES: set[str] = {"color", "color32", "rgb", "rgba", "argb", "bgra"}
+    _EXACT_LARGE_INT_TYPES: set[str] = {
+        "uint64",
+        "ulonglong",
+        "qword",
+        "int64",
+        "longlong",
+        "integer64",
+    }
+
+    def __init__(self, app, players: Player | Collection[Player], model: PlayerDataModel):
+        self.app = app
         self.model = model
+        self._closed = False
+        self.target_players: list[Player] = self._normalize_players(players)
+        self.player: Player = self.target_players[0]
         if len(self.target_players) == 1:
             title = f"Edit Player: {self.player.full_name}"
         else:
             title = f"Edit {len(self.target_players)} Players (showing {self.player.full_name})"
-        self.title(title)
-        # Dimensions: slightly larger for many fields
-        self.geometry("700x500")
-        self.configure(bg=PANEL_BG)
-        style = ttk.Style(self)
-        try:
-            current_theme = style.theme_use()
-            style.theme_use(current_theme)
-        except Exception:
-            pass
-        style.configure("FullEditor.TNotebook", background=PANEL_BG, borderwidth=0, tabmargins=(0, 0, 0, 0))
-        tab_bg = "#1F3F6B"
-        style.configure(
-            "FullEditor.TNotebook.Tab",
-            background=tab_bg,
-            foreground=TEXT_PRIMARY,
-            padding=(12, 6),
-            borderwidth=0,
-        )
-        style.map(
-            "FullEditor.TNotebook.Tab",
-            background=[("selected", BUTTON_BG), ("active", BUTTON_ACTIVE_BG), ("!selected", tab_bg)],
-            foreground=[("selected", TEXT_PRIMARY), ("active", TEXT_PRIMARY), ("!selected", TEXT_PRIMARY)],
-        )
-        style.configure("FullEditor.TFrame", background=PANEL_BG, borderwidth=0)
-        # Dictionary mapping category names to a mapping of field names to
-        # Tkinter variables.  This allows us to load and save values easily.
-        self.field_vars: dict[str, dict[str, tk.Variable]] = {}
-        # Dictionary mapping (category_name, field_name) -> metadata dict
-        # describing offset, start bit and bit length.  Using the tuple
-        # avoids using unhashable Tkinter variables as keys.
+
+        self.field_vars: dict[str, dict[str, int | str]] = {}
         self.field_meta: dict[tuple[str, str], FieldMetadata] = {}
-        # Dictionary to hold Spinbox widgets for each field.  The key is
-        # (category_name, field_name) and the value is the Spinbox
-        # instance.  Storing these allows us to compute min/max values
-        # dynamically based on the widget's configuration (e.g. range)
-        # when adjusting entire categories via buttons.
-        self.spin_widgets: dict[tuple[str, str], tk.Spinbox] = {}
-        self.raw_field_inspector: "RawFieldInspectorExtension | None" = None
-        # Track fields edited since last save
+        self.field_source_category: dict[tuple[str, str], str] = {}
+        # Baseline UI-side values loaded from memory. Save should only write fields that
+        # were successfully loaded into the editor and whose UI values differ from this baseline.
+        self._baseline_values: dict[tuple[str, str], object] = {}
         self._unsaved_changes: set[tuple[str, str]] = set()
-        # Suppress change-trace callbacks while populating initial values
         self._initializing = True
-        # Notebook for category tabs
-        notebook = ttk.Notebook(self, style="FullEditor.TNotebook")
-        notebook.pack(fill=tk.BOTH, expand=True)
-        # Determine which categories are available from the model.  If
-        # categories are missing, we still display the tab with a placeholder.
-        # Determine tab order.  Start with the common categories defined in
-        # the offset map.  Then append any additional categories found in
-        # the model that are not already listed.  Finally include
-        # placeholder tabs for future extensions (Accessories, Contract).
+        self._loading_values = False
+        self._season_slot_selector_key: tuple[str, str] | None = None
+        self._season_slot_defs: list[dict[str, object]] = []
+        self._season_stat_field_keys: list[tuple[str, str]] = []
+
+        self.window_tag = dpg.generate_uuid()
+        self.tab_bar_tag = dpg.generate_uuid()
+
+        with dpg.window(
+            label=title,
+            tag=self.window_tag,
+            width=920,
+            height=720,
+            no_collapse=True,
+            on_close=self._on_close,
+        ):
+            self._build_tabs()
+            dpg.add_separator()
+            with dpg.group(horizontal=True):
+                dpg.add_button(label="Save", width=100, callback=self._save_all)
+                dpg.add_button(label="Close", width=100, callback=self._on_close)
+
+        # Track open editors for control-bridge helpers.
+        editors = getattr(self.app, "full_editors", None)
+        if isinstance(editors, list):
+            editors.append(self)
+        else:
+            self.app.full_editors = [self]
+
+        self._load_all_values_async()
+
+    # ------------------------------------------------------------------
+    # Build UI
+    # ------------------------------------------------------------------
+    def _build_tabs(self) -> None:
         categories_map = self.model.get_categories_for_super("Players") or {}
+        categories_map = self._prepare_stats_tabs(categories_map)
         ordered = sorted(categories_map.keys())
         if not ordered:
+            self.app.show_warning("Full Player Editor", "No player categories available.")
             return
-        for cat in ordered:
-            frame = tk.Frame(notebook, bg=PANEL_BG, highlightthickness=0, bd=0)
-            notebook.add(frame, text=cat)
-            self._build_category_tab(frame, cat, categories_map.get(cat))
-        # Extension hooks can attach a raw-field inspector to expose raw memory values.
+
+        with dpg.tab_bar(tag=self.tab_bar_tag, parent=self.window_tag):
+            for cat in ordered:
+                self._build_category_tab(cat, categories_map.get(cat))
+
         full_editor_context = {
-            "notebook": notebook,
+            "tab_bar": self.tab_bar_tag,
             "player": self.player,
-            "model": model,
-            "inspector": self.raw_field_inspector,
+            "model": self.model,
+            "app": self.app,
         }
         for factory in FULL_EDITOR_EXTENSIONS:
             try:
                 factory(self, full_editor_context)
             except Exception:
+                # Extensions are optional; ignore failures to keep base editor working.
                 pass
-        # Action buttons at bottom
-        btn_frame = tk.Frame(self, bg=PANEL_BG)
-        btn_frame.pack(fill=tk.X, pady=5)
-        save_btn = tk.Button(
-            btn_frame,
-            text="Save",
-            command=self._save_all,
-            bg=BUTTON_BG,
-            fg=BUTTON_TEXT,
-            activebackground=BUTTON_ACTIVE_BG,
-            activeforeground=BUTTON_TEXT,
-            relief=tk.FLAT,
+
+    @staticmethod
+    def _clone_fields_with_source(fields: list[dict], source_category: str) -> list[dict]:
+        cloned: list[dict] = []
+        for field in fields:
+            if not isinstance(field, dict):
+                continue
+            field_copy = dict(field)
+            field_copy["__source_category"] = source_category
+            cloned.append(field_copy)
+        return cloned
+
+    @staticmethod
+    def _stats_id_sort_key(item: dict[str, object]) -> tuple[int, int, int, str]:
+        normalized = str(item.get("normalized_name") or item.get("name") or "").strip().upper()
+        if normalized == "CURRENTYEARSTATID":
+            return (0, 0, 0, normalized)
+        if normalized.startswith("STATSID"):
+            suffix = normalized.replace("STATSID", "", 1)
+            return (1, int(suffix or 0) if suffix.isdigit() else 0, 0, normalized)
+        return (
+            2,
+            _to_int(item.get("address")),
+            _to_int(item.get("startBit", item.get("start_bit", 0))),
+            normalized,
         )
-        save_btn.pack(side=tk.LEFT, padx=10)
-        close_btn = tk.Button(
-            btn_frame,
-            text="Close",
-            command=self.destroy,
-            bg="#B0413E",
-            fg="white",
-            activebackground="#8D2C29",
-            activeforeground="white",
-            relief=tk.FLAT,
-        )
-        close_btn.pack(side=tk.LEFT)
-        # Populate field values from memory
-        self._load_all_values()
-        self._initializing = False
-    def _build_category_tab(self, parent: tk.Frame, category_name: str, fields_obj: list | None = None) -> None:
-        """
-        Build the UI for a specific category.  If field definitions are
-        available for the category, create a grid of labels and spinboxes
-        for each field.  Otherwise, display a placeholder message.
-        """
+
+    @classmethod
+    def _build_season_slot_selector_field(cls, id_fields: list[dict[str, object]]) -> dict[str, object] | None:
+        if not id_fields:
+            return None
+
+        ordered_ids = sorted((field for field in id_fields if isinstance(field, dict)), key=cls._stats_id_sort_key)
+        slot_defs: list[dict[str, object]] = []
+        next_slot = 0
+        for id_field in ordered_ids:
+            normalized = str(id_field.get("normalized_name") or id_field.get("name") or "").strip().upper()
+            name = str(id_field.get("name") or normalized or "").strip()
+            source_category = str(id_field.get("__source_category") or cls._PLAYER_STATS_IDS_CATEGORY)
+            if not name:
+                continue
+            if normalized == "CURRENTYEARSTATID":
+                slot = 0
+                next_slot = max(next_slot, 1)
+                label = "0 - Current Season"
+            elif normalized.startswith("STATSID"):
+                suffix = normalized.replace("STATSID", "", 1)
+                slot = int(suffix) if suffix.isdigit() else next_slot
+                next_slot = max(next_slot, slot + 1)
+                label = f"{slot}"
+            else:
+                slot = next_slot
+                next_slot += 1
+                label = f"{slot} - {name}"
+            slot_defs.append(
+                {
+                    "slot": slot,
+                    "label": label,
+                    "field_name": name,
+                    "source_category": source_category,
+                    "meta": dict(id_field),
+                }
+            )
+
+        if not slot_defs:
+            return None
+
+        slot_defs = sorted(slot_defs, key=lambda item: (_to_int(item.get("slot")), str(item.get("label") or "")))
+        labels = [str(item.get("label") or "") for item in slot_defs if str(item.get("label") or "")]
+        if not labels:
+            return None
+        return {
+            "name": cls._SEASON_SLOT_SELECTOR_NAME,
+            "type": "combo",
+            "values": labels,
+            "__season_slot_selector": True,
+            "__season_slot_defs": slot_defs,
+            "__source_category": cls._PLAYER_STATS_IDS_CATEGORY,
+        }
+
+    @classmethod
+    def _prepare_stats_tabs(cls, categories_map: dict[str, list[dict]]) -> dict[str, list[dict]]:
+        prepared: dict[str, list[dict]] = {}
+        for category_name, fields in (categories_map or {}).items():
+            if not isinstance(fields, list):
+                continue
+            prepared[str(category_name)] = [field for field in fields if isinstance(field, dict)]
+
+        career_key = "Stats - Career"
+        season_key = "Stats - Season"
+        awards_key = cls._PLAYER_STATS_AWARDS_CATEGORY
+        ids_key = "Stats - IDs"
+
+        awards_fields = prepared.get(awards_key, [])
+        id_fields = prepared.get(ids_key, [])
+
+        if career_key in prepared:
+            career_fields = cls._clone_fields_with_source(prepared.get(career_key, []), career_key)
+            if awards_fields:
+                career_fields.extend(cls._clone_fields_with_source(awards_fields, awards_key))
+            prepared["Career Stats"] = career_fields
+            prepared.pop(career_key, None)
+
+        if season_key in prepared:
+            season_fields = cls._clone_fields_with_source(prepared.get(season_key, []), season_key)
+            selector_added = False
+            if id_fields:
+                selector_field = cls._build_season_slot_selector_field(cls._clone_fields_with_source(id_fields, ids_key))
+                if selector_field:
+                    season_fields = [selector_field, *season_fields]
+                    selector_added = True
+            if awards_fields:
+                season_fields.extend(cls._clone_fields_with_source(awards_fields, awards_key))
+            prepared["Season Stats"] = season_fields
+            prepared.pop(season_key, None)
+            if selector_added:
+                prepared.pop(ids_key, None)
+
+        if awards_fields and ("Career Stats" in prepared or "Season Stats" in prepared):
+            prepared.pop(awards_key, None)
+
+        return prepared
+
+    @staticmethod
+    def _humanize_group_label(raw: object) -> str:
+        text = str(raw or "").strip()
+        if not text:
+            return ""
+        text = text.replace("_", " ").replace("-", " ")
+        parts = [segment for segment in text.split() if segment]
+        if not parts:
+            return ""
+        words: list[str] = []
+        for part in parts:
+            if part.isupper() and len(part) <= 4:
+                words.append(part)
+            else:
+                words.append(part.capitalize())
+        return " ".join(words)
+
+    def _group_label_for_field(self, category_name: str, field: dict) -> str:
+        raw_group = field.get("source_table_group") or field.get("source_group") or ""
+        group_label = self._humanize_group_label(raw_group)
+        if group_label:
+            return group_label
+        source_category = str(
+            field.get("__source_category")
+            or field.get("source_category")
+            or ""
+        ).strip()
+        if source_category and source_category.lower() != str(category_name).strip().lower():
+            return self._humanize_group_label(source_category)
+        return ""
+
+    def _build_category_tab(self, category_name: str, fields_obj: list | None = None) -> None:
         fields = fields_obj if isinstance(fields_obj, list) else self.model.categories.get(category_name, [])
-        # Add category-level adjustment buttons for Attributes, Durability, and Tendencies
-        if category_name in ("Attributes", "Durability", "Tendencies"):
-            btn_frame = tk.Frame(parent, bg=PANEL_BG)
-            btn_frame.pack(fill=tk.X, padx=10, pady=(5))
-            actions = [
-                ("Min", "min"),
-                ("+5", "plus5"),
-                ("+10", "plus10"),
-                ("-5", "minus5"),
-                ("-10", "minus10"),
-                ("Max", "max"),
-            ]
-            for label, action in actions:
-                tk.Button(
-                    btn_frame,
-                    text=label,
-                    command=lambda act=action, cat=category_name: self._adjust_category(cat, act),
-                    bg=BUTTON_BG,
-                    fg=BUTTON_TEXT,
-                    activebackground=BUTTON_ACTIVE_BG,
-                    activeforeground=BUTTON_TEXT,
-                    relief=tk.FLAT,
-                    width=5,
-                ).pack(side=tk.LEFT, padx=2)
-        # Container for scrolled view if many fields
-        canvas = tk.Canvas(parent, bg=PANEL_BG, highlightthickness=0, bd=0)
-        scrollbar = tk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        try:
-            scrollbar.configure(bg=PANEL_BG, troughcolor=PANEL_BG, activebackground=ACCENT_BG)
-        except tk.TclError:
-            pass
-        scroll_frame = tk.Frame(canvas, bg=PANEL_BG)
-        scroll_frame.bind(
-            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set, bg=PANEL_BG)
-        bind_mousewheel(scroll_frame, canvas)
-        # Pack canvas and scrollbar
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        # Save variables mapping
-        category_vars = self.field_vars.get(category_name)
-        if category_vars is None:
-            category_vars = dict[str, tk.Variable]()
-            self.field_vars[category_name] = category_vars
-        if not fields:
-            # No definitions found
-            tk.Label(
-                scroll_frame,
-                text=f"{category_name} editing not available.",
-                bg=PANEL_BG,
-                fg=TEXT_SECONDARY,
-            ).pack(padx=10, pady=10)
-            return
-        # Build rows for each field
-        for row, field in enumerate(fields):
-            name = field.get("name", f"Field {row}")
-            offset_val = _to_int(field.get("offset"))
-            start_bit = _to_int(field.get("startBit", field.get("start_bit", 0)))
-            length = _to_int(field.get("length", 8))
-            raw_size = _to_int(field.get("size"))
-            raw_length = _to_int(field.get("length") or 0)
-            byte_length = raw_size if raw_size > 0 else raw_length
-            requires_deref = bool(field.get("requiresDereference") or field.get("requires_deref"))
-            deref_offset = _to_int(field.get("dereferenceAddress") or field.get("deref_offset"))
-            field_type = str(field.get("type", "")).lower()
-            is_string_field = any(tag in field_type for tag in ("string", "text", "wstring", "wide", "utf16", "char"))
-            is_float_field = "float" in field_type
-            # Treat binary types as regular numeric bitfields; reserve this flag for pointer/color only.
-            is_color_like = any(tag in field_type for tag in ("color", "pointer"))
-            # Label
-            lbl = tk.Label(scroll_frame, text=name + ":", bg=PANEL_BG, fg=TEXT_PRIMARY)
-            lbl.grid(row=row, column=0, sticky=tk.W, padx=(10, 5), pady=2)
-            if is_string_field:
-                max_chars = length if length > 0 else byte_length
-                enc_tag = field_type or "utf16"
-                if max_chars <= 0:
-                    max_chars = 64
-                var = tk.StringVar(value="")
-                entry = tk.Entry(
-                    scroll_frame,
-                    textvariable=var,
-                    width=24,
-                    bg=ENTRY_BG,
-                    fg=ENTRY_FG,
-                    insertbackground=ENTRY_FG,
-                    relief=tk.FLAT,
-                    highlightbackground=ENTRY_BORDER,
-                    highlightthickness=1,
-                    disabledbackground=ENTRY_BG,
-                    disabledforeground=ENTRY_FG,
+        with dpg.tab(label=category_name, parent=self.tab_bar_tag):
+            if category_name in ("Attributes", "Durability", "Tendencies"):
+                with dpg.group(horizontal=True):
+                    for label, action in [
+                        ("Min", "min"),
+                        ("+5", "plus5"),
+                        ("+10", "plus10"),
+                        ("-5", "minus5"),
+                        ("-10", "minus10"),
+                        ("Max", "max"),
+                    ]:
+                        dpg.add_button(
+                            label=label,
+                            width=55,
+                            callback=lambda _s, _a, cat=category_name, act=action: self._adjust_category(cat, act),
+                        )
+            with dpg.child_window(autosize_x=True, autosize_y=True, border=False) as _scroll:
+                if not fields:
+                    dpg.add_text(f"{category_name} editing not available.", color=self._color_tuple(TEXT_SECONDARY))
+                    return
+                table = dpg.add_table(
+                    header_row=False,
+                    resizable=False,
+                    policy=dpg.mvTable_SizingStretchProp,
+                    scrollX=False,
+                    scrollY=False,
                 )
-                entry.grid(row=row, column=1, sticky=tk.W, padx=(0, 10), pady=2)
-                category_vars[name] = var
-                self.field_meta[(category_name, name)] = FieldMetadata(
-                    offset=offset_val,
-                    start_bit=start_bit,
-                    length=max_chars,
-                    requires_deref=requires_deref,
-                    deref_offset=deref_offset,
-                    widget=entry,
-                    data_type=field_type or "string",
-                    byte_length=byte_length,
-                )
-                def on_text_change(*args, cat=category_name, field_name=name):
-                    if getattr(self, '_initializing', False):
-                        return
-                    self._unsaved_changes.add((cat, field_name))
-                var.trace_add("write", on_text_change)
-                continue
-            # Variable and spinbox
-            var = tk.IntVar(value=0)
-            # Determine raw maximum value for the bitfield
-            max_raw = (1 << length) - 1
-            # Compute the range shown in the spinbox.  For Attributes
-            # categories we convert the raw 0..max_raw values to the 2K
-            # rating scale of 25..99.  This mapping is handled in
-            # _load_all_values/_save_all; here we restrict the spinbox
-            # range to reflect the rating bounds.  For all other
-            # categories we use the raw bit range.
-            # Determine the displayed range of the Spinbox.  For
-            # Attributes, Durability and Tendencies we display the
-            # familiar 25..99 rating scale.  Conversion to/from raw
-            # bitfield values is handled in the load/save methods.  For
-            # all other categories, use the raw bit range.
-            if category_name in ("Attributes", "Durability"):
-                # Attributes and Durability use the familiar 25-99 rating scale
-                spin_from = 25
-                spin_to = 99
-            elif category_name == "Tendencies":
-                # Tendencies are displayed on a 0-100 scale
-                spin_from = 0
-                spin_to = 100
-            elif name.lower() == "height":
-                spin_from = HEIGHT_MIN_INCHES
-                spin_to = HEIGHT_MAX_INCHES
-            else:
-                spin_from = 0
-                spin_to = max_raw
-            # Determine if this field has an enumeration of values defined.
-            # If the field contains a "values" list, we use a combobox
-            # populated with those values.  Otherwise we fall back to
-            # category-specific handling (badges) or a numeric spinbox.
-            if is_float_field:
-                var = tk.DoubleVar(value=0.0)
-                entry = tk.Entry(
-                    scroll_frame,
-                    textvariable=var,
-                    width=18,
-                    bg=ENTRY_BG,
-                    fg=ENTRY_FG,
-                    insertbackground=ENTRY_FG,
-                    relief=tk.FLAT,
-                    highlightbackground=ENTRY_BORDER,
-                    highlightthickness=1,
-                    disabledbackground=ENTRY_BG,
-                    disabledforeground=ENTRY_FG,
-                )
-                entry.grid(row=row, column=1, sticky=tk.W, padx=(0, 10), pady=2)
-                category_vars[name] = var
-                self.field_meta[(category_name, name)] = FieldMetadata(
-                    offset=offset_val,
-                    start_bit=start_bit,
-                    length=length,
-                    requires_deref=requires_deref,
-                    deref_offset=deref_offset,
-                    widget=entry,
-                    data_type=field_type or "float",
-                    byte_length=byte_length,
-                )
-                def on_float_change(*args, cat=category_name, field_name=name):
-                    if getattr(self, '_initializing', False):
-                        return
-                    self._unsaved_changes.add((cat, field_name))
-                var.trace_add("write", on_float_change)
-                continue
-            if is_color_like:
-                var = tk.StringVar(value="")
-                entry = tk.Entry(
-                    scroll_frame,
-                    textvariable=var,
-                    width=18,
-                    bg=ENTRY_BG,
-                    fg=ENTRY_FG,
-                    insertbackground=ENTRY_FG,
-                    relief=tk.FLAT,
-                    highlightbackground=ENTRY_BORDER,
-                    highlightthickness=1,
-                    disabledbackground=ENTRY_BG,
-                    disabledforeground=ENTRY_FG,
-                )
-                entry.grid(row=row, column=1, sticky=tk.W, padx=(0, 10), pady=2)
-                category_vars[name] = var
-                self.field_meta[(category_name, name)] = FieldMetadata(
-                    offset=offset_val,
-                    start_bit=start_bit,
-                    length=length,
-                    requires_deref=requires_deref,
-                    deref_offset=deref_offset,
-                    widget=entry,
-                    data_type=field_type or "pointer",
-                    byte_length=byte_length,
-                )
-                def on_color_change(*args, cat=category_name, field_name=name):
-                    if getattr(self, '_initializing', False):
-                        return
-                    self._unsaved_changes.add((cat, field_name))
-                var.trace_add("write", on_color_change)
-                continue
-            values_list = field.get("values") if isinstance(field, dict) else None
-            if values_list:
-                # Create an IntVar to store the selected index
-                var = tk.IntVar(value=0)
-                combo = ttk.Combobox(
-                    scroll_frame,
-                    values=values_list,
-                    state="readonly",
-                    width=16,
-                    style="App.TCombobox",
-                )
-                combo.grid(row=row, column=1, sticky=tk.W, padx=(0, 10), pady=2)
-                # When user picks an entry, update the IntVar accordingly
-                def on_enum_selected(event=None, v=var, c=combo, vals=values_list):
-                    try:
-                        v.set(vals.index(c.get()))
-                    except Exception:
-                        v.set(0)
-                combo.bind("<<ComboboxSelected>>", on_enum_selected)
-                # Store variable
-                category_vars[name] = var
-                # Record metadata; keep reference to combobox and values list
-                self.field_meta[(category_name, name)] = FieldMetadata(
-                    offset=offset_val,
-                    start_bit=start_bit,
-                    length=length,
-                    requires_deref=requires_deref,
-                    deref_offset=deref_offset,
-                    widget=combo,
-                    values=tuple(str(v) for v in values_list),
-                    data_type=field_type,
-                    byte_length=byte_length,
-                )
-                # Flag unsaved changes
-                def on_enum_change(*args, cat=category_name, field_name=name):
-                    if getattr(self, '_initializing', False):
-                        return
-                    self._unsaved_changes.add((cat, field_name))
-                var.trace_add("write", on_enum_change)
-            elif category_name == "Badges":
-                # Special handling for badge levels: expose a human-readable
-                # combobox instead of a numeric spinbox.  Each badge uses a
-                # 3-bit field (0-7) but the game recognises only 0..4.
-                var = tk.IntVar(value=0)
-                combo = ttk.Combobox(
-                    scroll_frame,
-                    values=BADGE_LEVEL_NAMES,
-                    state="readonly",
-                    width=12,
-                    style="App.TCombobox",
-                )
-                combo.grid(row=row, column=1, sticky=tk.W, padx=(0, 10), pady=2)
-                # When the user picks a level, update the IntVar
-                def on_combo_selected(event, v=var, c=combo):
-                    val_name = c.get()
-                    v.set(BADGE_NAME_TO_VALUE.get(val_name, 0))
-                combo.bind("<<ComboboxSelected>>", on_combo_selected)
-                # Store variable for this field
-                category_vars[name] = var
-                # Record metadata; also keep reference to combobox for later update
-                self.field_meta[(category_name, name)] = FieldMetadata(
-                    offset=offset_val,
-                    start_bit=start_bit,
-                    length=length,
-                    requires_deref=requires_deref,
-                    deref_offset=deref_offset,
-                    widget=combo,
-                    values=tuple(BADGE_LEVEL_NAMES),
-                    data_type=field_type,
-                    byte_length=byte_length,
-                )
-                # Flag unsaved changes
-                def on_badge_change(*args, cat=category_name, field_name=name):
-                    if getattr(self, '_initializing', False):
-                        return
-                    self._unsaved_changes.add((cat, field_name))
-                var.trace_add("write", on_badge_change)
-            else:
-                # Use Spinbox for numeric values; large ranges may be unwieldy
-                spin = tk.Spinbox(
-                    scroll_frame,
-                    from_=spin_from,
-                    to=spin_to,
-                    textvariable=var,
-                    width=10,
-                    bg=INPUT_BG,
-                    fg=TEXT_PRIMARY,
-                    highlightbackground=ACCENT_BG,
-                    highlightthickness=1,
-                    relief=tk.FLAT,
-                    insertbackground=TEXT_PRIMARY,
-                )
-                spin.grid(row=row, column=1, sticky=tk.W, padx=(0, 10), pady=2)
-                spin.configure(selectbackground=ACCENT_BG, selectforeground=TEXT_PRIMARY)
-                # Store variable by name for this category
-                category_vars[name] = var
-                # Record metadata keyed by (category, field_name)
-                self.field_meta[(category_name, name)] = FieldMetadata(
-                    offset=offset_val,
-                    start_bit=start_bit,
-                    length=length,
-                    requires_deref=requires_deref,
-                    deref_offset=deref_offset,
-                    widget=spin,
-                    data_type=field_type,
-                    byte_length=byte_length,
-                )
-                # Save the Spinbox widget for later category-wide adjustments
-                self.spin_widgets[(category_name, name)] = spin
-                # Flag unsaved changes when the value changes
-                def on_spin_change(*args, cat=category_name, field_name=name):
-                    if getattr(self, '_initializing', False):
-                        return
-                    self._unsaved_changes.add((cat, field_name))
-                var.trace_add("write", on_spin_change)
-    def _load_all_values(self) -> None:
-        """Populate UI variables with current values from memory."""
-        record_ptr = getattr(self.player, "record_ptr", None)
-        for category, fields in self.field_vars.items():
-            for field_name, var in fields.items():
-                meta = self.field_meta.get((category, field_name))
-                if not meta:
-                    continue
-                value = self.model.decode_field_value(
-                    entity_type="player",
-                    entity_index=self.player.index,
-                    category=category,
-                    field_name=field_name,
-                    meta=meta,
-                    record_ptr=record_ptr,
-                )
-                if value is None:
-                    continue
-                if meta.values:
-                    try:
-                        idx = _to_int(value)
-                    except Exception:
-                        idx = 0
-                    var.set(idx)
-                    widget = meta.widget
-                    if isinstance(widget, ttk.Combobox):
-                        vals = list(meta.values)
-                        if 0 <= idx < len(vals):
-                            try:
-                                widget.set(vals[idx])
-                            except Exception:
-                                pass
-                    continue
-                if isinstance(var, tk.StringVar):
-                    var.set("" if value is None else str(value))
-                elif isinstance(var, tk.DoubleVar):
-                    try:
-                        if isinstance(value, (int, float)):
-                            var.set(float(value))
+                dpg.add_table_column(parent=table, width_fixed=True, init_width_or_weight=230)
+                dpg.add_table_column(parent=table, init_width_or_weight=1.0)
+                previous_group = ""
+                for row, field in enumerate(fields):
+                    name = field.get("name", f"Field {row}")
+                    source_category = str(field.get("__source_category") or category_name)
+                    group_label = self._group_label_for_field(category_name, field)
+                    if group_label and group_label != previous_group:
+                        with dpg.table_row(parent=table):
+                            dpg.add_text(group_label, color=self._color_tuple(TEXT_SECONDARY))
+                            dpg.add_text("")
+                    previous_group = group_label
+                    with dpg.table_row(parent=table):
+                        dpg.add_text(f"{name}:")
+                        control = self._add_field_control(category_name, name, field)
+                    self.field_vars.setdefault(category_name, {})[name] = control
+                    self.field_source_category[(category_name, name)] = source_category
+                    if bool(field.get("__season_slot_selector")):
+                        self._season_slot_selector_key = (category_name, name)
+                        defs_raw = field.get("__season_slot_defs")
+                        if isinstance(defs_raw, list):
+                            self._season_slot_defs = [dict(item) for item in defs_raw if isinstance(item, dict)]
                         else:
-                            var.set(float(str(value)))
-                    except Exception:
-                        pass
-                else:
-                    try:
-                        var.set(_to_int(value))
-                    except Exception:
-                        pass
-    def _save_all(self) -> None:
-        """
-        Iterate over all fields and write the current values back to the
-        player's record in memory.
-        """
-        any_error = False
-        targets = self.target_players or [self.player]
+                            self._season_slot_defs = []
+                    elif (
+                        category_name == self._SEASON_STATS_TAB
+                        and source_category in (
+                            self._PLAYER_STATS_SEASON_CATEGORY,
+                            self._PLAYER_STATS_AWARDS_CATEGORY,
+                        )
+                    ):
+                        self._season_stat_field_keys.append((category_name, name))
+
+    @staticmethod
+    def _normalize_data_type(data_type: str | None) -> str:
+        return str(data_type or "").strip().lower()
+
+    @classmethod
+    def _control_mode_for_data_type(cls, data_type: str | None) -> str:
+        normalized = cls._normalize_data_type(data_type)
+        if normalized in cls._EXACT_LARGE_INT_TYPES:
+            return "large_int_text"
+        if (
+            normalized in cls._EXACT_STRING_TYPES
+            or normalized in cls._EXACT_POINTER_TEXT_TYPES
+            or normalized in cls._EXACT_COLOR_TEXT_TYPES
+        ):
+            return "text"
+        if normalized in cls._EXACT_FLOAT_TYPES:
+            return "float"
+        return "int"
+
+    def _add_field_control(self, category_name: str, field_name: str, field: dict) -> int | str:
+        offset_val = _to_int(field.get("offset"))
+        start_bit = _to_int(field.get("startBit", field.get("start_bit", 0)))
+        length = _to_int(field.get("length", 8))
+        raw_size = _to_int(field.get("size"))
+        raw_length = _to_int(field.get("length") or 0)
+        byte_length = raw_size if raw_size > 0 else raw_length
+        requires_deref = bool(field.get("requiresDereference") or field.get("requires_deref"))
+        deref_offset = _to_int(field.get("dereferenceAddress") or field.get("deref_offset"))
+        raw_field_type = str(field.get("type") or "")
+        field_type = self._normalize_data_type(raw_field_type)
+        control_mode = self._control_mode_for_data_type(raw_field_type)
+
+        values_list = field.get("values") if isinstance(field, dict) else None
+        try:
+            max_raw = (1 << length) - 1 if length and 0 < length < 31 else 999999
+        except Exception:
+            max_raw = 999999
+
+        control: int | str
+        if control_mode == "text":
+            max_chars = length if length > 0 else byte_length
+            if max_chars <= 0:
+                max_chars = 64
+            control = dpg.add_input_text(
+                width=self._WIDTH_TEXT,
+                default_value="",
+                callback=lambda _s, _a, cat=category_name, fname=field_name: self._mark_unsaved(cat, fname),
+            )
+            self.field_meta[(category_name, field_name)] = FieldMetadata(
+                offset=offset_val,
+                start_bit=start_bit,
+                length=max_chars,
+                requires_deref=requires_deref,
+                deref_offset=deref_offset,
+                widget=control,
+                data_type=raw_field_type or "string",
+                byte_length=byte_length,
+            )
+            return control
+
+        if control_mode == "float":
+            control = dpg.add_input_float(
+                width=self._WIDTH_FLOAT,
+                default_value=0.0,
+                format="%.3f",
+                callback=lambda _s, _a, cat=category_name, fname=field_name: self._mark_unsaved(cat, fname),
+            )
+            self.field_meta[(category_name, field_name)] = FieldMetadata(
+                offset=offset_val,
+                start_bit=start_bit,
+                length=length,
+                requires_deref=requires_deref,
+                deref_offset=deref_offset,
+                widget=control,
+                data_type=raw_field_type or "float",
+                byte_length=byte_length,
+            )
+            return control
+
+        if control_mode == "large_int_text":
+            control = dpg.add_input_text(
+                width=self._WIDTH_TEXT,
+                default_value="0",
+                callback=lambda _s, _a, cat=category_name, fname=field_name: self._mark_unsaved(cat, fname),
+            )
+            self.field_meta[(category_name, field_name)] = FieldMetadata(
+                offset=offset_val,
+                start_bit=start_bit,
+                length=length,
+                requires_deref=requires_deref,
+                deref_offset=deref_offset,
+                widget=control,
+                data_type=raw_field_type or "int64",
+                byte_length=byte_length,
+            )
+            return control
+
+        if bool(field.get("__season_slot_selector")):
+            items = [str(v) for v in values_list] if isinstance(values_list, list) else []
+            default_val = items[0] if items else ""
+            control = dpg.add_combo(
+                items=items,
+                default_value=default_val,
+                width=self._WIDTH_COMBO,
+                callback=self._on_season_slot_changed,
+            )
+            self.field_meta[(category_name, field_name)] = FieldMetadata(
+                offset=offset_val,
+                start_bit=start_bit,
+                length=length,
+                requires_deref=False,
+                deref_offset=0,
+                widget=control,
+                values=tuple(items),
+                data_type="season_slot_selector",
+                byte_length=byte_length,
+            )
+            return control
+
+        if values_list:
+            items = [str(v) for v in values_list]
+            default_val = items[0] if items else ""
+            control = dpg.add_combo(
+                items=items,
+                default_value=default_val,
+                width=self._WIDTH_COMBO,
+                callback=lambda _s, _a, cat=category_name, fname=field_name: self._mark_unsaved(cat, fname),
+            )
+            self.field_meta[(category_name, field_name)] = FieldMetadata(
+                offset=offset_val,
+                start_bit=start_bit,
+                length=length,
+                requires_deref=requires_deref,
+                deref_offset=deref_offset,
+                widget=control,
+                values=tuple(items),
+                data_type=raw_field_type or None,
+                byte_length=byte_length,
+            )
+            return control
+
+        if category_name == "Badges":
+            control = dpg.add_combo(
+                items=list(BADGE_LEVEL_NAMES),
+                default_value=BADGE_LEVEL_NAMES[0],
+                width=self._WIDTH_COMBO,
+                callback=lambda _s, _a, cat=category_name, fname=field_name: self._mark_unsaved(cat, fname),
+            )
+            self.field_meta[(category_name, field_name)] = FieldMetadata(
+                offset=offset_val,
+                start_bit=start_bit,
+                length=length,
+                requires_deref=requires_deref,
+                deref_offset=deref_offset,
+                widget=control,
+                values=tuple(BADGE_LEVEL_NAMES),
+                data_type=raw_field_type or "badge",
+                byte_length=byte_length,
+            )
+            return control
+
+        # Numeric fields
+        if category_name in ("Attributes", "Durability"):
+            spin_from, spin_to = 25, 99
+        elif category_name == "Tendencies":
+            spin_from, spin_to = 0, 100
+        elif field_name.lower() == "height":
+            spin_from, spin_to = HEIGHT_MIN_INCHES, HEIGHT_MAX_INCHES
+        else:
+            spin_from, spin_to = 0, max_raw if max_raw > 0 else 0
+        spin_from, spin_to = self._sanitize_input_int_range(spin_from, spin_to)
+
+        control = dpg.add_input_int(
+            width=self._WIDTH_INT,
+            default_value=spin_from,
+            min_value=spin_from,
+            max_value=spin_to,
+            min_clamped=True,
+            max_clamped=True,
+            callback=lambda _s, _a, cat=category_name, fname=field_name: self._mark_unsaved(cat, fname),
+        )
+        self.field_meta[(category_name, field_name)] = FieldMetadata(
+            offset=offset_val,
+            start_bit=start_bit,
+            length=length,
+            requires_deref=requires_deref,
+            deref_offset=deref_offset,
+            widget=control,
+            data_type=raw_field_type or "int",
+            byte_length=byte_length,
+        )
+        return control
+
+    # ------------------------------------------------------------------
+    # Data loading / saving
+    # ------------------------------------------------------------------
+    def _load_all_values_async(self) -> None:
+        if self._loading_values:
+            return
+        self._loading_values = True
+        player_record_ptr = getattr(self.player, "record_ptr", None)
+        season_record_ptr = self._resolve_selected_season_record_ptr(self.player)
+        values: dict[tuple[str, str], object] = {}
         for category, fields in self.field_vars.items():
-            for field_name, var in fields.items():
+            for field_name in fields.keys():
                 meta = self.field_meta.get((category, field_name))
                 if not meta:
+                    continue
+                if self._is_season_slot_selector_field(category, field_name):
                     continue
                 try:
-                    ui_value = var.get()
-                except Exception:
-                    any_error = True
-                    continue
-                for target in targets:
-                    ok = self.model.encode_field_value(
+                    source_category = self.field_source_category.get((category, field_name), category)
+                    target_record_ptr = player_record_ptr
+                    if self._is_season_stats_field(category, source_category):
+                        target_record_ptr = season_record_ptr
+                        if target_record_ptr is None:
+                            continue
+                    value = self.model.decode_field_value(
                         entity_type="player",
-                        entity_index=target.index,
-                        category=category,
+                        entity_index=self.player.index,
+                        category=source_category,
                         field_name=field_name,
                         meta=meta,
-                        display_value=ui_value,
-                        record_ptr=getattr(target, "record_ptr", None),
+                        record_ptr=target_record_ptr,
                     )
-                    any_error = any_error or not ok
-        if any_error:
-            messagebox.showerror("Save Error", "One or more fields could not be saved.")
-        else:
-            if len(targets) > 1:
-                messagebox.showinfo("Save Successful", f"All fields saved for {len(targets)} players.")
+                except Exception:
+                    value = None
+                if value is None:
+                    continue
+                values[(category, field_name)] = value
+        self._loading_values = False
+        if not self._closed:
+            self._apply_loaded_values(values)
+
+    def _apply_loaded_values(self, values: dict[tuple[str, str], object]) -> None:
+        baseline_map = getattr(self, "_baseline_values", None)
+        if not isinstance(baseline_map, dict):
+            baseline_map = {}
+            self._baseline_values = baseline_map
+        for (category, field_name), value in values.items():
+            control = self.field_vars.get(category, {}).get(field_name)
+            meta = self.field_meta.get((category, field_name))
+            if control is None or meta is None or not dpg.does_item_exist(control):
+                continue
+            control_mode = self._control_mode_for_data_type(meta.data_type)
+            if meta.values:
+                selection = ""
+                vals = list(meta.values)
+                if isinstance(value, str) and value in vals:
+                    selection = value
+                else:
+                    try:
+                        idx = self._coerce_int(value, default=0)
+                        if 0 <= idx < len(vals):
+                            selection = vals[idx]
+                    except Exception:
+                        selection = ""
+                if not selection:
+                    selection = vals[0] if vals else ""
+                dpg.set_value(control, selection)
+            elif control_mode == "text":
+                dpg.set_value(control, "" if value is None else str(value))
+            elif control_mode == "large_int_text":
+                dpg.set_value(control, "0" if value is None else str(value))
+            elif control_mode == "float":
+                try:
+                    dpg.set_value(control, float(cast(Any, value)))
+                except Exception:
+                    pass
             else:
-                messagebox.showinfo("Save Successful", "All fields saved successfully.")
+                try:
+                    dpg.set_value(control, self._clamp_dpg_int(_to_int(value)))
+                except Exception:
+                    pass
+            try:
+                baseline_map[(category, field_name)] = self._get_ui_value(meta, control)
+            except Exception:
+                pass
+            try:
+                self._unsaved_changes.discard((category, field_name))
+            except Exception:
+                pass
+        self._initializing = False
+        self._loading_values = False
+
+    def _save_all(self) -> None:
+        baseline_map = getattr(self, "_baseline_values", None)
+        if not isinstance(baseline_map, dict) or not baseline_map:
+            self.app.show_message("Save", "No changes to save.")
+            return
+
+        any_error = False
+        targets = self.target_players or [self.player]
+        changed_keys: list[tuple[str, str]] = []
+
+        for (category, field_name), baseline_value in baseline_map.items():
+            control = self.field_vars.get(category, {}).get(field_name)
+            meta = self.field_meta.get((category, field_name))
+            if control is None or meta is None or not dpg.does_item_exist(control):
+                continue
+            if self._is_season_slot_selector_field(category, field_name):
+                continue
+            try:
+                ui_value = self._get_ui_value(meta, control)
+            except Exception:
+                any_error = True
+                continue
+            if ui_value == baseline_value:
+                self._unsaved_changes.discard((category, field_name))
+                continue
+            changed_keys.append((category, field_name))
+            source_category = self.field_source_category.get((category, field_name), category)
+            field_ok = True
+            for target in targets:
+                target_record_ptr = getattr(target, "record_ptr", None)
+                if self._is_season_stats_field(category, source_category):
+                    target_record_ptr = self._resolve_selected_season_record_ptr(target)
+                    if target_record_ptr is None:
+                        any_error = True
+                        field_ok = False
+                        continue
+                ok = self.model.encode_field_value(
+                    entity_type="player",
+                    entity_index=target.index,
+                    category=source_category,
+                    field_name=field_name,
+                    meta=meta,
+                    display_value=ui_value,
+                    record_ptr=target_record_ptr,
+                )
+                if not ok:
+                    any_error = True
+                    field_ok = False
+            if field_ok:
+                baseline_map[(category, field_name)] = ui_value
+                self._unsaved_changes.discard((category, field_name))
+
+        if any_error:
+            self.app.show_error("Save Error", "One or more fields could not be saved.")
+            return
+        if not changed_keys:
+            self.app.show_message("Save", "No changes to save.")
+            return
+        if len(targets) > 1:
+            self.app.show_message(
+                "Save Successful",
+                f"Saved {len(changed_keys)} field(s) for {len(targets)} players.",
+            )
+        else:
+            self.app.show_message("Save Successful", f"Saved {len(changed_keys)} field(s).")
+
+    def _get_ui_value(self, meta: FieldMetadata, control_tag: int | str) -> object:
+        if meta.values:
+            selected = dpg.get_value(control_tag)
+            values_list = list(meta.values)
+            if selected in values_list:
+                idx = values_list.index(selected)
+            else:
+                idx = 0
+            if values_list == list(BADGE_LEVEL_NAMES):
+                return BADGE_NAME_TO_VALUE.get(selected, idx)
+            return idx
+        control_mode = self._control_mode_for_data_type(meta.data_type)
+        value = dpg.get_value(control_tag)
+        if control_mode == "text":
+            return "" if value is None else str(value)
+        if control_mode == "large_int_text":
+            return _to_int(value)
+        if control_mode == "float":
+            try:
+                return float(cast(Any, value))
+            except Exception:
+                return 0.0
+        return _to_int(value)
+
+    def _is_season_slot_selector_field(self, category_name: str, field_name: str) -> bool:
+        return self._season_slot_selector_key == (category_name, field_name)
+
+    def _is_season_stats_field(self, category_name: str, source_category: str) -> bool:
+        return (
+            category_name == self._SEASON_STATS_TAB
+            and source_category in (
+                self._PLAYER_STATS_SEASON_CATEGORY,
+                self._PLAYER_STATS_AWARDS_CATEGORY,
+            )
+        )
+
+    def _selected_season_slot_index(self) -> int:
+        if not self._season_slot_defs or not self._season_slot_selector_key:
+            return 0
+        selector_category, selector_name = self._season_slot_selector_key
+        control = self.field_vars.get(selector_category, {}).get(selector_name)
+        if control is None or not dpg.does_item_exist(control):
+            return 0
+        try:
+            selected_label = str(dpg.get_value(control) or "")
+        except Exception:
+            selected_label = ""
+        if selected_label:
+            for idx, slot_def in enumerate(self._season_slot_defs):
+                if selected_label == str(slot_def.get("label") or ""):
+                    return idx
+        return 0
+
+    def _season_stats_base_and_stride(self) -> tuple[int | None, int]:
+        pointer_meta = getattr(self.model, "_league_pointer_meta", None)
+        resolve_base = getattr(self.model, "_resolve_league_base", None)
+        if callable(pointer_meta) and callable(resolve_base):
+            for pointer_key in self._SEASON_STATS_POINTER_KEYS:
+                try:
+                    chains, stride = pointer_meta(pointer_key)
+                except Exception:
+                    continue
+                if stride <= 0 or not chains:
+                    continue
+                try:
+                    base_ptr = resolve_base(pointer_key, chains, None)
+                except Exception:
+                    base_ptr = None
+                if base_ptr is not None and base_ptr > 0:
+                    return int(base_ptr), int(stride)
+        return None, 0
+
+    def _resolve_selected_season_record_ptr(self, player: Player | None = None) -> int | None:
+        if not self._season_slot_defs:
+            return None
+        slot_idx = self._selected_season_slot_index()
+        if slot_idx < 0 or slot_idx >= len(self._season_slot_defs):
+            slot_idx = 0
+        slot_def = self._season_slot_defs[slot_idx]
+        id_field_name = str(slot_def.get("field_name") or "").strip()
+        if not id_field_name:
+            return None
+        id_source_category = str(slot_def.get("source_category") or self._PLAYER_STATS_IDS_CATEGORY)
+        id_meta = slot_def.get("meta")
+        if not isinstance(id_meta, dict):
+            return None
+
+        target_player = player if isinstance(player, Player) else self.player
+        player_record_ptr = getattr(target_player, "record_ptr", None)
+        try:
+            raw_id_value = self.model.decode_field_value(
+                entity_type="player",
+                entity_index=target_player.index,
+                category=id_source_category,
+                field_name=id_field_name,
+                meta=id_meta,
+                record_ptr=player_record_ptr,
+            )
+        except Exception:
+            raw_id_value = None
+        stat_id = self._coerce_int(raw_id_value, default=-1)
+        if stat_id < 0:
+            return None
+
+        base_ptr, stride = self._season_stats_base_and_stride()
+        if base_ptr is None or stride <= 0:
+            return None
+        if stat_id >= base_ptr and ((stat_id - base_ptr) % stride == 0):
+            return int(stat_id)
+        return int(base_ptr + stat_id * stride)
+
+    def _set_control_default_value(self, control_tag: int | str, meta: FieldMetadata) -> None:
+        if not dpg.does_item_exist(control_tag):
+            return
+        if meta.values:
+            values_list = list(meta.values)
+            dpg.set_value(control_tag, values_list[0] if values_list else "")
+            return
+        control_mode = self._control_mode_for_data_type(meta.data_type)
+        if control_mode == "large_int_text":
+            dpg.set_value(control_tag, "0")
+            return
+        if control_mode == "text":
+            dpg.set_value(control_tag, "")
+            return
+        if control_mode == "float":
+            dpg.set_value(control_tag, 0.0)
+            return
+        dpg.set_value(control_tag, 0)
+
+    def _load_selected_season_stats_values(self) -> None:
+        if not self._season_stat_field_keys:
+            return
+        season_record_ptr = self._resolve_selected_season_record_ptr(self.player)
+        baseline_map = getattr(self, "_baseline_values", None)
+        if not isinstance(baseline_map, dict):
+            baseline_map = {}
+            self._baseline_values = baseline_map
+        values: dict[tuple[str, str], object] = {}
+        self._loading_values = True
+        try:
+            for category, field_name in self._season_stat_field_keys:
+                control = self.field_vars.get(category, {}).get(field_name)
+                meta = self.field_meta.get((category, field_name))
+                if control is None or meta is None or not dpg.does_item_exist(control):
+                    continue
+                if season_record_ptr is None:
+                    self._set_control_default_value(control, meta)
+                    baseline_map.pop((category, field_name), None)
+                    try:
+                        self._unsaved_changes.discard((category, field_name))
+                    except Exception:
+                        pass
+                    continue
+                source_category = self.field_source_category.get((category, field_name), category)
+                try:
+                    value = self.model.decode_field_value(
+                        entity_type="player",
+                        entity_index=self.player.index,
+                        category=source_category,
+                        field_name=field_name,
+                        meta=meta,
+                        record_ptr=season_record_ptr,
+                    )
+                except Exception:
+                    value = None
+                if value is None:
+                    self._set_control_default_value(control, meta)
+                    baseline_map.pop((category, field_name), None)
+                    try:
+                        self._unsaved_changes.discard((category, field_name))
+                    except Exception:
+                        pass
+                    continue
+                values[(category, field_name)] = value
+            if values:
+                self._apply_loaded_values(values)
+        finally:
+            self._loading_values = False
+
+    def _on_season_slot_changed(self, _sender=None, _app_data=None, _user_data=None) -> None:
+        if self._closed:
+            return
+        self._load_selected_season_stats_values()
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
     def _adjust_category(self, category_name: str, action: str) -> None:
-        """
-        Adjust all values within a category according to the specified action.
-        Actions can be one of: 'min', 'max', 'plus5', 'plus10', 'minus5', 'minus10'.
-        For Attributes, Durability and Tendencies categories, values are clamped
-        to the 25..99 scale.  For other categories, values are clamped to the
-        raw bitfield range (0..(2^length - 1)).
-        """
-        # Ensure the category exists
         fields = self.field_vars.get(category_name)
         if not fields:
             return
-        for field_name, var in fields.items():
-            # Retrieve bit length from metadata
+        for field_name, control in fields.items():
             meta = self.field_meta.get((category_name, field_name))
-            if not meta:
-                continue
-            if meta.data_type and any(
-                tag in meta.data_type.lower() for tag in ("string", "text", "char", "wstr", "utf", "wide")
-            ):
+            if not meta or self._control_mode_for_data_type(meta.data_type) != "int":
                 continue
             length = meta.length
-            # Determine min and max values based on category
             if category_name in ("Attributes", "Durability"):
-                # Attributes and Durability: clamp to 25..99
-                min_val = 25
-                max_val = 99
+                min_val, max_val = 25, 99
             elif category_name == "Tendencies":
-                # Tendencies: clamp to 0..100
-                min_val = 0
-                max_val = 100
+                min_val, max_val = 0, 100
             else:
-                min_val = 0
-                max_val = (1 << int(length)) - 1
-            current = var.get()
+                min_val, max_val = 0, (1 << int(length)) - 1 if length else 0
+            current = self._coerce_int(dpg.get_value(control), default=min_val)
             new_val = current
             if action == "min":
                 new_val = min_val
@@ -618,15 +922,74 @@ class FullPlayerEditor(tk.Toplevel):
                 new_val = current - 5
             elif action == "minus10":
                 new_val = current - 10
-            # Clamp to allowed range
-            if new_val < min_val:
-                new_val = min_val
-            if new_val > max_val:
-                new_val = max_val
-            var.set(int(new_val))
-# ---------------------------------------------------------------------
-# Team full editor
-# ---------------------------------------------------------------------
+            new_val = max(min_val, min(max_val, new_val))
+            try:
+                dpg.set_value(control, int(new_val))
+                self._mark_unsaved(category_name, field_name)
+            except Exception:
+                continue
+
+    def _mark_unsaved(self, category: str, field_name: str) -> None:
+        if self._initializing or self._loading_values:
+            return
+        self._unsaved_changes.add((category, field_name))
+
+    @staticmethod
+    def _coerce_int(value: object, default: int = 0) -> int:
+        try:
+            return int(cast(Any, value))
+        except Exception:
+            return default
+
+    @classmethod
+    def _clamp_dpg_int(cls, value: int) -> int:
+        if value < cls._DPG_INT_MIN:
+            return cls._DPG_INT_MIN
+        if value > cls._DPG_INT_MAX:
+            return cls._DPG_INT_MAX
+        return int(value)
+
+    @classmethod
+    def _sanitize_input_int_range(cls, min_value: int, max_value: int) -> tuple[int, int]:
+        min_clamped = cls._clamp_dpg_int(min_value)
+        max_clamped = cls._clamp_dpg_int(max_value)
+        if max_clamped < min_clamped:
+            max_clamped = min_clamped
+        return min_clamped, max_clamped
+
+    @staticmethod
+    def _color_tuple(hex_color: str) -> tuple[int, int, int, int]:
+        hex_color = hex_color.lstrip("#")
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        return (r, g, b, 255)
+
+    def _normalize_players(self, players: Player | Collection[Player]) -> list[Player]:
+        player_list: list[Player] = []
+        if isinstance(players, Player):
+            player_list = [players]
+        elif isinstance(players, CollectionABC) and not isinstance(players, (str, bytes)):
+            player_list = [p for p in players if isinstance(p, Player)]
+        if not player_list:
+            raise ValueError("FullPlayerEditor requires at least one player.")
+        return player_list
+
+    def _on_close(self, _sender=None, _app_data=None, _user_data=None) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            editors = getattr(self.app, "full_editors", [])
+            if isinstance(editors, list):
+                try:
+                    editors.remove(self)
+                except ValueError:
+                    pass
+        except Exception:
+            pass
+        if self.window_tag and dpg.does_item_exist(self.window_tag):
+            dpg.delete_item(self.window_tag)
 
 
 __all__ = ["FullPlayerEditor"]

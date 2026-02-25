@@ -1,290 +1,78 @@
-"""Players screen builder extracted from PlayerEditorApp."""
+"""Players screen for Dear PyGui."""
 from __future__ import annotations
 
-import tkinter as tk
-from tkinter import ttk
-from typing import cast
+import dearpygui.dearpygui as dpg
 
-from ..core.config import (
-    BUTTON_ACTIVE_BG,
-    BUTTON_BG,
-    BUTTON_TEXT,
-    ENTRY_BG,
-    ENTRY_BORDER,
-    ENTRY_FG,
-    PANEL_BG,
-    INPUT_PLACEHOLDER_FG,
-    INPUT_TEXT_FG,
-)
-from ..core.extensions import PLAYER_PANEL_EXTENSIONS
-from .widgets import bind_mousewheel
 
 
 def build_players_screen(app) -> None:
-    app.players_frame = tk.Frame(app, bg="#0F1C2E")
-    controls = tk.Frame(app.players_frame, bg="#0F1C2E")
-    controls.pack(fill=tk.X, padx=20, pady=15)
-    tk.Label(
-        controls,
-        text="Search",
-        font=("Segoe UI", 11, "bold"),
-        bg="#0F1C2E",
-        fg="#E0E1DD",
-    ).grid(row=0, column=0, sticky="w")
-    app.player_search_var = tk.StringVar()
-    app.search_entry = tk.Entry(
-        controls,
-        textvariable=app.player_search_var,
-        width=30,
-        font=("Segoe UI", 11),
-        relief=tk.FLAT,
-        fg=INPUT_PLACEHOLDER_FG,
-        bg=ENTRY_BG,
-        insertbackground=ENTRY_FG,
-        highlightthickness=1,
-        highlightbackground=ENTRY_BORDER,
-        disabledbackground=ENTRY_BG,
-        disabledforeground=ENTRY_FG,
-    )
-    app.search_entry.grid(row=0, column=1, padx=(8, 20), sticky="w")
-    app.search_entry.insert(0, "Search players.")
+    with dpg.child_window(tag="screen_players", parent=app.content_root, autosize_x=True, autosize_y=True, show=False) as tag:
+        app.screen_tags["players"] = tag
+        with dpg.group(horizontal=True):
+            dpg.add_text("Search")
+            app.player_search_input_tag = dpg.add_input_text(
+                hint="Search players.",
+                width=220,
+                callback=lambda s, a: _on_search_changed(app, a),
+            )
+            dpg.add_button(label="Refresh", callback=app._start_scan, width=90)
+            dpg.add_spacer(width=10)
+            dpg.add_text("Player Dataset")
+            app.dataset_combo_tag = dpg.add_combo(items=["All Data"], default_value="All Data")
+            dpg.add_spacer(width=10)
+            app.player_count_text_tag = dpg.add_text(app.player_count_var.get())
+        dpg.add_spacer(height=6)
+        with dpg.group(horizontal=True):
+            dpg.add_text("Team")
+            app.team_combo_tag = dpg.add_combo(items=[], width=220, callback=lambda s, a: app._on_team_selected(None, a))
+            app.scan_status_text_tag = dpg.add_text(app.scan_status_var.get(), color=(155, 164, 181, 255))
+        dpg.add_spacer(height=8)
+        with dpg.group(horizontal=True):
+            with dpg.child_window(tag="player_list_container", width=420, autosize_y=True) as list_container:
+                app.player_list_container = list_container
+                dpg.add_text("No players available.")
+            with dpg.child_window(tag="player_detail_container", autosize_x=True, autosize_y=True, border=True):
+                _build_player_detail_panel(app)
 
-    def _on_search_focus_in(_event):
-        if app.search_entry.get() == "Search players.":
-            app.search_entry.delete(0, tk.END)
-            app.search_entry.configure(fg=INPUT_TEXT_FG)
 
-    def _on_search_focus_out(_event):
-        if not app.search_entry.get():
-            app.search_entry.insert(0, "Search players.")
-            app.search_entry.configure(fg=INPUT_PLACEHOLDER_FG)
+def _on_search_changed(app, value: str) -> None:
+    app.player_search_var.set(value or "")
+    app._filter_player_list()
 
-    app.search_entry.bind("<FocusIn>", _on_search_focus_in)
-    app.search_entry.bind("<FocusOut>", _on_search_focus_out)
-    refresh_btn = tk.Button(
-        controls,
-        text="Refresh",
-        command=app._start_scan,
-        bg="#778DA9",
-        fg=BUTTON_TEXT,
-        relief=tk.FLAT,
-        activebackground="#415A77",
-        activeforeground=BUTTON_TEXT,
-        padx=16,
-        pady=4,
-    )
-    refresh_btn.grid(row=0, column=2, padx=(0, 20))
-    tk.Label(
-        controls,
-        text="Player Dataset",
-        font=("Segoe UI", 11, "bold"),
-        bg="#0F1C2E",
-        fg="#E0E1DD",
-    ).grid(row=0, column=3, sticky="w")
-    app.dataset_var = tk.StringVar(value="All Data")
-    dataset_combo = ttk.Combobox(
-        controls,
-        textvariable=app.dataset_var,
-        values=["All Data"],
-        state="readonly",
-        width=15,
-        style="App.TCombobox",
-    )
-    dataset_combo.grid(row=0, column=4, padx=(8, 0), sticky="w")
-    controls.columnconfigure(5, weight=1)
-    app.player_count_var = tk.StringVar(value="Players: 0")
-    tk.Label(
-        controls,
-        textvariable=app.player_count_var,
-        font=("Segoe UI", 11, "bold"),
-        bg="#0F1C2E",
-        fg="#E0E1DD",
-    ).grid(row=0, column=5, sticky="e")
-    tk.Label(
-        controls,
-        text="Team",
-        font=("Segoe UI", 11, "bold"),
-        bg="#0F1C2E",
-        fg="#E0E1DD",
-    ).grid(row=1, column=0, sticky="w", pady=(10, 0))
-    app.team_var = tk.StringVar()
-    app.team_dropdown = ttk.Combobox(
-        controls,
-        textvariable=app.team_var,
-        state="readonly",
-        width=25,
-        style="App.TCombobox",
-    )
-    app.team_dropdown.grid(row=1, column=1, padx=(8, 0), pady=(10, 0), sticky="w")
-    app.team_dropdown.bind("<<ComboboxSelected>>", app._on_team_selected)
-    app.scan_status_var = tk.StringVar(value="")
-    app.scan_status_label = tk.Label(
-        controls,
-        textvariable=app.scan_status_var,
-        font=("Segoe UI", 10, "italic"),
-        bg="#0F1C2E",
-        fg="#9BA4B5",
-    )
-    app.scan_status_label.grid(row=1, column=2, columnspan=3, sticky="w", pady=(10, 0))
 
-    content = tk.Frame(app.players_frame, bg="#0F1C2E")
-    content.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 20))
-    list_container = tk.Frame(content, bg="#0F1C2E")
-    list_container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-    app.player_listbox = tk.Listbox(
-        list_container,
-        selectmode=tk.EXTENDED,
-        exportselection=False,
-        font=("Segoe UI", 11),
-        bg="#0F1C2E",
-        fg="#E0E1DD",
-        highlightthickness=0,
-        relief=tk.FLAT,
-    )
-    app.player_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-    app.player_listbox.bind("<<ListboxSelect>>", app._on_player_selected)
-    app.player_listbox.bind("<Double-Button-1>", lambda _e: app._open_full_editor())
-    bind_mousewheel(app.player_listbox)
-    list_scroll = tk.Scrollbar(list_container, orient=tk.VERTICAL, command=app.player_listbox.yview)
-    list_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-    app.player_listbox.configure(yscrollcommand=list_scroll.set)
-    detail_container = tk.Frame(content, bg=PANEL_BG, width=420)
-    # Allow the detail pane to grow with the window so longer labels/fields are not cramped.
-    detail_container.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(20, 0))
-    detail_container.pack_propagate(False)
-    app.player_portrait = tk.Canvas(detail_container, width=150, height=150, bg=PANEL_BG, highlightthickness=0)
-    app.player_portrait.pack(pady=(30, 15))
-    app.player_portrait_circle = app.player_portrait.create_oval(25, 25, 125, 125, fill="#415A77", outline="")
-    app.player_portrait_text = app.player_portrait.create_text(75, 75, text="", fill="#E0E1DD", font=("Segoe UI", 24, "bold"))
-    app.player_name_var = tk.StringVar(value="Select a player")
-    app.player_name_label = tk.Label(
-        detail_container,
-        textvariable=app.player_name_var,
-        font=("Segoe UI", 18, "bold"),
-        bg=PANEL_BG,
-        fg="#E0E1DD",
-    )
-    app.player_name_label.pack()
-    app.player_ovr_var = tk.StringVar(value="OVR --")
-    app.player_ovr_label = tk.Label(
-        detail_container,
-        textvariable=app.player_ovr_var,
-        font=("Segoe UI", 14),
-        bg=PANEL_BG,
-        fg="#E63946",
-    )
-    app.player_ovr_label.pack(pady=(0, 20))
-    info_grid = tk.Frame(detail_container, bg=PANEL_BG)
-    info_grid.pack(padx=35, pady=10, fill=tk.X)
-    app.player_detail_fields = cast(dict[str, tk.StringVar], {})
-    detail_widgets = cast(dict[str, tk.Widget], {})
-    detail_fields = [
-        ("Position", "--"),
-        ("Number", "--"),
-        ("Height", "--"),
-        ("Weight", "--"),
-        ("Face ID", "--"),
-        ("Unique ID", "--"),
-    ]
-    for idx, (label, default) in enumerate(detail_fields):
-        row = idx // 2
-        col = (idx % 2) * 2
-        name_label = tk.Label(
-            info_grid,
-            text=label,
-            bg=PANEL_BG,
-            fg="#E0E1DD",
-            font=("Segoe UI", 11),
-        )
-        name_label.grid(row=row, column=col, sticky="w", pady=4, padx=(0, 12))
-        var = tk.StringVar(value=default)
-        value_label = tk.Label(
-            info_grid,
-            textvariable=var,
-            bg=PANEL_BG,
-            fg="#9BA4B5",
-            font=("Segoe UI", 11, "bold"),
-        )
-        value_label.grid(row=row, column=col + 1, sticky="w", pady=4, padx=(0, 20))
-        app.player_detail_fields[label] = var
-        detail_widgets[label] = value_label
-    app.player_detail_widgets = detail_widgets
-    info_grid.columnconfigure(1, weight=1)
-    info_grid.columnconfigure(3, weight=1)
-    form = tk.Frame(detail_container, bg=PANEL_BG)
-    form.pack(padx=35, pady=(10, 0), fill=tk.X)
-    app.var_first = tk.StringVar()
-    app.var_last = tk.StringVar()
-    first_entry = None
-    last_entry = None
-    tk.Label(form, text="Team", bg="#16213E", fg="#E0E1DD", font=("Segoe UI", 11)).grid(row=0, column=0, sticky="w", pady=4)
-    app.var_player_team = tk.StringVar()
-    team_value_label = tk.Label(
-        form,
-        textvariable=app.var_player_team,
-        bg="#16213E",
-        fg="#9BA4B5",
-        font=("Segoe UI", 11, "bold"),
-    )
-    team_value_label.grid(row=0, column=1, sticky="w", pady=4, padx=(8, 0))
-    form.columnconfigure(1, weight=1)
-    app.first_name_entry = None
-    app.last_name_entry = None
-    app.team_value_label = team_value_label
-    panel_context = {
-        "panel_parent": detail_container,
-        "detail_widgets": detail_widgets,
-        "detail_vars": app.player_detail_fields,
-        "first_name_entry": first_entry,
-        "last_name_entry": last_entry,
-        "team_widget": team_value_label,
-        "inspector": app.player_panel_inspector,
-        "ai_settings": app.ai_settings,
-    }
-    for factory in PLAYER_PANEL_EXTENSIONS:
-        try:
-            factory(app, panel_context)
-        except Exception:
-            pass
-    btn_row = tk.Frame(detail_container, bg="#16213E")
-    btn_row.pack(pady=(20, 0))
-    app.btn_edit = tk.Button(
-        btn_row,
-        text="Edit Player",
-        command=app._open_full_editor,
-        bg=BUTTON_BG,
-        fg=BUTTON_TEXT,
-        disabledforeground=BUTTON_TEXT,
-        activebackground=BUTTON_ACTIVE_BG,
-        activeforeground=BUTTON_TEXT,
-        relief=tk.FLAT,
-        state=tk.DISABLED,
-        padx=16,
-        pady=6,
-    )
-    app.btn_edit.pack(side=tk.LEFT, padx=5)
-    app.btn_copy = tk.Button(
-        btn_row,
-        text="Copy Player",
-        command=app._open_copy_dialog,
-        bg=BUTTON_BG,
-        fg=BUTTON_TEXT,
-        disabledforeground=BUTTON_TEXT,
-        activebackground=BUTTON_ACTIVE_BG,
-        activeforeground=BUTTON_TEXT,
-        relief=tk.FLAT,
-        state=tk.DISABLED,
-        padx=16,
-        pady=6,
-    )
-    app.btn_copy.pack(side=tk.LEFT, padx=5)
-    app.current_players = []
-    app.filtered_player_indices = []
-    app.selected_player = None
-    app.player_listbox.delete(0, tk.END)
-    app.player_count_var.set("Players: 0")
-    app.player_listbox.insert(tk.END, "No players available.")
-    app.player_search_var.trace_add("write", lambda *_: app._filter_player_list())
+def _build_player_detail_panel(app):
+    app.player_name_text = dpg.add_text(app.player_name_var.get(), bullet=False, color=(224, 225, 221, 255))
+    app.player_ovr_text = dpg.add_text(app.player_ovr_var.get(), color=(230, 57, 70, 255))
+    dpg.add_spacer(height=6)
+    with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, row_background=False, resizable=False):
+        # Define columns once before adding rows (DPG requirement).
+        dpg.add_table_column()
+        dpg.add_table_column()
+        labels_defaults = [
+            ("Position", "--"),
+            ("Number", "--"),
+            ("Height", "--"),
+            ("Weight", "--"),
+            ("Face ID", "--"),
+            ("Unique ID", "--"),
+        ]
+        app.player_detail_fields = {}
+        app.player_detail_widgets = {}
+        for label, default in labels_defaults:
+            with dpg.table_row():
+                dpg.add_text(label)
+                val_tag = dpg.add_text(default, color=(155, 164, 181, 255))
+            app.player_detail_fields[label] = app.player_detail_fields.get(label) or app.player_detail_fields.setdefault(label, app.var_first.__class__(default))
+            app.player_detail_widgets[label] = val_tag
+    dpg.add_spacer(height=8)
+    with dpg.group(horizontal=True):
+        app.btn_edit = dpg.add_button(label="Edit Player", callback=app._open_full_editor, enabled=False)
+        app.btn_copy = dpg.add_button(label="Copy Player", callback=app._open_copy_dialog, enabled=False)
+    with dpg.group(horizontal=True):
+        export_cb = app._export_selected_player if hasattr(app, "_export_selected_player") else (lambda *_a, **_k: None)
+        import_cb = app._import_selected_player if hasattr(app, "_import_selected_player") else (lambda *_a, **_k: None)
+        app.btn_player_export = dpg.add_button(label="Export Player", callback=export_cb, enabled=False)
+        app.btn_player_import = dpg.add_button(label="Import Player", callback=import_cb, enabled=False)
 
 
 __all__ = ["build_players_screen"]

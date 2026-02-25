@@ -10,16 +10,32 @@ from typing import Any, Iterable
 TeamEntry = str | int | tuple[Any, ...] | dict[str, Any]
 
 
-def ensure_default_profiles(settings: dict[str, Any], team_names: Iterable[TeamEntry], active_count: int = 12) -> dict[str, Any]:
+def ensure_default_profiles(
+    settings: dict[str, Any],
+    team_names: Iterable[TeamEntry],
+    active_count: int = 12,
+    *,
+    force: bool = False,
+) -> dict[str, Any]:
     """Ensure the settings dict contains a `profiles` section with defaults.
 
     team_names is an iterable where the index corresponds to team ID. The
-    function will create up to len(team_names) team profiles but only enable the
-    first `active_count` teams by default.
+    function will create 30 default team profiles (IDs 0-29) while preserving
+    any additional profiles beyond that range. Only the first `active_count`
+    teams are enabled by default for newly created entries. When force is
+    False and profiles already exist, no new defaults are generated.
     """
     profiles = settings.get("profiles") or {}
-    base = profiles.get("base", "You are an experienced NBA general manager focused on building a competitive roster. Prioritize win-now trades while balancing future cap and development. Keep replies concise and actionable.")
+    base = profiles.get(
+        "base",
+        "You are an experienced NBA general manager focused on building a competitive roster. Prioritize win-now trades while balancing future cap and development. Keep replies concise and actionable.",
+    )
     team_profiles = profiles.get("team_profiles") or []
+    if not force and isinstance(team_profiles, list) and team_profiles:
+        profiles.setdefault("base", base)
+        profiles.setdefault("active_count", int(active_count))
+        settings["profiles"] = profiles
+        return settings
 
     entries = list(team_names)
     # Normalize entries into (id, name) pairs. Supported inputs:
@@ -38,25 +54,75 @@ def ensure_default_profiles(settings: dict[str, Any], team_names: Iterable[TeamE
             tid, name = i, str(entry) or f"Team {i}"
         normalized.append((tid, name))
 
-    max_teams = max(0, min(len(normalized), 36))
+    filtered: list[tuple[int, str]] = []
+    seen: set[int] = set()
+    for tid, name in normalized:
+        if tid < 0 or tid > 29 or tid in seen:
+            continue
+        filtered.append((tid, name))
+        seen.add(tid)
+    filtered.sort(key=lambda item: item[0])
+
+    name_lookup: dict[int, str] = {}
+    for tid, name in filtered:
+        if tid not in name_lookup:
+            name_lookup[tid] = name
+
+    existing_profiles = team_profiles if isinstance(team_profiles, list) else []
+    existing_by_id: dict[int, dict[str, Any]] = {}
+    extras: list[dict[str, Any]] = []
+    for entry in existing_profiles:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            tid = int(entry.get("id", -1))
+        except Exception:
+            tid = -1
+        if tid < 0 or tid > 29:
+            extras.append(entry)
+            continue
+        if tid in existing_by_id:
+            continue
+        existing_by_id[tid] = entry
+
     new_team_profiles: list[dict[str, Any]] = []
-    for idx in range(max_teams):
-        tid, name = normalized[idx]
+    default_constraints = {
+        "budget_m": None,
+        "priority": "win-now",
+        "rebuild_years": 2,
+        "playstyle": "balanced",
+    }
+    for tid in range(30):
+        name = name_lookup.get(tid, f"Team {tid}")
         persona = f"You are the General Manager of {name} (team id: {tid}).\nYour constraints and priorities: act as the GM for roster decisions, be concise, and justify trade or signing decisions."
-        enabled = idx < int(active_count)
-        # Default constraints: budget in millions (None = unspecified), priority, rebuild years, playstyle
-        constraints = {
-            "budget_m": None,
-            "priority": "win-now",
-            "rebuild_years": 2,
-            "playstyle": "balanced",
-        }
-        new_team_profiles.append({"id": int(tid), "name": name, "enabled": enabled, "persona": persona, "constraints": constraints})
+        enabled = tid < int(active_count)
+        existing = existing_by_id.get(tid)
+        if existing is None:
+            new_team_profiles.append(
+                {
+                    "id": tid,
+                    "name": name,
+                    "enabled": enabled,
+                    "persona": persona,
+                    "constraints": dict(default_constraints),
+                }
+            )
+            continue
+        existing["id"] = tid
+        if not existing.get("name"):
+            existing["name"] = name
+        if "enabled" not in existing:
+            existing["enabled"] = enabled
+        if not str(existing.get("persona", "")).strip():
+            existing["persona"] = persona
+        if "constraints" not in existing:
+            existing["constraints"] = dict(default_constraints)
+        new_team_profiles.append(existing)
 
     profiles = {
         "base": base,
         "active_count": int(active_count),
-        "team_profiles": new_team_profiles,
+        "team_profiles": new_team_profiles + extras,
     }
     settings["profiles"] = profiles
     return settings

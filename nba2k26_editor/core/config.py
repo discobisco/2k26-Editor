@@ -4,6 +4,7 @@ Central configuration and shared constants for the NBA 2K26 editor.
 Values here are intentionally lightweight so they can be imported from both
 UI and non-UI modules without side effects.
 """
+import os
 from pathlib import Path
 
 APP_NAME = "NBA 2K26 Live Memory Editor"
@@ -17,6 +18,7 @@ CONFIG_DIR = BASE_DIR
 AI_SETTINGS_PATH = CONFIG_DIR / "ai_settings.json"
 AUTOLOAD_EXT_FILE = CONFIG_DIR / "autoload_extensions.json"
 CACHE_DIR = CONFIG_DIR / "cache"
+AUTOLOAD_EXTENSIONS = os.environ.get("NBA2K_EXTENSIONS_AUTOLOAD", "").strip().lower() in ("1", "true", "yes", "on")
 
 # Offsets and schema files (single unified bundle under Offsets/offsets.json)
 DEFAULT_OFFSET_FILES: tuple[str, ...] = ("offsets.json",)
@@ -33,7 +35,7 @@ HOOK_TARGETS: tuple[tuple[str, str], ...] = (
 HOOK_TARGET_LABELS = {exe.lower(): label for label, exe in HOOK_TARGETS}
 ALLOWED_MODULE_NAMES = {exe.lower() for _, exe in HOOK_TARGETS}
 
-# UI palette (used by Tk theme helpers)
+# UI palette (used by Dear PyGui theme helpers)
 PRIMARY_BG = "#0C1220"
 PANEL_BG = "#0E1729"
 INPUT_BG = "#111C30"
@@ -61,6 +63,7 @@ __all__ = [
     "CONFIG_DIR",
     "AI_SETTINGS_PATH",
     "AUTOLOAD_EXT_FILE",
+    "AUTOLOAD_EXTENSIONS",
     "DEFAULT_OFFSET_FILES",
     "MODULE_NAME",
     "HOOK_TARGETS",

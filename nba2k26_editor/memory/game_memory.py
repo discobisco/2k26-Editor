@@ -43,8 +43,6 @@ class GameMemory:
         self.hproc: wintypes.HANDLE | None = None
         self.base_addr: int | None = None
         self.pointer_size = ctypes.sizeof(ctypes.c_void_p)
-        self.last_dynamic_base_report: dict[str, object] | None = None
-        self.last_dynamic_base_overrides: dict[str, int] | None = None
 
     def _detect_pointer_size(self, handle: wintypes.HANDLE | None) -> int:
         default = ctypes.sizeof(ctypes.c_void_p)

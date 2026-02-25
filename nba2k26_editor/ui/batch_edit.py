@@ -1,190 +1,140 @@
-"""Batch edit window (ported from the monolithic editor)."""
+"""Batch edit modal for Dear PyGui."""
 from __future__ import annotations
 
-import tkinter as tk
 from typing import cast
-from tkinter import ttk
+
+import dearpygui.dearpygui as dpg
 
 from ..core.conversions import to_int
 from ..core.offsets import PLAYER_STRIDE
 from ..models.data_model import PlayerDataModel
 from ..models.schema import FieldWriteSpec
-from .widgets import bind_mousewheel
 
 
-class BatchEditWindow(tk.Toplevel):
-    """
-    Apply a single field value across many players (by team selection).
+class BatchEditWindow:
+    """Apply a single field value across many players (team selection)."""
 
-    Supports enumerated fields (combobox) and numeric fields (spinbox),
-    plus a convenience button to reset core ratings.
-    """
-
-    def __init__(self, parent: tk.Tk, model: PlayerDataModel) -> None:
-        super().__init__(parent)
-        self.title("Batch Edit")
+    def __init__(self, app, model: PlayerDataModel) -> None:
+        self.app = app
         self.model = model
-        self.team_vars: dict[str, tk.BooleanVar] = {}
-        self.category_var = tk.StringVar()
-        self.field_var = tk.StringVar()
-        self.value_widget: tk.Widget | None = None
-        self.value_var: tk.Variable | None = None
-        self.configure(bg="#F5F5F5")
-        self.transient(parent)
-        self.grab_set()
+        self.window_tag: int | str = dpg.generate_uuid()
+        self.category_combo: int | str | None = None
+        self.field_combo: int | str | None = None
+        self.value_tag: int | str | None = None
+        self.value_kind: str | None = None  # "combo" or "int"
+        self.team_tags: dict[str, int | str] = {}
         self._build_ui()
-        self.update_idletasks()
-        x = parent.winfo_rootx() + (parent.winfo_width() - self.winfo_width()) // 2
-        y = parent.winfo_rooty() + (parent.winfo_height() - self.winfo_height()) // 2
-        self.geometry(f"+{x}+{y}")
 
+    # ------------------------------------------------------------------
+    # UI
+    # ------------------------------------------------------------------
     def _build_ui(self) -> None:
-        """Construct controls for category/field selection and team targeting."""
-        tk.Label(self, text="Select teams, choose a field and enter a value:", bg="#F5F5F5", font=("Segoe UI", 11)).pack(
-            pady=(10, 5)
-        )
-        sel_frame = tk.Frame(self, bg="#F5F5F5")
-        sel_frame.pack(fill=tk.X, padx=10)
-        tk.Label(sel_frame, text="Category:", bg="#F5F5F5").grid(row=0, column=0, sticky=tk.W, padx=(0, 5), pady=2)
-        categories = list(self.model.categories.keys())
-        self.category_combo = ttk.Combobox(sel_frame, textvariable=self.category_var, state="readonly", values=categories)
-        self.category_combo.grid(row=0, column=1, sticky=tk.W, pady=2)
-        self.category_combo.bind("<<ComboboxSelected>>", self._on_category_selected)
-        tk.Label(sel_frame, text="Field:", bg="#F5F5F5").grid(row=1, column=0, sticky=tk.W, padx=(0, 5), pady=2)
-        self.field_combo = ttk.Combobox(sel_frame, textvariable=self.field_var, state="readonly", values=[])
-        self.field_combo.grid(row=1, column=1, sticky=tk.W, pady=2)
-        self.field_combo.bind("<<ComboboxSelected>>", self._on_field_selected)
-        self.input_frame = tk.Frame(self, bg="#F5F5F5")
-        self.input_frame.pack(fill=tk.X, padx=10, pady=(5, 5))
-        teams_frame = tk.Frame(self, bg="#F5F5F5")
-        teams_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
-        canvas = tk.Canvas(teams_frame, bg="#F5F5F5", highlightthickness=0)
-        scrollbar = tk.Scrollbar(teams_frame, orient="vertical", command=canvas.yview)
-        scroll_frame = tk.Frame(canvas, bg="#F5F5F5")
-        scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        bind_mousewheel(scroll_frame, canvas)
-        try:
-            team_names = self.model.get_teams()
-        except Exception:
-            team_names = []
-        if not team_names:
-            team_names = [name for _, name in self.model.team_list]
-        for idx, name in enumerate(team_names):
-            var = tk.BooleanVar(value=False)
-            self.team_vars[name] = var
-            tk.Checkbutton(scroll_frame, text=name, variable=var, bg="#F5F5F5").grid(row=idx, column=0, sticky=tk.W, padx=5, pady=2)
-        btn_frame = tk.Frame(self, bg="#F5F5F5")
-        btn_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
-        tk.Button(btn_frame, text="Apply", command=self._apply_changes, bg="#52796F", fg="white", relief=tk.FLAT).pack(side=tk.LEFT, padx=(0, 5))
-        tk.Button(
-            btn_frame,
-            text="Reset Core Ratings",
-            command=self._reset_core_fields,
-            bg="#386641",
-            fg="white",
-            relief=tk.FLAT,
-        ).pack(side=tk.LEFT, padx=(0, 5))
-        tk.Button(btn_frame, text="Close", command=self.destroy, bg="#B0413E", fg="white", relief=tk.FLAT).pack(side=tk.RIGHT)
+        with dpg.window(
+            label="Batch Edit",
+            tag=self.window_tag,
+            modal=True,
+            no_collapse=True,
+            width=780,
+            height=620,
+        ):
+            dpg.add_text("Choose a category/field, select teams, then apply the value.")
+            dpg.add_spacer(height=6)
+            with dpg.group(horizontal=True):
+                dpg.add_text("Category:")
+                self.category_combo = dpg.add_combo(
+                    items=list(self.model.categories.keys()),
+                    width=220,
+                    callback=lambda _s, value: self._on_category_selected(str(value)),
+                )
+                dpg.add_text("Field:")
+                self.field_combo = dpg.add_combo(items=[], width=260, callback=lambda _s, value: self._on_field_selected(str(value)))
+            dpg.add_spacer(height=6)
+            self.value_container = dpg.add_child_window(height=60, border=False)
+            dpg.add_spacer(height=4)
+            dpg.add_text("Teams")
+            with dpg.child_window(height=320, border=True):
+                for team in self._team_names():
+                    tag = dpg.add_checkbox(label=team, default_value=False)
+                    self.team_tags[team] = tag
+            dpg.add_spacer(height=8)
+            with dpg.group(horizontal=True):
+                dpg.add_button(label="Apply", width=120, callback=lambda: self._apply_changes())
+                dpg.add_button(label="Reset Core Ratings", width=170, callback=lambda: self._reset_core_fields())
+                dpg.add_button(label="Close", width=90, callback=lambda: dpg.delete_item(self.window_tag))
 
-    def _on_category_selected(self, _event: tk.Event | None = None) -> None:
-        """Update field dropdown when category changes."""
-        category = self.category_var.get()
-        self.field_var.set("")
-        if self.value_widget is not None:
-            self.value_widget.destroy()
-            self.value_widget = None
-            self.value_var = None
+    # ------------------------------------------------------------------
+    # Events
+    # ------------------------------------------------------------------
+    def _on_category_selected(self, category: str) -> None:
+        if not self.field_combo or not dpg.does_item_exist(self.field_combo):
+            return
+        self._clear_value_input()
         fields = self.model.categories.get(category, [])
-        names = [f.get("name", "") for f in fields]
-        self.field_combo.config(values=names)
-        self.field_combo.set("")
+        names = [str(f.get("name", "")) for f in fields]
+        dpg.configure_item(self.field_combo, items=names)
+        if names:
+            dpg.set_value(self.field_combo, names[0])
+            self._on_field_selected(names[0])
 
-    def _on_field_selected(self, _event: tk.Event | None = None) -> None:
-        """Create the appropriate input control for the selected field."""
-        category = self.category_var.get()
-        field_name = self.field_var.get()
-        if self.value_widget is not None:
-            self.value_widget.destroy()
-            self.value_widget = None
-            self.value_var = None
-        field_def = next((fd for fd in self.model.categories.get(category, []) if fd.get("name") == field_name), None)
-        if not field_def:
+    def _on_field_selected(self, field_name: str) -> None:
+        category = dpg.get_value(self.category_combo) if self.category_combo else ""
+        self._clear_value_input()
+        field_def = self._field_def(str(category), field_name)
+        if not field_def or not self.value_container or not dpg.does_item_exist(self.value_container):
             return
         raw_values = field_def.get("values")
         values_list = [str(v) for v in raw_values] if isinstance(raw_values, (list, tuple)) else None
         length = to_int(field_def.get("length", 0)) or 8
-        if values_list:
-            self.value_var = tk.IntVar()
-            combo = ttk.Combobox(self.input_frame, state="readonly", values=values_list, width=25)
-            combo.pack(fill=tk.X, pady=(0, 5))
-            self.value_widget = combo
+        with dpg.group(parent=self.value_container):
             if values_list:
-                combo.set(values_list[0])
-        else:
-            if category in ("Attributes", "Tendencies", "Durability"):
-                min_val, max_val = 25, 99
+                self.value_kind = "combo"
+                self.value_tag = dpg.add_combo(items=values_list, default_value=values_list[0] if values_list else "", width=200)
             else:
-                min_val = 0
-                max_val = (1 << length) - 1 if length else 255
-            self.value_var = tk.IntVar(value=min_val)
-            spin = tk.Spinbox(
-                self.input_frame,
-                from_=min_val,
-                to=max_val,
-                textvariable=self.value_var,
-                width=10,
-                increment=1,
-                justify=tk.LEFT,
-            )
-            spin.pack(fill=tk.X, pady=(0, 5))
-            self.value_widget = spin
+                self.value_kind = "int"
+                if str(category) in ("Attributes", "Tendencies", "Durability"):
+                    min_val, max_val = 25, 99
+                else:
+                    min_val = 0
+                    max_val = (1 << length) - 1 if length else 255
+                self.value_tag = dpg.add_input_int(default_value=min_val, min_value=0, max_value=max_val, width=200)
 
+    # ------------------------------------------------------------------
+    # Actions
+    # ------------------------------------------------------------------
     def _apply_changes(self) -> None:
-        """Write the selected value to the chosen field for selected teams."""
-        import tkinter.messagebox as mb
-
-        category = self.category_var.get()
-        field_name = self.field_var.get()
+        cat_tag = self.category_combo if isinstance(self.category_combo, (int, str)) else None
+        field_tag = self.field_combo if isinstance(self.field_combo, (int, str)) else None
+        category = str(dpg.get_value(cat_tag) or "") if cat_tag and dpg.does_item_exist(cat_tag) else ""
+        field_name = str(dpg.get_value(field_tag) or "") if field_tag and dpg.does_item_exist(field_tag) else ""
         if not category or not field_name:
-            mb.showinfo("Batch Edit", "Please select a category and field.")
+            self.app.show_warning("Batch Edit", "Select a category and field first.")
             return
-        selected_teams = [name for name, var in self.team_vars.items() if var.get()]
-        if not selected_teams:
-            mb.showinfo("Batch Edit", "Please select one or more teams.")
-            return
-        field_def = next((fd for fd in self.model.categories.get(category, []) if fd.get("name") == field_name), None)
+        field_def = self._field_def(category, field_name)
         if not field_def:
-            mb.showerror("Batch Edit", "Field definition not found.")
+            self.app.show_error("Batch Edit", "Field definition not found.")
+            return
+        selected_teams = self._selected_teams()
+        if not selected_teams:
+            self.app.show_warning("Batch Edit", "Select one or more teams first.")
             return
         offset_val = to_int(field_def.get("offset"))
         start_bit = to_int(field_def.get("startBit", field_def.get("start_bit", 0)))
         length = to_int(field_def.get("length", 0))
         requires_deref = bool(field_def.get("requiresDereference") or field_def.get("requires_deref"))
         deref_offset = to_int(field_def.get("dereferenceAddress") or field_def.get("deref_offset"))
-        if length <= 0:
-            mb.showerror("Batch Edit", f"Invalid length for field '{field_name}'.")
+        if length is None or length <= 0 or offset_val is None:
+            self.app.show_error("Batch Edit", f"Invalid metadata for '{field_name}'.")
             return
-        raw_values = field_def.get("values")
-        values_list = list(raw_values) if isinstance(raw_values, (list, tuple)) else None
-        if values_list:
-            if isinstance(self.value_widget, ttk.Combobox):
-                sel_idx = self.value_widget.current()
-                if sel_idx < 0:
-                    mb.showinfo("Batch Edit", "Please select a value.")
-                    return
-                display_value: object = self.value_widget.get()
-                if not str(display_value).strip():
-                    mb.showinfo("Batch Edit", "Please select a value.")
-                    return
-            else:
-                display_value = 0
-        else:
+        display_value: object = 0
+        values_list = field_def.get("values")
+        if values_list and self.value_kind == "combo" and self.value_tag:
+            display_value = dpg.get_value(self.value_tag) or ""
+            if not str(display_value).strip():
+                self.app.show_warning("Batch Edit", "Pick a value before applying.")
+                return
+        elif self.value_kind == "int" and self.value_tag:
             try:
-                display_value = self.value_var.get() if self.value_var else 0
+                display_value = int(dpg.get_value(self.value_tag))
             except Exception:
                 display_value = 0
         kind, value, _char_limit, _enc = self.model.coerce_field_value(
@@ -195,26 +145,23 @@ class BatchEditWindow(tk.Toplevel):
             display_value=display_value,
         )
         if kind == "skip":
-            mb.showinfo("Batch Edit", "Invalid value provided for the selected field.")
+            self.app.show_warning("Batch Edit", "Invalid value for the selected field.")
             return
-        if not self.model.mem.hproc or self.model.external_loaded or not self.model.mem.open_process():
-            mb.showinfo("Batch Edit", "NBA 2K26 is not running or roster loaded from external files. Cannot apply changes.")
+        if self.model.external_loaded or not self.model.mem.open_process():
+            self.app.show_warning("Batch Edit", "NBA 2K26 is not running or roster is external; cannot apply.")
             return
         player_base = self.model._resolve_player_table_base()
         if player_base is None:
-            mb.showinfo("Batch Edit", "Unable to resolve player table. Cannot apply changes.")
+            self.app.show_warning("Batch Edit", "Player table not resolved; try scanning players first.")
             return
         cached_players = list(self.model.players or [])
         if not cached_players:
-            mb.showinfo("Batch Edit", "No player data cached. Refresh the roster before applying batch edits.")
+            self.app.show_warning("Batch Edit", "No cached players. Scan players before batch editing.")
             return
         selected_lower = {name.lower() for name in selected_teams}
-        if "all players" in selected_lower:
-            target_players = cached_players
-        else:
-            target_players = [p for p in cached_players if (p.team or "").lower() in selected_lower]
-        if not target_players:
-            mb.showinfo("Batch Edit", "No players matched the selected teams.")
+        targets = cached_players if "all players" in selected_lower else [p for p in cached_players if (p.team or "").lower() in selected_lower]
+        if not targets:
+            self.app.show_warning("Batch Edit", "No players matched the selected teams.")
             return
         total_changed = 0
         seen_indices: set[int] = set()
@@ -227,16 +174,15 @@ class BatchEditWindow(tk.Toplevel):
                 requires_deref,
                 deref_offset,
             )
-            for player in target_players:
+            for player in targets:
                 if player.index in seen_indices:
                     continue
                 seen_indices.add(player.index)
                 record_addr = player_base + player.index * PLAYER_STRIDE
-                applied = self.model._apply_field_assignments(record_addr, (assignment,))
-                if applied:
+                if self.model._apply_field_assignments(record_addr, (assignment,)):
                     total_changed += 1
         else:
-            for player in target_players:
+            for player in targets:
                 if player.index in seen_indices:
                     continue
                 seen_indices.add(player.index)
@@ -251,27 +197,25 @@ class BatchEditWindow(tk.Toplevel):
                 )
                 if ok:
                     total_changed += 1
-        mb.showinfo("Batch Edit", f"Applied value to {total_changed} player(s).")
+        self.app.show_message("Batch Edit", f"Applied value to {total_changed} player(s).")
         try:
             self.model.refresh_players()
         except Exception:
             pass
-        self.destroy()
+        dpg.delete_item(self.window_tag)
 
     def _reset_core_fields(self) -> None:
         """Baseline attributes/durability/badges/potential/vitals for selected players."""
-        import tkinter.messagebox as mb
-
         if self.model.external_loaded:
-            mb.showinfo("Batch Edit", "NBA 2K26 roster is loaded from external files. Cannot apply changes.")
+            self.app.show_warning("Batch Edit", "NBA 2K26 roster is loaded from external files. Cannot apply changes.")
             return
         if not self.model.mem.hproc and not self.model.mem.open_process():
-            mb.showinfo("Batch Edit", "NBA 2K26 is not running. Cannot apply changes.")
+            self.app.show_warning("Batch Edit", "NBA 2K26 is not running. Cannot apply changes.")
             return
-        selected_teams = [name for name, var in self.team_vars.items() if var.get()]
+        selected_teams = self._selected_teams()
         cached_players = list(self.model.players or [])
         if not cached_players:
-            mb.showinfo("Batch Edit", "No player data cached. Refresh the roster before applying batch edits.")
+            self.app.show_warning("Batch Edit", "No player data cached. Scan players first.")
             return
         if selected_teams:
             selected_lower = {name.lower() for name in selected_teams}
@@ -281,10 +225,9 @@ class BatchEditWindow(tk.Toplevel):
                 filtered_players = [p for p in cached_players if (p.team or "").lower() in selected_lower]
         else:
             filtered_players = cached_players
-        player_map = {p.index: p for p in filtered_players}
-        players_to_update = list(player_map.values())
+        players_to_update = list({p.index: p for p in filtered_players}.values())
         if not players_to_update:
-            mb.showinfo("Batch Edit", "No players were found to update.")
+            self.app.show_warning("Batch Edit", "No players were found to update.")
             return
         categories = self.model.categories or {}
         lower_map = {name.lower(): name for name in categories.keys()}
@@ -305,7 +248,7 @@ class BatchEditWindow(tk.Toplevel):
                     continue
                 offset_val = to_int(field.get("offset") or field.get("address"))
                 length = to_int(field.get("length"))
-                if offset_val <= 0 or length <= 0:
+                if offset_val is None or offset_val <= 0 or length is None or length <= 0:
                     continue
                 raw_values = field.get("values")
                 if skip_enums and isinstance(raw_values, (list, tuple)) and raw_values:
@@ -339,14 +282,14 @@ class BatchEditWindow(tk.Toplevel):
         tendencies_fields = collect_numeric_fields(lower_map.get("tendencies"), skip_enums=True)
         vitals_fields = collect_numeric_fields(lower_map.get("vitals"), skip_enums=False)
         if not (attribute_fields or durability_fields or badge_fields or potential_fields or tendencies_fields or vitals_fields):
-            mb.showerror("Batch Edit", "No eligible fields were found to update.")
+            self.app.show_error("Batch Edit", "No eligible fields were found to update.")
             return
         if not self.model.mem.open_process():
-            mb.showinfo("Batch Edit", "NBA 2K26 is not running. Cannot apply changes.")
+            self.app.show_warning("Batch Edit", "NBA 2K26 is not running. Cannot apply changes.")
             return
         player_base = self.model._resolve_player_table_base()
         if player_base is None:
-            mb.showinfo("Batch Edit", "Unable to resolve player table. Cannot apply changes.")
+            self.app.show_warning("Batch Edit", "Unable to resolve player table. Cannot apply changes.")
             return
         group_assignments: dict[str, list[FieldWriteSpec]] = {
             "attributes": [],
@@ -379,6 +322,7 @@ class BatchEditWindow(tk.Toplevel):
                 )
             elif kind != "skip":
                 post_actions.append((spec, display_value))
+
         for spec in attribute_fields:
             _queue_assignment("attributes", spec, 25)
         for spec in durability_fields:
@@ -410,9 +354,7 @@ class BatchEditWindow(tk.Toplevel):
         for player in players_to_update:
             record_addr = player_base + player.index * PLAYER_STRIDE
             for assignments in group_assignments.values():
-                if not assignments:
-                    continue
-                if self.model._apply_field_assignments(record_addr, tuple(assignments)):
+                if assignments and self.model._apply_field_assignments(record_addr, tuple(assignments)):
                     total_updated += 1
             for spec, value in post_actions:
                 ok = self.model.encode_field_value(
@@ -426,11 +368,44 @@ class BatchEditWindow(tk.Toplevel):
                 )
                 if ok:
                     total_updated += 1
-        mb.showinfo("Batch Edit", f"Reset core fields for {len(players_to_update)} player(s).")
+        self.app.show_message("Batch Edit", f"Reset core fields for {len(players_to_update)} player(s).")
         try:
             self.model.refresh_players()
         except Exception:
             pass
 
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+    def _clear_value_input(self) -> None:
+        if self.value_container and dpg.does_item_exist(self.value_container):
+            for child in list(dpg.get_item_children(self.value_container, 1) or []):
+                dpg.delete_item(child)
+        self.value_tag = None
+        self.value_kind = None
 
-__all__ = ["BatchEditWindow"]
+    def _field_def(self, category: str, field_name: str):
+        return next((fd for fd in self.model.categories.get(category, []) if fd.get("name") == field_name), None)
+
+    def _team_names(self) -> list[str]:
+        try:
+            names = self.model.get_teams()
+        except Exception:
+            names = []
+        if names:
+            return list(names)
+        try:
+            return [name for _, name in self.model.team_list]
+        except Exception:
+            return []
+
+    def _selected_teams(self) -> list[str]:
+        return [name for name, tag in self.team_tags.items() if dpg.does_item_exist(tag) and dpg.get_value(tag)]
+
+
+def open_batch_edit(app) -> BatchEditWindow:
+    """Convenience helper to open the batch edit modal."""
+    return BatchEditWindow(app, app.model)
+
+
+__all__ = ["BatchEditWindow", "open_batch_edit"]

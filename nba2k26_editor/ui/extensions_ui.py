@@ -2,17 +2,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import importlib
 import importlib.util
 import os
 import subprocess
 import sys
+import warnings
 from pathlib import Path
 from typing import Any
 
-import tkinter as tk
-from tkinter import messagebox
-
+from ..core.config import AUTOLOAD_EXTENSIONS
 from ..core.extensions import (
     EXTENSION_MODULE_PREFIX,
     load_autoload_extensions,
@@ -29,7 +29,9 @@ class ExtensionEntry:
 
 
 BUILTIN_EXTENSIONS: dict[str, str] = {
-    "nba2k26_editor.dual_base_mirror": "dual_base_mirror.py (built-in)",
+    "nba2k_editor.dual_base_mirror": "dual_base_mirror.py (built-in)",
+    # Legacy import key retained for backward compatibility.
+    "nba2k26_editor.dual_base_mirror": "dual_base_mirror.py (legacy built-in)",
 }
 
 
@@ -43,7 +45,10 @@ _BUILTIN_STEMS = {module.rsplit(".", 1)[-1]: _module_key(module) for module in B
 
 def _key_to_module_name(key: str) -> str | None:
     if key.startswith(EXTENSION_MODULE_PREFIX):
-        return key[len(EXTENSION_MODULE_PREFIX) :].strip()
+        module_name = key[len(EXTENSION_MODULE_PREFIX) :].strip()
+        if module_name.startswith("nba2k26_editor."):
+            return module_name.replace("nba2k26_editor.", "nba2k_editor.", 1)
+        return module_name
     return None
 
 
@@ -58,6 +63,13 @@ def _key_to_path(key: str) -> Path | None:
 
 def _normalize_autoload_key(key: str) -> str:
     if key.startswith(EXTENSION_MODULE_PREFIX):
+        if key.startswith(f"{EXTENSION_MODULE_PREFIX}nba2k26_editor."):
+            warnings.warn(
+                "Legacy extension key 'nba2k26_editor.*' is deprecated; use 'nba2k_editor.*'.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            return key.replace("nba2k26_editor.", "nba2k_editor.", 1)
         return key
     try:
         stem = Path(key).stem
@@ -96,21 +108,36 @@ def _build_restart_command() -> list[str]:
 def reload_with_selected_extensions(app: Any) -> None:
     selected: list[str] = []
     for key, var in app.extension_vars.items():
-        try:
-            if var.get():
+        if isinstance(var, bool):
+            if var:
                 selected.append(key)
-        except Exception:
-            continue
-    try:
-        save_autoload_extensions(list(selected))
-    except Exception as exc:
-        messagebox.showerror("Extensions", f"Failed to save selected extensions:\n{exc}")
-        return
+        else:
+            try:
+                if var.get():  # type: ignore[attr-defined]
+                    selected.append(key)
+            except Exception:
+                continue
     restart_cmd = _build_restart_command()
+    env = None
+    if AUTOLOAD_EXTENSIONS:
+        try:
+            save_autoload_extensions(list(selected))
+        except Exception as exc:
+            try:
+                app.show_error("Extensions", f"Failed to save selected extensions:\n{exc}")
+            except Exception:
+                pass
+            return
+    elif selected:
+        env = os.environ.copy()
+        env["NBA2K_EXTENSIONS_ONCE"] = json.dumps(selected)
     try:
-        subprocess.Popen(restart_cmd, close_fds=True)
+        subprocess.Popen(restart_cmd, close_fds=True, env=env)
     except Exception as exc:
-        messagebox.showerror("Extensions", f"Failed to restart the editor:\n{exc}")
+        try:
+            app.show_error("Extensions", f"Failed to restart the editor:\n{exc}")
+        except Exception:
+            print(f"[extensions] Failed to restart editor: {exc}")
         return
     try:
         app.destroy()
@@ -119,16 +146,31 @@ def reload_with_selected_extensions(app: Any) -> None:
     os._exit(0)
 
 
-def autoload_extensions_from_file(app: Any) -> None:
-    for raw_key in load_autoload_extensions():
+def _load_extensions_from_keys(app: Any, keys: list[str]) -> None:
+    for raw_key in keys:
         key = _normalize_autoload_key(str(raw_key))
-        var = app.extension_vars.get(key)
-        if var is not None:
-            var.set(True)
+        app.extension_vars[key] = True
         if is_extension_loaded(app, key):
             continue
         if load_extension_module(key):
             app.loaded_extensions.add(key)
+
+
+def autoload_extensions_from_file(app: Any) -> None:
+    raw_once = os.environ.pop("NBA2K_EXTENSIONS_ONCE", "").strip()
+    if raw_once:
+        try:
+            parsed = json.loads(raw_once)
+        except Exception:
+            parsed = []
+        if isinstance(parsed, list):
+            _load_extensions_from_keys(app, [str(item) for item in parsed if str(item).strip()])
+        elif isinstance(parsed, str) and parsed.strip():
+            _load_extensions_from_keys(app, [parsed.strip()])
+        return
+    if not AUTOLOAD_EXTENSIONS:
+        return
+    _load_extensions_from_keys(app, load_autoload_extensions())
 
 
 def discover_extension_files() -> list[ExtensionEntry]:
@@ -201,14 +243,14 @@ def load_extension_module(key: str) -> bool:
             importlib.import_module(module_name)
             return True
         except Exception as exc:
-            messagebox.showerror("Extension Loader", f"Failed to load {label}:\n{exc}")
+            print(f"[extensions] Failed to load {label}: {exc}")
             return False
     path = _key_to_path(key)
     if path is None:
-        messagebox.showerror("Extension Loader", f"Failed to load {label}:\nInvalid extension key.")
+        print(f"[extensions] Failed to load {label}: Invalid extension key.")
         return False
     if not path.exists():
-        messagebox.showerror("Extension Loader", f"Failed to load {label}:\nExtension file not found.")
+        print(f"[extensions] Failed to load {label}: file not found.")
         return False
     try:
         spec = importlib.util.spec_from_file_location(f"ext_{path.stem}", path)
@@ -218,32 +260,21 @@ def load_extension_module(key: str) -> bool:
         spec.loader.exec_module(module)
         return True
     except Exception as exc:
-        messagebox.showerror("Extension Loader", f"Failed to load {label}:\n{exc}")
+        print(f"[extensions] Failed to load {label}: {exc}")
         return False
 
 
-def toggle_extension_module(app: Any, key: str, label: str, var: tk.BooleanVar) -> None:
+def toggle_extension_module(app: Any, key: str, label: str, var: bool) -> None:
     display_name = label or extension_label_for_key(key)
-    if not var.get():
+    enabled = bool(var)
+    if not enabled:
         if key in app.loaded_extensions:
-            should_restart = False
+            app.loaded_extensions.discard(key)
             try:
-                should_restart = messagebox.askyesno(
-                    "Extensions",
-                    f"Unload {display_name}? The editor must restart to fully unload it.",
-                    parent=app,
-                )
+                app.extension_status_var.set(f"Restarting without {display_name}...")
             except Exception:
-                should_restart = True
-            if should_restart:
-                app.loaded_extensions.discard(key)
-                try:
-                    app.extension_status_var.set(f"Restarting without {display_name}...")
-                except Exception:
-                    pass
-                reload_with_selected_extensions(app)
-            else:
-                var.set(True)
+                pass
+            reload_with_selected_extensions(app)
         return
     if key in app.loaded_extensions:
         app.extension_status_var.set(f"{display_name} is already loaded.")
@@ -251,8 +282,6 @@ def toggle_extension_module(app: Any, key: str, label: str, var: tk.BooleanVar) 
     if load_extension_module(key):
         app.loaded_extensions.add(key)
         app.extension_status_var.set(f"Loaded extension: {display_name}")
-    else:
-        var.set(False)
 
 
 __all__ = [

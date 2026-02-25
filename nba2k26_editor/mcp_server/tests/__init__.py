@@ -1,0 +1,2 @@
+"""MyEras MCP server tests."""
+

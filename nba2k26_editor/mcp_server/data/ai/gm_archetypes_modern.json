@@ -1,0 +1,81 @@
+{
+  "archetypes": {
+    "aggressive": {
+      "archetype": "aggressive",
+      "risk_tolerance": 0.88,
+      "trade_frequency": 0.86,
+      "draft_pick_value_weight": 0.28,
+      "star_bias_weight": 0.82,
+      "youth_development_weight": 0.34,
+      "cap_sensitivity": 0.26,
+      "loyalty_bias": 0.18,
+      "media_pressure_sensitivity": 0.72
+    },
+    "conservative": {
+      "archetype": "conservative",
+      "risk_tolerance": 0.26,
+      "trade_frequency": 0.22,
+      "draft_pick_value_weight": 0.82,
+      "star_bias_weight": 0.28,
+      "youth_development_weight": 0.68,
+      "cap_sensitivity": 0.71,
+      "loyalty_bias": 0.76,
+      "media_pressure_sensitivity": 0.35
+    },
+    "rebuild": {
+      "archetype": "rebuild",
+      "risk_tolerance": 0.52,
+      "trade_frequency": 0.74,
+      "draft_pick_value_weight": 0.92,
+      "star_bias_weight": 0.24,
+      "youth_development_weight": 0.93,
+      "cap_sensitivity": 0.69,
+      "loyalty_bias": 0.31,
+      "media_pressure_sensitivity": 0.48
+    },
+    "winNow": {
+      "archetype": "winNow",
+      "risk_tolerance": 0.78,
+      "trade_frequency": 0.73,
+      "draft_pick_value_weight": 0.21,
+      "star_bias_weight": 0.84,
+      "youth_development_weight": 0.23,
+      "cap_sensitivity": 0.42,
+      "loyalty_bias": 0.29,
+      "media_pressure_sensitivity": 0.81
+    },
+    "analytics": {
+      "archetype": "analytics",
+      "risk_tolerance": 0.56,
+      "trade_frequency": 0.58,
+      "draft_pick_value_weight": 0.62,
+      "star_bias_weight": 0.51,
+      "youth_development_weight": 0.67,
+      "cap_sensitivity": 0.64,
+      "loyalty_bias": 0.36,
+      "media_pressure_sensitivity": 0.44
+    },
+    "starChaser": {
+      "archetype": "starChaser",
+      "risk_tolerance": 0.84,
+      "trade_frequency": 0.79,
+      "draft_pick_value_weight": 0.14,
+      "star_bias_weight": 0.95,
+      "youth_development_weight": 0.19,
+      "cap_sensitivity": 0.31,
+      "loyalty_bias": 0.22,
+      "media_pressure_sensitivity": 0.76
+    },
+    "smallMarket": {
+      "archetype": "smallMarket",
+      "risk_tolerance": 0.41,
+      "trade_frequency": 0.48,
+      "draft_pick_value_weight": 0.73,
+      "star_bias_weight": 0.39,
+      "youth_development_weight": 0.72,
+      "cap_sensitivity": 0.89,
+      "loyalty_bias": 0.43,
+      "media_pressure_sensitivity": 0.52
+    }
+  }
+}

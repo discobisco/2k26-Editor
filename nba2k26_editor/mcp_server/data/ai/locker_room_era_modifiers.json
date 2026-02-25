@@ -1,0 +1,30 @@
+{
+  "1980s": {
+    "loyalty_bias": 0.18,
+    "media_sensitivity_mult": 0.82,
+    "ego_bias": -0.06,
+    "trade_demand_mult": 0.72,
+    "toughness_bias": 0.14
+  },
+  "1990s": {
+    "loyalty_bias": 0.12,
+    "media_sensitivity_mult": 0.78,
+    "ego_bias": -0.03,
+    "trade_demand_mult": 0.85,
+    "toughness_bias": 0.18
+  },
+  "2000s": {
+    "loyalty_bias": 0.01,
+    "media_sensitivity_mult": 0.93,
+    "ego_bias": 0.08,
+    "trade_demand_mult": 1.02,
+    "toughness_bias": 0.06
+  },
+  "modern": {
+    "loyalty_bias": -0.09,
+    "media_sensitivity_mult": 1.15,
+    "ego_bias": 0.12,
+    "trade_demand_mult": 1.18,
+    "toughness_bias": -0.03
+  }
+}

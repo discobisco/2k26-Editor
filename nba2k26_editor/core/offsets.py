@@ -11,120 +11,114 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any, cast, TypedDict
+from typing import Any, cast
 
-from .config import DEFAULT_OFFSET_FILES, MODULE_NAME as CONFIG_MODULE_NAME
+from .config import MODULE_NAME as CONFIG_MODULE_NAME
 from .conversions import to_int
+from .offset_cache import CachedOffsetPayload, OffsetCache
+from .offset_loader import OffsetRepository
+from .offset_resolver import OffsetResolveError, OffsetResolver
+from .perf import timed
 
 
 class OffsetSchemaError(RuntimeError):
     """Raised when offsets are missing required definitions."""
 
 
-# Field name synonyms for offsets across schema variants
-OFFSET_FIELD_SYNONYMS: dict[str, list[str]] = {
-    "first name": [
-        "player_first_name",
-        "first_name",
-        "firstname",
-        "offset player first name",
-        "offset first name",
-    ],
-    "last name": [
-        "player_last_name",
-        "last_name",
-        "lastname",
-        "surname",
-        "offset player last name",
-        "offset last name",
-    ],
-    "face id": [
-        "player_faceid",
-        "faceid",
-        "offset player face id",
-        "offset face id",
-    ],
-    "current team": [
-        "player team",
-        "team",
-        "team_id",
-        "current team address",
-        "offset player team",
-    ],
-    "team name": [
-        "offset team name",
-        "city name",
-    ],
-    "team short name": [
-        "team_short_name",
-        "offset team short name",
-        "team abbrev",
-        "team abbreviation",
-        "city abbrev",
-    ],
-    "team year": [
-        "team year",
-        "historic year",
-        "offset team year",
-    ],
-    "team type": [
-        "team type",
-        "offset team type",
-    ],
+BASE_POINTER_SIZE_KEY_MAP: dict[str, str | None] = {
+    "Player": "playerSize",
+    "Team": "teamSize",
+    "Staff": "staffSize",
+    "Stadium": "stadiumSize",
+    "TeamHistory": "historySize",
+    "NBAHistory": "historySize",
+    "HallOfFame": "hallOfFameSize",
+    "History": "historySize",
+    "Jersey": "jerseySize",
+    "career_stats": "careerStatsSize",
+    "Cursor": None,
+}
+REQUIRED_LIVE_BASE_POINTER_KEYS: tuple[str, ...] = ("Player", "Team", "Staff", "Stadium")
+
+STRICT_OFFSET_FIELD_KEYS: dict[str, tuple[str, str]] = {
+    "player_first_name": ("Vitals", "FIRSTNAME"),
+    "player_last_name": ("Vitals", "LASTNAME"),
+    "player_current_team": ("Vitals", "CURRENTTEAM"),
+    "team_name": ("Team Vitals", "TEAMNAME"),
+    "team_city_name": ("Team Vitals", "CITYNAME"),
+    "team_city_abbrev": ("Team Vitals", "CITYSHORTNAME"),
+    "staff_first_name": ("Staff Vitals", "FIRSTNAME"),
+    "staff_last_name": ("Staff Vitals", "LASTNAME"),
+    "stadium_name": ("Stadium", "ARENANAME"),
 }
 
-CATEGORY_ALIASES: dict[str, str] = {
-    "vitals_offsets": "vitals",
-    "attributes_offsets": "attributes",
-    "tendencies_offsets": "tendencies",
-    "hotzone_offsets": "hotzones",
-    "signature_offsets": "signatures",
-    "contract_offsets": "contracts",
-    "stats_offsets": "stats",
-    "edit_offsets": "edit",
-    "look_offsets": "appearance",
-    "shoes/gear_offsets": "gear",
-    "team vitals": "teams",
-    "team_vitals": "teams",
+# Hierarchy-aware required field specs:
+# (source_super_type, source_category, source_group, normalized_name)
+STRICT_OFFSET_HIERARCHY_FIELD_KEYS: dict[str, tuple[str, str, str, str]] = {
+    "player_first_name": ("Player", "Vitals", "ID", "FIRSTNAME"),
+    "player_last_name": ("Player", "Vitals", "ID", "LASTNAME"),
+    "player_current_team": ("Player", "Vitals", "Team", "CURRENTTEAM"),
+    "team_name": ("Team", "Info", "", "TEAMNAME"),
+    "team_city_name": ("Team", "Info", "", "CITYNAME"),
+    "team_city_abbrev": ("Team", "Info", "", "CITYSHORTNAME"),
+    "staff_first_name": ("Staff", "Vitals", "vitals", "FIRSTNAME"),
+    "staff_last_name": ("Staff", "Vitals", "vitals", "LASTNAME"),
+    "stadium_name": ("Stadium", "Vitals", "Vitals", "ARENANAME"),
 }
 
-
-def _build_field_canonical_lookup() -> dict[str, str]:
-    lookup: dict[str, str] = {}
-    for canon, syns in OFFSET_FIELD_SYNONYMS.items():
-        canon_l = canon.lower()
-        lookup[canon_l] = canon_l
-        for alias in syns:
-            lookup[str(alias).lower()] = canon_l
-    return lookup
-
-
-_FIELD_CANONICAL_LOOKUP: dict[str, str] = _build_field_canonical_lookup()
-_CANONICAL_DISPLAY_NAMES: dict[str, str] = {
-    key.lower(): key.title() for key in OFFSET_FIELD_SYNONYMS
-}
-BASE_CANONICAL_FIELD_INFO: dict[str, dict[str, str]] = {
-    "first name": {"category": "Vitals", "display": "First Name", "type": "wstring"},
-    "last name": {"category": "Vitals", "display": "Last Name", "type": "wstring"},
-    "face id": {"category": "Vitals", "display": "Face ID", "type": "number"},
-    "current team": {"category": "Vitals", "display": "Current Team", "type": "number"},
-    "team name": {"category": "Teams", "display": "Team Name", "type": "wstring"},
-    "team short name": {"category": "Teams", "display": "Team Short Name", "type": "wstring"},
-    "team year": {"category": "Teams", "display": "Team Year", "type": "number"},
-    "team type": {"category": "Teams", "display": "Team Type", "type": "number"},
+# Schema-driven required field sources keyed by split offsets file + normalized name.
+REQUIRED_OFFSET_SCHEMA_FIELDS: dict[str, tuple[str, str]] = {
+    "player_first_name": ("offsets_players.json", "FIRSTNAME"),
+    "player_last_name": ("offsets_players.json", "LASTNAME"),
+    "player_current_team": ("offsets_players.json", "CURRENTTEAM"),
+    "team_name": ("offsets_teams.json", "TEAMNAME"),
+    "team_city_name": ("offsets_teams.json", "CITYNAME"),
+    "team_city_abbrev": ("offsets_teams.json", "CITYSHORTNAME"),
+    "staff_first_name": ("offsets_staff.json", "FIRSTNAME"),
+    "staff_last_name": ("offsets_staff.json", "LASTNAME"),
+    "stadium_name": ("offsets_stadiums.json", "ARENANAME"),
 }
 
 MODULE_NAME = CONFIG_MODULE_NAME
 OFFSET_FILENAME_PATTERNS: tuple[str, ...] = ()
-OFFSETS_BUNDLE_FILE = DEFAULT_OFFSET_FILES[0] if DEFAULT_OFFSET_FILES else "offsets.json"
+SPLIT_OFFSETS_LEAGUE_FILE = "offsets_league.json"
+SPLIT_OFFSETS_DOMAIN_FILES: tuple[str, ...] = (
+    "offsets_players.json",
+    "offsets_teams.json",
+    "offsets_staff.json",
+    "offsets_stadiums.json",
+    "offsets_history.json",
+    "offsets_shoes.json",
+)
+SPLIT_OFFSETS_OPTIONAL_FILES: tuple[str, ...] = ("dropdowns.json",)
+OFFSETS_BUNDLE_FILE = "split offsets files (offsets_league.json + offsets_*.json)"
+PLAYER_STATS_TABLE_CATEGORY_MAP: dict[str, str] = {
+    "player stat id": "Stats - IDs",
+    "stats": "Stats - IDs",
+    "season": "Stats - Season",
+    "season high stats": "Stats - Season",
+    "career": "Stats - Career",
+    "career high stats": "Stats - Career",
+    "awards": "Stats - Awards",
+}
+PLAYER_STATS_IDS_CATEGORY = "Stats - IDs"
+PLAYER_STATS_SEASON_CATEGORY = "Stats - Season"
 _offset_file_path: Path | None = None
 _offset_config: dict | None = None
+_offset_config_primary: dict | None = None
+_offset_file_path_primary: Path | None = None
+_offset_config_offsets2: dict | None = None
+_offset_file_path_offsets2: Path | None = None
 _offset_index: dict[tuple[str, str], dict] = {}
+_offset_normalized_index: dict[tuple[str, str], dict] = {}
+_offset_hierarchy_index: dict[tuple[str, str, str, str], dict] = {}
 _current_offset_target: str | None = None
-_base_pointer_overrides: dict[str, int] | None = None
 CATEGORY_SUPER_TYPES: dict[str, str] = {}
 CATEGORY_CANONICAL: dict[str, str] = {}
-CATEGORY_SUPER_TYPES: dict[str, str] = {}
+PLAYER_STATS_RELATIONS: dict[str, Any] = {}
+
+_OFFSET_CACHE = OffsetCache()
+_OFFSET_REPOSITORY = OffsetRepository(_OFFSET_CACHE)
 
 PLAYER_TABLE_RVA = 0
 PLAYER_STRIDE = 0
@@ -153,9 +147,9 @@ TEAM_FIELD_DEFS: dict[str, tuple[int, int, str]] = {}
 TEAM_RECORD_SIZE = TEAM_STRIDE
 
 TEAM_FIELD_SPECS: tuple[tuple[str, str], ...] = (
-    ("Team Name", "Team Name"),
-    ("City Name", "City Name"),
-    ("City Abbrev", "City Abbrev"),
+    ("Team Name", "TEAMNAME"),
+    ("City Name", "CITYNAME"),
+    ("City Abbrev", "CITYSHORTNAME"),
 )
 PLAYER_PANEL_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("Position", "Vitals", "Position"),
@@ -167,7 +161,7 @@ PLAYER_PANEL_FIELDS: tuple[tuple[str, str, str], ...] = (
 )
 PLAYER_PANEL_OVR_FIELD: tuple[str, str] = ("Attributes", "CACHCED_OVR")
 
-UNIFIED_FILES = (OFFSETS_BUNDLE_FILE,)
+UNIFIED_FILES: tuple[str, ...] = ()
 EXTRA_CATEGORY_FIELDS: dict[str, list[dict]] = {}
 
 # Staff/Stadium metadata (populated when offsets define them)
@@ -425,212 +419,875 @@ FIELD_NAME_ALIASES: dict[str, str] = {
 
 
 def _derive_offset_candidates(target_executable: str | None) -> tuple[str, ...]:
-    """Return an ordered list of offset filenames to probe for the target executable."""
-    base: list[str] = list(DEFAULT_OFFSET_FILES)
-    # Try common per-version filenames first (helps when users drop standalone files).
-    version_hint = None
-    if target_executable:
-        m = re.search(r"2k(\d{2})", target_executable.lower())
-        if m:
-            version_hint = m.group(1)
-    if version_hint:
-        base.insert(0, f"2k{version_hint}_offsets.json")
-        base.insert(0, f"2K{version_hint}_Offsets.json")
-    # Hard-coded 2K26 standalone names for convenience.
-    base.insert(0, "2k26_offsets-2.json")
-    base.insert(0, "2k26_offsets.json")
-    return tuple(dict.fromkeys(base))  # de-dup while preserving order
+    """Return the split-offset file manifest."""
+    del target_executable  # split files are not executable-specific
+    return (SPLIT_OFFSETS_LEAGUE_FILE, *SPLIT_OFFSETS_DOMAIN_FILES)
 
 
-def _select_merged_offset_entry(raw: object, target_executable: str | None) -> dict | None:
-    """
-    Pick the best offsets entry from a merged offsets payload.
-    Supports:
-      1) a single offsets object with an `offsets` list
-      2) a mapping of version keys -> offsets objects
-    """
-    if isinstance(raw, dict) and isinstance(raw.get("offsets"), list):
-        return raw
-    version_hint = None
-    if target_executable:
-        match = re.search(r"2k(\d{2})", target_executable.lower())
-        if match:
-            version_hint = match.group(1)
-    if isinstance(raw, dict):
-        best: dict | None = None
-        best_score = -1
-        for key, value in raw.items():
-            if not isinstance(value, dict) or not isinstance(value.get("offsets"), list):
-                continue
-            score = 0
-            key_lower = str(key).lower()
-            game_info = value.get("game_info") if isinstance(value.get("game_info"), dict) else {}
-            exec_name = str(game_info.get("executable", "")).lower() if isinstance(game_info, dict) else ""
-            # Only accept entries that explicitly match the loaded game's executable (or 2kXX hint).
-            if target_executable and exec_name and exec_name != target_executable.lower():
-                continue
-            if version_hint and not (version_hint in key_lower or version_hint in exec_name):
-                continue
-            if version_hint and version_hint in key_lower:
-                score += 3
-            if target_executable and exec_name == target_executable.lower():
-                score += 4
-            elif version_hint and version_hint in exec_name:
-                score += 2
-            version_field = str(game_info.get("version", "")).lower() if isinstance(game_info, dict) else ""
-            if version_hint and version_hint in version_field:
-                score += 1
-            if score > best_score:
-                best_score = score
-                best = value
-        if best:
-            return best
-        for value in raw.values():
-            if isinstance(value, dict) and isinstance(value.get("offsets"), list):
-                return value
-    if isinstance(raw, list):
-        for entry in raw:
-            if isinstance(entry, dict) and isinstance(entry.get("offsets"), list):
-                return entry
+def _split_version_tokens(raw_key: object) -> tuple[str, ...]:
+    text = str(raw_key or "").strip()
+    if not text:
+        return ()
+    tokens = [chunk.strip().upper() for chunk in text.split(",") if chunk and chunk.strip()]
+    return tuple(dict.fromkeys(tokens))
+
+
+def _version_key_matches(raw_key: object, target_label: str | None) -> bool:
+    target = str(target_label or "").strip().upper()
+    if not target:
+        return False
+    tokens = _split_version_tokens(raw_key)
+    if tokens:
+        return target in tokens
+    return str(raw_key or "").strip().upper() == target
+
+
+def _select_version_entry(per_version: dict[str, object], target_label: str) -> dict[str, object] | None:
+    for raw_key, payload in per_version.items():
+        if not isinstance(payload, dict):
+            continue
+        if _version_key_matches(raw_key, target_label):
+            return payload
     return None
 
 
-def _convert_merged_offsets_schema(raw: object, target_exe: str | None) -> dict | None:
-    """Handle merged_offsets schema where each entry carries per-version data."""
-    if not isinstance(raw, dict):
-        return None
-    offsets = raw.get("offsets")
-    versions_map = raw.get("versions")
-    if not isinstance(offsets, list) or not isinstance(versions_map, dict):
-        return None
+def _infer_length_bits(field_type: object, length_raw: object) -> int:
+    length_val = to_int(length_raw)
+    if length_val > 0:
+        return length_val
+    type_name = str(field_type or "").strip().lower()
+    if type_name in {
+        "byte",
+        "ubyte",
+        "sbyte",
+    }:
+        return 8
+    if type_name in {"short", "ushort", "int16", "uint16", "word"}:
+        return 16
+    if type_name in {"integer", "int", "uint", "number", "slider", "long", "ulong", "int32", "uint32", "dword"}:
+        return 32
+    if type_name == "float":
+        return 32
+    if type_name in {"double", "int64", "uint64", "longlong", "ulonglong", "qword"}:
+        return 64
+    if "pointer" in type_name or type_name in {"ptr", "address"}:
+        return 64
+    if type_name in {"binary", "bool", "boolean", "bit", "bitfield"}:
+        return 1
+    return 0
 
-    version_hint = None
-    if target_exe:
-        match = re.search(r"2k(\d{2})", target_exe.lower())
-        if match:
-            version_hint = f"2k{match.group(1)}"
-    version_key: str | None = None
+
+def _normalize_offset_type(field_type: object) -> str:
+    raw = str(field_type or "").strip().lower()
+    if not raw:
+        return ""
+    if raw in {
+        "integer",
+        "int",
+        "uint",
+        "number",
+        "slider",
+        "byte",
+        "ubyte",
+        "char",
+        "sbyte",
+        "short",
+        "ushort",
+        "int16",
+        "uint16",
+        "word",
+        "long",
+        "ulong",
+        "int32",
+        "uint32",
+        "dword",
+        "int64",
+        "uint64",
+        "longlong",
+        "ulonglong",
+        "qword",
+    }:
+        return "integer"
+    if raw in {"float", "single", "double"}:
+        return "float"
+    if "pointer" in raw or raw in {"ptr", "address"}:
+        return "pointer"
+    if raw in {"binary", "bool", "boolean", "bit", "bitfield", "combo"}:
+        return "binary"
+    if raw in {"wstring", "utf16", "utf-16", "wchar", "wide"}:
+        return "wstring"
+    if raw in {"string", "text", "ascii", "char", "cstring"}:
+        return "string"
+    return raw
+
+
+_KNOWN_SUPER_TYPES: set[str] = {
+    "Player",
+    "Players",
+    "Team",
+    "Teams",
+    "Staff",
+    "Stadium",
+    "Stadiums",
+    "Jersey",
+    "Jerseys",
+    "Shoe",
+    "Shoes",
+    "NBA History List",
+    "NBA History",
+    "NBA Record List",
+    "NBA Records",
+    "Career Stats",
+    "History",
+    "Playbooks",
+}
+
+
+def _looks_like_super_type(label: object) -> bool:
+    text = str(label or "").strip()
+    if not text:
+        return False
+    return text in _KNOWN_SUPER_TYPES
+
+
+def _normalized_super_type_label(raw_value: object) -> str:
+    text = str(raw_value).strip() if raw_value is not None else ""
+    if text.lower() in {"", "none", "null"}:
+        return ""
+    return text
+
+
+def _derive_super_type_map_from_split_schema(split_schema: object) -> dict[str, str]:
+    """Build category -> super_type map from offsets_league split_schema."""
+    derived: dict[str, str] = {}
+    if not isinstance(split_schema, dict):
+        return derived
+    for file_payload in split_schema.values():
+        if not isinstance(file_payload, dict):
+            continue
+        for super_type_label, category_map in file_payload.items():
+            super_type = _normalized_super_type_label(super_type_label)
+            if not super_type or not isinstance(category_map, dict):
+                continue
+            for category_name in category_map.keys():
+                category = str(category_name or "").strip()
+                if not category:
+                    continue
+                derived.setdefault(category.lower(), super_type)
+    return derived
+
+
+def _select_active_version(
+    versions_map: dict[str, object],
+    target_executable: str | None,
+    *,
+    require_hint: bool = False,
+) -> tuple[str, str, dict[str, object]] | None:
+    version_hint = _derive_version_label(target_executable)
+    if require_hint and not version_hint:
+        return None
+    selected_key: str | None = None
+    selected_label = version_hint or ""
     if version_hint:
         for key in versions_map.keys():
-            key_l = str(key).lower()
-            if version_hint in key_l:
-                version_key = key
+            if _version_key_matches(key, version_hint):
+                selected_key = str(key)
                 break
-    if version_key is None:
+        if selected_key is None:
+            return None
+    else:
+        selected_key = str(next(iter(versions_map.keys()), ""))
+        selected_label = selected_key
+    selected_info = versions_map.get(selected_key) if selected_key else None
+    if not isinstance(selected_info, dict) or not selected_key:
         return None
-    version_info = versions_map.get(version_key)
-    if not isinstance(version_info, dict):
+    return selected_label, selected_key, cast(dict[str, object], selected_info)
+
+
+def _read_json_cached(path: Path) -> dict[str, Any] | None:
+    parsed, _error = _read_json_with_error(path)
+    return parsed
+
+
+def _read_json_with_error(path: Path) -> tuple[dict[str, Any] | None, str | None]:
+    cached = _OFFSET_CACHE.get_json(path)
+    if cached is not None:
+        return cached, None
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            parsed = json.load(handle)
+    except json.JSONDecodeError as exc:
+        return None, (
+            f"{path}: invalid JSON syntax at line {exc.lineno}, column {exc.colno}: {exc.msg}"
+        )
+    except OSError as exc:
+        return None, f"{path}: unable to read file: {exc}"
+    except Exception as exc:
+        return None, f"{path}: unable to parse JSON: {exc}"
+    if not isinstance(parsed, dict):
+        return None, f"{path}: top-level JSON value must be an object."
+    _OFFSET_CACHE.set_json(path, parsed)
+    return parsed, None
+
+
+def _build_dropdown_values_index(raw_dropdowns: object) -> dict[tuple[str, str, str], list[str]]:
+    index: dict[tuple[str, str, str], list[str]] = {}
+    if not isinstance(raw_dropdowns, dict):
+        return index
+    dropdown_entries = raw_dropdowns.get("dropdowns")
+    if not isinstance(dropdown_entries, list):
+        return index
+    for entry in dropdown_entries:
+        if not isinstance(entry, dict):
+            continue
+        canonical_category = str(entry.get("canonical_category") or "").strip()
+        normalized_name = str(entry.get("normalized_name") or "").strip()
+        versions = entry.get("versions")
+        if not canonical_category or not normalized_name or not isinstance(versions, dict):
+            continue
+        category_key = canonical_category.lower()
+        normalized_key = normalized_name.upper()
+        for version_key, value in versions.items():
+            if not isinstance(value, dict):
+                continue
+            values = value.get("values")
+            if not isinstance(values, list):
+                values = value.get("dropdown")
+            if not isinstance(values, list):
+                continue
+            cleaned_values = [str(item) for item in values]
+            if not cleaned_values:
+                continue
+            for token in _split_version_tokens(version_key):
+                index[(category_key, normalized_key, token)] = cleaned_values
+    return index
+
+
+def _resolve_split_category(root_category: str, table_segments: tuple[str, ...]) -> str:
+    """Return runtime category name for a split offsets leaf entry."""
+    root = str(root_category or "").strip() or "Misc"
+    if root.lower() != "stats":
+        return root
+    if not table_segments:
+        return "Stats - Misc"
+    table_key = str(table_segments[0] or "").strip().lower()
+    mapped = PLAYER_STATS_TABLE_CATEGORY_MAP.get(table_key)
+    if mapped:
+        return mapped
+    table_label = str(table_segments[0]).strip()
+    return f"Stats - {table_label}" if table_label else "Stats - Misc"
+
+
+def _iter_hierarchy_leaf_nodes(
+    node: object,
+    path_segments: tuple[str, ...],
+):
+    if isinstance(node, list):
+        for item in node:
+            yield from _iter_hierarchy_leaf_nodes(item, path_segments)
+        return
+    if not isinstance(node, dict):
+        return
+
+    versions_raw = node.get("versions")
+    normalized_raw = (
+        node.get("normalized_name")
+        or node.get("canonical_name")
+        or node.get("name")
+        or node.get("display_name")
+    )
+    if isinstance(versions_raw, dict) and normalized_raw:
+        yield cast(dict[str, object], node), path_segments
+        return
+
+    for key, child in node.items():
+        if not isinstance(child, (dict, list)):
+            continue
+        child_path = path_segments + (str(key),)
+        yield from _iter_hierarchy_leaf_nodes(child, child_path)
+
+
+def _resolve_hierarchy_context(
+    path_segments: tuple[str, ...],
+    *,
+    leaf_node: dict[str, object],
+    version_payload: dict[str, object],
+    super_type_map: dict[str, str],
+) -> dict[str, object]:
+    segments = tuple(str(seg).strip() for seg in path_segments if str(seg).strip())
+    version_super = _normalized_super_type_label(
+        version_payload.get("super_type")
+        or version_payload.get("superType")
+        or leaf_node.get("super_type")
+        or leaf_node.get("superType")
+    )
+    source_category = "Misc"
+    source_group = ""
+    table_segments: tuple[str, ...] = ()
+    source_super_type = version_super
+    if segments and _looks_like_super_type(segments[0]):
+        source_super_type = str(segments[0]).strip() or source_super_type
+        source_category = str(segments[1] if len(segments) > 1 else "Misc")
+        source_group = str(segments[2] if len(segments) > 2 else "")
+        table_segments = tuple(segments[2:])
+    else:
+        source_category = str(segments[0] if segments else "Misc")
+        source_group = str(segments[1] if len(segments) > 1 else "")
+        table_segments = tuple(segments[1:])
+        if not source_super_type:
+            source_super_type = str(
+                super_type_map.get(source_category.lower())
+                or super_type_map.get(source_group.lower())
+                or ""
+            ).strip()
+    emitted_category = _resolve_split_category(source_category, table_segments)
+    source_table_path = "/".join(segments) if segments else source_category
+    return {
+        "source_super_type": source_super_type,
+        "source_category": source_category,
+        "source_group": source_group,
+        "source_table_segments": table_segments,
+        "source_table_path": source_table_path,
+        "emitted_category": emitted_category,
+    }
+
+
+def _iter_hierarchy_sections(hierarchy: object):
+    if not isinstance(hierarchy, dict):
+        return
+    for source_file, raw_domain in hierarchy.items():
+        if not isinstance(raw_domain, dict):
+            continue
+        for domain_key, sections in raw_domain.items():
+            if not isinstance(sections, list):
+                continue
+            for section in sections:
+                if not isinstance(section, dict):
+                    continue
+                for category_name, payload in section.items():
+                    yield str(source_file), str(domain_key), str(category_name).strip() or "Misc", payload
+
+
+def _collect_selected_entries(
+    data: dict[str, object],
+    target_executable: str | None,
+    *,
+    require_hint: bool = False,
+) -> tuple[list[dict[str, object]], dict[str, object], str | None, str | None, dict[str, object] | None]:
+    hierarchy = data.get("hierarchy")
+    versions_map = data.get("versions")
+    if not isinstance(hierarchy, dict) or not isinstance(versions_map, dict) or not versions_map:
+        return [], {}, None, None, None
+    version_ctx = _select_active_version(versions_map, target_executable, require_hint=require_hint)
+    if version_ctx is None:
+        return [], {}, None, None, None
+    version_label, version_key, version_info = version_ctx
+    super_type_map_raw = data.get("super_type_map")
+    super_type_map: dict[str, str] = {}
+    if isinstance(super_type_map_raw, dict):
+        super_type_map = {str(key).lower(): str(value) for key, value in super_type_map_raw.items()}
+    dropdown_values_raw = data.get("_dropdown_values_index")
+    dropdown_values = (
+        dropdown_values_raw
+        if isinstance(dropdown_values_raw, dict)
+        else {}
+    )
+
+    entries: list[dict[str, object]] = []
+    skipped_entries: list[dict[str, object]] = []
+    skips_by_reason: dict[str, int] = {}
+    discovered_leaf_fields = 0
+
+    def _record_skip(leaf_obj: dict[str, object], reason: str, **extra: object) -> None:
+        skips_by_reason[reason] = skips_by_reason.get(reason, 0) + 1
+        context = extra.pop("context", None)
+        source_category = ""
+        source_group = ""
+        source_path = ""
+        source_super_type = ""
+        emitted_category = ""
+        if isinstance(context, dict):
+            source_category = str(context.get("source_category") or "")
+            source_group = str(context.get("source_group") or "")
+            source_path = str(context.get("source_table_path") or "")
+            source_super_type = str(context.get("source_super_type") or "")
+            emitted_category = str(context.get("emitted_category") or "")
+        record: dict[str, object] = {
+            "reason": reason,
+            "category": emitted_category,
+            "canonical_category": str(leaf_obj.get("canonical_category") or ""),
+            "normalized_name": str(leaf_obj.get("normalized_name") or ""),
+            "source_super_type": source_super_type,
+            "source_category": source_category,
+            "source_group": source_group,
+            "source_root_category": source_category,
+            "source_table_group": source_group,
+            "source_table_path": source_path,
+            "source_offsets_file": str(extra.pop("source_offsets_file", "")),
+            "source_offsets_domain": str(extra.pop("source_offsets_domain", "")),
+            "parse_report_entry_id": to_int(extra.pop("parse_report_entry_id", 0)),
+        }
+        for key_name, value in extra.items():
+            record[str(key_name)] = value
+        skipped_entries.append(record)
+
+    entry_counter = 0
+    for source_file, source_domain, category_name, payload in _iter_hierarchy_sections(hierarchy):
+        for leaf_node, path_segments in _iter_hierarchy_leaf_nodes(payload, (category_name,)):
+            discovered_leaf_fields += 1
+            versions_raw = leaf_node.get("versions")
+            normalized_raw = (
+                leaf_node.get("normalized_name")
+                or leaf_node.get("canonical_name")
+                or leaf_node.get("name")
+                or leaf_node.get("display_name")
+            )
+            if not isinstance(versions_raw, dict):
+                _record_skip(
+                    leaf_node,
+                    "missing_versions",
+                    source_offsets_file=source_file,
+                    source_offsets_domain=source_domain,
+                )
+                continue
+            version_payload = _select_version_entry(versions_raw, version_label)
+            if not isinstance(version_payload, dict):
+                _record_skip(
+                    leaf_node,
+                    "missing_target_version",
+                    source_offsets_file=source_file,
+                    source_offsets_domain=source_domain,
+                    available_versions=[str(key) for key in versions_raw.keys()],
+                )
+                continue
+            if not normalized_raw:
+                _record_skip(
+                    leaf_node,
+                    "missing_normalized_name",
+                    source_offsets_file=source_file,
+                    source_offsets_domain=source_domain,
+                )
+                continue
+            context = _resolve_hierarchy_context(
+                path_segments,
+                leaf_node=leaf_node,
+                version_payload=cast(dict[str, object], version_payload),
+                super_type_map=super_type_map,
+            )
+            normalized_name = str(normalized_raw).strip()
+            canonical_category = str(
+                leaf_node.get("canonical_category")
+                or context.get("emitted_category")
+                or "Misc"
+            ).strip() or str(context.get("emitted_category") or "Misc")
+            emitted_category = str(context.get("emitted_category") or "Misc").strip() or "Misc"
+            display_name = str(
+                leaf_node.get("display_name")
+                or leaf_node.get("name")
+                or normalized_name
+            ).strip() or normalized_name
+
+            normalized_payload: dict[str, object] = dict(version_payload)
+            if not isinstance(normalized_payload.get("values"), list) and isinstance(dropdown_values, dict):
+                dropdown_categories = (
+                    canonical_category,
+                    str(leaf_node.get("canonical_category") or ""),
+                    emitted_category,
+                    str(context.get("source_category") or ""),
+                    str(context.get("source_group") or ""),
+                )
+                version_tokens = tuple(
+                    dict.fromkeys(
+                        [
+                            *_split_version_tokens(version_key),
+                            *_split_version_tokens(version_label),
+                        ]
+                    )
+                )
+                for token in version_tokens:
+                    for dropdown_category in dropdown_categories:
+                        if not dropdown_category:
+                            continue
+                        values = dropdown_values.get((dropdown_category.lower(), normalized_name.upper(), token))
+                        if isinstance(values, list) and values:
+                            normalized_payload["values"] = list(values)
+                            break
+                    if isinstance(normalized_payload.get("values"), list):
+                        break
+
+            address_raw = normalized_payload.get("address")
+            if address_raw in (None, ""):
+                address_raw = normalized_payload.get("offset")
+            if address_raw in (None, ""):
+                address_raw = normalized_payload.get("hex")
+            if address_raw in (None, ""):
+                _record_skip(
+                    leaf_node,
+                    "missing_address",
+                    context=context,
+                    source_offsets_file=source_file,
+                    source_offsets_domain=source_domain,
+                )
+                continue
+            address = to_int(address_raw)
+            if address < 0:
+                _record_skip(
+                    leaf_node,
+                    "invalid_address",
+                    context=context,
+                    source_offsets_file=source_file,
+                    source_offsets_domain=source_domain,
+                    address=address_raw,
+                )
+                continue
+            field_type_raw = normalized_payload.get("type") or leaf_node.get("type")
+            field_type_normalized = _normalize_offset_type(field_type_raw)
+            explicit_length = to_int(normalized_payload.get("length"))
+            length_bits = explicit_length
+            if length_bits <= 0:
+                if field_type_normalized in {"wstring", "string"}:
+                    _record_skip(
+                        leaf_node,
+                        "missing_required_string_length",
+                        context=context,
+                        source_offsets_file=source_file,
+                        source_offsets_domain=source_domain,
+                    )
+                    continue
+                length_bits = _infer_length_bits(field_type_raw, normalized_payload.get("length"))
+                if length_bits <= 0:
+                    _record_skip(
+                        leaf_node,
+                        "missing_length",
+                        context=context,
+                        source_offsets_file=source_file,
+                        source_offsets_domain=source_domain,
+                    )
+                    continue
+
+            source_super_type = str(
+                context.get("source_super_type")
+                or leaf_node.get("super_type")
+                or leaf_node.get("superType")
+                or ""
+            ).strip()
+            if emitted_category.startswith("Stats - "):
+                canonical_category = emitted_category
+
+            entry_counter += 1
+            entry: dict[str, object] = dict(normalized_payload)
+            entry.update({
+                "category": emitted_category,
+                "name": display_name,
+                "display_name": display_name,
+                "canonical_category": canonical_category,
+                "normalized_name": normalized_name,
+                "super_type": source_super_type,
+                "selected_version": version_label,
+                "selected_version_key": version_key,
+                "version_metadata": dict(normalized_payload),
+                "source_super_type": source_super_type,
+                "source_category": str(context.get("source_category") or ""),
+                "source_group": str(context.get("source_group") or ""),
+                "source_root_category": str(context.get("source_category") or ""),
+                "source_table_group": str(context.get("source_group") or ""),
+                "source_table_path": str(context.get("source_table_path") or ""),
+                "source_offsets_domain": source_domain,
+                "source_offsets_file": source_file,
+                "parse_report_entry_id": int(entry_counter),
+            })
+            if "address" not in entry and "offset" not in entry and "hex" not in entry:
+                # Preserve source payload shape while keeping entries addressable.
+                entry["address"] = int(address)
+            field_type_text = str(field_type_raw or "").strip()
+            if field_type_text and "type" not in entry:
+                entry["type"] = field_type_text
+            if normalized_payload.get("requiresDereference") is True or normalized_payload.get("requires_deref") is True:
+                entry["requiresDereference"] = True
+            deref = normalized_payload.get("dereferenceAddress")
+            if deref in (None, ""):
+                deref = normalized_payload.get("deref_offset")
+            if deref in (None, ""):
+                deref = normalized_payload.get("dereference_address")
+            if deref not in (None, ""):
+                entry["dereferenceAddress"] = to_int(deref)
+            values = normalized_payload.get("values")
+            if isinstance(values, list):
+                entry["values"] = list(values)
+            if isinstance(leaf_node.get("variant_names"), list):
+                entry["variant_names"] = list(leaf_node.get("variant_names") or [])
+            if leaf_node.get("canonical_name"):
+                entry["canonical_name"] = str(leaf_node.get("canonical_name"))
+            entries.append(entry)
+
+    skipped_fields = len(skipped_entries)
+    emitted_fields = len(entries)
+    accounted_fields = emitted_fields + skipped_fields
+    report: dict[str, object] = {
+        "target_version": version_label,
+        "selected_version_key": version_key,
+        "discovered_leaf_fields": discovered_leaf_fields,
+        "emitted_fields": emitted_fields,
+        "skipped_fields": skipped_fields,
+        "accounted_fields": accounted_fields,
+        "untracked_loss": max(0, discovered_leaf_fields - accounted_fields),
+        "skips_by_reason": dict(sorted(skips_by_reason.items())),
+        "skipped": skipped_entries,
+    }
+    return entries, report, version_label, version_key, version_info
+
+
+def _iter_selected_entries(data: dict[str, object], target_executable: str | None):
+    entries, _report, _version_label, _version_key, _version_info = _collect_selected_entries(data, target_executable)
+    for entry in entries:
+        yield entry
+
+
+def _build_split_offsets_payload(
+    offsets_dir: Path,
+    *,
+    parse_errors: list[str] | None = None,
+) -> tuple[Path, dict[str, Any]] | None:
+    league_path = offsets_dir / SPLIT_OFFSETS_LEAGUE_FILE
+    if not league_path.is_file():
         return None
-    unified_offsets: list[dict[str, object]] = []
+    missing_domains = [name for name in SPLIT_OFFSETS_DOMAIN_FILES if not (offsets_dir / name).is_file()]
+    if missing_domains:
+        return None
+
+    league_raw, league_error = _read_json_with_error(league_path)
+    if league_error and parse_errors is not None:
+        parse_errors.append(league_error)
+    if not isinstance(league_raw, dict):
+        return None
+    versions = league_raw.get("versions")
+    if not isinstance(versions, dict) or not versions:
+        return None
+    dropdown_values: dict[tuple[str, str, str], list[str]] = {}
+    dropdown_path = offsets_dir / SPLIT_OFFSETS_OPTIONAL_FILES[0]
+    if dropdown_path.is_file():
+        dropdown_values = _build_dropdown_values_index(_read_json_cached(dropdown_path))
+
+    hierarchy_payload: dict[str, dict[str, object]] = {}
+    discovered_leaf_fields = 0
+    for file_name in SPLIT_OFFSETS_DOMAIN_FILES:
+        file_path = offsets_dir / file_name
+        raw_domain, domain_error = _read_json_with_error(file_path)
+        if domain_error and parse_errors is not None:
+            parse_errors.append(domain_error)
+        if not isinstance(raw_domain, dict):
+            return None
+        hierarchy_payload[file_name] = raw_domain
+        for _source_file, _source_domain, category_name, payload in _iter_hierarchy_sections({file_name: raw_domain}):
+            for _leaf_node, _path_segments in _iter_hierarchy_leaf_nodes(payload, (category_name,)):
+                discovered_leaf_fields += 1
+    if not hierarchy_payload:
+        return None
+
+    merged_payload: dict[str, Any] = {
+        "hierarchy": hierarchy_payload,
+        "versions": dict(versions),
+        "_dropdown_values_index": dropdown_values,
+        "_split_manifest": {
+            "required_files": [SPLIT_OFFSETS_LEAGUE_FILE, *SPLIT_OFFSETS_DOMAIN_FILES],
+            "optional_files": list(SPLIT_OFFSETS_OPTIONAL_FILES),
+            "discovered_leaf_fields": discovered_leaf_fields,
+        },
+    }
+    super_type_map_raw = league_raw.get("super_type_map")
+    split_schema_raw = league_raw.get("split_schema")
+    if isinstance(split_schema_raw, dict):
+        merged_payload["split_schema"] = dict(split_schema_raw)
+    super_type_map: dict[str, str] = {}
+    if isinstance(super_type_map_raw, dict):
+        super_type_map.update(
+            {
+                str(key).lower(): str(value)
+                for key, value in super_type_map_raw.items()
+                if _normalized_super_type_label(value)
+            }
+        )
+    for category_key, super_type_value in _derive_super_type_map_from_split_schema(split_schema_raw).items():
+        super_type_map.setdefault(category_key, super_type_value)
+    if super_type_map:
+        merged_payload["super_type_map"] = super_type_map
+    category_normalization = league_raw.get("category_normalization")
+    if isinstance(category_normalization, dict):
+        merged_payload["category_normalization"] = dict(category_normalization)
+    league_category_pointer_map = league_raw.get("league_category_pointer_map")
+    if isinstance(league_category_pointer_map, dict):
+        merged_payload["league_category_pointer_map"] = dict(league_category_pointer_map)
+    if isinstance(league_raw.get("game_info"), dict):
+        merged_payload["game_info"] = dict(league_raw.get("game_info") or {})
+    if isinstance(league_raw.get("base_pointers"), dict):
+        merged_payload["base_pointers"] = dict(league_raw.get("base_pointers") or {})
+    return league_path, merged_payload
+
+
+def _build_player_stats_relations(offsets: list[dict[str, object]]) -> dict[str, object]:
+    id_entries: list[dict[str, object]] = []
+    season_entries: list[dict[str, object]] = []
     for entry in offsets:
         if not isinstance(entry, dict):
             continue
-        per_version = entry.get("versions")
-        if not isinstance(per_version, dict):
-            continue
-        v_entry = per_version.get(version_key)
-        if not isinstance(v_entry, dict):
-            continue
-        address_raw = v_entry.get("address")
-        if address_raw in (None, ""):
-            address_raw = v_entry.get("hex")
-        address = to_int(address_raw)
-        ftype = v_entry.get("type")
-        length = to_int(v_entry.get("length"))
-        if length < 0:
-            length = 0
-        is_pointer = isinstance(ftype, str) and ("pointer" in ftype.lower() or "ptr" in ftype.lower())
-        if address < 0 or (length == 0 and not is_pointer):
-            continue
-        start_bit = to_int(v_entry.get("startBit") or v_entry.get("start_bit"))
-        category = (
-            v_entry.get("category")
-            or entry.get("canonical_category")
-            or entry.get("super_type")
-            or entry.get("superType")
-            or ""
+        category = str(entry.get("canonical_category") or entry.get("category") or "").strip()
+        if category == PLAYER_STATS_IDS_CATEGORY:
+            id_entries.append(entry)
+        elif category == PLAYER_STATS_SEASON_CATEGORY:
+            season_entries.append(entry)
+
+    def _entry_sort_key(item: dict[str, object]) -> tuple[int, int, str]:
+        return (
+            to_int(item.get("address") or item.get("offset") or item.get("hex")),
+            to_int(item.get("startBit") or item.get("start_bit")),
+            str(item.get("normalized_name") or item.get("name") or ""),
         )
-        name = (
-            v_entry.get("name")
-            or entry.get("display_name")
-            or entry.get("normalized_name")
-            or entry.get("canonical_name")
-            or f"Field 0x{address:X}"
-        )
-        new_entry: dict[str, object] = {
-            "category": str(category),
-            "name": str(name),
-            # Preserve both keys since downstream consumers check for `address` or `offset`
-            "address": address,
-            "offset": address,
-            "hex": f"0x{address:X}",
-            "length": length,
-            "startBit": start_bit,
-        }
-        if isinstance(ftype, str):
-            new_entry["type"] = ftype
-        if v_entry.get("requiresDereference") is True or v_entry.get("requires_deref") is True:
-            new_entry["requiresDereference"] = True
-        deref = v_entry.get("dereferenceAddress") or v_entry.get("deref_offset")
-        if deref is not None:
-            new_entry["dereferenceAddress"] = deref
-        values = v_entry.get("values")
-        if isinstance(values, list):
-            new_entry["values"] = values
-        unified_offsets.append(new_entry)
-    if not unified_offsets:
+
+    def _id_sort_key(item: dict[str, object]) -> tuple[int, int, int, str]:
+        normalized = str(item.get("normalized_name") or "").strip().upper()
+        if normalized.startswith("STATSID"):
+            suffix = normalized.replace("STATSID", "", 1)
+            return (0, int(suffix or 0) if suffix.isdigit() else 0, 0, normalized)
+        if normalized == "CURRENTYEARSTATID":
+            return (1, 0, 0, normalized)
+        addr, bit, name = _entry_sort_key(item)
+        return (2, addr, bit, name)
+
+    ordered_ids = [
+        str(item.get("normalized_name") or item.get("name") or "").strip()
+        for item in sorted(id_entries, key=_id_sort_key)
+        if str(item.get("normalized_name") or item.get("name") or "").strip()
+    ]
+    ordered_season = [
+        str(item.get("normalized_name") or item.get("name") or "").strip()
+        for item in sorted(season_entries, key=_entry_sort_key)
+        if str(item.get("normalized_name") or item.get("name") or "").strip()
+    ]
+    return {
+        "source_category": PLAYER_STATS_IDS_CATEGORY,
+        "target_category": PLAYER_STATS_SEASON_CATEGORY,
+        "relation_type": "season_only",
+        "id_fields": ordered_ids,
+        "target_fields": ordered_season,
+    }
+
+
+def _extract_player_stats_relations(config_data: dict | None) -> dict[str, Any]:
+    if not isinstance(config_data, dict):
+        return {}
+    relations = config_data.get("relations")
+    if not isinstance(relations, dict):
+        return {}
+    relation = relations.get("player_stats")
+    if not isinstance(relation, dict):
+        return {}
+    return dict(relation)
+
+
+def _sync_player_stats_relations(config_data: dict | None) -> None:
+    global PLAYER_STATS_RELATIONS
+    PLAYER_STATS_RELATIONS = _extract_player_stats_relations(config_data)
+
+
+def _convert_merged_offsets_schema(raw: object, target_exe: str | None) -> dict | None:
+    """Validate and normalize hierarchy-first schema for the target executable."""
+    if not isinstance(raw, dict):
         return None
-    converted: dict[str, object] = {"offsets": unified_offsets}
-    # Preserve helpers that inform category grouping/canonicalization.
+    if not isinstance(raw.get("hierarchy"), dict):
+        return None
+    if not isinstance(raw.get("versions"), dict):
+        return None
+
+    selected_entries, parse_report, _version_label, version_key, version_info = _collect_selected_entries(
+        cast(dict[str, object], raw),
+        target_exe,
+        require_hint=True,
+    )
+    if not selected_entries or not version_key or not isinstance(version_info, dict):
+        return None
+
+    player_stats_relations = _build_player_stats_relations(selected_entries)
+    converted: dict[str, object] = {
+        "hierarchy": dict(cast(dict[str, object], raw.get("hierarchy") or {})),
+        "relations": {"player_stats": player_stats_relations},
+        "_parse_report": parse_report,
+        "versions": {version_key: dict(version_info)},
+    }
+    if isinstance(raw.get("_split_manifest"), dict):
+        converted["_split_manifest"] = dict(cast(dict[str, object], raw.get("_split_manifest") or {}))
+    if isinstance(raw.get("_dropdown_values_index"), dict):
+        converted["_dropdown_values_index"] = dict(cast(dict[str, object], raw.get("_dropdown_values_index") or {}))
     if isinstance(raw.get("category_normalization"), dict):
         converted["category_normalization"] = raw["category_normalization"]
     if isinstance(raw.get("super_type_map"), dict):
         converted["super_type_map"] = raw["super_type_map"]
-    converted["versions"] = {version_key: version_info}
+    elif isinstance(raw.get("split_schema"), dict):
+        derived_super_type_map = _derive_super_type_map_from_split_schema(raw.get("split_schema"))
+        if derived_super_type_map:
+            converted["super_type_map"] = derived_super_type_map
+    if isinstance(raw.get("league_category_pointer_map"), dict):
+        converted["league_category_pointer_map"] = raw["league_category_pointer_map"]
+    if isinstance(raw.get("split_schema"), dict):
+        converted["split_schema"] = raw["split_schema"]
+
     base_ptrs = version_info.get("base_pointers") if isinstance(version_info.get("base_pointers"), dict) else None
     if base_ptrs:
-        converted["base_pointers"] = base_ptrs
+        converted["base_pointers"] = dict(base_ptrs)
     game_info = version_info.get("game_info") if isinstance(version_info.get("game_info"), dict) else None
     if game_info:
-        converted["game_info"] = game_info
+        converted["game_info"] = dict(game_info)
     return converted
 
 
 def _load_offset_config_file(target_executable: str | None = None) -> tuple[Path | None, dict | None]:
-    """Locate and parse the offsets bundle for the given executable."""
-    base_dir = Path(__file__).resolve().parent.parent
-    # Single source: packaged Offsets folder (avoid cross-version/conflicting files).
-    search_dirs = [
-        base_dir / "Offsets",
-        base_dir / "offsets",
-    ]
-    candidates = _derive_offset_candidates(target_executable)
-    for folder in search_dirs:
-        for fname in candidates:
-            path = folder / fname
-            if not path.is_file():
+    """Locate and parse split offsets files for the given executable."""
+    with timed("offsets.load_offset_config_file"):
+        target_key = (target_executable or "").lower()
+        if target_key:
+            cached = _OFFSET_CACHE.get_target(target_key)
+            if cached is not None:
+                return cached.path, dict(cached.data)
+        base_dir = Path(__file__).resolve().parent.parent
+        search_dirs = [
+            base_dir / "Offsets",
+            base_dir / "offsets",
+        ]
+        resolver = OffsetResolver(convert_schema=_convert_merged_offsets_schema)
+        parse_errors: list[str] = []
+        for folder in search_dirs:
+            split_payload = _build_split_offsets_payload(folder, parse_errors=parse_errors)
+            if split_payload is None:
                 continue
-            try:
-                with path.open("r", encoding="utf-8") as handle:
-                    raw = json.load(handle)
-            except Exception as exc:
-                print(f"Failed to load offsets from {path}: {exc}")
+            path, raw_payload = split_payload
+            resolved = resolver.resolve(raw_payload, target_executable)
+            if not isinstance(resolved, dict):
                 continue
-            converted = _convert_merged_offsets_schema(raw, target_executable)
-            if converted:
-                return path, converted
-            selected = _select_merged_offset_entry(raw, target_executable)
-            if selected and selected is not raw:
-                converted_selected = _convert_merged_offsets_schema(selected, target_executable)
-                return path, converted_selected or selected
-            if isinstance(raw, dict):
-                return path, raw
-    return None, None
+            payload = dict(resolved)
+            if target_key:
+                _OFFSET_CACHE.set_target(CachedOffsetPayload(path=path, target_key=target_key, data=payload))
+            return path, payload
+        if parse_errors:
+            unique_errors: list[str] = []
+            seen_error_keys: set[str] = set()
+            for message in parse_errors:
+                key = message.casefold()
+                if key in seen_error_keys:
+                    continue
+                seen_error_keys.add(key)
+                unique_errors.append(message)
+            details = " ; ".join(unique_errors)
+            raise OffsetSchemaError(
+                "Offsets files were found, but one or more required files could not be parsed. "
+                f"{details}"
+            )
+        return None, None
 
 
 def _build_offset_index(offsets: list[dict]) -> None:
-    """Create a lookup of offset entries by (category, name) with aliases."""
+    """Create strict exact-match lookup maps for offsets entries."""
     _offset_index.clear()
+    _offset_normalized_index.clear()
+    _offset_hierarchy_index.clear()
     for entry in offsets:
         if not isinstance(entry, dict):
             continue
@@ -638,38 +1295,61 @@ def _build_offset_index(offsets: list[dict]) -> None:
         name_raw = str(entry.get("name", "")).strip()
         if not name_raw:
             continue
-        category = category_raw.lower()
-        name = name_raw.lower()
-        _offset_index[(category, name)] = entry
-        alias_cat = CATEGORY_ALIASES.get(category) or (category[:-8] if category.endswith("_offsets") else None)
-        if alias_cat:
-            _offset_index[(alias_cat, name)] = entry
-        for canon, syns in OFFSET_FIELD_SYNONYMS.items():
-            all_names = [canon] + syns
-            if name in (s.lower() for s in all_names):
-                for alt in all_names:
-                    alt_l = alt.lower()
-                    _offset_index[(category, alt_l)] = entry
-                    if alias_cat:
-                        _offset_index[(alias_cat, alt_l)] = entry
+        _offset_index[(category_raw, name_raw)] = entry
+        canonical = str(entry.get("canonical_category", "")).strip()
+        normalized = str(entry.get("normalized_name", "")).strip()
+        if canonical and normalized:
+            _offset_normalized_index[(canonical, normalized)] = entry
+        source_super_type = str(
+            entry.get("source_super_type")
+            or entry.get("super_type")
+            or entry.get("superType")
+            or ""
+        ).strip()
+        source_category = str(entry.get("source_category") or "").strip()
+        source_group = str(entry.get("source_group") or "").strip()
+        if source_super_type and source_category and normalized:
+            _offset_hierarchy_index[(source_super_type, source_category, source_group, normalized)] = entry
 
 
 def _find_offset_entry(name: str, category: str | None = None) -> dict | None:
-    """Return the offset entry matching the provided name and category."""
-    lname = name.strip().lower()
+    """Return the offset entry matching the provided exact name/category."""
+    exact_name = name.strip()
     if category:
-        key = (category.strip().lower(), lname)
-        if key in _offset_index:
-            return _offset_index[key]
+        return _offset_index.get((category.strip(), exact_name))
     for (cat, entry_name), entry in _offset_index.items():
-        if entry_name == lname and (category is None or cat == category.strip().lower()):
+        if entry_name == exact_name and (category is None or cat == category.strip()):
             return entry
     return None
 
 
+def _find_offset_entry_by_normalized(canonical_category: str, normalized_name: str) -> dict | None:
+    """Return an offsets entry by exact canonical_category + normalized_name."""
+    return _offset_normalized_index.get((canonical_category, normalized_name))
+
+
+def _find_offset_entry_by_hierarchy(
+    source_super_type: str,
+    source_category: str,
+    source_group: str,
+    normalized_name: str,
+) -> dict | None:
+    """Return an offsets entry by exact hierarchy + normalized name."""
+    key = (
+        str(source_super_type or "").strip(),
+        str(source_category or "").strip(),
+        str(source_group or "").strip(),
+        str(normalized_name or "").strip(),
+    )
+    return _offset_hierarchy_index.get(key)
+
+
 def _load_dropdowns_map() -> dict[str, dict[str, list[str]]]:
-    """Return an empty dropdown map. Dropdowns.json support has been disabled."""
-    return {}
+    """Load dropdown metadata once per process from Offsets/dropdowns.json when present."""
+    with timed("offsets.load_dropdowns"):
+        base_dir = Path(__file__).resolve().parent.parent
+        search_dirs = [base_dir / "Offsets", base_dir / "offsets"]
+        return _OFFSET_REPOSITORY.load_dropdowns(search_dirs=search_dirs)
 
 
 def _derive_version_label(executable: str | None) -> str | None:
@@ -682,16 +1362,46 @@ def _derive_version_label(executable: str | None) -> str | None:
     return f"2K{m.group(1)}"
 
 
-def _load_categories_from_mega(version_label: str | None) -> dict[str, list[dict]]:
-    """Mega offsets are disabled; rely solely on offsets.json."""
-    return {}
+def _resolve_version_context(
+    data: dict[str, Any] | None,
+    target_executable: str | None,
+) -> tuple[str | None, dict[str, Any], dict[str, Any]]:
+    """Return (version_label, base_pointers, game_info) for the active target."""
+    version_label = _derive_version_label(target_executable)
+    if not isinstance(data, dict):
+        return version_label, {}, {}
+
+    versions_raw = data.get("versions")
+    versions_map = versions_raw if isinstance(versions_raw, dict) else {}
+    version_info: dict[str, Any] = {}
+    if version_label and versions_map:
+        candidate = versions_map.get(version_label)
+        if not isinstance(candidate, dict):
+            candidate = versions_map.get(version_label.upper())
+        if not isinstance(candidate, dict):
+            candidate = versions_map.get(version_label.lower())
+        if isinstance(candidate, dict):
+            version_info = candidate
+
+    version_base = version_info.get("base_pointers")
+    base_pointers = version_base if isinstance(version_base, dict) else {}
+
+    version_game = version_info.get("game_info")
+    game_info = version_game if isinstance(version_game, dict) else {}
+    stride_constants = version_info.get("stride_constants")
+    if isinstance(stride_constants, dict):
+        merged_game_info = dict(game_info)
+        merged_game_info.update(stride_constants)
+        game_info = merged_game_info
+
+    return version_label, base_pointers, game_info
 
 
 def _load_categories() -> dict[str, list[dict]]:
     """
-    Load editor categories from a unified offsets file.
+    Load editor categories from the active offsets payload.
     Returns a dictionary mapping category names to lists of field
-    definitions. If parsing fails or no unified file is found, an empty
+    definitions. If parsing fails or no offsets are available, an empty
     dictionary is returned.
     """
     dropdowns = _load_dropdowns_map()
@@ -732,6 +1442,7 @@ def _load_categories() -> dict[str, list[dict]]:
             entry_super = None
             if isinstance(entry, dict):
                 entry_super = entry.get("super_type") or entry.get("superType")
+            entry_super = _normalized_super_type_label(entry_super)
             map_super = super_type_map.get(cat_key.lower())
             # Allow explicit mapping to override mis-labeled entries (e.g., team tabs tagged as Players).
             if map_super:
@@ -794,9 +1505,28 @@ def _load_categories() -> dict[str, list[dict]]:
                 field["length"] = int(length)
         if source_entry is not None and source_entry.get("type") and not field.get("type"):
             field["type"] = source_entry.get("type")
+        if source_entry is not None:
+            for key_name in (
+                "canonical_category",
+                "normalized_name",
+                "super_type",
+                "type_normalized",
+                "source_root_category",
+                "source_table_group",
+                "source_table_path",
+                "source_offsets_domain",
+                "source_offsets_file",
+                "length_inferred",
+                "start_bit_inferred",
+                "parse_report_entry_id",
+                "selected_version",
+                "selected_version_key",
+            ):
+                if source_entry.get(key_name) and not field.get(key_name):
+                    field[key_name] = source_entry.get(key_name)
 
     def _entry_to_field(entry: dict, display_name: str, target_category: str | None = None) -> dict | None:
-        offset_val = to_int(entry.get("address"))
+        offset_val = to_int(entry.get("address") or entry.get("offset") or entry.get("hex"))
         length_val = to_int(entry.get("length"))
         if offset_val <= 0 or length_val <= 0:
             return None
@@ -810,8 +1540,15 @@ def _load_categories() -> dict[str, list[dict]]:
         if entry.get("requiresDereference"):
             field["requiresDereference"] = True
             field["dereferenceAddress"] = to_int(entry.get("dereferenceAddress"))
-        if "type" in entry:
-            field["type"] = entry["type"]
+        raw_type = entry.get("type")
+        normalized_type = entry.get("type_normalized")
+        if raw_type not in (None, ""):
+            field["type_raw"] = raw_type
+        if normalized_type not in (None, ""):
+            field["type_normalized"] = normalized_type
+            field["type"] = normalized_type
+        elif raw_type not in (None, ""):
+            field["type"] = raw_type
         if "values" in entry and isinstance(entry["values"], list):
             field["values"] = entry["values"]
         category_label = target_category or str(entry.get("category", "")).strip()
@@ -948,61 +1685,47 @@ def _load_categories() -> dict[str, list[dict]]:
         return fields
 
     def _merge_extra_template_files(cat_map: dict[str, list[dict]]) -> None:
-        """Template merging disabled; offsets are sourced solely from offsets.json."""
+        """Template merging is disabled."""
         return
 
-    def _ensure_potential_category(cat_map: dict[str, list[dict]]) -> None:
-        if cat_map.get("Potential"):
-            return
-        specs = [
-            ("Minimum Potential", ("Minimum Potential", "Min Potential")),
-            ("Potential", ("Potential",)),
-            ("Maximum Potential", ("Maximum Potential", "Max Potential")),
-        ]
-        potential_fields: list[dict] = []
-        for display_name, candidates in specs:
-            entry = None
-            for base in candidates:
-                entry = _find_offset_entry(base, "Vitals")
-                if entry:
-                    break
-                entry = _find_offset_entry(base, "Attributes")
-                if entry:
-                    break
-            if not entry:
-                continue
-            field = _entry_to_field(entry, display_name, "Potential")
-            if field is not None:
-                potential_fields.append(field)
-        if potential_fields:
-            cat_map["Potential"] = potential_fields
-
     base_categories: dict[str, list[dict]] = {}
-    if _offset_config is None:
-        try:
-            initialize_offsets()
-        except OffsetSchemaError as exc:
-            # Allow startup without offsets; categories remain empty until loaded later.
-            try:
-                print(f"Offset warnings: {exc}")
-            except Exception:
-                pass
-    base_categories = {}
     bit_cursor: dict[tuple[str, int], int] = {}
     seen_fields_global: dict[str, set[str]] = {}
     if isinstance(_offset_config, dict):
         categories: dict[str, list[dict]] = {}
         combined_sections: list[dict] = []
+        hierarchy_obj = _offset_config.get("hierarchy")
+
+        if isinstance(hierarchy_obj, dict):
+            target_exec = _current_offset_target or MODULE_NAME
+            combined_sections.extend(
+                entry
+                for entry in _iter_selected_entries(cast(dict[str, object], _offset_config), target_exec)
+                if isinstance(entry, dict)
+            )
 
         def _extend(section: object) -> None:
             if isinstance(section, list):
                 combined_sections.extend(item for item in section if isinstance(item, dict))
 
-        _extend(_offset_config.get("offsets"))
-        for key, value in _offset_config.items():
-            if key in {"offsets", "game_info", "base_pointers"}:
-                continue
-            _extend(value)
+        if not combined_sections:
+            _extend(_offset_config.get("offsets"))
+            for key, value in _offset_config.items():
+                if key in {
+                    "offsets",
+                    "hierarchy",
+                    "versions",
+                    "relations",
+                    "_parse_report",
+                    "_split_manifest",
+                    "_dropdown_values_index",
+                    "super_type_map",
+                    "category_normalization",
+                    "game_info",
+                    "base_pointers",
+                }:
+                    continue
+                _extend(value)
         seen_fields: set[tuple[str, str]] = set()
         for entry in combined_sections:
             cat_name = str(entry.get("category", "Misc")).strip() or "Misc"
@@ -1014,10 +1737,10 @@ def _load_categories() -> dict[str, list[dict]]:
             if key in seen_fields:
                 continue
             seen_fields.add(key)
-            offset_val = to_int(entry.get("address"))
+            offset_val = to_int(entry.get("address") or entry.get("offset") or entry.get("hex"))
             if offset_val < 0:
                 continue
-            start_bit = to_int(entry.get("startBit"))
+            start_bit = to_int(entry.get("startBit") or entry.get("start_bit"))
             length_val = to_int(entry.get("length"))
             size_val = to_int(entry.get("size"))
             entry_type = str(entry.get("type", "")).lower()
@@ -1027,6 +1750,8 @@ def _load_categories() -> dict[str, list[dict]]:
                 elif entry_type in ("number", "slider", "int", "uint", "pointer", "float"):
                     length_val = size_val * 8
             if length_val <= 0:
+                length_val = _infer_length_bits(entry.get("type"), entry.get("length"))
+            if length_val <= 0:
                 continue
             field: dict[str, object] = {
                 "name": field_name,
@@ -1034,8 +1759,15 @@ def _load_categories() -> dict[str, list[dict]]:
                 "startBit": int(start_bit),
                 "length": int(length_val),
             }
-            if "type" in entry:
-                field["type"] = entry["type"]
+            raw_type = entry.get("type")
+            normalized_type = entry.get("type_normalized")
+            if raw_type not in (None, ""):
+                field["type_raw"] = raw_type
+            if normalized_type not in (None, ""):
+                field["type_normalized"] = normalized_type
+                field["type"] = normalized_type
+            elif raw_type not in (None, ""):
+                field["type"] = raw_type
             if entry.get("requiresDereference"):
                 field["requiresDereference"] = True
                 field["dereferenceAddress"] = to_int(entry.get("dereferenceAddress"))
@@ -1071,6 +1803,12 @@ def _load_categories() -> dict[str, list[dict]]:
                     length_val = to_int(field.get("length"))
                     key = (cat_name, offset_int)
                     bit_cursor[key] = max(bit_cursor.get(key, 0), start_val + max(length_val, 0))
+    if base_categories:
+        categories = {key: list(value) for key, value in base_categories.items()}
+        if categories:
+            _emit_super_type_warnings()
+            return categories
+
     base_dir = Path(__file__).resolve().parent
     project_root = base_dir.parent
     unified_candidates: list[Path] = []
@@ -1243,7 +1981,6 @@ def _load_categories() -> dict[str, list[dict]]:
                             else:
                                 categories[key_local] = vals
                 if categories:
-                    _ensure_potential_category(categories)
                     _emit_super_type_warnings()
                     return categories
         except Exception:
@@ -1251,107 +1988,31 @@ def _load_categories() -> dict[str, list[dict]]:
     if base_categories:
         categories = {key: list(value) for key, value in base_categories.items()}
         if categories:
-            _ensure_potential_category(categories)
             _emit_super_type_warnings()
             return categories
     return {}
 
 
-def _collect_player_info_entries(player_info: object) -> list[dict]:
-    """Convert nested Player_Info definitions into flat offset entries."""
-    entries: list[dict] = []
-    if not isinstance(player_info, dict):
-        return entries
-    for category, fields in player_info.items():
-        if not isinstance(fields, dict):
-            continue
-        category_name = str(category)
-        for name, definition in fields.items():
-            if not isinstance(definition, dict):
-                continue
-            entry: dict[str, object] = {
-                "category": category_name,
-                "name": str(name),
-            }
-            for key, value in definition.items():
-                if key == "offset_from_base":
-                    if not entry.get("address"):
-                        entry["address"] = value
-                else:
-                    entry[key] = value
-            if "address" not in entry and "offset_from_base" in definition:
-                entry["address"] = definition["offset_from_base"]
-            if "length" not in entry and "size" in definition:
-                entry["length"] = definition["size"]
-            entries.append(entry)
-    return entries
-
-
-def _collect_base_entries(base_data: object) -> list[dict]:
-    """Convert legacy Base map entries into indexed offsets where possible."""
-    entries: list[dict] = []
-    if not isinstance(base_data, dict):
-        return entries
-    for raw_key, raw_value in base_data.items():
-        if isinstance(raw_value, (dict, list)):
-            continue
-        key = str(raw_key).strip().lower()
-        canonical = _FIELD_CANONICAL_LOOKUP.get(key)
-        if canonical is None:
-            continue
-        info = BASE_CANONICAL_FIELD_INFO.get(canonical)
-        if info is None:
-            continue
-        address = to_int(raw_value)
-        entry: dict[str, object] = {
-            "category": info["category"],
-            "name": info.get("display") or _CANONICAL_DISPLAY_NAMES.get(canonical, canonical.title()),
-            "address": address,
-            "type": info.get("type", "number"),
-        }
-        entries.append(entry)
-    return entries
-
-
 def _normalize_chain_steps(chain_data: object) -> list[dict[str, object]]:
     steps: list[dict[str, object]] = []
-    if not isinstance(chain_data, list):
+    if chain_data is None:
         return steps
-    for hop in chain_data:
-        if isinstance(hop, dict):
-            offset = to_int(
-                hop.get("offset")
-                or hop.get("add")
-                or hop.get("delta")
-                or hop.get("value")
-                or hop.get("rva")
+    if not isinstance(chain_data, list):
+        raise OffsetSchemaError("Pointer chain must be a list.")
+    allowed_keys = {"offset", "post_add", "dereference"}
+    for index, hop in enumerate(chain_data):
+        if not isinstance(hop, dict):
+            raise OffsetSchemaError(f"Pointer chain step at index {index} must be an object.")
+        unknown = [key for key in hop.keys() if key not in allowed_keys]
+        if unknown:
+            raise OffsetSchemaError(
+                f"Pointer chain step at index {index} contains unsupported keys: {', '.join(sorted(unknown))}."
             )
-            post_add = to_int(
-                hop.get("post")
-                or hop.get("postAdd")
-                or hop.get("post_add")
-                or hop.get("finalOffset")
-                or hop.get("final_offset")
-            )
-            deref = False
-            for key in ("dereference", "deref", "read", "pointer", "follow", "resolve", "resolvePointer", "resolve_pointer"):
-                if hop.get(key):
-                    deref = True
-                    break
-            hop_type = str(hop.get("type", "")).lower()
-            if hop_type in {"read", "pointer", "deref"}:
-                deref = True
-            steps.append({
-                "offset": offset,
-                "post_add": post_add,
-                "dereference": deref,
-            })
-        else:
-            steps.append({
-                "offset": to_int(hop),
-                "post_add": 0,
-                "dereference": True,
-            })
+        steps.append({
+            "offset": to_int(hop.get("offset")),
+            "post_add": to_int(hop.get("post_add")),
+            "dereference": bool(hop.get("dereference")),
+        })
     return steps
 
 
@@ -1359,48 +2020,24 @@ def _parse_pointer_chain_config(base_cfg: dict | None) -> list[dict[str, object]
     chains: list[dict[str, object]] = []
     if not isinstance(base_cfg, dict):
         return chains
+    allowed_keys = {"address", "chain", "absolute", "direct_table", "final_offset"}
+    unknown = [key for key in base_cfg.keys() if key not in allowed_keys]
+    if unknown:
+        raise OffsetSchemaError(f"Base pointer config contains unsupported keys: {', '.join(sorted(unknown))}.")
     addr_raw = base_cfg.get("address")
-    if addr_raw is None:
-        addr_raw = base_cfg.get("rva")
-    if addr_raw is None:
-        addr_raw = base_cfg.get("base")
     if addr_raw is None:
         return chains
     base_addr = to_int(addr_raw)
-    final_offset = to_int(base_cfg.get("finalOffset") or base_cfg.get("final_offset"))
-    absolute_flag = base_cfg.get("absolute")
-    if absolute_flag is None:
-        absolute_flag = base_cfg.get("isAbsolute")
-    is_absolute = bool(absolute_flag)
-    direct_table = bool(
-        base_cfg.get("direct_table")
-        or base_cfg.get("direct")
-        or base_cfg.get("directTable")
-        or base_cfg.get("treat_as_base")
-    )
-    chain_data = base_cfg.get("chain") or base_cfg.get("steps")
-    if isinstance(chain_data, list) and chain_data:
-        candidate_like = [
-            item for item in chain_data
-            if isinstance(item, dict) and any(key in item for key in ("address", "rva", "base"))
-        ]
-        if candidate_like and len(candidate_like) == len(chain_data):
-            for candidate in chain_data:
-                candidate_addr = candidate.get("address")
-                if candidate_addr is None:
-                    candidate_addr = candidate.get("rva", candidate.get("base"))
-                candidate_absolute = candidate.get("absolute")
-                if candidate_absolute is None:
-                    candidate_absolute = candidate.get("isAbsolute")
-                chains.extend(_parse_pointer_chain_config({
-                    "address": candidate_addr if candidate_addr is not None else base_addr,
-                    "chain": candidate.get("chain") or candidate.get("steps"),
-                    "finalOffset": candidate.get("finalOffset") or candidate.get("final_offset") or final_offset,
-                    "absolute": candidate_absolute if candidate_absolute is not None else is_absolute,
-                    "direct_table": candidate.get("direct_table") or candidate.get("direct"),
-                }))
-        if chains:
-            return chains
+    final_offset = to_int(base_cfg.get("final_offset"))
+    is_absolute = bool(base_cfg.get("absolute"))
+    chain_data = base_cfg.get("chain")
+    if chain_data is None:
+        raise OffsetSchemaError("Base pointer config must include a 'chain' list (use [] for direct table pointers).")
+    if "direct_table" in base_cfg:
+        direct_table = bool(base_cfg.get("direct_table"))
+    else:
+        # Empty chains represent direct table bases unless explicitly overridden.
+        direct_table = isinstance(chain_data, list) and len(chain_data) == 0
     steps = _normalize_chain_steps(chain_data)
     chains.append({
         "rva": base_addr,
@@ -1410,89 +2047,6 @@ def _parse_pointer_chain_config(base_cfg: dict | None) -> list[dict[str, object]
         "direct_table": direct_table,
     })
     return chains
-
-
-def _extend_pointer_candidates(target: list[dict[str, object]], candidates: object) -> None:
-    """Append pointer chain candidates defined using legacy tuple/dict notation."""
-    if not isinstance(candidates, (list, tuple)):
-        return
-    for candidate in candidates:
-        candidate_cfg: dict[str, object] | None = None
-        if isinstance(candidate, dict):
-            candidate_cfg = dict(candidate)
-        elif isinstance(candidate, (list, tuple)):
-            if not candidate:
-                continue
-            rva = to_int(candidate[0])
-            if rva == 0:
-                continue
-            final_offset = to_int(candidate[1]) if len(candidate) > 1 else 0
-            extra_deref = bool(candidate[2]) if len(candidate) > 2 else False
-            direct_table = bool(candidate[3]) if len(candidate) > 3 else False
-            candidate_cfg = {
-                "address": rva,
-                "absolute": False,
-                "finalOffset": final_offset,
-            }
-            steps: list[dict[str, object]] = []
-            if extra_deref:
-                steps.append({"offset": 0, "dereference": True})
-            if steps:
-                candidate_cfg["steps"] = steps
-            if direct_table:
-                candidate_cfg["direct_table"] = True
-        else:
-            continue
-        if not isinstance(candidate_cfg, dict):
-            continue
-        chains = _parse_pointer_chain_config(candidate_cfg)
-        if chains:
-            target.extend(chains)
-
-
-def _normalize_base_pointer_overrides(overrides: dict[str, int] | None) -> dict[str, int]:
-    if not overrides:
-        return {}
-    normalized: dict[str, int] = {}
-    for raw_key, raw_value in overrides.items():
-        addr = to_int(raw_value)
-        if addr is None or addr <= 0:
-            continue
-        label = str(raw_key or "").strip()
-        if not label:
-            continue
-        low = label.lower()
-        if "player" in low:
-            label = "Player"
-        elif "team" in low:
-            label = "Team"
-        elif "stadium" in low:
-            label = "Stadium"
-        elif "arena" in low:
-            label = "Arena"
-        normalized[label] = addr
-    return normalized
-
-
-def _apply_base_pointer_overrides(data: dict, overrides: dict[str, int]) -> None:
-    """Merge dynamic base overrides into an offsets payload."""
-    if not overrides or not isinstance(data, dict):
-        return
-
-    def _merge(target: object) -> dict[str, object]:
-        base_map = target if isinstance(target, dict) else {}
-        merged = dict(base_map)
-        for key, addr in overrides.items():
-            merged[key] = {"address": addr, "absolute": True, "direct_table": True, "finalOffset": 0}
-        return merged
-
-    data["base_pointers"] = _merge(data.get("base_pointers"))
-    versions = data.get("versions")
-    if isinstance(versions, dict):
-        for vinfo in versions.values():
-            if not isinstance(vinfo, dict):
-                continue
-            vinfo["base_pointers"] = _merge(vinfo.get("base_pointers"))
 
 
 def _apply_offset_config(data: dict | None) -> None:
@@ -1507,336 +2061,225 @@ def _apply_offset_config(data: dict | None) -> None:
     global STADIUM_STRIDE, STADIUM_RECORD_SIZE, STADIUM_PTR_CHAINS, STADIUM_NAME_OFFSET, STADIUM_NAME_LENGTH, STADIUM_NAME_ENCODING
     if not data:
         raise OffsetSchemaError(f"{OFFSETS_BUNDLE_FILE} is missing or empty.")
-    # Version-aware fallback helpers (in case the selected payload lost game_info/base_pointers)
-    versions_map_raw = data.get("versions") if isinstance(data.get("versions"), dict) else {}
-    versions_map = cast(dict[str, VersionInfo], versions_map_raw)
-    version_label = _derive_version_label(_current_offset_target or MODULE_NAME)
-    def _version_info(label: str | None) -> VersionInfo:
-        if not versions_map or not label:
-            return VersionInfo()
-        vinfo = versions_map.get(label)
-        if isinstance(vinfo, dict):
-            return vinfo
-        vinfo = versions_map.get(label.upper()) if isinstance(label, str) else None
-        if isinstance(vinfo, dict):
-            return vinfo
-        vinfo = versions_map.get(label.lower()) if isinstance(label, str) else None
-        if isinstance(vinfo, dict):
-            return vinfo
-        return VersionInfo()
-
-    base_pointers_source = data.get("base_pointers") or data.get("BasePointers")
-    legacy_base = data.get("Base") or data.get("base")
-    if legacy_base is None and isinstance(base_pointers_source, dict):
-        legacy_base = base_pointers_source
-    if legacy_base is None:
-        legacy_base = {}
-    combined_offsets: list[dict] = []
-    offsets = data.get("offsets")
-    if isinstance(offsets, list):
-        combined_offsets.extend(offsets)
-    player_info_entries = _collect_player_info_entries(data.get("Player_Info"))
-    if player_info_entries:
-        combined_offsets.extend(player_info_entries)
-    base_entries = _collect_base_entries(legacy_base)
-    if base_entries:
-        combined_offsets.extend(base_entries)
-    team_offsets = data.get("Teams") or data.get("team_offsets")
-    if isinstance(team_offsets, list):
-        combined_offsets.extend(team_offsets)
+    _version_label, base_pointers, game_info = _resolve_version_context(
+        cast(dict[str, Any], data),
+        _current_offset_target or MODULE_NAME,
+    )
+    combined_offsets = [
+        entry
+        for entry in _iter_selected_entries(cast(dict[str, object], data), _current_offset_target or MODULE_NAME)
+        if isinstance(entry, dict)
+    ]
     if not combined_offsets:
         _offset_index.clear()
+        _offset_normalized_index.clear()
+        _offset_hierarchy_index.clear()
         raise OffsetSchemaError(f"No offsets defined in {OFFSETS_BUNDLE_FILE}.")
     _build_offset_index(combined_offsets)
+
     errors: list[str] = []
     warnings: list[str] = []
-    game_info = data.get("game_info") or {}
-    process_info = data.get("process_info") or {}
-    process_base_addr = to_int(
-        process_info.get("base_address")
-        or process_info.get("BaseAddress")
-        or process_info.get("module_base")
-    )
 
-    def _legacy_lookup(section: object, *candidates: str) -> object:
-        if not isinstance(section, dict):
-            return None
-        for key in candidates:
-            if key in section:
-                return section[key]
-        lowered = {str(k).lower(): v for k, v in section.items()}
-        for key in candidates:
-            value = lowered.get(key.lower())
-            if value is not None:
-                return value
-        return None
-
-    module_candidate = game_info.get("executable") or process_info.get("name")
+    module_candidate = game_info.get("executable")
     if module_candidate:
         MODULE_NAME = str(module_candidate)
-    vinfo: VersionInfo = VersionInfo()
-    vgi: dict[str, Any] = {}
-    player_stride_val = to_int(
-        game_info.get("playerSize")
-        or process_info.get("playerSize")
-        or _legacy_lookup(legacy_base, "Player Offset Length")
-    )
-    if player_stride_val <= 0:
-        vinfo = _version_info(version_label)
-        vgi = cast(dict[str, Any], vinfo.get("game_info") or {})
-        player_stride_val = to_int(vgi.get("playerSize") or vgi.get("player_size"))
-    if player_stride_val <= 0:
-        warnings.append("Player stride missing; defaulting to 0.")
-    else:
-        PLAYER_STRIDE = player_stride_val
-    team_stride_val = to_int(
-        game_info.get("teamSize")
-        or process_info.get("teamSize")
-        or _legacy_lookup(legacy_base, "Team Offset Length")
-    )
-    if team_stride_val <= 0:
-        vinfo = _version_info(version_label)
-        vgi = cast(dict[str, Any], vinfo.get("game_info") or {})
-        team_stride_val = to_int(vgi.get("teamSize") or vgi.get("team_size"))
-    if team_stride_val <= 0:
-        warnings.append("Team stride missing; defaulting to 0.")
-    else:
-        TEAM_STRIDE = team_stride_val
-        TEAM_RECORD_SIZE = TEAM_STRIDE
-    base_pointers: dict[str, Any] = base_pointers_source if isinstance(base_pointers_source, dict) else {}
-    if not base_pointers and versions_map:
-        vinfo = _version_info(version_label)
-        v_bp = cast(dict[str, Any], vinfo.get("base_pointers") or {})
-        if v_bp:
-            base_pointers = v_bp
-    if not isinstance(base_pointers, dict):
-        base_pointers = {}
-    if not base_pointers:
-        legacy_player_addr_raw = _legacy_lookup(legacy_base, "Player Base Address")
-        legacy_player_chain = _legacy_lookup(legacy_base, "Player Offset Chain")
-        if legacy_player_addr_raw is not None:
-            addr_int = to_int(legacy_player_addr_raw)
-            direct_player = not legacy_player_chain
-            absolute_flag = True
-            if addr_int and process_base_addr:
-                if 0 <= addr_int < process_base_addr:
-                    absolute_flag = False
-            entry: dict[str, object] = {
-                "address": addr_int,
-                "absolute": absolute_flag,
-                "chain": legacy_player_chain if isinstance(legacy_player_chain, list) else [],
-            }
-            if direct_player:
-                entry["direct_table"] = True
-            base_pointers["Player"] = entry
-        legacy_team_addr_raw = _legacy_lookup(legacy_base, "Team Base Address")
-        legacy_team_chain = _legacy_lookup(legacy_base, "Team Offset Chain")
-        if legacy_team_addr_raw is not None:
-            addr_int = to_int(legacy_team_addr_raw)
-            direct_team = not legacy_team_chain
-            absolute_flag = True
-            if addr_int and process_base_addr:
-                if 0 <= addr_int < process_base_addr:
-                    absolute_flag = False
-            entry: dict[str, object] = {
-                "address": addr_int,
-                "absolute": absolute_flag,
-                "chain": legacy_team_chain if isinstance(legacy_team_chain, list) else [],
-            }
-            if direct_team:
-                entry["direct_table"] = True
-            base_pointers["Team"] = entry
-    global TEAM_TABLE_RVA
-    TEAM_TABLE_RVA = to_int(_legacy_lookup(legacy_base, "Team Base Address"))
 
     def _pointer_address(defn: dict | None) -> tuple[int, bool]:
         if not isinstance(defn, dict):
             return 0, False
-        for key in ("address", "rva", "base"):
-            if key in defn:
-                return to_int(defn.get(key)), True
-        return 0, False
+        if "address" not in defn:
+            return 0, False
+        return to_int(defn.get("address")), True
+
+    # Validate base pointers and mapped game_info size keys using exact keys only.
+    for key_name in REQUIRED_LIVE_BASE_POINTER_KEYS:
+        entry = base_pointers.get(key_name)
+        if not isinstance(entry, dict):
+            errors.append(f"Missing required base pointer '{key_name}'.")
+            continue
+        addr_val, has_addr = _pointer_address(entry)
+        if not has_addr:
+            errors.append(f"Base pointer '{key_name}' is missing required 'address' value.")
+            continue
+        if addr_val <= 0:
+            errors.append(f"Base pointer '{key_name}' address must be > 0.")
+    for pointer_key, size_key in BASE_POINTER_SIZE_KEY_MAP.items():
+        if pointer_key not in base_pointers:
+            continue
+        entry = base_pointers.get(pointer_key)
+        if not isinstance(entry, dict):
+            errors.append(f"Base pointer '{pointer_key}' must be an object.")
+            continue
+        if size_key is None:
+            continue
+        size_val = to_int(game_info.get(size_key))
+        if size_val <= 0:
+            errors.append(f"Missing or invalid game_info '{size_key}' for base pointer '{pointer_key}'.")
+
+    PLAYER_STRIDE = max(0, to_int(game_info.get("playerSize")) or 0)
+    TEAM_STRIDE = max(0, to_int(game_info.get("teamSize")) or 0)
+    STAFF_STRIDE = max(0, to_int(game_info.get("staffSize")) or 0)
+    STADIUM_STRIDE = max(0, to_int(game_info.get("stadiumSize")) or 0)
+    TEAM_RECORD_SIZE = TEAM_STRIDE
+    STAFF_RECORD_SIZE = STAFF_STRIDE
+    STADIUM_RECORD_SIZE = STADIUM_STRIDE
 
     PLAYER_PTR_CHAINS.clear()
     player_base = base_pointers.get("Player")
-    player_addr, player_addr_defined = _pointer_address(player_base)
-    if not player_addr_defined:
-        warnings.append("Player base pointer definition missing; live player scanning disabled.")
-        PLAYER_TABLE_RVA = 0
-    else:
+    player_addr, player_addr_defined = _pointer_address(player_base if isinstance(player_base, dict) else None)
+    if player_addr_defined:
         PLAYER_TABLE_RVA = player_addr
-        chains = _parse_pointer_chain_config(player_base)
-        if chains:
-            PLAYER_PTR_CHAINS.extend(chains)
+        player_chains = _parse_pointer_chain_config(player_base)
+        if player_chains:
+            PLAYER_PTR_CHAINS.extend(player_chains)
         else:
-            warnings.append("Player base pointer chain produced no resolvable entries; live player scanning disabled.")
+            errors.append("Player base pointer chain produced no resolvable entries.")
+    else:
+        PLAYER_TABLE_RVA = 0
+
     TEAM_PTR_CHAINS.clear()
     team_base = base_pointers.get("Team")
-    team_addr, team_addr_defined = _pointer_address(team_base)
-    if not team_addr_defined:
-        warnings.append("Team base pointer definition missing; team scanning disabled.")
-    else:
-        chains = _parse_pointer_chain_config(team_base)
-        if chains:
-            TEAM_PTR_CHAINS.extend(chains)
+    team_addr, team_addr_defined = _pointer_address(team_base if isinstance(team_base, dict) else None)
+    global TEAM_TABLE_RVA
+    TEAM_TABLE_RVA = team_addr if team_addr_defined else 0
+    if team_addr_defined:
+        team_chains = _parse_pointer_chain_config(team_base)
+        if team_chains:
+            TEAM_PTR_CHAINS.extend(team_chains)
         else:
-            warnings.append("Team base pointer chain produced no resolvable entries; team scanning disabled.")
+            errors.append("Team base pointer chain produced no resolvable entries.")
+
     DRAFT_PTR_CHAINS.clear()
-    draft_entry = (
-        base_pointers.get("DraftClass")
-        or base_pointers.get("draftclass")
-        or base_pointers.get("Draft")
-    )
-    if draft_entry:
+    draft_entry = base_pointers.get("DraftClass")
+    if isinstance(draft_entry, dict):
         draft_chains = _parse_pointer_chain_config(draft_entry)
         if draft_chains:
             DRAFT_PTR_CHAINS.extend(draft_chains)
-    pointer_candidates = data.get("pointer_candidates") or data.get("PointerCandidates")
-    if isinstance(pointer_candidates, dict):
-        extra_player_candidates = (
-            pointer_candidates.get("Player")
-            or pointer_candidates.get("player")
-            or pointer_candidates.get("Players")
-        )
-        if extra_player_candidates:
-            _extend_pointer_candidates(PLAYER_PTR_CHAINS, extra_player_candidates)
-        extra_team_candidates = (
-            pointer_candidates.get("Team")
-            or pointer_candidates.get("team")
-            or pointer_candidates.get("Teams")
-        )
-        if extra_team_candidates:
-            _extend_pointer_candidates(TEAM_PTR_CHAINS, extra_team_candidates)
-        extra_draft_candidates = (
-            pointer_candidates.get("DraftClass")
-            or pointer_candidates.get("draft")
-            or pointer_candidates.get("draftclass")
-        )
-        if extra_draft_candidates:
-            _extend_pointer_candidates(DRAFT_PTR_CHAINS, extra_draft_candidates)
-        extra_staff_candidates = pointer_candidates.get("Staff") or pointer_candidates.get("staff")
-        if extra_staff_candidates:
-            _extend_pointer_candidates(STAFF_PTR_CHAINS, extra_staff_candidates)
-        extra_stadium_candidates = (
-            pointer_candidates.get("Stadium")
-            or pointer_candidates.get("stadium")
-            or pointer_candidates.get("Stadiums")
-        )
-        if extra_stadium_candidates:
-            _extend_pointer_candidates(STADIUM_PTR_CHAINS, extra_stadium_candidates)
-    name_char_limit: int | None = None
 
-    def _derive_char_capacity(offset_val: int, enc: str, length_val: int) -> int | None:
-        if length_val > 0:
-            return length_val
-        if PLAYER_STRIDE > 0 and offset_val >= 0:
-            try:
-                remaining = max(0, PLAYER_STRIDE - offset_val)
-                return remaining
-            except Exception:
-                return None
-        return None
+    def _entry_address(entry: dict[str, object]) -> int:
+        return to_int(entry.get("address") or entry.get("offset") or entry.get("hex"))
 
-    first_entry = _find_offset_entry("First Name", "Vitals")
-    if not first_entry:
-        OFF_FIRST_NAME = to_int(_legacy_lookup(legacy_base, "Offset Player First Name", "Offset First Name", "First Name Offset")) or 0
-        FIRST_NAME_ENCODING = "utf16"
-        if OFF_FIRST_NAME > 0:
-            cap = _derive_char_capacity(OFF_FIRST_NAME, FIRST_NAME_ENCODING, 0)
-            if cap is not None:
-                name_char_limit = cap if name_char_limit is None else max(name_char_limit, cap)
-            warnings.append("Vitals.First Name not found; using Base offset.")
-        else:
-            warnings.append("Vitals.First Name not found; name editing limited.")
-    else:
-        OFF_FIRST_NAME = to_int(first_entry.get("address"))
-        if OFF_FIRST_NAME < 0:
-            warnings.append("First Name address must be zero or positive; disabling first-name edits.")
-            OFF_FIRST_NAME = 0
-        first_type = str(first_entry.get("type", "")).lower()
-        FIRST_NAME_ENCODING = "ascii" if first_type in ("string", "text") else "utf16"
-        length_val = to_int(first_entry.get("length"))
-        cap = _derive_char_capacity(OFF_FIRST_NAME, FIRST_NAME_ENCODING, length_val)
-        if cap is not None:
-            name_char_limit = cap if name_char_limit is None else max(name_char_limit, cap)
-    last_entry = _find_offset_entry("Last Name", "Vitals")
-    if not last_entry:
-        OFF_LAST_NAME = to_int(_legacy_lookup(legacy_base, "Offset Player Last Name", "Offset Last Name", "Last Name Offset")) or 0
-        LAST_NAME_ENCODING = "utf16"
-        if OFF_LAST_NAME >= 0:
-            cap = _derive_char_capacity(OFF_LAST_NAME, LAST_NAME_ENCODING, 0)
-            if cap is not None:
-                name_char_limit = cap if name_char_limit is None else max(name_char_limit, cap)
-            warnings.append("Vitals.Last Name not found; using Base offset.")
-        else:
-            warnings.append("Vitals.Last Name not found; name editing limited.")
-    else:
-        OFF_LAST_NAME = to_int(last_entry.get("address"))
-        if OFF_LAST_NAME < 0:
-            warnings.append("Last Name address must be zero or positive; disabling last-name edits.")
-            OFF_LAST_NAME = 0
-        last_type = str(last_entry.get("type", "")).lower()
-        LAST_NAME_ENCODING = "ascii" if last_type in ("string", "text") else "utf16"
-        length_val = to_int(last_entry.get("length"))
-        cap = _derive_char_capacity(OFF_LAST_NAME, LAST_NAME_ENCODING, length_val)
-        if cap is not None:
-            name_char_limit = cap if name_char_limit is None else max(name_char_limit, cap)
-    if name_char_limit is not None:
-        NAME_MAX_CHARS = name_char_limit
-    team_entry = _find_offset_entry("Current Team", "Vitals")
-    if not team_entry:
+    def _find_schema_field(source_file: str, normalized_name: str) -> dict[str, object] | None:
+        source_key = str(source_file or "").strip().casefold()
+        normalized_key = str(normalized_name or "").strip().upper()
+        if not source_key or not normalized_key:
+            return None
+        candidates: list[dict[str, object]] = []
+        for entry in combined_offsets:
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("source_offsets_file") or "").strip().casefold() != source_key:
+                continue
+            if str(entry.get("normalized_name") or "").strip().upper() != normalized_key:
+                continue
+            candidates.append(cast(dict[str, object], entry))
+        if not candidates:
+            return None
+
+        def _score(candidate: dict[str, object]) -> tuple[int, int, int, int, int]:
+            category_text = str(candidate.get("canonical_category") or candidate.get("category") or "").strip().lower()
+            non_stats = 0 if category_text.startswith("stats") else 1
+            deref_raw = (
+                candidate.get("dereferenceAddress")
+                or candidate.get("deref_offset")
+                or candidate.get("dereference_address")
+            )
+            has_deref = 1 if to_int(deref_raw) > 0 else 0
+            addr = _entry_address(candidate)
+            addr_valid = 1 if addr > 0 else 0
+            length_val = to_int(candidate.get("length"))
+            return (non_stats, has_deref, addr_valid, addr, length_val)
+
+        return max(candidates, key=_score)
+
+    def _require_field(key_name: str) -> dict | None:
+        source_file, norm_name = REQUIRED_OFFSET_SCHEMA_FIELDS[key_name]
+        entry = _find_schema_field(source_file, norm_name)
+        if not isinstance(entry, dict):
+            errors.append(
+                "Missing required offset field "
+                f"'{source_file}:{norm_name}'."
+            )
+            return None
+        return entry
+
+    first_entry = _require_field("player_first_name")
+    OFF_FIRST_NAME = (
+        to_int(first_entry.get("address") or first_entry.get("offset") or first_entry.get("hex"))
+        if isinstance(first_entry, dict)
+        else 0
+    )
+    if OFF_FIRST_NAME < 0:
+        errors.append("Vitals/FIRSTNAME address must be >= 0.")
+        OFF_FIRST_NAME = 0
+    FIRST_NAME_ENCODING = "ascii" if str((first_entry or {}).get("type", "")).lower() in ("string", "text") else "utf16"
+    first_len = to_int((first_entry or {}).get("length"))
+    if first_len <= 0:
+        errors.append("Vitals/FIRSTNAME length must be > 0.")
+
+    last_entry = _require_field("player_last_name")
+    OFF_LAST_NAME = (
+        to_int(last_entry.get("address") or last_entry.get("offset") or last_entry.get("hex"))
+        if isinstance(last_entry, dict)
+        else 0
+    )
+    if OFF_LAST_NAME < 0:
+        errors.append("Vitals/LASTNAME address must be >= 0.")
+        OFF_LAST_NAME = 0
+    LAST_NAME_ENCODING = "ascii" if str((last_entry or {}).get("type", "")).lower() in ("string", "text") else "utf16"
+    last_len = to_int((last_entry or {}).get("length"))
+    if last_len <= 0:
+        errors.append("Vitals/LASTNAME length must be > 0.")
+    if first_len > 0 or last_len > 0:
+        NAME_MAX_CHARS = max(first_len or 0, last_len or 0)
+
+    team_entry = _require_field("player_current_team")
+    OFF_TEAM_PTR = to_int(
+        (team_entry or {}).get("dereferenceAddress")
+        or (team_entry or {}).get("deref_offset")
+        or (team_entry or {}).get("dereference_address")
+    )
+    if OFF_TEAM_PTR <= 0:
+        team_type = str((team_entry or {}).get("type_normalized") or (team_entry or {}).get("type") or "").strip().lower()
+        if team_type in {"pointer", "address", "ptr", "uint64", "ulonglong", "qword"}:
+            # CURRENTTEAM is frequently stored as a direct uint64 team-record pointer.
+            OFF_TEAM_PTR = to_int((team_entry or {}).get("address") or (team_entry or {}).get("offset") or (team_entry or {}).get("hex"))
+    if OFF_TEAM_PTR < 0:
+        errors.append("Vitals/CURRENTTEAM dereference address must be >= 0.")
         OFF_TEAM_PTR = 0
-        OFF_TEAM_ID = to_int(_legacy_lookup(legacy_base, "Offset Player Team", "Player Team Offset")) or 0
-        if OFF_TEAM_ID <= 0:
-            warnings.append("Player_Info.Vitals.Current Team entry missing; team link disabled.")
-    else:
-        OFF_TEAM_PTR = to_int(
-            team_entry.get("dereferenceAddress")
-            or team_entry.get("deref_offset")
-            or team_entry.get("dereference_address")
-        )
-        if OFF_TEAM_PTR < 0:
-            warnings.append("Current Team deref address must be >= 0; disabling team link.")
-            OFF_TEAM_PTR = 0
-        OFF_TEAM_ID = to_int(team_entry.get("address")) or to_int(_legacy_lookup(legacy_base, "Offset Player Team", "Player Team Offset")) or 0
-    team_name_entry = _find_offset_entry("Team Name", "Teams")
-    if not team_name_entry:
-        TEAM_NAME_OFFSET = to_int(_legacy_lookup(legacy_base, "Offset Team Name", "Team Name Offset")) or 0
-        TEAM_NAME_ENCODING = "utf16"
-        if TEAM_NAME_OFFSET > 0 and TEAM_STRIDE > 0:
-            TEAM_NAME_LENGTH = max(0, TEAM_STRIDE - TEAM_NAME_OFFSET)
-            OFF_TEAM_NAME = TEAM_NAME_OFFSET
-            warnings.append("Teams.Team Name missing; using Base offset and derived length.")
-        else:
-            warnings.append("Teams.Team Name entry missing; team names disabled.")
-            TEAM_NAME_LENGTH = 0
-            OFF_TEAM_NAME = 0
-    else:
-        TEAM_NAME_OFFSET = to_int(team_name_entry.get("address"))
-        if TEAM_NAME_OFFSET < 0:
-            warnings.append("Team Name address must be >= 0; team names disabled.")
-            TEAM_NAME_OFFSET = 0
-        team_type = str(team_name_entry.get("type", "")).lower()
-        TEAM_NAME_ENCODING = "ascii" if team_type in ("string", "text") else "utf16"
-        TEAM_NAME_LENGTH = to_int(team_name_entry.get("length"))
-        if TEAM_NAME_LENGTH <= 0:
-            if TEAM_STRIDE > 0 and TEAM_NAME_OFFSET >= 0:
-                remaining = max(0, TEAM_STRIDE - TEAM_NAME_OFFSET)
-                TEAM_NAME_LENGTH = remaining
-            if TEAM_NAME_LENGTH <= 0:
-                warnings.append("Team Name length unavailable; team names disabled.")
-        OFF_TEAM_NAME = TEAM_NAME_OFFSET
+    OFF_TEAM_ID = to_int((team_entry or {}).get("address") or (team_entry or {}).get("offset") or (team_entry or {}).get("hex")) or 0
+    if OFF_TEAM_ID <= 0:
+        errors.append("Vitals/CURRENTTEAM address must be > 0.")
+
+    team_name_entry = _require_field("team_name")
+    TEAM_NAME_OFFSET = to_int(
+        (team_name_entry or {}).get("address")
+        or (team_name_entry or {}).get("offset")
+        or (team_name_entry or {}).get("hex")
+    ) or 0
+    if TEAM_NAME_OFFSET < 0:
+        errors.append("Team Vitals/TEAMNAME address must be >= 0.")
+        TEAM_NAME_OFFSET = 0
+    team_name_type = str((team_name_entry or {}).get("type", "")).lower()
+    TEAM_NAME_ENCODING = "ascii" if team_name_type in ("string", "text") else "utf16"
+    TEAM_NAME_LENGTH = to_int((team_name_entry or {}).get("length")) or 0
+    if TEAM_NAME_LENGTH <= 0:
+        errors.append("Team Vitals/TEAMNAME length must be > 0.")
+    OFF_TEAM_NAME = TEAM_NAME_OFFSET
+
     team_player_entries = [
-        entry for (cat, _), entry in _offset_index.items() if cat == "team players"
+        entry
+        for entry in combined_offsets
+        if str(entry.get("canonical_category", "")) == "Team Players"
     ]
     if team_player_entries:
         TEAM_PLAYER_SLOT_COUNT = len(team_player_entries)
     TEAM_FIELD_DEFS.clear()
-    for label, entry_name in TEAM_FIELD_SPECS:
-        entry_obj = _find_offset_entry(entry_name, "Teams")
+    for label, normalized_name in TEAM_FIELD_SPECS:
+        entry_obj = _find_schema_field("offsets_teams.json", normalized_name)
         if not isinstance(entry_obj, dict):
             continue
-        offset = to_int(entry_obj.get("address"))
+        offset = to_int(entry_obj.get("address") or entry_obj.get("offset") or entry_obj.get("hex"))
         length_val = to_int(entry_obj.get("length"))
         entry_type = str(entry_obj.get("type", "")).lower()
         if offset <= 0 or length_val <= 0:
@@ -1845,66 +2288,56 @@ def _apply_offset_config(data: dict | None) -> None:
             continue
         encoding = "ascii" if entry_type in ("string", "text") else "utf16"
         TEAM_FIELD_DEFS[label] = (offset, length_val, encoding)
-    if TEAM_STRIDE > 0:
-        TEAM_RECORD_SIZE = TEAM_STRIDE
-    # Staff stride/name metadata
-    staff_stride_val = to_int(
-        game_info.get("staffSize")
-        or process_info.get("staffSize")
-        or _legacy_lookup(legacy_base, "Staff Offset Length")
-    )
-    if staff_stride_val <= 0:
-        vinfo = _version_info(version_label)
-        vgi = cast(dict[str, Any], vinfo.get("game_info") or {})
-        staff_stride_val = to_int(vgi.get("staffSize") or vgi.get("staff_size"))
-    STAFF_STRIDE = max(0, staff_stride_val or 0)
-    STAFF_RECORD_SIZE = STAFF_STRIDE
+
     STAFF_PTR_CHAINS.clear()
     staff_base = base_pointers.get("Staff")
-    staff_addr, staff_addr_defined = _pointer_address(staff_base)
+    staff_addr, staff_addr_defined = _pointer_address(staff_base if isinstance(staff_base, dict) else None)
     if staff_addr_defined:
-        chains = _parse_pointer_chain_config(staff_base)
-        if chains:
-            STAFF_PTR_CHAINS.extend(chains)
-    staff_first_entry = _find_offset_entry("Staff Vitals - FIRSTNAME", "Staff")
-    staff_last_entry = _find_offset_entry("Staff Vitals - LASTNAME", "Staff")
-    staff_name_entry = staff_first_entry or staff_last_entry
-    if staff_name_entry:
-        STAFF_NAME_OFFSET = to_int(staff_name_entry.get("address")) or 0
-        entry_type = str(staff_name_entry.get("type", "")).lower()
-        STAFF_NAME_ENCODING = "ascii" if entry_type in ("string", "text") else "utf16"
-        STAFF_NAME_LENGTH = to_int(staff_name_entry.get("length")) or 0
-        if STAFF_NAME_LENGTH <= 0 and STAFF_STRIDE > 0 and STAFF_NAME_OFFSET > 0:
-            remaining = max(0, STAFF_STRIDE - STAFF_NAME_OFFSET)
-            STAFF_NAME_LENGTH = remaining
-    # Stadium stride/name metadata
-    stadium_stride_val = to_int(
-        game_info.get("stadiumSize")
-        or process_info.get("stadiumSize")
-        or _legacy_lookup(legacy_base, "Stadium Offset Length")
-    )
-    if stadium_stride_val <= 0:
-        vinfo = _version_info(version_label)
-        vgi = cast(dict[str, Any], vinfo.get("game_info") or {})
-        stadium_stride_val = to_int(vgi.get("stadiumSize") or vgi.get("stadium_size"))
-    STADIUM_STRIDE = max(0, stadium_stride_val or 0)
-    STADIUM_RECORD_SIZE = STADIUM_STRIDE
+        staff_chains = _parse_pointer_chain_config(staff_base)
+        if staff_chains:
+            STAFF_PTR_CHAINS.extend(staff_chains)
+        else:
+            errors.append("Staff base pointer chain produced no resolvable entries.")
+
+    staff_first_entry = _require_field("staff_first_name")
+    staff_last_entry = _require_field("staff_last_name")
+    STAFF_NAME_OFFSET = to_int(
+        (staff_first_entry or {}).get("address")
+        or (staff_first_entry or {}).get("offset")
+        or (staff_first_entry or {}).get("hex")
+    ) or 0
+    STAFF_NAME_ENCODING = "ascii" if str((staff_first_entry or {}).get("type", "")).lower() in ("string", "text") else "utf16"
+    STAFF_NAME_LENGTH = to_int((staff_first_entry or {}).get("length")) or 0
+    if STAFF_NAME_LENGTH <= 0:
+        errors.append("Staff Vitals/FIRSTNAME length must be > 0.")
+    if isinstance(staff_last_entry, dict):
+        last_staff_len = to_int(staff_last_entry.get("length"))
+        if last_staff_len <= 0:
+            errors.append("Staff Vitals/LASTNAME length must be > 0.")
+
     STADIUM_PTR_CHAINS.clear()
     stadium_base = base_pointers.get("Stadium")
-    stadium_addr, stadium_addr_defined = _pointer_address(stadium_base)
+    stadium_addr, stadium_addr_defined = _pointer_address(stadium_base if isinstance(stadium_base, dict) else None)
     if stadium_addr_defined:
-        chains = _parse_pointer_chain_config(stadium_base)
-        if chains:
-            STADIUM_PTR_CHAINS.extend(chains)
-    stadium_name_entry = _find_offset_entry("Stadium Vitals - NAME", "Stadium")
-    if stadium_name_entry:
-        STADIUM_NAME_OFFSET = to_int(stadium_name_entry.get("address")) or 0
-        entry_type = str(stadium_name_entry.get("type", "")).lower()
-        STADIUM_NAME_ENCODING = "ascii" if entry_type in ("string", "text") else "utf16"
-        STADIUM_NAME_LENGTH = to_int(stadium_name_entry.get("length")) or 0
-        if STADIUM_NAME_LENGTH <= 0 and STADIUM_STRIDE > 0 and STADIUM_NAME_OFFSET > 0:
-            remaining = max(0, STADIUM_STRIDE - STADIUM_NAME_OFFSET)
-            STADIUM_NAME_LENGTH = remaining
+        stadium_chains = _parse_pointer_chain_config(stadium_base)
+        if stadium_chains:
+            STADIUM_PTR_CHAINS.extend(stadium_chains)
+        else:
+            errors.append("Stadium base pointer chain produced no resolvable entries.")
+
+    stadium_name_entry = _require_field("stadium_name")
+    STADIUM_NAME_OFFSET = to_int(
+        (stadium_name_entry or {}).get("address")
+        or (stadium_name_entry or {}).get("offset")
+        or (stadium_name_entry or {}).get("hex")
+    ) or 0
+    if STADIUM_NAME_OFFSET < 0:
+        errors.append("Stadium/ARENANAME address must be >= 0.")
+        STADIUM_NAME_OFFSET = 0
+    STADIUM_NAME_ENCODING = "ascii" if str((stadium_name_entry or {}).get("type", "")).lower() in ("string", "text") else "utf16"
+    STADIUM_NAME_LENGTH = to_int((stadium_name_entry or {}).get("length")) or 0
+    if STADIUM_NAME_LENGTH <= 0:
+        errors.append("Stadium/ARENANAME length must be > 0.")
     if errors:
         raise OffsetSchemaError(" ; ".join(errors))
     if warnings:
@@ -1915,44 +2348,56 @@ def _apply_offset_config(data: dict | None) -> None:
 def initialize_offsets(
     target_executable: str | None = None,
     force: bool = False,
-    base_pointer_overrides: dict[str, int] | None = None,
+    filename: str | None = None,
 ) -> None:
     """Ensure offset data for the requested executable is loaded."""
-    global _offset_file_path, _offset_config, MODULE_NAME, _current_offset_target, _base_pointer_overrides
-    target_exec = target_executable or MODULE_NAME
-    target_key = target_exec.lower()
-    overrides_norm = _normalize_base_pointer_overrides(base_pointer_overrides)
-    if overrides_norm:
-        _base_pointer_overrides = overrides_norm
-    elif _base_pointer_overrides:
-        overrides_norm = dict(_base_pointer_overrides)
-    if _offset_config is not None and not force and _current_offset_target == target_key:
+    global _offset_file_path, _offset_config, MODULE_NAME, _current_offset_target
+    with timed("offsets.initialize_offsets"):
+        target_exec = target_executable or MODULE_NAME
+        target_key = target_exec.lower()
+        if force:
+            _OFFSET_CACHE.invalidate_target(target_key)
+        if _offset_config is not None and not force and _current_offset_target == target_key and not filename:
+            MODULE_NAME = target_exec
+            _sync_player_stats_relations(_offset_config)
+            return
+        if filename:
+            path = Path(filename)
+            try:
+                with path.open("r", encoding="utf-8") as fh:
+                    raw = json.load(fh)
+            except Exception as exc:
+                raise OffsetSchemaError(f"Failed to load offsets file '{filename}': {exc}") from exc
+            resolver = OffsetResolver(convert_schema=_convert_merged_offsets_schema)
+            try:
+                data = resolver.require_dict(raw, target_exec)
+            except OffsetResolveError as exc:
+                raise OffsetSchemaError(str(exc)) from exc
+        else:
+            path, data = _load_offset_config_file(target_exec)
+        if not isinstance(data, dict):
+            raise OffsetSchemaError(
+                f"Unable to locate offset schema for {target_exec}. Expected {SPLIT_OFFSETS_LEAGUE_FILE} and "
+                f"{', '.join(SPLIT_OFFSETS_DOMAIN_FILES)} in the Offsets folder."
+            )
+        _offset_file_path = path
+        _offset_config = data
         MODULE_NAME = target_exec
-        if overrides_norm:
-            _apply_base_pointer_overrides(_offset_config, overrides_norm)
-            _apply_offset_config(_offset_config)
-        return
-    path, data = _load_offset_config_file(target_exec)
-    if data is None:
-        raise OffsetSchemaError(
-            f"Unable to locate offset schema for {target_exec}. Expected {OFFSETS_BUNDLE_FILE} in the Offsets folder."
-        )
-    if overrides_norm:
-        _apply_base_pointer_overrides(data, overrides_norm)
-    _offset_file_path = path
-    _offset_config = data
-    MODULE_NAME = target_exec
-    _apply_offset_config(data)
-    MODULE_NAME = target_exec
-    _current_offset_target = target_key
+        _apply_offset_config(data)
+        _sync_player_stats_relations(data)
+        MODULE_NAME = target_exec
+        _current_offset_target = target_key
 
 
 __all__ = [
     "OffsetSchemaError",
     "initialize_offsets",
-    "OFFSET_FIELD_SYNONYMS",
-    "CATEGORY_ALIASES",
+    "BASE_POINTER_SIZE_KEY_MAP",
+    "REQUIRED_LIVE_BASE_POINTER_KEYS",
+    "STRICT_OFFSET_FIELD_KEYS",
+    "STRICT_OFFSET_HIERARCHY_FIELD_KEYS",
     "CATEGORY_SUPER_TYPES",
+    "PLAYER_STATS_RELATIONS",
     "PLAYER_TABLE_RVA",
     "PLAYER_STRIDE",
     "PLAYER_PTR_CHAINS",
@@ -2006,7 +2451,3 @@ __all__ = [
     "NAME_SUFFIXES",
     "_load_categories",
 ]
-class VersionInfo(TypedDict, total=False):
-    """Offsets bundle metadata for a specific game version."""
-    game_info: dict[str, Any]
-    base_pointers: dict[str, Any]

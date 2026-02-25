@@ -1,0 +1,9 @@
+{
+  "era": "modern",
+  "season": "2026-27",
+  "pace_factor": 1.01,
+  "hand_checking": false,
+  "defensive_three_seconds": true,
+  "salary_cap": 164000000.0,
+  "luxury_tax_line": 199500000.0
+}

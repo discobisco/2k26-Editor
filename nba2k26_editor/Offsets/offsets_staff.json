@@ -1,0 +1,334 @@
+{
+  "Staff offsets": [
+    {
+      "Staff Vitals": {
+        "contract": [
+          {
+            "normalized_name": "SALARY",
+            "display_name": "Salary",
+            "versions": {
+              "2K26": {
+                "address": 269,
+                "group": "contract",
+                "hex": "0x10D",
+                "length": 24,
+                "type": "bit"
+              }
+            }
+          },
+          {
+            "normalized_name": "YEARSLEFT",
+            "display_name": "Years Left",
+            "versions": {
+              "2K26": {
+                "address": 293,
+                "group": "contract",
+                "hex": "0x125",
+                "length": 4,
+                "type": "bit"
+              }
+            }
+          }
+        ],
+        "vitals": [
+          {
+            "normalized_name": "UNIQUEPHOTOID",
+            "display_name": "*Unique Photo ID",
+            "versions": {
+              "2K26": {
+                "address": 264,
+                "group": "vitals",
+                "hex": "0x108",
+                "type": "ushort"
+              }
+            }
+          },
+          {
+            "normalized_name": "FACEID",
+            "display_name": "Face ID",
+            "versions": {
+              "2K26": {
+                "address": 274,
+                "group": "vitals",
+                "hex": "0x112",
+                "type": "ushort"
+              }
+            }
+          },
+          {
+            "normalized_name": "FIRSTNAME",
+            "display_name": "First Name",
+            "versions": {
+              "2K26": {
+                "address": 80,
+                "group": "vitals",
+                "hex": "0x50",
+                "length": 40,
+                "type": "wstring"
+              }
+            }
+          },
+          {
+            "normalized_name": "HEIGHT",
+            "display_name": "Height",
+            "versions": {
+              "2K26": {
+                "address": 0,
+                "group": "vitals",
+                "hex": "0x0",
+                "type": "ushort"
+              }
+            }
+          },
+          {
+            "normalized_name": "LASTNAME",
+            "display_name": "Last Name",
+            "versions": {
+              "2K26": {
+                "address": 120,
+                "group": "vitals",
+                "hex": "0x78",
+                "length": 40,
+                "type": "wstring"
+              }
+            }
+          },
+          {
+            "normalized_name": "POSITION",
+            "display_name": "Position",
+            "versions": {
+              "2K26": {
+                "address": 362,
+                "group": "vitals",
+                "hex": "0x16A",
+                "length": 1,
+                "type": "ubyte"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Staff Attributes": {
+        "attributes": [
+          {
+            "normalized_name": "ANALYTICS",
+            "display_name": "Analytics",
+            "versions": {
+              "2K26": {
+                "address": 343,
+                "group": "attributes",
+                "hex": "0x157",
+                "length": 1,
+                "type": "ubyte"
+              }
+            }
+          },
+          {
+            "normalized_name": "BUSINESS",
+            "display_name": "Business",
+            "versions": {
+              "2K26": {
+                "address": 340,
+                "group": "attributes",
+                "hex": "0x154",
+                "length": 1,
+                "type": "ubyte"
+              }
+            }
+          },
+          {
+            "normalized_name": "CHARISMA",
+            "display_name": "Charisma",
+            "versions": {
+              "2K26": {
+                "address": 342,
+                "group": "attributes",
+                "hex": "0x156",
+                "length": 1,
+                "type": "ubyte"
+              }
+            }
+          },
+          {
+            "normalized_name": "DEFENSECOACHING",
+            "display_name": "Defensive Coaching",
+            "versions": {
+              "2K26": {
+                "address": 339,
+                "group": "attributes",
+                "hex": "0x153",
+                "length": 1,
+                "type": "ubyte"
+              }
+            }
+          },
+          {
+            "normalized_name": "OFFENSIVECOACHING",
+            "display_name": "Offensive Coaching",
+            "versions": {
+              "2K26": {
+                "address": 338,
+                "group": "attributes",
+                "hex": "0x152",
+                "length": 1,
+                "type": "ubyte"
+              }
+            }
+          },
+          {
+            "normalized_name": "POTENTIAL",
+            "display_name": "Potential",
+            "versions": {
+              "2K26": {
+                "address": 281,
+                "group": "attributes",
+                "hex": "0x119",
+                "length": 1,
+                "type": "ubyte"
+              }
+            }
+          },
+          {
+            "normalized_name": "SPORTSMEDICINE",
+            "display_name": "Sports Medicine",
+            "versions": {
+              "2K26": {
+                "address": 341,
+                "group": "attributes",
+                "hex": "0x155",
+                "length": 1,
+                "type": "ubyte"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Staff Style": {
+        "Familiarity": [
+          {
+            "normalized_name": "BALANCEDPROFICIENCY",
+            "display_name": "Balanced Proficiency",
+            "versions": {
+              "2K26": {
+                "address": 344,
+                "group": "Familiarity",
+                "hex": "0x158",
+                "length": 1,
+                "type": "ubyte"
+              }
+            }
+          },
+          {
+            "normalized_name": "DEFENSEPROFICIENCY",
+            "display_name": "Defense Proficiency",
+            "versions": {
+              "2K26": {
+                "address": 351,
+                "group": "Familiarity",
+                "hex": "0x15F",
+                "length": 1,
+                "type": "ubyte"
+              }
+            }
+          },
+          {
+            "normalized_name": "GRITGRINDPROFICIENCY",
+            "display_name": "Grit & Grind Proficiency",
+            "versions": {
+              "2K26": {
+                "address": 345,
+                "group": "Familiarity",
+                "hex": "0x159",
+                "length": 1,
+                "type": "ubyte"
+              }
+            }
+          },
+          {
+            "normalized_name": "PACESPACEPROFICIENCY",
+            "display_name": "Pace &Space Proficiency",
+            "versions": {
+              "2K26": {
+                "address": 346,
+                "group": "Familiarity",
+                "hex": "0x15A",
+                "length": 1,
+                "type": "ubyte"
+              }
+            }
+          },
+          {
+            "normalized_name": "PERIMETERCENTRICPROFICIENCY",
+            "display_name": "Perimeter Centric Proficiency",
+            "versions": {
+              "2K26": {
+                "address": 347,
+                "group": "Familiarity",
+                "hex": "0x15B",
+                "length": 1,
+                "type": "ubyte"
+              }
+            }
+          },
+          {
+            "normalized_name": "POSTCENTRICPROFICIENCY",
+            "display_name": "Post Centric Proficiency",
+            "versions": {
+              "2K26": {
+                "address": 348,
+                "group": "Familiarity",
+                "hex": "0x15C",
+                "length": 1,
+                "type": "ubyte"
+              }
+            }
+          },
+          {
+            "normalized_name": "7SECONDSPROFICIENCY",
+            "display_name": "Seven Seconds Proficiency",
+            "versions": {
+              "2K26": {
+                "address": 350,
+                "group": "Familiarity",
+                "hex": "0x15E",
+                "length": 1,
+                "type": "ubyte"
+              }
+            }
+          },
+          {
+            "normalized_name": "TRIANGLEPROFICIENCY",
+            "display_name": "Triangle Proficiency",
+            "versions": {
+              "2K26": {
+                "address": 349,
+                "group": "Familiarity",
+                "hex": "0x15D",
+                "length": 1,
+                "type": "ubyte"
+              }
+            }
+          }
+        ],
+        "team": [
+          {
+            "normalized_name": "CURRENTTEAM",
+            "display_name": "Current Team",
+            "versions": {
+              "2K26": {
+                "address": 24,
+                "group": "team",
+                "hex": "0x18",
+                "type": "uint64"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

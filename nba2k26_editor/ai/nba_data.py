@@ -9,8 +9,7 @@ from __future__ import annotations
 import math
 import threading
 import time
-from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Sequence
 
 from ..core.config import BASE_DIR
 from ..core.conversions import format_height_inches

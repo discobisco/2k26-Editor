@@ -15,25 +15,17 @@ import os
 import shlex
 import subprocess
 import threading
-import tkinter as tk
-from tkinter import ttk
-import urllib.error
-import urllib.request
 import weakref
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Mapping, TYPE_CHECKING
 
-from ..core.config import (
-    BUTTON_ACTIVE_BG,
-    BUTTON_BG,
-    BUTTON_TEXT,
-    INPUT_TEXT_FG,
-    PANEL_BG,
-    TEXT_PRIMARY,
-    TEXT_SECONDARY,
-)
+import dearpygui.dearpygui as dpg
+
 from . import nba_data
+from .backends.http_backend import call_chat_completions
+from .backends.python_backend import generate_sync as generate_python_sync, load_instance as load_python_instance
+from .cba_context import build_cba_guidance
 if TYPE_CHECKING:
     from typing import Protocol
 
@@ -43,30 +35,28 @@ if TYPE_CHECKING:
 
     class PlayerEditorApp(Protocol):
         selected_player: _PlayerProto | None
-        player_detail_fields: Mapping[str, tk.Variable]
+        selected_players: list[Any]
+        player_detail_fields: Mapping[str, Any]
         filtered_player_indices: list[int]
         current_players: list[Any] | None
-        player_listbox: tk.Listbox
-        staff_listbox: tk.Listbox
-        stadium_listbox: tk.Listbox
-        team_var: tk.Variable
-        team_edit_var: tk.Variable
-        team_field_vars: Mapping[str, tk.Variable]
-        ai_mode_var: tk.Variable
-        player_search_var: tk.Variable
-        player_name_var: tk.Variable
-        player_ovr_var: tk.Variable
-        var_first: tk.Variable
-        var_last: tk.Variable
-        var_player_team: tk.Variable
+        team_var: Any
+        team_edit_var: Any
+        team_field_vars: Mapping[str, Any]
+        ai_mode_var: Any
+        player_search_var: Any
+        player_name_var: Any
+        player_ovr_var: Any
+        var_first: Any
+        var_last: Any
+        var_player_team: Any
+        ai_persona_choice_var: Any
+        ai_settings: dict[str, Any]
+        screen_tags: Mapping[str, Any]
+        full_editors: list[Any]
         model: Any
-        home_frame: tk.Misc
-        players_frame: tk.Misc
-        teams_frame: tk.Misc | None
-        staff_frame: tk.Misc | None
-        stadium_frame: tk.Misc | None
 
-        def after(self, delay_ms: int, callback: Callable, *args: Any) -> Any: ...
+        def run_on_ui_thread(self, func: Callable, delay_ms: int = 0) -> None: ...
+        def enqueue_ui_update(self, func: Callable) -> None: ...
 
         def _refresh_player_list(self) -> Any: ...
 
@@ -94,6 +84,8 @@ if TYPE_CHECKING:
 
         def show_excel(self) -> Any: ...
 
+        def show_ai(self) -> Any: ...
+
         def get_ai_settings(self) -> dict[str, Any]: ...
 
         def _open_full_editor(self) -> Any: ...
@@ -118,10 +110,184 @@ if TYPE_CHECKING:
 
         def _open_team_player_editor(self) -> Any: ...
 
-        def winfo_children(self) -> list[tk.Misc]: ...
+        def get_persona_choice_items(self) -> list[tuple[str, str]]: ...
+
+        def copy_to_clipboard(self, text: str) -> None: ...
+
+        def get_player_list_items(self) -> list[str]: ...
+
+        def get_selected_player_indices(self) -> list[int]: ...
+
+        def set_selected_player_indices(self, indices: list[int]) -> None: ...
+
+        def clear_player_selection(self) -> None: ...
+
+        def get_staff_list_items(self) -> list[str]: ...
+
+        def get_selected_staff_indices(self) -> list[int]: ...
+
+        def set_staff_selection(self, positions: list[int]) -> None: ...
+
+        def get_stadium_list_items(self) -> list[str]: ...
+
+        def get_selected_stadium_indices(self) -> list[int]: ...
+
+        def set_stadium_selection(self, positions: list[int]) -> None: ...
 
 else:
     PlayerEditorApp = Any
+
+
+class EditorCommandAdapter:
+    """Entity-parameterized adapter for full/staff/stadium editor commands."""
+
+    def __init__(
+        self,
+        *,
+        bridge: "LLMControlBridge",
+        entity_label: str,
+        index_key: str | None,
+        find_editor: Callable[[], Any],
+        select_index: Callable[[int], Any] | None,
+        set_field_on_ui: Callable[[str, str, Any, int | None], dict[str, Any]],
+        subject_builder: Callable[[Any], dict[str, Any] | None] | None = None,
+        subject_key: str | None = None,
+    ) -> None:
+        self._bridge = bridge
+        self._entity_label = entity_label
+        self._index_key = index_key
+        self._find_editor = find_editor
+        self._select_index = select_index
+        self._set_field_on_ui = set_field_on_ui
+        self._subject_builder = subject_builder
+        self._subject_key = subject_key
+
+    def _resolve_index(self, payload: dict[str, Any]) -> int | None:
+        if not self._index_key:
+            return None
+        raw = payload.get(self._index_key)
+        if raw is None:
+            return None
+        return int(raw)
+
+    def _maybe_select(self, index_value: int | None) -> None:
+        if index_value is None or self._select_index is None:
+            return
+        try:
+            self._select_index(index_value)
+        except Exception:
+            return
+
+    def _subject_payload(self, editor: Any) -> dict[str, Any]:
+        if self._subject_key is None:
+            return {}
+        subject = self._subject_builder(editor) if self._subject_builder is not None else None
+        return {self._subject_key: subject}
+
+    def list_fields(self, _payload: dict[str, Any]) -> dict[str, Any]:
+        def list_impl() -> dict[str, Any]:
+            editor = self._find_editor()
+            if editor is None:
+                return {"open": False, "fields": {}}
+            result: dict[str, Any] = {"open": True, "fields": {}}
+            result.update(self._subject_payload(editor))
+            for cat, mapping in editor.field_vars.items():
+                fields = []
+                for fname, var in mapping.items():
+                    meta = editor.field_meta.get((cat, fname))
+                    fields.append(
+                        {
+                            "name": fname,
+                            "value": self._bridge._get_control_value(var),
+                            "offset": getattr(meta, "offset", None) if meta else None,
+                            "length": getattr(meta, "length", None) if meta else None,
+                            "values": getattr(meta, "values", None) if meta else None,
+                        }
+                    )
+                result["fields"][cat] = fields
+            return result
+
+        return self._bridge._run_on_ui_thread(list_impl)
+
+    def set_field(self, payload: dict[str, Any]) -> dict[str, Any]:
+        category = str(payload.get("category", "")).strip()
+        field = str(payload.get("field", "")).strip()
+        if not category or not field:
+            raise ValueError(f"Provide 'category' and 'field' for set_{self._entity_label}_field")
+        value = payload.get("value")
+        index_value = self._resolve_index(payload)
+
+        def set_impl() -> dict[str, Any]:
+            return self._set_field_on_ui(category, field, value, index_value)
+
+        return self._bridge._run_on_ui_thread(set_impl)
+
+    def set_fields(self, payload: dict[str, Any]) -> dict[str, Any]:
+        fields = payload.get("fields")
+        if not isinstance(fields, list):
+            raise ValueError("Provide 'fields' as a list of {category, field, value} dicts.")
+        index_value = self._resolve_index(payload)
+
+        def set_many_impl() -> dict[str, Any]:
+            self._maybe_select(index_value)
+            updated = []
+            errors = []
+            for entry in fields:
+                try:
+                    cat = str(entry.get("category", "")).strip()
+                    fname = str(entry.get("field", "")).strip()
+                    self._set_field_on_ui(cat, fname, entry.get("value"), index_value)
+                    updated.append({"category": entry.get("category"), "field": entry.get("field")})
+                except Exception as exc:  # noqa: BLE001
+                    errors.append({"field": entry.get("field"), "error": str(exc)})
+            return {"updated": updated, "errors": errors}
+
+        return self._bridge._run_on_ui_thread(set_many_impl)
+
+    def save(self, payload: dict[str, Any]) -> dict[str, Any]:
+        close_after = bool(payload.get("close_after", False))
+        index_value = self._resolve_index(payload)
+
+        def save_impl() -> dict[str, Any]:
+            self._maybe_select(index_value)
+            editor = self._find_editor()
+            if editor is None:
+                raise RuntimeError(f"No open {self._entity_label.title()} editor to save.")
+            try:
+                editor._save_all()
+            except Exception as exc:  # noqa: BLE001
+                raise RuntimeError(f"Saving failed: {exc}") from exc
+            if close_after:
+                try:
+                    if hasattr(editor, "_on_close"):
+                        editor._on_close()
+                except Exception:
+                    pass
+            return {"saved": True}
+
+        return self._bridge._run_on_ui_thread(save_impl)
+
+    def get_state(self, _payload: dict[str, Any]) -> dict[str, Any]:
+        def state_impl() -> dict[str, Any]:
+            editor = self._find_editor()
+            if editor is None:
+                return {"open": False, "categories": {}}
+            result: dict[str, Any] = {"open": True, "categories": {}}
+            result.update(self._subject_payload(editor))
+            for cat, mapping in editor.field_vars.items():
+                result["categories"][cat] = {}
+                for fname, var in mapping.items():
+                    meta = editor.field_meta.get((cat, fname))
+                    result["categories"][cat][fname] = {
+                        "value": self._bridge._get_control_value(var),
+                        "offset": getattr(meta, "offset", None) if meta is not None else None,
+                        "length": getattr(meta, "length", None) if meta is not None else None,
+                        "values": getattr(meta, "values", None) if meta is not None else None,
+                    }
+            return result
+
+        return self._bridge._run_on_ui_thread(state_impl)
+
 
 class LLMControlBridge:
     """
@@ -139,6 +305,7 @@ class LLMControlBridge:
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._start_server()
+        self._editor_adapters = self._build_editor_adapters()
 
     @property
     def app(self) -> PlayerEditorApp:
@@ -225,7 +392,10 @@ class LLMControlBridge:
                 try:
                     detail[label] = var.get()
                 except Exception:
-                    detail[label] = ""
+                    try:
+                        detail[label] = dpg.get_value(var)
+                    except Exception:
+                        detail[label] = ""
             state = {
                 "team": app.team_var.get(),
                 "selected_index": None,
@@ -236,7 +406,7 @@ class LLMControlBridge:
                 "players_count": len(app.current_players or []),
                 "screen": self._detect_screen(),
             }
-            selection = app.player_listbox.curselection()
+            selection = app.get_selected_player_indices()
             if selection:
                 state["selected_index"] = int(selection[0])
             if player:
@@ -259,17 +429,14 @@ class LLMControlBridge:
         def gather() -> list[dict[str, Any]]:
             app = self.app
             players: list[dict[str, Any]] = []
-            if not hasattr(app, "player_listbox"):
-                return players
-            for idx in range(app.player_listbox.size()):
-                name = app.player_listbox.get(idx)
-                players.append(
-                    {
-                        "index": idx,
-                        "name": name,
-                        "filtered_index": app.filtered_player_indices[idx] if idx < len(app.filtered_player_indices) else None,
-                    }
-                )
+            items = []
+            try:
+                items = app.get_player_list_items()
+            except Exception:
+                items = []
+            for idx, name in enumerate(items):
+                filtered_index = app.filtered_player_indices[idx] if idx < len(app.filtered_player_indices) else None
+                players.append({"index": idx, "name": name, "filtered_index": filtered_index})
             return players
 
         return self._run_on_ui_thread(gather)
@@ -385,6 +552,45 @@ class LLMControlBridge:
             "features": sorted(self.feature_actions().keys()),
         }
 
+    def _build_editor_adapters(self) -> dict[str, EditorCommandAdapter]:
+        def _full_subject(editor: Any) -> dict[str, Any] | None:
+            player = getattr(editor, "player", None)
+            if player is None:
+                return None
+            return {
+                "index": getattr(player, "index", None),
+                "full_name": getattr(player, "full_name", None),
+            }
+
+        return {
+            "full": EditorCommandAdapter(
+                bridge=self,
+                entity_label="full",
+                index_key="player_index",
+                find_editor=self._find_open_full_editor,
+                select_index=lambda idx: self._select_player_index(idx),
+                set_field_on_ui=self._set_full_field_on_ui,
+                subject_builder=_full_subject,
+                subject_key="player",
+            ),
+            "staff": EditorCommandAdapter(
+                bridge=self,
+                entity_label="staff",
+                index_key="staff_index",
+                find_editor=self._find_open_staff_editor,
+                select_index=lambda idx: self._select_staff_index(idx),
+                set_field_on_ui=self._set_staff_field_on_ui,
+            ),
+            "stadium": EditorCommandAdapter(
+                bridge=self,
+                entity_label="stadium",
+                index_key="stadium_index",
+                find_editor=self._find_open_stadium_editor,
+                select_index=lambda idx: self._select_stadium_index(idx),
+                set_field_on_ui=self._set_stadium_field_on_ui,
+            ),
+        }
+
     def _cmd_select_player(self, payload: dict[str, Any]) -> dict[str, Any]:
         if "index" in payload:
             index = int(payload["index"])
@@ -408,55 +614,39 @@ class LLMControlBridge:
 
     def _select_player_index(self, index: int) -> dict[str, Any]:
         app = self.app
-        size = app.player_listbox.size()
+        items = app.get_player_list_items()
+        size = len(items)
         if index < 0 or index >= size:
             raise ValueError(f"Index {index} out of bounds (0-{size - 1}).")
-        app.player_listbox.selection_clear(0, tk.END)
-        app.player_listbox.selection_set(index)
-        app.player_listbox.activate(index)
-        app.player_listbox.see(index)
-        app.player_listbox.event_generate("<<ListboxSelect>>")
+        app.set_selected_player_indices([index])
         return self._gather_selection_summary()
 
     def _select_staff_index(self, index: int) -> dict[str, Any]:
         app = self.app
         app.show_staff()
-        app._refresh_staff_list()
-        size = app.staff_listbox.size() if app.staff_listbox else 0
+        items = app.get_staff_list_items()
+        size = len(items)
         if index < 0 or index >= size:
             raise ValueError(f"Index {index} out of bounds (0-{size - 1}).")
-        lb = app.staff_listbox
-        if lb is None:
-            raise RuntimeError("Staff listbox not initialized.")
-        lb.selection_clear(0, tk.END)
-        lb.selection_set(index)
-        lb.activate(index)
-        lb.see(index)
-        lb.event_generate("<<ListboxSelect>>")
-        return {"selected_index": index, "name": lb.get(index)}
+        app.set_staff_selection([index])
+        return {"selected_index": index, "name": items[index]}
 
     def _select_stadium_index(self, index: int) -> dict[str, Any]:
         app = self.app
         app.show_stadium()
-        app._refresh_stadium_list()
-        size = app.stadium_listbox.size() if app.stadium_listbox else 0
+        items = app.get_stadium_list_items()
+        size = len(items)
         if index < 0 or index >= size:
             raise ValueError(f"Index {index} out of bounds (0-{size - 1}).")
-        lb = app.stadium_listbox
-        if lb is None:
-            raise RuntimeError("Stadium listbox not initialized.")
-        lb.selection_clear(0, tk.END)
-        lb.selection_set(index)
-        lb.activate(index)
-        lb.see(index)
-        lb.event_generate("<<ListboxSelect>>")
-        return {"selected_index": index, "name": lb.get(index)}
+        app.set_stadium_selection([index])
+        return {"selected_index": index, "name": items[index]}
 
     def _select_player_name(self, name: str) -> dict[str, Any]:
         app = self.app
         normalized = name.strip().lower()
-        for idx in range(app.player_listbox.size()):
-            if app.player_listbox.get(idx).strip().lower() == normalized:
+        items = app.get_player_list_items()
+        for idx, label in enumerate(items):
+            if label.strip().lower() == normalized:
                 return self._select_player_index(idx)
         raise ValueError(f"Player named '{name}' not found in the current list.")
 
@@ -750,7 +940,11 @@ class LLMControlBridge:
             "selected_index": None,
             "player": None,
         }
-        selection = app.player_listbox.curselection()
+        selection = []
+        try:
+            selection = app.get_selected_player_indices()
+        except Exception:
+            selection = []
         if selection:
             info["selected_index"] = int(selection[0])
         if player:
@@ -770,75 +964,99 @@ class LLMControlBridge:
     # ------------------------------------------------------------------ #
     def _find_open_full_editor(self) -> Any:
         """Return the first open FullPlayerEditor-like Toplevel or None.
-        Implemented as a direct scan of `self.app.winfo_children()` and **must be
-        called from the UI thread** (e.g. from inside `_run_on_ui_thread`).
+        Implemented as a scan of `self.app.full_editors` and **must be called
+        from the UI thread** (e.g. from inside `_run_on_ui_thread`).
         """
         app = self.app
-        for child in app.winfo_children():
-            try:
-                if hasattr(child, "player") and hasattr(child, "_save_all"):
-                    return child
-            except Exception:
-                continue
+        editors = getattr(app, "full_editors", None)
+        if isinstance(editors, list):
+            for editor in editors:
+                try:
+                    if hasattr(editor, "player") and hasattr(editor, "_save_all"):
+                        return editor
+                except Exception:
+                    continue
         return None
 
     def _find_open_staff_editor(self) -> Any:
         app = self.app
-        for child in app.winfo_children():
-            try:
-                if getattr(child, "_editor_type", "") == "staff" and hasattr(child, "_save_all"):
-                    return child
-            except Exception:
-                continue
+        editors = getattr(app, "full_editors", None)
+        if isinstance(editors, list):
+            for editor in editors:
+                try:
+                    if getattr(editor, "_editor_type", "") == "staff" and hasattr(editor, "_save_all"):
+                        return editor
+                except Exception:
+                    continue
         return None
 
     def _find_open_stadium_editor(self) -> Any:
         app = self.app
-        for child in app.winfo_children():
-            try:
-                if getattr(child, "_editor_type", "") == "stadium" and hasattr(child, "_save_all"):
-                    return child
-            except Exception:
-                continue
+        editors = getattr(app, "full_editors", None)
+        if isinstance(editors, list):
+            for editor in editors:
+                try:
+                    if getattr(editor, "_editor_type", "") == "stadium" and hasattr(editor, "_save_all"):
+                        return editor
+                except Exception:
+                    continue
         return None
 
-    def _cmd_list_full_fields(self, _payload: dict[str, Any]) -> dict[str, Any]:
-        def list_fields() -> dict[str, Any]:
-            editor = self._find_open_full_editor()
-            if editor is None:
-                return {"open": False, "fields": {}}
-            p = getattr(editor, "player", None)
-            player_info = {"index": getattr(p, "index", None), "full_name": getattr(p, "full_name", None)} if p is not None else None
-            result = {"open": True, "player": player_info, "fields": {}}
-            for cat, mapping in editor.field_vars.items():
-                fields = []
-                for fname, var in mapping.items():
-                    meta = editor.field_meta.get((cat, fname))
-                    fields.append({
-                        "name": fname,
-                        "value": (var.get() if hasattr(var, "get") else None),
-                        "offset": getattr(meta, "offset", None) if meta else None,
-                        "length": getattr(meta, "length", None) if meta else None,
-                        "values": getattr(meta, "values", None) if meta else None,
-                    })
-                result["fields"][cat] = fields
-            return result
+    @staticmethod
+    def _coerce_int(value: Any, default: int = 0) -> int:
+        try:
+            return int(value)
+        except Exception:
+            return default
 
-        return self._run_on_ui_thread(list_fields)
+    @staticmethod
+    def _get_control_value(control: Any) -> Any:
+        try:
+            return dpg.get_value(control)
+        except Exception:
+            try:
+                return control.get()
+            except Exception:
+                return None
+
+    def _set_control_value(self, control: Any, meta: Any, value: Any) -> Any:
+        """Set a DPG control value using metadata; returns the applied value."""
+        if meta and getattr(meta, "values", None):
+            vals = list(meta.values)
+            target = vals[0] if vals else value
+            if isinstance(value, str):
+                for v in vals:
+                    if str(v).strip().lower() == value.strip().lower():
+                        target = v
+                        break
+            elif value is not None and vals:
+                idx = self._coerce_int(value, 0)
+                if 0 <= idx < len(vals):
+                    target = vals[idx]
+            try:
+                dpg.set_value(control, target)
+            except Exception:
+                pass
+            return target
+
+        data_type = (getattr(meta, "data_type", "") or "").lower() if meta else ""
+        if "float" in data_type:
+            applied = float(value) if value is not None else 0.0
+        elif any(tag in data_type for tag in ("string", "text", "char", "pointer", "wide")):
+            applied = "" if value is None else str(value)
+        else:
+            applied = self._coerce_int(value, 0)
+        try:
+            dpg.set_value(control, applied)
+        except Exception:
+            pass
+        return applied
+
+    def _cmd_list_full_fields(self, _payload: dict[str, Any]) -> dict[str, Any]:
+        return self._editor_adapters["full"].list_fields(_payload)
 
     def _cmd_set_full_field(self, payload: dict[str, Any]) -> dict[str, Any]:
-        category = str(payload.get("category", "")).strip()
-        field = str(payload.get("field", "")).strip()
-        if not category or not field:
-            raise ValueError("Provide 'category' and 'field' for set_full_field")
-        value = payload.get("value")
-
-        player_index = payload.get("player_index")
-
-        def set_field() -> dict[str, Any]:
-            return self._set_full_field_on_ui(category, field, value, player_index)
-
-        return self._run_on_ui_thread(set_field)
+        return self._editor_adapters["full"].set_field(payload)
 
     def _set_full_field_on_ui(
         self,
@@ -881,156 +1099,26 @@ class LLMControlBridge:
                 break
         if fname_key is None:
             raise ValueError(f"Unknown field '{field}' in category '{cat_key}'")
-        var = editor.field_vars[cat_key][fname_key]
+        control = editor.field_vars[cat_key][fname_key]
         meta = editor.field_meta.get((cat_key, fname_key))
-        # Enumerations
-        if meta and getattr(meta, "values", None):
-            vals = list(meta.values)
-            if isinstance(value, str):
-                idx = None
-                for i, v in enumerate(vals):
-                    if str(v).strip().lower() == value.strip().lower():
-                        idx = i
-                        break
-                if idx is None:
-                    raise ValueError(f"Unknown enumerated value '{value}' for field '{fname_key}'")
-            else:
-                if value is None:
-                    raise ValueError(f"Value for '{fname_key}' is required.")
-                idx = int(value)
-            try:
-                var.set(int(idx))
-            except Exception:
-                pass
-            widget = getattr(meta, "widget", None)
-            if widget is not None and hasattr(widget, "set"):
-                try:
-                    widget.set(vals[idx])
-                except Exception:
-                    pass
-        else:
-            try:
-                if hasattr(var, "set"):
-                    var.set(value)
-                else:
-                    setattr(editor, fname_key, value)
-            except Exception as exc:
-                raise RuntimeError(f"Failed to set field: {exc}")
-        return {"category": cat_key, "field": fname_key, "value": (var.get() if hasattr(var, "get") else None)}
+        self._set_control_value(control, meta, value)
+        return {"category": cat_key, "field": fname_key, "value": self._get_control_value(control)}
 
     def _cmd_save_full_editor(self, payload: dict[str, Any]) -> dict[str, Any]:
-        close_after = bool(payload.get("close_after", False))
-
-        player_index = payload.get("player_index")
-
-        def save() -> dict[str, Any]:
-            if player_index is not None:
-                try:
-                    self._select_player_index(int(player_index))
-                except Exception:
-                    pass
-            editor = self._find_open_full_editor()
-            if editor is None:
-                raise RuntimeError("No open FullPlayerEditor to save.")
-            try:
-                editor._save_all()
-            except Exception as exc:  # noqa: BLE001
-                raise RuntimeError(f"Saving failed: {exc}")
-            if close_after:
-                try:
-                    editor.destroy()
-                except Exception:
-                    pass
-            return {"saved": True}
-
-        return self._run_on_ui_thread(save)
+        return self._editor_adapters["full"].save(payload)
 
     def _cmd_set_full_fields(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Set multiple fields at once. Payload contains: fields: [{category, field, value}] and optional player_index."""
-        fields = payload.get("fields")
-        if not isinstance(fields, list):
-            raise ValueError("Provide 'fields' as a list of {category, field, value} dicts.")
-        player_index = payload.get("player_index")
-
-        def set_many() -> dict[str, Any]:
-            if player_index is not None:
-                try:
-                    self._select_player_index(int(player_index))
-                except Exception:
-                    pass
-            updated = []
-            errors = []
-            for entry in fields:
-                try:
-                    cat = str(entry.get("category", "")).strip()
-                    fname = str(entry.get("field", "")).strip()
-                    self._set_full_field_on_ui(cat, fname, entry.get("value"))
-                    updated.append({"category": entry.get("category"), "field": entry.get("field")})
-                except Exception as exc:  # noqa: BLE001
-                    errors.append({"field": entry.get("field"), "error": str(exc)})
-            return {"updated": updated, "errors": errors}
-
-        return self._run_on_ui_thread(set_many)
+        return self._editor_adapters["full"].set_fields(payload)
 
     def _cmd_get_full_editor_state(self, _payload: dict[str, Any]) -> dict[str, Any]:
-        def state() -> dict[str, Any]:
-            editor = self._find_open_full_editor()
-            if editor is None:
-                return {"open": False, "categories": {}}
-            p = getattr(editor, "player", None)
-            player_info = {"index": getattr(p, "index", None), "full_name": getattr(p, "full_name", None)} if p is not None else None
-            data = {"open": True, "player": player_info, "categories": {}}
-            for cat, mapping in editor.field_vars.items():
-                data["categories"][cat] = {}
-                for fname, var in mapping.items():
-                    meta = editor.field_meta.get((cat, fname))
-                    data["categories"][cat][fname] = {
-                        "value": (var.get() if hasattr(var, "get") else None),
-                        "offset": getattr(meta, "offset", None) if meta is not None else None,
-                        "length": getattr(meta, "length", None) if meta is not None else None,
-                        "values": getattr(meta, "values", None) if meta is not None else None,
-                    }
-            return data
-
-        return self._run_on_ui_thread(state)
+        return self._editor_adapters["full"].get_state(_payload)
 
     # ---------------- Staff editor helpers ---------------- #
     def _cmd_list_staff_fields(self, _payload: dict[str, Any]) -> dict[str, Any]:
-        def list_fields() -> dict[str, Any]:
-            editor = self._find_open_staff_editor()
-            if editor is None:
-                return {"open": False, "fields": {}}
-            result = {"open": True, "fields": {}}
-            for cat, mapping in editor.field_vars.items():
-                fields = []
-                for fname, var in mapping.items():
-                    meta = editor.field_meta.get((cat, fname))
-                    fields.append(
-                        {
-                            "name": fname,
-                            "value": (var.get() if hasattr(var, "get") else None),
-                            "offset": getattr(meta, "offset", None) if meta else None,
-                            "length": getattr(meta, "length", None) if meta else None,
-                            "values": getattr(meta, "values", None) if meta else None,
-                        }
-                    )
-                result["fields"][cat] = fields
-            return result
-
-        return self._run_on_ui_thread(list_fields)
+        return self._editor_adapters["staff"].list_fields(_payload)
 
     def _cmd_set_staff_field(self, payload: dict[str, Any]) -> dict[str, Any]:
-        category = str(payload.get("category", "")).strip()
-        field = str(payload.get("field", "")).strip()
-        if not category or not field:
-            raise ValueError("Provide 'category' and 'field' for set_staff_field")
-        value = payload.get("value")
-        staff_index = payload.get("staff_index")
-
-        def set_field() -> dict[str, Any]:
-            return self._set_staff_field_on_ui(category, field, value, staff_index)
-
-        return self._run_on_ui_thread(set_field)
+        return self._editor_adapters["staff"].set_field(payload)
 
     def _set_staff_field_on_ui(
         self,
@@ -1069,154 +1157,26 @@ class LLMControlBridge:
                 break
         if fname_key is None:
             raise ValueError(f"Unknown field '{field}' in category '{cat_key}'")
-        var = editor.field_vars[cat_key][fname_key]
+        control = editor.field_vars[cat_key][fname_key]
         meta = editor.field_meta.get((cat_key, fname_key))
-        if meta and getattr(meta, "values", None):
-            vals = list(meta.values)
-            if isinstance(value, str):
-                idx = None
-                for i, v in enumerate(vals):
-                    if str(v).strip().lower() == value.strip().lower():
-                        idx = i
-                        break
-                if idx is None:
-                    raise ValueError(f"Unknown enumerated value '{value}' for field '{fname_key}'")
-            else:
-                if value is None:
-                    raise ValueError(f"Value for '{fname_key}' is required.")
-                idx = int(value)
-            try:
-                var.set(int(idx))
-            except Exception:
-                pass
-            widget = getattr(meta, "widget", None)
-            if widget is not None and hasattr(widget, "set"):
-                try:
-                    widget.set(vals[idx])
-                except Exception:
-                    pass
-        else:
-            try:
-                if hasattr(var, "set"):
-                    var.set(value)
-                else:
-                    setattr(editor, fname_key, value)
-            except Exception as exc:
-                raise RuntimeError(f"Failed to set field: {exc}")
-        return {"category": cat_key, "field": fname_key, "value": (var.get() if hasattr(var, "get") else None)}
+        self._set_control_value(control, meta, value)
+        return {"category": cat_key, "field": fname_key, "value": self._get_control_value(control)}
 
     def _cmd_set_staff_fields(self, payload: dict[str, Any]) -> dict[str, Any]:
-        fields = payload.get("fields")
-        if not isinstance(fields, list):
-            raise ValueError("Provide 'fields' as a list of {category, field, value} dicts.")
-        staff_index = payload.get("staff_index")
-
-        def set_many() -> dict[str, Any]:
-            if staff_index is not None:
-                try:
-                    self._select_staff_index(int(staff_index))
-                except Exception:
-                    pass
-            editor = self._find_open_staff_editor()
-            if editor is None:
-                try:
-                    self.app._open_full_staff_editor(staff_index if staff_index is not None else None)
-                except Exception:
-                    pass
-                editor = self._find_open_staff_editor()
-                if editor is None:
-                    raise RuntimeError("No open staff editor found and unable to open one.")
-            updated = []
-            errors = []
-            for entry in fields:
-                try:
-                    cat = str(entry.get("category", "")).strip()
-                    fname = str(entry.get("field", "")).strip()
-                    self._set_staff_field_on_ui(cat, fname, entry.get("value"))
-                    updated.append({"category": entry.get("category"), "field": entry.get("field")})
-                except Exception as exc:
-                    errors.append({"field": entry.get("field"), "error": str(exc)})
-            return {"updated": updated, "errors": errors}
-
-        return self._run_on_ui_thread(set_many)
+        return self._editor_adapters["staff"].set_fields(payload)
 
     def _cmd_save_staff_editor(self, payload: dict[str, Any]) -> dict[str, Any]:
-        close_after = bool(payload.get("close_after", False))
-
-        def save() -> dict[str, Any]:
-            editor = self._find_open_staff_editor()
-            if editor is None:
-                raise RuntimeError("No open Staff editor to save.")
-            try:
-                editor._save_all()
-            except Exception as exc:
-                raise RuntimeError(f"Saving failed: {exc}")
-            if close_after:
-                try:
-                    editor.destroy()
-                except Exception:
-                    pass
-            return {"saved": True}
-
-        return self._run_on_ui_thread(save)
+        return self._editor_adapters["staff"].save(payload)
 
     def _cmd_get_staff_editor_state(self, _payload: dict[str, Any]) -> dict[str, Any]:
-        def state() -> dict[str, Any]:
-            editor = self._find_open_staff_editor()
-            if editor is None:
-                return {"open": False, "categories": {}}
-            data = {"open": True, "categories": {}}
-            for cat, mapping in editor.field_vars.items():
-                data["categories"][cat] = {}
-                for fname, var in mapping.items():
-                    meta = editor.field_meta.get((cat, fname))
-                    data["categories"][cat][fname] = {
-                        "value": (var.get() if hasattr(var, "get") else None),
-                        "offset": getattr(meta, "offset", None) if meta is not None else None,
-                        "length": getattr(meta, "length", None) if meta is not None else None,
-                        "values": getattr(meta, "values", None) if meta is not None else None,
-                    }
-            return data
-
-        return self._run_on_ui_thread(state)
+        return self._editor_adapters["staff"].get_state(_payload)
 
     # ---------------- Stadium editor helpers ---------------- #
     def _cmd_list_stadium_fields(self, _payload: dict[str, Any]) -> dict[str, Any]:
-        def list_fields() -> dict[str, Any]:
-            editor = self._find_open_stadium_editor()
-            if editor is None:
-                return {"open": False, "fields": {}}
-            result = {"open": True, "fields": {}}
-            for cat, mapping in editor.field_vars.items():
-                fields = []
-                for fname, var in mapping.items():
-                    meta = editor.field_meta.get((cat, fname))
-                    fields.append(
-                        {
-                            "name": fname,
-                            "value": (var.get() if hasattr(var, "get") else None),
-                            "offset": getattr(meta, "offset", None) if meta else None,
-                            "length": getattr(meta, "length", None) if meta else None,
-                            "values": getattr(meta, "values", None) if meta else None,
-                        }
-                    )
-                result["fields"][cat] = fields
-            return result
-
-        return self._run_on_ui_thread(list_fields)
+        return self._editor_adapters["stadium"].list_fields(_payload)
 
     def _cmd_set_stadium_field(self, payload: dict[str, Any]) -> dict[str, Any]:
-        category = str(payload.get("category", "")).strip()
-        field = str(payload.get("field", "")).strip()
-        if not category or not field:
-            raise ValueError("Provide 'category' and 'field' for set_stadium_field")
-        value = payload.get("value")
-        stadium_index = payload.get("stadium_index")
-
-        def set_field() -> dict[str, Any]:
-            return self._set_stadium_field_on_ui(category, field, value, stadium_index)
-
-        return self._run_on_ui_thread(set_field)
+        return self._editor_adapters["stadium"].set_field(payload)
 
     def _set_stadium_field_on_ui(
         self,
@@ -1255,116 +1215,19 @@ class LLMControlBridge:
                 break
         if fname_key is None:
             raise ValueError(f"Unknown field '{field}' in category '{cat_key}'")
-        var = editor.field_vars[cat_key][fname_key]
+        control = editor.field_vars[cat_key][fname_key]
         meta = editor.field_meta.get((cat_key, fname_key))
-        if meta and getattr(meta, "values", None):
-            vals = list(meta.values)
-            if isinstance(value, str):
-                idx = None
-                for i, v in enumerate(vals):
-                    if str(v).strip().lower() == value.strip().lower():
-                        idx = i
-                        break
-                if idx is None:
-                    raise ValueError(f"Unknown enumerated value '{value}' for field '{fname_key}'")
-            else:
-                if value is None:
-                    raise ValueError(f"Value for '{fname_key}' is required.")
-                idx = int(value)
-            try:
-                var.set(int(idx))
-            except Exception:
-                pass
-            widget = getattr(meta, "widget", None)
-            if widget is not None and hasattr(widget, "set"):
-                try:
-                    widget.set(vals[idx])
-                except Exception:
-                    pass
-        else:
-            try:
-                if hasattr(var, "set"):
-                    var.set(value)
-                else:
-                    setattr(editor, fname_key, value)
-            except Exception as exc:
-                raise RuntimeError(f"Failed to set field: {exc}")
-        return {"category": cat_key, "field": fname_key, "value": (var.get() if hasattr(var, "get") else None)}
+        self._set_control_value(control, meta, value)
+        return {"category": cat_key, "field": fname_key, "value": self._get_control_value(control)}
 
     def _cmd_set_stadium_fields(self, payload: dict[str, Any]) -> dict[str, Any]:
-        fields = payload.get("fields")
-        if not isinstance(fields, list):
-            raise ValueError("Provide 'fields' as a list of {category, field, value} dicts.")
-        stadium_index = payload.get("stadium_index")
-
-        def set_many() -> dict[str, Any]:
-            if stadium_index is not None:
-                try:
-                    self._select_stadium_index(int(stadium_index))
-                except Exception:
-                    pass
-            editor = self._find_open_stadium_editor()
-            if editor is None:
-                try:
-                    self.app._open_full_stadium_editor(stadium_index if stadium_index is not None else None)
-                except Exception:
-                    pass
-                editor = self._find_open_stadium_editor()
-                if editor is None:
-                    raise RuntimeError("No open stadium editor found and unable to open one.")
-            updated = []
-            errors = []
-            for entry in fields:
-                try:
-                    cat = str(entry.get("category", "")).strip()
-                    fname = str(entry.get("field", "")).strip()
-                    self._set_stadium_field_on_ui(cat, fname, entry.get("value"))
-                    updated.append({"category": entry.get("category"), "field": entry.get("field")})
-                except Exception as exc:
-                    errors.append({"field": entry.get("field"), "error": str(exc)})
-            return {"updated": updated, "errors": errors}
-
-        return self._run_on_ui_thread(set_many)
+        return self._editor_adapters["stadium"].set_fields(payload)
 
     def _cmd_save_stadium_editor(self, payload: dict[str, Any]) -> dict[str, Any]:
-        close_after = bool(payload.get("close_after", False))
-
-        def save() -> dict[str, Any]:
-            editor = self._find_open_stadium_editor()
-            if editor is None:
-                raise RuntimeError("No open Stadium editor to save.")
-            try:
-                editor._save_all()
-            except Exception as exc:
-                raise RuntimeError(f"Saving failed: {exc}")
-            if close_after:
-                try:
-                    editor.destroy()
-                except Exception:
-                    pass
-            return {"saved": True}
-
-        return self._run_on_ui_thread(save)
+        return self._editor_adapters["stadium"].save(payload)
 
     def _cmd_get_stadium_editor_state(self, _payload: dict[str, Any]) -> dict[str, Any]:
-        def state() -> dict[str, Any]:
-            editor = self._find_open_stadium_editor()
-            if editor is None:
-                return {"open": False, "categories": {}}
-            data = {"open": True, "categories": {}}
-            for cat, mapping in editor.field_vars.items():
-                data["categories"][cat] = {}
-                for fname, var in mapping.items():
-                    meta = editor.field_meta.get((cat, fname))
-                    data["categories"][cat][fname] = {
-                        "value": (var.get() if hasattr(var, "get") else None),
-                        "offset": getattr(meta, "offset", None) if meta is not None else None,
-                        "length": getattr(meta, "length", None) if meta is not None else None,
-                        "values": getattr(meta, "values", None) if meta is not None else None,
-                    }
-            return data
-
-        return self._run_on_ui_thread(state)
+        return self._editor_adapters["stadium"].get_state(_payload)
 
     def _run_on_ui_thread(self, func: Callable[[], Any], timeout: float = 5.0) -> Any:
         result: dict[str, Any] = {}
@@ -1378,7 +1241,11 @@ class LLMControlBridge:
             finally:
                 event.set()
 
-        self.app.after(0, wrapper)
+        try:
+            self.app.run_on_ui_thread(wrapper)
+        except Exception:
+            # Fallback: execute immediately if scheduling fails
+            wrapper()
         if not event.wait(timeout):
             raise RuntimeError("Timed out waiting for editor UI thread.")
         if "error" in result:
@@ -1391,13 +1258,9 @@ class LLMControlBridge:
     def _detect_screen(self) -> str:
         app = self.app
         try:
-            if app.home_frame.winfo_ismapped():
-                return "home"
-            if app.players_frame.winfo_ismapped():
-                return "players"
-            teams_frame = getattr(app, "teams_frame", None)
-            if teams_frame is not None and teams_frame.winfo_ismapped():
-                return "teams"
+            for name, tag in getattr(app, "screen_tags", {}).items():
+                if dpg.does_item_exist(tag) and dpg.is_item_shown(tag):
+                    return name
         except Exception:
             pass
         return "unknown"
@@ -1421,212 +1284,212 @@ def ensure_control_bridge(app: PlayerEditorApp) -> LLMControlBridge:
     CONTROL_BRIDGE = bridge
     return bridge
 
+
 class PlayerAIAssistant:
-    """UI helper that wires player data into an AI backend."""
+    """UI helper that wires player data into an AI backend (Dear PyGui)."""
 
     def __init__(self, app: PlayerEditorApp, context: dict[str, Any]) -> None:
         self.app = app
         self.context = context
-        parent_obj = context.get("panel_parent")
-        parent: tk.Widget | None = parent_obj if isinstance(parent_obj, tk.Widget) else None
-        if parent is None:
-            return
-        self.prompt_var = tk.StringVar(
-            value="Provide scouting notes and suggested attribute tweaks."
-        )
-        self.status_var = tk.StringVar(value="Select a player and click Ask AI.")
-        nba_data.warm_cache_async()
         self._worker: threading.Thread | None = None
-        self._build_panel(parent)
+        self._persona_display_map: dict[str, str] = {}
+        self.prompt_tag: int | str | None = None
+        self.status_tag: int | str | None = None
+        self.output_tag: int | str | None = None
+        self.progress_tag: int | str | None = None
+        self.persona_combo_tag: int | str | None = None
+        self.ask_button_tag: int | str | None = None
+        self.copy_button_tag: int | str | None = None
+        self.prompt_placeholder = (
+            "Provide direct 2K26 roster edits with target values, or general roster guidance if no player is selected."
+        )
+        self.status_text = "Enter a request. Player selection is optional."
+        nba_data.warm_cache_async()
+        parent_tag = context.get("panel_parent")
+        if parent_tag is None or not dpg.does_item_exist(parent_tag):
+            return
+        self._build_panel(parent_tag)
         try:
             bridge = ensure_control_bridge(app)
-            self.status_var.set(f"AI Assistant ready. Control bridge at {bridge.server_address()}")
+            self._set_status(f"AI Assistant ready. Control bridge at {bridge.server_address()}")
         except Exception as exc:  # noqa: BLE001
-            self.status_var.set(f"Control bridge unavailable: {exc}")
+            self._set_status(f"Control bridge unavailable: {exc}")
 
-    def _build_panel(self, parent: tk.Widget) -> None:
-        frame = tk.LabelFrame(
-            parent,
-            text="AI Assistant",
-            bg=PANEL_BG,
-            fg=TEXT_PRIMARY,
-            labelanchor="n",
+    def _build_panel(self, parent_tag: int | str) -> None:
+        dpg.add_text("AI Assistant", parent=parent_tag, color=(224, 225, 221, 255))
+        dpg.add_spacer(parent=parent_tag, height=4)
+        self.persona_combo_tag = dpg.add_combo(
+            parent=parent_tag,
+            items=[],
+            width=260,
+            callback=self._on_persona_select,
         )
-        frame.pack(fill=tk.BOTH, expand=False, padx=24, pady=(10, 0))
-        self.frame = frame
-        # Persona selector (optional)
-        persona_row = tk.Frame(frame, bg=PANEL_BG)
-        persona_row.pack(fill=tk.X, padx=8, pady=(8, 4))
-        tk.Label(
-            persona_row,
-            text="Persona",
-            bg=PANEL_BG,
-            fg=TEXT_PRIMARY,
-            font=("Segoe UI", 10, "bold"),
-        ).pack(anchor="w")
-        # Combobox shows human-friendly labels; we map them to internal values
-        self._persona_display_map: dict[str, str] = {}
-        self.persona_combobox = ttk.Combobox(persona_row, values=[], state="readonly")
-        self.persona_combobox.pack(fill=tk.X, pady=(2, 0))
-
-        def _on_persona_select(evt=None) -> None:
-            try:
-                sel_display = self.persona_combobox.get()
-                sel_val = self._persona_display_map.get(sel_display, "none")
-                try:
-                    self.app.ai_persona_choice_var.set(sel_val)
-                except Exception:
-                    pass
-            except Exception:
-                pass
-
-        self.persona_combobox.bind("<<ComboboxSelected>>", _on_persona_select)
-        # Initialize available choices
-        try:
-            items = self.app.get_persona_choice_items()
-            displays = [lab for lab, val in items]
-            self._persona_display_map = {lab: val for lab, val in items}
-            self.persona_combobox.configure(values=displays)
-            # Set initial selection display from the current ai_persona_choice_var
-            try:
-                cur = self.app.ai_persona_choice_var.get() or "none"
-                inv_map = {v: k for k, v in self._persona_display_map.items()}
-                if cur in inv_map:
-                    self.persona_combobox.set(inv_map[cur])
-            except Exception:
-                pass
-        except Exception:
-            pass
-
-        prompt_row = tk.Frame(frame, bg=PANEL_BG)
-        prompt_row.pack(fill=tk.X, padx=8, pady=(4, 4))
-        tk.Label(
-            prompt_row,
-            text="Request",
-            bg=PANEL_BG,
-            fg=TEXT_PRIMARY,
-            font=("Segoe UI", 10, "bold"),
-        ).pack(anchor="w")
-        self.prompt_entry = tk.Entry(
-            prompt_row,
-            textvariable=self.prompt_var,
-            bg="white",
-            fg="#0B0B0B",
-            relief=tk.FLAT,
+        self._refresh_persona_dropdown()
+        dpg.add_spacer(parent=parent_tag, height=4)
+        self.prompt_tag = dpg.add_input_text(
+            parent=parent_tag,
+            hint="Ask for roster edits or guidance...",
+            width=-1,
+            height=80,
+            multiline=True,
+            default_value=self.prompt_placeholder,
         )
-        self.prompt_entry.pack(fill=tk.X, pady=(2, 0))
-        btn_bar = tk.Frame(frame, bg=PANEL_BG)
-        btn_bar.pack(fill=tk.X, padx=8, pady=(6, 4))
-        self.ask_button = tk.Button(
-            btn_bar,
-            text="Ask AI",
-            command=self._on_request,
-            bg=BUTTON_BG,
-            fg=BUTTON_TEXT,
-            relief=tk.FLAT,
-            activebackground=BUTTON_ACTIVE_BG,
-            activeforeground=BUTTON_TEXT,
+        with dpg.group(horizontal=True, parent=parent_tag):
+            self.ask_button_tag = dpg.add_button(label="Ask AI", width=120, callback=self._on_request)
+            self.copy_button_tag = dpg.add_button(label="Copy Response", width=140, callback=self._copy_response)
+        self.status_tag = dpg.add_text(self.status_text, parent=parent_tag, wrap=520, color=(155, 164, 181, 255))
+        self.progress_tag = dpg.add_loading_indicator(parent=parent_tag, radius=8, style=1)
+        dpg.configure_item(self.progress_tag, show=False)
+        self.output_tag = dpg.add_input_text(
+            parent=parent_tag,
+            multiline=True,
+            readonly=True,
+            width=-1,
+            height=220,
+            default_value="",
         )
-        self.ask_button.pack(side=tk.LEFT)
-        tk.Button(
-            btn_bar,
-            text="Copy Response",
-            command=self._copy_response,
-            bg="#3C6E71",
-            fg="white",
-            relief=tk.FLAT,
-        ).pack(side=tk.LEFT, padx=(8, 0))
-        self.status_label = tk.Label(
-            frame,
-            textvariable=self.status_var,
-            bg=PANEL_BG,
-            fg=TEXT_SECONDARY,
-            wraplength=340,
-            justify="left",
-            font=("Segoe UI", 9, "italic"),
-        )
-        self.status_label.pack(fill=tk.X, padx=8, pady=(0, 6))
-        # Progress indicator for long-running requests
-        self.progress = ttk.Progressbar(frame, mode="indeterminate", length=200)
-        self.progress.pack(fill=tk.X, padx=8, pady=(0, 6))
-        self.progress.stop()
-        self.progress.configure(mode="indeterminate")
 
     def _refresh_persona_dropdown(self) -> None:
+        items: list[tuple[str, str]] = []
         try:
             items = self.app.get_persona_choice_items()
-            displays = [lab for lab, val in items]
-            self._persona_display_map = {lab: val for lab, val in items}
-            self.persona_combobox.configure(values=displays)
-            # attempt to keep current selection if still present
+        except Exception:
+            items = [("None", "none")]
+        self._persona_display_map = {label: value for label, value in items}
+        displays = list(self._persona_display_map.keys())
+        if self.persona_combo_tag and dpg.does_item_exist(self.persona_combo_tag):
+            dpg.configure_item(self.persona_combo_tag, items=displays)
+            current_val = None
             try:
-                cur = self.app.ai_persona_choice_var.get() or "none"
-                inv_map = {v: k for k, v in self._persona_display_map.items()}
-                if cur in inv_map:
-                    self.persona_combobox.set(inv_map[cur])
-                else:
-                    # reset to 'None'
-                    self.persona_combobox.set("None")
-                    self.app.ai_persona_choice_var.set("none")
+                current_val = self.app.ai_persona_choice_var.get()
             except Exception:
-                pass
+                current_val = "none"
+            inv_map = {v: k for k, v in self._persona_display_map.items()}
+            display = inv_map.get(current_val, displays[0] if displays else "")
+            if display:
+                dpg.set_value(self.persona_combo_tag, display)
+
+    def _on_persona_select(self, _sender, value) -> None:
+        try:
+            sel_val = self._persona_display_map.get(value, "none")
+            self.app.ai_persona_choice_var.set(sel_val)
         except Exception:
             pass
 
-        self.output_text = tk.Text(
-            frame,
-            height=8,
-            bg="white",
-            fg="#0B0B0B",
-            wrap="word",
-            relief=tk.FLAT,
-            state="disabled",
-        )
-        self.output_text.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 10))
+    def _set_status(self, text: str) -> None:
+        self.status_text = text
+        if self.status_tag and dpg.does_item_exist(self.status_tag):
+            dpg.set_value(self.status_tag, text)
+
+    def _set_output(self, text: str) -> None:
+        if self.output_tag and dpg.does_item_exist(self.output_tag):
+            dpg.set_value(self.output_tag, text or "")
+
+    def _append_output(self, text: str, *, replace_placeholder: bool = True) -> None:
+        if not (self.output_tag and dpg.does_item_exist(self.output_tag)):
+            return
+        current = str(dpg.get_value(self.output_tag) or "")
+        if replace_placeholder and current.strip() == "Thinking ...":
+            current = ""
+        dpg.set_value(self.output_tag, current + (text or ""))
+
+    def _start_progress(self) -> None:
+        if self.progress_tag and dpg.does_item_exist(self.progress_tag):
+            dpg.configure_item(self.progress_tag, show=True)
+        if self.ask_button_tag and dpg.does_item_exist(self.ask_button_tag):
+            dpg.disable_item(self.ask_button_tag)
+
+    def _stop_progress(self) -> None:
+        if self.progress_tag and dpg.does_item_exist(self.progress_tag):
+            dpg.configure_item(self.progress_tag, show=False)
+        if self.ask_button_tag and dpg.does_item_exist(self.ask_button_tag):
+            dpg.enable_item(self.ask_button_tag)
 
     def _copy_response(self) -> None:
-        try:
-            text = self.output_text.get("1.0", tk.END).strip()
-        except Exception:
-            text = ""
+        text = ""
+        if self.output_tag and dpg.does_item_exist(self.output_tag):
+            try:
+                text = str(dpg.get_value(self.output_tag) or "").strip()
+            except Exception:
+                text = ""
         if not text:
-            self.status_var.set("No response to copy yet.")
+            self._set_status("No response to copy yet.")
             return
-        self.output_text.clipboard_clear()
-        self.output_text.clipboard_append(text)
-        self.status_var.set("Copied response to clipboard.")
+        try:
+            self.app.copy_to_clipboard(text)
+            self._set_status("Copied response to clipboard.")
+        except Exception:
+            self._set_status("Could not copy response.")
+
+    def _get_settings_for_request(self) -> tuple[dict[str, Any] | None, str | None]:
+        try:
+            settings = self.app.get_ai_settings()
+        except Exception as exc:  # noqa: BLE001
+            return None, f"Could not read AI settings: {exc}"
+        if not isinstance(settings, dict):
+            return None, "AI settings are invalid."
+        mode = str(settings.get("mode", "none")).strip().lower()
+        if mode in ("", "none"):
+            return None, "AI is disabled. Enable it in AI Settings."
+        if mode == "remote":
+            remote = settings.get("remote") or {}
+            base = str(remote.get("base_url", "")).strip()
+            if not base:
+                return None, "Remote API base URL is missing."
+        elif mode == "local":
+            local = settings.get("local") or {}
+            backend = str(local.get("backend", "cli")).strip().lower() or "cli"
+            if backend == "python":
+                backend_name = str(local.get("python_backend", "")).strip()
+                model_path = str(local.get("model_path", "")).strip()
+                if not backend_name:
+                    return None, "Select a python backend (llama_cpp or transformers)."
+                if not model_path:
+                    return None, "Provide a model path or Hugging Face model id."
+            else:
+                command = str(local.get("command", "")).strip()
+                if not command:
+                    return None, "Provide a local command or executable."
+        else:
+            return None, f"Unknown AI mode: {mode}"
+        return settings, None
 
     def _on_request(self) -> None:
         if self._worker and self._worker.is_alive():
-            self.status_var.set("Hold on, the AI is still processing.")
+            self._set_status("Hold on, the AI is still processing.")
+            return
+        settings, error = self._get_settings_for_request()
+        if error:
+            self._set_status(error)
+            self._set_output(error)
             return
         prompt = self._build_prompt()
         if not prompt:
-            self.status_var.set("Select a player first.")
+            message = "Enter a request to send to the AI."
+            self._set_status(message)
+            self._set_output(message)
             return
-        self.status_var.set("Contacting AI backend ...")
+        self._set_status("Contacting AI backend ...")
         self._set_output("Thinking ...")
         self._start_progress()
-        self._worker = threading.Thread(target=self._run_ai, args=(prompt,), daemon=True)
+        self._worker = threading.Thread(target=self._run_ai, args=(prompt, settings), daemon=True)
         self._worker.start()
 
-    def _run_ai(self, prompt: str) -> None:
-        settings = self.app.get_ai_settings()
-        # Determine persona selection from the app and resolve to persona text
+    def _run_ai(self, prompt: str, settings: dict[str, Any]) -> None:
         selection = None
-        try:
-            selection = getattr(self.app, "ai_persona_choice_var", tk.StringVar()).get()
-        except Exception:
-            selection = None
+        persona_var = getattr(self.app, "ai_persona_choice_var", None)
+        if persona_var is not None and hasattr(persona_var, "get"):
+            try:
+                selection = persona_var.get()
+            except Exception:
+                selection = None
         try:
             from .personas import get_persona_text
+            persona_text = get_persona_text(settings, selection)
         except Exception:
             persona_text = ""
-        else:
-            persona_text = get_persona_text(settings, selection)
 
         mode = str(settings.get("mode", "none"))
-        # If using local python backend, prefix persona into the prompt and stream
         if mode == "local" and str(settings.get("local", {}).get("backend", "cli")).strip().lower() == "python":
             local = settings.get("local") or {}
             backend = str(local.get("python_backend", "")).strip().lower()
@@ -1636,32 +1499,41 @@ class PlayerAIAssistant:
 
             def _on_update(text: str, done: bool, error: Exception | None) -> None:
                 if error:
-                    self.frame.after(0, lambda: self._finalize_request(f"AI error: {error}", False))
+                    self.app.run_on_ui_thread(lambda: self._finalize_request(f"AI error: {error}", False))
                     return
                 if done:
-                    self.frame.after(0, lambda: self._finalize_request(text or "(AI backend returned no content.)", True))
+                    self.app.run_on_ui_thread(
+                        lambda: self._finalize_request(text or "(AI backend returned no content.)", True)
+                    )
                 else:
-                    self.frame.after(0, lambda t=text: self._append_output(t))
+                    self.app.run_on_ui_thread(lambda t=text: self._append_output(t))
 
             try:
                 from .backend_helpers import generate_text_async
             except Exception:
-                # Fallback to existing sync path
                 full_prompt = (persona_text + "\n\n" if persona_text else "") + prompt
                 try:
                     response = invoke_ai_backend(settings, full_prompt)
                 except Exception as exc:  # noqa: BLE001
-                    self.frame.after(0, lambda: self._finalize_request(f"AI error: {exc}", False))
+                    error_message = f"AI error: {exc}"
+                    self.app.run_on_ui_thread(lambda msg=error_message: self._finalize_request(msg, False))
                     return
-                self.frame.after(0, lambda: self._finalize_request(response or "(AI backend returned no content.)", True))
+                self.app.run_on_ui_thread(
+                    lambda: self._finalize_request(response or "(AI backend returned no content.)", True)
+                )
                 return
 
-            # Kick off async generator (persona prefixed to prompt)
             full_prompt = (persona_text + "\n\n" if persona_text else "") + prompt
-            generate_text_async(backend, model_path, full_prompt, max_tokens=max_tokens, temperature=temperature, on_update=_on_update)
+            generate_text_async(
+                backend,
+                model_path,
+                full_prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                on_update=_on_update,
+            )
             return
 
-        # Remote mode needs persona passed to remote API as system message
         if mode == "remote":
             try:
                 response = invoke_ai_backend(settings, prompt, persona=(persona_text or None))
@@ -1671,10 +1543,9 @@ class PlayerAIAssistant:
             else:
                 message = response or "(AI backend returned no content.)"
                 success = True
-            self.frame.after(0, lambda: self._finalize_request(message, success))
+            self.app.run_on_ui_thread(lambda: self._finalize_request(message, success))
             return
 
-        # CLI/local (non-python) backends: prefix persona into prompt and call
         full_prompt = (persona_text + "\n\n" if persona_text else "") + prompt
         try:
             response = invoke_ai_backend(settings, full_prompt)
@@ -1684,101 +1555,73 @@ class PlayerAIAssistant:
         else:
             message = response or "(AI backend returned no content.)"
             success = True
-        self.frame.after(0, lambda: self._finalize_request(message, success))
+        self.app.run_on_ui_thread(lambda: self._finalize_request(message, success))
 
     def _finalize_request(self, message: str, success: bool) -> None:
         self._stop_progress()
         self._set_output(message)
+        self._worker = None
         if success:
-            self.status_var.set("AI response received.")
+            self._set_status("AI response received.")
         else:
-            self.status_var.set(message)
-
-    def _set_output(self, text: str) -> None:
-        self.output_text.configure(state="normal")
-        self.output_text.delete("1.0", tk.END)
-        self.output_text.insert(tk.END, text.strip())
-        self.output_text.configure(state="disabled")
-
-    def _start_progress(self) -> None:
-        try:
-            self.progress.start(50)
-            self.status_var.set("AI thinking...")
-        except Exception:
-            pass
-
-    def _stop_progress(self) -> None:
-        try:
-            self.progress.stop()
-        except Exception:
-            pass
-    def _append_output(self, text: str, *, replace_placeholder: bool = True) -> None:
-        """Append incremental text to the output box.
-
-        If the current content equals the placeholder text "Thinking ...", it will
-        be replaced on the first append so we don't show the placeholder and the
-        first token together.
-        """
-        try:
-            self.output_text.configure(state="normal")
-            current = self.output_text.get("1.0", tk.END)
-            if replace_placeholder and current.strip() == "Thinking ...":
-                self.output_text.delete("1.0", tk.END)
-            self.output_text.insert(tk.END, text)
-            self.output_text.configure(state="disabled")
-        except Exception:
-            try:
-                self.output_text.configure(state="disabled")
-            except Exception:
-                pass
+            self._set_status(message)
 
     def _build_prompt(self) -> str:
-        first_entry_obj = self.context.get("first_name_entry")
-        last_entry_obj = self.context.get("last_name_entry")
-        first_entry: tk.Entry | None = first_entry_obj if isinstance(first_entry_obj, tk.Entry) else None
-        last_entry: tk.Entry | None = last_entry_obj if isinstance(last_entry_obj, tk.Entry) else None
+        has_player = getattr(self.app, "selected_player", None) is not None
         detail_vars_obj = self.context.get("detail_vars", {})
-        detail_vars: dict[str, tk.StringVar] = detail_vars_obj if isinstance(detail_vars_obj, dict) else {}
-        name = self.app.player_name_var.get().strip()
-        ovr = self.app.player_ovr_var.get().strip()
-        first = first_entry.get().strip() if first_entry is not None else ""
-        last = last_entry.get().strip() if last_entry is not None else ""
-        team = ""
-        try:
-            team = self.app.var_player_team.get().strip()
-        except Exception:
-            team = ""
-        pieces = [
-            f"Displayed name: {name}",
-            f"First name entry: {first or 'N/A'}",
-            f"Last name entry: {last or 'N/A'}",
-            f"Team: {team or 'N/A'}",
-            f"Overall rating label: {ovr}",
-        ]
-        for label, var in detail_vars.items():
-            try:
-                pieces.append(f"{label}: {var.get()}")
-            except Exception:
-                continue
-        lookup_names = [f"{first} {last}".strip(), name]
-        summary = nba_data.get_player_summary([n for n in lookup_names if n])
-        if summary:
-            pieces.append(f"NBA reference: {summary}")
+        detail_vars: dict[str, Any] = detail_vars_obj if isinstance(detail_vars_obj, dict) else {}
+        name = str(self.app.player_name_var.get() or "").strip() if has_player else ""
+        ovr = str(self.app.player_ovr_var.get() or "").strip() if has_player else ""
+        first = str(self.app.var_first.get() or "").strip() if has_player else ""
+        last = str(self.app.var_last.get() or "").strip() if has_player else ""
+        team = str(self.app.var_player_team.get() or "").strip() if has_player else ""
+        pieces: list[str] = []
+        if has_player:
+            if name and name.lower() != "select a player":
+                pieces.append(f"Displayed name: {name}")
+            pieces.append(f"First name entry: {first or 'N/A'}")
+            pieces.append(f"Last name entry: {last or 'N/A'}")
+            pieces.append(f"Team: {team or 'N/A'}")
+            if ovr:
+                pieces.append(f"Overall rating label: {ovr}")
+            for label, var in detail_vars.items():
+                try:
+                    val = str(var.get()).strip()
+                except Exception:
+                    try:
+                        val = str(dpg.get_value(var)).strip()
+                    except Exception:
+                        val = ""
+                if val and val != "--":
+                    pieces.append(f"{label}: {val}")
+            lookup_names = [f"{first} {last}".strip(), name]
+            summary = nba_data.get_player_summary([n for n in lookup_names if n])
+            if summary:
+                pieces.append(f"NBA reference: {summary}")
         else:
-            error = nba_data.last_error()
-            if error:
-                pass
-        request_text = self.prompt_var.get().strip() or "Provide a scouting report."
+            pieces.append("No player selected.")
+        request_text = ""
+        try:
+            prompt_tag = self.prompt_tag
+            if prompt_tag is not None and dpg.does_item_exist(prompt_tag):
+                request_text = str(dpg.get_value(prompt_tag) or "").strip()
+        except Exception:
+            request_text = ""
+        if not request_text:
+            request_text = self.prompt_placeholder
+        cba_guidance = build_cba_guidance(season="2025-26")
+        cba_block = f"\n\nCBA guidance:\n{cba_guidance}" if cba_guidance else ""
         return (
             "You are assisting with NBA 2K roster editing. "
-            "Use the provided player data to answer the user's request. "
+            "Provide specific, actionable field/value edits the editor can apply. "
+            "If no player is selected, answer generally or ask which player to edit. "
             "Keep responses concise and actionable.\n\n"
-            "Player data:\n- "
+            "Context:\n- "
             + "\n- ".join(pieces)
+            + cba_block
             + "\n\nUser request:\n"
             + request_text
         )
-
 
 def build_local_command(local_settings: dict[str, Any]) -> tuple[list[str], Path | None]:
     """Return the command list and working directory for a local AI invocation."""
@@ -1797,6 +1640,7 @@ def build_local_command(local_settings: dict[str, Any]) -> tuple[list[str], Path
 def call_local_process(local_settings: dict[str, Any], prompt: str) -> str:
     """Invoke a local CLI that reads the prompt from stdin."""
     cmd, workdir = build_local_command(local_settings)
+    timeout = float(local_settings.get("timeout", 60) or 60)
     try:
         completed = subprocess.run(
             cmd,
@@ -1806,7 +1650,10 @@ def call_local_process(local_settings: dict[str, Any], prompt: str) -> str:
             text=True,
             encoding="utf-8",
             check=False,
+            timeout=timeout,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"Local AI process timed out after {timeout:g}s.") from exc
     except FileNotFoundError as exc:
         raise RuntimeError(f"Command not found: {cmd[0]}") from exc
     if completed.returncode != 0:
@@ -1816,10 +1663,6 @@ def call_local_process(local_settings: dict[str, Any], prompt: str) -> str:
     if not output:
         raise RuntimeError("Local AI process returned no output.")
     return output
-
-
-# In-process Python backend instances cache
-_PYTHON_BACKEND_INSTANCES: dict[str, Any] = {}
 
 
 def call_python_backend(local_settings: dict[str, Any], prompt: str) -> str:
@@ -1837,44 +1680,14 @@ def call_python_backend(local_settings: dict[str, Any], prompt: str) -> str:
     model_path = str(local_settings.get("model_path", "")).strip()
     max_tokens = int(local_settings.get("max_tokens", 256))
     temperature = float(local_settings.get("temperature", 0.4))
-
-    if backend == "llama_cpp":
-        try:
-            from llama_cpp import Llama
-        except Exception as exc:
-            raise RuntimeError("Install 'llama-cpp-python' (pip install llama-cpp-python) to use the llama_cpp backend.") from exc
-        key = f"llama_cpp::{model_path}"
-        inst = _PYTHON_BACKEND_INSTANCES.get(key)
-        if inst is None:
-            if not model_path:
-                raise RuntimeError("Provide 'model_path' for llama_cpp backend.")
-            inst = Llama(model_path=model_path)
-            _PYTHON_BACKEND_INSTANCES[key] = inst
-        resp = inst.create(prompt=prompt, max_tokens=max_tokens, temperature=temperature)
-        choices = resp.get("choices") if isinstance(resp, dict) else None
-        if choices and choices[0] and "text" in choices[0]:
-            return str(choices[0]["text"]).strip()
-        return str(resp)
-
-    elif backend == "transformers":
-        try:
-            from transformers import pipeline
-        except Exception as exc:
-            raise RuntimeError("Install 'transformers' to use the transformers backend.") from exc
-        key = f"transformers::{model_path}"
-        inst = _PYTHON_BACKEND_INSTANCES.get(key)
-        if inst is None:
-            if not model_path:
-                raise RuntimeError("Provide 'model_path' for transformers backend.")
-            inst = pipeline("text-generation", model=model_path, device_map="auto")
-            _PYTHON_BACKEND_INSTANCES[key] = inst
-        out = inst(prompt, max_length=max_tokens, do_sample=True, temperature=temperature)
-        if isinstance(out, list) and out:
-            return str(out[0].get("generated_text", "")).strip()
-        return str(out).strip()
-
-    else:
-        raise RuntimeError(f"Unsupported python backend: {backend}")
+    inst = load_python_instance(backend, model_path)
+    return generate_python_sync(
+        backend,
+        inst,
+        prompt,
+        max_tokens=max_tokens,
+        temperature=temperature,
+    )
 
 
 def call_remote_api(remote_settings: dict[str, Any], prompt: str, persona: str | None = None) -> str:
@@ -1883,47 +1696,14 @@ def call_remote_api(remote_settings: dict[str, Any], prompt: str, persona: str |
     If `persona` is provided, it will be prepended as a system message so the
     remote model receives the GM persona as system-level instruction.
     """
-    base = str(remote_settings.get("base_url", "")).strip()
-    if not base:
-        raise RuntimeError("Remote API base URL is not configured.")
-    url = base.rstrip("/")
-    if not url.endswith("/chat/completions"):
-        url = f"{url}/chat/completions"
-    model = str(remote_settings.get("model", "")).strip() or "lmstudio"
-    system_intro = "You are a helpful basketball analyst assisting with NBA 2K roster edits."
-    system_content = (str(persona).strip() + "\n\n" if persona else "") + system_intro
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system_content},
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": 0.4,
-    }
-    api_key = str(remote_settings.get("api_key", "")).strip()
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-    data = json.dumps(payload).encode("utf-8")
-    timeout = int(remote_settings.get("timeout") or 30)
-    try:
-        req = urllib.request.Request(url, data=data, headers=headers)
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            raw = resp.read()
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", "ignore")
-        raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"Remote API error: {exc.reason}") from exc
-    parsed = json.loads(raw)
-    choices = parsed.get("choices")
-    if not choices:
-        raise RuntimeError("Remote API returned no choices.")
-    message = choices[0].get("message", {})
-    content = message.get("content")
-    if not content:
-        raise RuntimeError("Remote API choice did not include content.")
-    return str(content).strip()
+    return call_chat_completions(
+        base_url=str(remote_settings.get("base_url", "")).strip(),
+        model=str(remote_settings.get("model", "")).strip() or "lmstudio",
+        prompt=prompt,
+        api_key=str(remote_settings.get("api_key", "")).strip(),
+        timeout=int(remote_settings.get("timeout") or 30),
+        persona=persona,
+    )
 
 
 def invoke_ai_backend(settings: dict[str, Any], prompt: str, persona: str | None = None) -> str:
@@ -1946,7 +1726,12 @@ def invoke_ai_backend(settings: dict[str, Any], prompt: str, persona: str | None
     raise RuntimeError("Enable the AI integration in Home > AI Settings first.")
 
 
+# Backward-compatible alias for older imports/tests.
+AIAssistantPanel = PlayerAIAssistant
+
+
 __all__ = [
+    "AIAssistantPanel",
     "LLMControlBridge",
     "ensure_control_bridge",
     "PlayerAIAssistant",

@@ -1,100 +1,36 @@
-"""Staff screen hooked to live offsets when available."""
+"""Staff screen for Dear PyGui."""
 from __future__ import annotations
 
-import tkinter as tk
-
-from ..core.config import (
-    PANEL_BG,
-    PRIMARY_BG,
-    TEXT_PRIMARY,
-    TEXT_SECONDARY,
-    BUTTON_BG,
-    BUTTON_TEXT,
-    BUTTON_ACTIVE_BG,
-    ENTRY_BG,
-    ENTRY_BORDER,
-    ENTRY_FG,
-)
+from .entity_list_screen import EntityListScreenConfig, build_entity_list_screen
 
 
 def build_staff_screen(app) -> None:
-    app.staff_frame = tk.Frame(app, bg=PRIMARY_BG)
-
-    header = tk.Frame(app.staff_frame, bg=PANEL_BG)
-    header.pack(fill=tk.X, padx=12, pady=12)
-    tk.Label(
-        header,
-        text="Staff",
-        font=("Segoe UI", 18, "bold"),
-        bg=PANEL_BG,
-        fg=TEXT_PRIMARY,
-    ).pack(side=tk.LEFT)
-    tk.Label(
-        header,
-        textvariable=app.staff_status_var,
-        bg=PANEL_BG,
-        fg=TEXT_SECONDARY,
-    ).pack(side=tk.LEFT, padx=(10, 0))
-
-    body = tk.Frame(app.staff_frame, bg=PRIMARY_BG)
-    body.pack(fill=tk.BOTH, expand=True, padx=16, pady=12)
-
-    # Left: list
-    left = tk.Frame(body, bg=PRIMARY_BG)
-    left.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 12))
-    tk.Label(left, text="Staff List", bg=PRIMARY_BG, fg=TEXT_PRIMARY, font=("Segoe UI", 11, "bold")).pack(anchor="w")
-    search = tk.Entry(
-        left,
-        textvariable=app.staff_search_var,
-        bg=ENTRY_BG,
-        fg=ENTRY_FG,
-        relief=tk.FLAT,
-        insertbackground=ENTRY_FG,
-        highlightbackground=ENTRY_BORDER,
-        highlightthickness=1,
+    build_entity_list_screen(
+        app,
+        EntityListScreenConfig(
+            screen_key="staff",
+            screen_tag="screen_staff",
+            title="Staff",
+            status_attr="staff_status_var",
+            status_text_tag_attr="staff_status_text_tag",
+            search_var_attr="staff_search_var",
+            search_input_tag_attr="staff_search_input_tag",
+            list_container_tag="staff_list_container",
+            list_container_attr="staff_list_container",
+            detail_container_tag="staff_detail_container",
+            count_var_attr="staff_count_var",
+            count_text_tag_attr="staff_count_text_tag",
+            full_button_attr="btn_staff_full",
+            full_button_label="Open Staff Editor",
+            full_button_width=180,
+            empty_text="No staff loaded.",
+            search_hint="Search staff.",
+            refresh_callback=lambda x: x._refresh_staff_list(),
+            filter_callback=lambda x: x._filter_staff_list(),
+            open_full_callback=lambda x: x._open_full_staff_editor(x._current_staff_index()),
+        ),
     )
-    search.pack(fill=tk.X, pady=(4, 6))
-    app.staff_search_var.trace_add("write", lambda *_: app._filter_staff_list())
-    listbox = tk.Listbox(left, height=20, bg=PANEL_BG, fg=TEXT_PRIMARY, selectbackground=BUTTON_ACTIVE_BG)
-    listbox.pack(fill=tk.BOTH, expand=True)
-    listbox.bind("<<ListboxSelect>>", lambda *_: app._on_staff_selected())
-    listbox.bind("<Double-1>", lambda *_: app._open_full_staff_editor(app._current_staff_index()))
-
-    # Right: detail
-    right = tk.Frame(body, bg=PANEL_BG, bd=1, relief=tk.FLAT)
-    right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-    tk.Label(
-        right,
-        text="Staff Details",
-        bg=PANEL_BG,
-        fg=TEXT_PRIMARY,
-        font=("Segoe UI", 12, "bold"),
-    ).pack(anchor="w", padx=12, pady=(10, 4))
-    tk.Label(
-        right,
-        textvariable=app.staff_count_var,
-        bg=PANEL_BG,
-        fg=TEXT_SECONDARY,
-        justify=tk.LEFT,
-        wraplength=520,
-    ).pack(anchor="w", padx=12, pady=(0, 12))
-    tk.Button(
-        right,
-        text="Open Staff Editor",
-        command=lambda: app._open_full_staff_editor(app._current_staff_index()),
-        bg=BUTTON_BG,
-        fg=BUTTON_TEXT,
-        activebackground=BUTTON_ACTIVE_BG,
-        activeforeground=BUTTON_TEXT,
-        relief=tk.FLAT,
-        padx=14,
-        pady=6,
-    ).pack(anchor="w", padx=12, pady=(0, 10))
-
-    # Expose widgets for future wiring
-    app.staff_listbox = listbox
-    app.staff_search = search
-    app._refresh_staff_list()
 
 
 __all__ = ["build_staff_screen"]
+

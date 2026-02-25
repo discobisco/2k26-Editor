@@ -15,6 +15,66 @@ RATING_MIN = 25
 RATING_MAX_DISPLAY = 99
 RATING_MAX_TRUE = 110
 
+# Year offset conversion
+YEAR_BASE = 1900
+_YEAR_FIELD_CACHE: dict[str, bool] = {}
+# Fields whose raw values are stored as offsets from YEAR_BASE (small ints) in some
+# rosters, but may appear as absolute years in others. We guard in the converters.
+_YEAR_FIELD_ALLOWLIST = {"DRAFTEDYEAR", "HISTORICYEAR", "BIRTHYEAR"}
+
+
+def _normalize_year_key(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]+", "", str(value or "")).upper()
+
+
+def is_year_offset_field(field_name: str) -> bool:
+    """
+    Return True if a field name should be treated as a year offset from YEAR_BASE.
+
+    This targets names containing "year" while excluding common non-year counters
+    like "years" and award labels such as "of the year".
+    """
+    if not field_name:
+        return False
+    if not field_name:
+        return False
+    key = _normalize_year_key(field_name)
+    cached = _YEAR_FIELD_CACHE.get(key)
+    if cached is not None:
+        return cached
+    allowed = key in _YEAR_FIELD_ALLOWLIST
+    _YEAR_FIELD_CACHE[key] = allowed
+    return allowed
+
+
+def convert_raw_to_year(raw: int, base_year: int = YEAR_BASE) -> int:
+    """Convert a stored year offset into a calendar year."""
+    try:
+        raw_val = int(raw)
+    except Exception:
+        raw_val = 0
+    # If the value already looks like an absolute calendar year, return as-is.
+    if raw_val >= base_year:
+        return raw_val
+    if raw_val < 0:
+        raw_val = 0
+    return int(base_year) + raw_val
+
+
+def convert_year_to_raw(year: int, base_year: int = YEAR_BASE) -> int:
+    """Convert a calendar year into its stored offset."""
+    try:
+        year_val = int(year)
+    except Exception:
+        return 0
+    # If value is already a small offset, keep it.
+    if 0 <= year_val < base_year:
+        return year_val
+    raw_val = year_val - int(base_year)
+    if raw_val < 0:
+        raw_val = 0
+    return raw_val
+
 # Badge levels (0..4)
 BADGE_LEVEL_NAMES: list[str] = ["None", "Bronze", "Silver", "Gold", "Hall of Fame"]
 BADGE_NAME_TO_VALUE: dict[str, int] = {name: idx for idx, name in enumerate(BADGE_LEVEL_NAMES)}
@@ -191,6 +251,10 @@ __all__ = [
     "RATING_MAX_TRUE",
     "BADGE_LEVEL_NAMES",
     "BADGE_NAME_TO_VALUE",
+    "YEAR_BASE",
+    "is_year_offset_field",
+    "convert_raw_to_year",
+    "convert_year_to_raw",
     "HEIGHT_UNIT_SCALE",
     "HEIGHT_MIN_INCHES",
     "HEIGHT_MAX_INCHES",

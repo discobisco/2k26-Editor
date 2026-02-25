@@ -1,32 +1,30 @@
-"""Common dialogs and reusable widgets (ported from the monolithic editor)."""
+"""Common dialogs for the Dear PyGui UI."""
 from __future__ import annotations
 
-import difflib
-import tkinter as tk
-from tkinter import ttk
-from typing import Callable, Any
+from typing import Callable
 
-from ..core.config import (
-    PANEL_BG,
-    TEXT_PRIMARY,
-    TEXT_SECONDARY,
-    ACCENT_BG,
-    BUTTON_ACTIVE_BG,
-    BUTTON_BG,
-    BUTTON_TEXT,
-    INPUT_TEXT_FG,
-)
-from .widgets import bind_mousewheel
+import dearpygui.dearpygui as dpg
+
+from ..core.config import TEXT_PRIMARY, TEXT_SECONDARY
 
 
-class ImportSummaryDialog(tk.Toplevel):
-    """Dialog displaying import results and providing quick player lookup."""
+def _rgba(hex_color: str, alpha: int = 255) -> tuple[int, int, int, int]:
+    """Convert #RRGGBB hex strings from config into RGBA tuples for DPG."""
+    if not isinstance(hex_color, str) or not hex_color.startswith("#") or len(hex_color) < 7:
+        return (255, 255, 255, alpha)
+    hex_clean = hex_color.lstrip("#")
+    r = int(hex_clean[0:2], 16)
+    g = int(hex_clean[2:4], 16)
+    b = int(hex_clean[4:6], 16)
+    return (r, g, b, alpha)
 
-    MAX_SUGGESTIONS = 200
+
+class ImportSummaryDialog:
+    """Show import results and allow mapping missing players to roster names."""
 
     def __init__(
         self,
-        parent: tk.Misc,
+        app,
         title: str,
         summary_text: str,
         missing_players: list[str],
@@ -37,420 +35,222 @@ class ImportSummaryDialog(tk.Toplevel):
         require_confirmation: bool = False,
         missing_label: str | None = None,
     ) -> None:
-        super().__init__(parent)
-        self.title(title)
-        if isinstance(parent, (tk.Tk, tk.Toplevel)):
-            self.transient(parent)
-        self.grab_set()
-        self.resizable(True, True)
-        self.configure(bg=PANEL_BG)
-        self.apply_callback = apply_callback
+        self.app = app
+        self.title = title
+        self.summary_text = summary_text
         self.missing_players = list(missing_players)
-        self.mapping: dict[str, str] = {}
+        self.roster_names = sorted(set(roster_names), key=lambda n: n.lower())
+        self.apply_callback = apply_callback
         self.require_confirmation = require_confirmation
-        self._raw_score_lookup = suggestion_scores or {}
-        self._confirm_vars: dict[str, tk.BooleanVar] = {}
-        self._row_entries: dict[str, "SearchEntry"] = {}
-        summary_frame = tk.Frame(self, bg=PANEL_BG)
-        summary_frame.pack(fill=tk.X, padx=16, pady=(16, 8))
-        tk.Label(
-            summary_frame,
-            text="Import summary:",
-            bg=PANEL_BG,
-            fg=TEXT_PRIMARY,
-            font=("Segoe UI", 11, "bold"),
-        ).pack(anchor="w")
-        summary_lines_count = summary_text.count("\n") + 1
-        summary_box = tk.Text(
-            summary_frame,
-            height=max(3, min(12, summary_lines_count)),
-            wrap="word",
-            bg=PANEL_BG,
-            fg=TEXT_PRIMARY,
-            relief=tk.FLAT,
-            state="normal",
-            padx=0,
-            pady=0,
-            highlightthickness=0,
-        )
-        summary_box.insert("1.0", summary_text)
-        summary_box.config(state="disabled")
-        summary_box.pack(fill=tk.X, pady=(4, 0))
-        if missing_players:
-            missing_frame = tk.LabelFrame(
-                self,
-                text=missing_label or "Players not found - type to search the current roster",
-                bg=PANEL_BG,
-                fg=TEXT_PRIMARY,
-                labelanchor="n",
-                padx=8,
-                pady=8,
-            )
-            missing_frame.pack(fill=tk.BOTH, expand=True, padx=16, pady=(0, 12))
-            canvas = tk.Canvas(missing_frame, highlightthickness=0, bg=PANEL_BG)
-            scrollbar = tk.Scrollbar(missing_frame, orient="vertical", command=canvas.yview)
-            canvas.configure(yscrollcommand=scrollbar.set)
-            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-            canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-            rows_frame = tk.Frame(canvas, bg=PANEL_BG)
-            canvas.create_window((0, 0), window=rows_frame, anchor="nw")
-            bind_mousewheel(rows_frame, canvas)
+        self.suggestions = suggestions or {}
+        self.suggestion_scores = suggestion_scores or {}
+        self.missing_label = missing_label or "Players not found"
+        self.window_tag = dpg.generate_uuid()
+        self._choice_tags: dict[str, int | str] = {}
+        self._confirm_tags: dict[str, int | str] = {}
+        self._build_ui()
 
-            def _on_configure(event):
-                canvas.configure(scrollregion=canvas.bbox("all"))
+    def _build_ui(self) -> None:
+        with dpg.window(label=self.title, tag=self.window_tag, modal=True, no_collapse=True, width=760, height=520):
+            dpg.add_text("Import summary:")
+            dpg.add_input_text(default_value=self.summary_text, multiline=True, readonly=True, width=-1, height=140)
+            if self.missing_players:
+                dpg.add_spacer(height=6)
+                dpg.add_text(self.missing_label, color=_rgba(TEXT_PRIMARY))
+                with dpg.child_window(height=220, border=True):
+                    for name in self.missing_players:
+                        with dpg.group(horizontal=True):
+                            dpg.add_text(name, color=_rgba(TEXT_PRIMARY))
+                            default_choice = self._initial_suggestion(name)
+                            combo = dpg.add_combo(items=self.roster_names, width=320, default_value=default_choice or "")
+                            self._choice_tags[name] = combo
+                            if self.require_confirmation:
+                                chk = dpg.add_checkbox(label="Use", default_value=bool(default_choice))
+                                self._confirm_tags[name] = chk
+                            score_val = self.suggestion_scores.get(name) or self.suggestion_scores.get(name.lower())
+                            if isinstance(score_val, (int, float)):
+                                pct_text = f"{max(0.0, min(float(score_val), 1.0)) * 100:.0f}%"
+                                dpg.add_text(pct_text, color=_rgba(TEXT_SECONDARY))
+            dpg.add_spacer(height=8)
+            with dpg.group(horizontal=True):
+                if self.missing_players and self.apply_callback:
+                    label = "Apply Confirmed" if self.require_confirmation else "Apply Matches"
+                    dpg.add_button(label=label, width=140, callback=lambda: self._apply())
+                dpg.add_button(label="Close", width=90, callback=lambda: dpg.delete_item(self.window_tag))
 
-            rows_frame.bind("<Configure>", _on_configure)
-            header_fg = TEXT_PRIMARY
-            tk.Label(rows_frame, text="Sheet Name", bg=PANEL_BG, fg=header_fg, font=("Segoe UI", 10, "bold")).grid(
-                row=0, column=0, sticky="w", padx=(0, 10), pady=(0, 4)
-            )
-            tk.Label(rows_frame, text="Search roster", bg=PANEL_BG, fg=header_fg, font=("Segoe UI", 10, "bold")).grid(
-                row=0, column=1, sticky="w", pady=(0, 4)
-            )
-            show_scores = bool(self._raw_score_lookup)
-            score_col = 2
-            use_col = 2
-            if show_scores:
-                tk.Label(rows_frame, text="Match %", bg=PANEL_BG, fg=header_fg, font=("Segoe UI", 10, "bold")).grid(
-                    row=0, column=2, sticky="w", padx=(8, 0), pady=(0, 4)
-                )
-                use_col = 3
-            if self.require_confirmation:
-                tk.Label(rows_frame, text="Use", bg=PANEL_BG, fg=header_fg, font=("Segoe UI", 10, "bold")).grid(
-                    row=0, column=use_col, sticky="w", padx=(6, 0), pady=(0, 4)
-                )
-            roster_sorted = sorted(set(roster_names), key=lambda n: n.lower())
-            self._roster_lookup = {name.lower(): name for name in roster_sorted}
-            self._suggestions: dict[str, str] = {}
-            if suggestions:
-                for raw_name, candidate in suggestions.items():
-                    if not candidate:
-                        continue
-                    key = str(raw_name or "").strip()
-                    if not key:
-                        continue
-                    cand = str(candidate).strip()
-                    if not cand:
-                        continue
-                    self._suggestions.setdefault(key, cand)
-                    self._suggestions.setdefault(key.lower(), cand)
-            for idx, name in enumerate(missing_players, start=1):
-                tk.Label(rows_frame, text=name, bg=PANEL_BG, fg=TEXT_PRIMARY).grid(
-                    row=idx, column=0, sticky="w", padx=(0, 10), pady=2
-                )
-                combo = SearchEntry(rows_frame, roster_sorted, width=32)
-                combo.grid(row=idx, column=1, sticky="ew", pady=2)
-                self._row_entries[name] = combo
-                suggestion = self._get_initial_suggestion(name, roster_sorted)
-                use_var: tk.BooleanVar | None = None
-                if self.require_confirmation:
-                    use_var = tk.BooleanVar(value=bool(suggestion))
-                    self._confirm_vars[name] = use_var
-                if suggestion:
-                    combo.insert(0, suggestion)
-                    combo.icursor(tk.END)
-                    if not self.require_confirmation or (use_var and use_var.get()):
-                        self._set_mapping(name, suggestion)
-
-                def _on_entry_change(value: str, source=name, dialog=self, confirm_var=use_var) -> None:
-                    cleaned = value.strip()
-                    if dialog.require_confirmation and confirm_var is not None:
-                        if cleaned and not confirm_var.get():
-                            confirm_var.set(True)
-                        elif not cleaned and confirm_var.get():
-                            dialog.after_idle(lambda: confirm_var.set(False))
-                    dialog._set_mapping(source, cleaned)
-
-                combo.set_match_callback(_on_entry_change)
-                score_value = self._raw_score_lookup.get(name) or self._raw_score_lookup.get(name.lower())
-                if show_scores:
-                    if isinstance(score_value, (int, float)):
-                        normalized = max(0.0, min(float(score_value), 1.0))
-                        display_score = f"{normalized * 100:.0f}%"
-                    else:
-                        display_score = "-"
-                    tk.Label(rows_frame, text=display_score, bg=PANEL_BG, fg=TEXT_SECONDARY).grid(
-                        row=idx, column=score_col, sticky="w", padx=(8, 0), pady=2
-                    )
-                if self.require_confirmation and use_var is not None:
-
-                    def _on_toggle(*_args, source=name, entry=combo, var=use_var, dialog=self) -> None:
-                        if var.get():
-                            current = entry.get().strip()
-                            if not current:
-                                dialog.after_idle(lambda: var.set(False))
-                                return
-                            dialog._set_mapping(source, current)
-                        else:
-                            dialog._set_mapping(source, "")
-
-                    use_var.trace_add("write", _on_toggle)
-                    tk.Checkbutton(
-                        rows_frame,
-                        text="",
-                        variable=use_var,
-                        bg=PANEL_BG,
-                        fg=TEXT_PRIMARY,
-                        activebackground=PANEL_BG,
-                        selectcolor=PANEL_BG,
-                    ).grid(row=idx, column=use_col, sticky="w", padx=(6, 0), pady=2)
-            rows_frame.columnconfigure(1, weight=1)
-        btn_frame = tk.Frame(self, bg=PANEL_BG)
-        btn_frame.pack(fill=tk.X, padx=16, pady=(0, 16))
-        if missing_players and apply_callback:
-            btn_label = "Apply Confirmed" if self.require_confirmation else "Apply Matches"
-            tk.Button(
-                btn_frame,
-                text=btn_label,
-                command=self._on_apply,
-                width=14,
-                bg=ACCENT_BG,
-                activebackground=BUTTON_ACTIVE_BG,
-                fg=TEXT_PRIMARY,
-            ).pack(side=tk.RIGHT, padx=(0, 8))
-        tk.Button(
-            btn_frame,
-            text="Close",
-            command=self.destroy,
-            width=12,
-            bg=BUTTON_BG,
-            activebackground=BUTTON_ACTIVE_BG,
-            fg=BUTTON_TEXT,
-        ).pack(side=tk.RIGHT)
-
-    def _get_initial_suggestion(self, sheet_name: str, roster_sorted: list[str]) -> str | None:
-        key = str(sheet_name or "").strip()
-        if not key:
-            return None
-        direct = self._suggestions.get(key) or self._suggestions.get(key.lower())
+    def _initial_suggestion(self, sheet_name: str) -> str | None:
+        direct = self.suggestions.get(sheet_name) or self.suggestions.get(sheet_name.lower())
         if direct:
             return direct
-        return self._closest_roster_match(key, roster_sorted)
-
-    def _closest_roster_match(self, sheet_name: str, roster_sorted: list[str]) -> str | None:
-        if not sheet_name:
-            return None
         lower = sheet_name.lower()
-        match = self._roster_lookup.get(lower)
-        if match:
-            return match
-        for candidate in roster_sorted:
-            cand_lower = candidate.lower()
-            if lower in cand_lower or cand_lower in lower:
-                return candidate
-        matches = difflib.get_close_matches(sheet_name, roster_sorted, n=1, cutoff=0.65)
-        if matches:
-            return matches[0]
-        matches_lower = difflib.get_close_matches(lower, list(self._roster_lookup.keys()), n=1, cutoff=0.65)
-        if matches_lower:
-            return self._roster_lookup.get(matches_lower[0])
+        for cand in self.roster_names:
+            if lower in cand.lower() or cand.lower() in lower:
+                return cand
         return None
 
-    def _set_mapping(self, sheet_name: str, roster_value: str) -> None:
-        value = (roster_value or "").strip()
-        if self.require_confirmation:
-            confirm_var = self._confirm_vars.get(sheet_name)
-            if confirm_var is not None and not confirm_var.get():
-                if sheet_name in self.mapping:
-                    self.mapping.pop(sheet_name, None)
-                return
-        if value:
-            self.mapping[sheet_name] = value
-        elif sheet_name in self.mapping:
-            self.mapping.pop(sheet_name, None)
-
-    def _on_apply(self) -> None:
-        if self.require_confirmation:
-            final_mapping: dict[str, str] = {}
-            for raw_name, entry in self._row_entries.items():
-                confirm_var = self._confirm_vars.get(raw_name)
-                if confirm_var and confirm_var.get():
-                    value = entry.get().strip()
-                    if value:
-                        final_mapping[raw_name] = value
-            if self.apply_callback:
-                self.apply_callback(final_mapping)
-        elif self.apply_callback:
-            self.apply_callback(dict(self.mapping))
-        self.destroy()
-
-
-class SearchEntry(ttk.Entry):
-    """Entry with dropdown suggestion list that stays open while typing."""
-
-    def __init__(self, parent: tk.Misc, values: list[str], width: int = 30):
-        self._all_values = values
-        self._popup = None
-        self._listbox = None
-        super().__init__(parent, width=width)
-        style = ttk.Style(self)
-        style_name = "SearchEntry.TEntry"
-        try:
-            style.configure(style_name, foreground=INPUT_TEXT_FG, fieldbackground="white")
-            self.configure(style=style_name)
-        except tk.TclError:
-            try:
-                self.configure(foreground=INPUT_TEXT_FG)
-            except tk.TclError:
-                pass
-        self._match_callback: Callable[[str], None] | None = None
-        self.bind("<KeyRelease>", self._on_keyrelease, add="+")
-        self.bind("<FocusOut>", self._on_focus_out, add="+")
-        self.bind("<Down>", self._move_focus_to_list, add="+")
-        self.bind("<Return>", self._commit_current, add="+")
-
-    def set_match_callback(self, callback: Callable[[str], None]) -> None:
-        self._match_callback = callback
-
-    def _move_focus_to_list(self, event=None) -> None:
-        if self._listbox:
-            self._listbox.focus_set()
-            self._listbox.selection_clear(0, tk.END)
-            self._listbox.selection_set(0)
-            self._listbox.activate(0)
-
-    def _commit_current(self, event=None) -> None:
-        value = self.get().strip()
-        if self._listbox and self._listbox.curselection():
-            value = self._listbox.get(self._listbox.curselection()[0])
-            self.delete(0, tk.END)
-            self.insert(0, value)
-        if self._match_callback:
-            self._match_callback(value)
-        self._hide_popup()
-
-    def _on_keyrelease(self, event) -> None:
-        if event.keysym in ("Return", "Escape", "Tab"):
+    def _apply(self) -> None:
+        if not self.apply_callback:
+            dpg.delete_item(self.window_tag)
             return
-        term = self.get().strip().lower()
-        if not term:
-            filtered = self._all_values[: ImportSummaryDialog.MAX_SUGGESTIONS]
-        else:
-            filtered = [v for v in self._all_values if term in v.lower()]
-            filtered = filtered[: ImportSummaryDialog.MAX_SUGGESTIONS]
-        if not filtered:
-            self._hide_popup()
-            return
-        self._show_popup(filtered)
-
-    def _on_focus_out(self, event) -> None:
-        widget = event.widget
-        if self._popup and widget not in (self, self._listbox):
-            self.after(100, self._hide_popup)
-
-    def _show_popup(self, values: list[str]) -> None:
-        if self._popup and not self._popup.winfo_exists():
-            self._popup = None
-        if not self._popup:
-            self._popup = tk.Toplevel(self)
-            self._popup.wm_overrideredirect(True)
-            self._popup.configure(bg="#2C3E50")
-            self._listbox = tk.Listbox(
-                self._popup,
-                selectmode=tk.SINGLE,
-                activestyle="dotbox",
-                bg="#2C3E50",
-                fg="#ECF0F1",
-                highlightthickness=0,
-                relief=tk.FLAT,
-            )
-            self._listbox.pack(fill=tk.BOTH, expand=True)
-            self._listbox.bind("<ButtonRelease-1>", self._on_list_click, add="+")
-            self._listbox.bind("<Return>", self._commit_current, add="+")
-            self._listbox.bind("<Escape>", lambda _e: self._hide_popup(), add="+")
-        assert self._popup and self._listbox
-        self._listbox.delete(0, tk.END)
-        for item in values:
-            self._listbox.insert(tk.END, item)
-        self._popup.update_idletasks()
-        x = self.winfo_rootx()
-        y = self.winfo_rooty() + self.winfo_height()
-        width = max(self.winfo_width(), 240)
-        height = min(200, self._popup.winfo_reqheight())
-        self._popup.geometry(f"{width}x{height}+{x}+{y}")
-        self._popup.deiconify()
-
-    def _on_list_click(self, _event) -> None:
-        if self._listbox and self._listbox.curselection():
-            value = self._listbox.get(self._listbox.curselection()[0])
-            self.delete(0, tk.END)
-            self.insert(0, value)
-            if self._match_callback:
-                self._match_callback(value)
-        self._hide_popup()
-
-    def _hide_popup(self) -> None:
-        if self._popup:
-            self._popup.destroy()
-            self._popup = None
-            self._listbox = None
+        mapping: dict[str, str] = {}
+        for name in self.missing_players:
+            tag = self._choice_tags.get(name)
+            if tag is None or not dpg.does_item_exist(tag):
+                continue
+            value = str(dpg.get_value(tag) or "").strip()
+            if not value:
+                continue
+            if self.require_confirmation:
+                confirm_tag = self._confirm_tags.get(name)
+                if confirm_tag is not None and not dpg.get_value(confirm_tag):
+                    continue
+            mapping[name] = value
+        self.apply_callback(mapping)
+        dpg.delete_item(self.window_tag)
 
 
-class CategorySelectionDialog(tk.Toplevel):
-    """
-    Modal dialog allowing the user to select one or more categories.
-    """
+class CategorySelectionDialog:
+    """Modal checkbox list for selecting categories."""
 
     def __init__(
         self,
-        parent: tk.Misc,
+        app,
         categories: list[str],
         title: str | None = None,
         message: str | None = None,
         select_all: bool = True,
+        include_raw_option: bool = False,
+        callback: Callable[[list[str] | None, bool], None] | None = None,
     ) -> None:
-        super().__init__(parent)
-        self.title(title or "Select categories")
-        self.resizable(False, False)
-        if isinstance(parent, (tk.Tk, tk.Toplevel)):
-            self.transient(parent)
-        self.grab_set()
-        self.selected: list[str] | None = []
-        self.export_full_records: bool = False
-        self.export_full_records_var = tk.BooleanVar(value=False)
-        tk.Label(self, text=message or "Select the following categories:").pack(padx=10, pady=(10, 5))
-        frame = tk.Frame(self)
-        frame.pack(padx=10, pady=5)
-        self.var_map: dict[str, tk.BooleanVar] = {}
-        for cat in categories:
-            var = tk.BooleanVar(value=select_all)
-            chk = tk.Checkbutton(frame, text=cat, variable=var)
-            chk.pack(anchor=tk.W)
-            self.var_map[cat] = var
-        raw_frame = tk.Frame(self)
-        raw_frame.pack(fill=tk.X, padx=10, pady=(0, 5))
-        tk.Checkbutton(
-            raw_frame,
-            text="Also export full raw player records",
-            variable=self.export_full_records_var,
-            anchor="w",
-            padx=0,
-        ).pack(anchor=tk.W)
-        btn_frame = tk.Frame(self)
-        btn_frame.pack(pady=(5, 10))
-        tk.Button(btn_frame, text="OK", width=10, command=self._on_ok).pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_frame, text="Cancel", width=10, command=self._on_cancel).pack(side=tk.LEFT, padx=5)
+        self.app = app
+        self.categories = categories
+        self.title = title or "Select categories"
+        self.message = message or "Select categories to include"
+        self.callback = callback
+        self.include_raw = include_raw_option
+        self.window_tag = dpg.generate_uuid()
+        self.var_tags: dict[str, int | str] = {}
+        self.raw_tag: int | str | None = None
+        self._build_ui(select_all)
 
-    def _on_ok(self) -> None:
-        selected: list[str] = []
-        for cat, var in self.var_map.items():
-            try:
-                if var.get():
-                    selected.append(cat)
-            except Exception:
-                pass
-        export_raw = bool(self.export_full_records_var.get())
-        if not selected and not export_raw:
-            self.selected = None
+    def _build_ui(self, select_all: bool) -> None:
+        with dpg.window(label=self.title, tag=self.window_tag, modal=True, no_collapse=True, width=520, height=420):
+            dpg.add_text(self.message, wrap=460)
+            with dpg.child_window(height=240, border=True):
+                for cat in self.categories:
+                    tag = dpg.add_checkbox(label=cat, default_value=select_all)
+                    self.var_tags[cat] = tag
+            if self.include_raw:
+                self.raw_tag = dpg.add_checkbox(label="Also export full raw player records", default_value=False)
+            dpg.add_spacer(height=8)
+            with dpg.group(horizontal=True):
+                dpg.add_button(label="OK", width=80, callback=lambda: self._finish(ok=True))
+                dpg.add_button(label="Cancel", width=80, callback=lambda: dpg.delete_item(self.window_tag))
+
+    def _finish(self, ok: bool) -> None:
+        selected: list[str] | None
+        if not ok:
+            selected = None
+            export_raw = False
         else:
-            self.selected = selected
-        self.export_full_records = export_raw
-        self.destroy()
+            selected = [cat for cat, tag in self.var_tags.items() if dpg.get_value(tag)]
+            export_raw = bool(self.raw_tag and dpg.get_value(self.raw_tag))
+            if not selected and not export_raw:
+                selected = None
+        if self.callback:
+            self.callback(selected, export_raw)
+        dpg.delete_item(self.window_tag)
 
-    def _on_cancel(self) -> None:
-        self.selected = None
-        self.export_full_records = False
-        self.destroy()
+
+class TeamSelectionDialog:
+    """Modal dialog allowing the user to select one or more teams."""
+
+    def __init__(
+        self,
+        app,
+        teams: list[tuple[int, str]] | list[str],
+        title: str | None = None,
+        message: str | None = None,
+        select_all: bool = True,
+        callback: Callable[[list[str] | None, bool], None] | None = None,
+    ) -> None:
+        self.app = app
+        self.teams = teams
+        self.title = title or "Select teams"
+        self.message = message or "Select teams to include"
+        self.callback = callback
+        self.window_tag = dpg.generate_uuid()
+        self.var_tags: dict[str, int | str] = {}
+        self.all_tag: int | str | None = None
+        self.range_tag: int | str | None = None
+        self._range_team_names: set[str] = set()
+        self._normalize_teams()
+        self._build_ui(select_all)
+
+    def _normalize_teams(self) -> None:
+        normalized: list[tuple[int | None, str]] = []
+        if self.teams and isinstance(self.teams[0], tuple):
+            normalized = [(int(tid), str(name)) for tid, name in self.teams]  # type: ignore[list-item]
+        else:
+            normalized = [(None, str(name)) for name in self.teams]  # type: ignore[list-item]
+        for tid, name in normalized:
+            if tid is not None and 0 <= tid <= 29:
+                self._range_team_names.add(name)
+        self.teams = normalized
+
+    def _build_ui(self, select_all: bool) -> None:
+        with dpg.window(label=self.title, tag=self.window_tag, modal=True, no_collapse=True, width=520, height=480):
+            dpg.add_text(self.message, wrap=460)
+            self.all_tag = dpg.add_checkbox(label="All teams", default_value=select_all, callback=lambda: self._toggle_all())
+            self.range_tag = dpg.add_checkbox(label="Teams 0-29", default_value=False, callback=lambda: self._toggle_range())
+            with dpg.child_window(height=280, border=True):
+                for _tid, name in self.teams:  # type: ignore[assignment]
+                    tag = dpg.add_checkbox(label=name, default_value=select_all)
+                    self.var_tags[name] = tag
+            dpg.add_spacer(height=8)
+            with dpg.group(horizontal=True):
+                dpg.add_button(label="OK", width=80, callback=lambda: self._finish(ok=True))
+                dpg.add_button(label="Cancel", width=80, callback=lambda: dpg.delete_item(self.window_tag))
+            self._toggle_all()
+
+    def _toggle_all(self) -> None:
+        if self.all_tag and dpg.get_value(self.all_tag):
+            if self.range_tag:
+                dpg.set_value(self.range_tag, False)
+            for tag in self.var_tags.values():
+                dpg.set_value(tag, False)
+        self._sync_checkbox_states()
+
+    def _toggle_range(self) -> None:
+        if self.range_tag and dpg.get_value(self.range_tag):
+            if self.all_tag:
+                dpg.set_value(self.all_tag, False)
+            for name, tag in self.var_tags.items():
+                dpg.set_value(tag, name in self._range_team_names)
+        self._sync_checkbox_states()
+
+    def _sync_checkbox_states(self) -> None:
+        enabled = not (self.all_tag and dpg.get_value(self.all_tag) or self.range_tag and dpg.get_value(self.range_tag))
+        for tag in self.var_tags.values():
+            dpg.configure_item(tag, enabled=enabled)
+
+    def _finish(self, ok: bool) -> None:
+        if not ok:
+            selected = None
+            all_teams = False
+        else:
+            if self.all_tag and dpg.get_value(self.all_tag):
+                selected = []
+                all_teams = True
+            else:
+                selected = [name for name, tag in self.var_tags.items() if dpg.get_value(tag)]
+                all_teams = False
+                if self.range_tag and dpg.get_value(self.range_tag):
+                    if not selected:
+                        selected = list(self._range_team_names)
+        if self.callback:
+            self.callback(selected, all_teams)
+        dpg.delete_item(self.window_tag)
 
 
-__all__ = ["ImportSummaryDialog", "CategorySelectionDialog", "SearchEntry"]
+__all__ = ["ImportSummaryDialog", "CategorySelectionDialog", "TeamSelectionDialog"]

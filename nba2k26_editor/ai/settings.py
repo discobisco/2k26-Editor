@@ -15,6 +15,7 @@ DEFAULT_AI_SETTINGS: dict[str, Any] = {
         "working_dir": "",
         "python_backend": "",
         "model_path": "",
+        "timeout": 60,
         "max_tokens": 256,
         "temperature": 0.4,
     },

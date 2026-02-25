@@ -1,1 +1,1 @@
-"""UI layer scaffold (Tkinter windows and widgets)."""
+"""UI layer for the Dear PyGui-based editor."""

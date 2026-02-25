@@ -1,0 +1,1070 @@
+{
+  "NBA History offsets": [
+    {
+      "Hall of Famers": {
+        "NBA History List/Hall of Famers": [
+          {
+            "normalized_name": "DATA",
+            "display_name": "Data",
+            "versions": {
+              "2K26": {
+                "address": 24,
+                "hex": "0x18",
+                "type": "float"
+              }
+            }
+          },
+          {
+            "normalized_name": "FIRSTNAME",
+            "display_name": "First Name",
+            "versions": {
+              "2K26": {
+                "address": 122,
+                "hex": "0x7A",
+                "length": 20,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LASTNAME",
+            "display_name": "Last Name",
+            "versions": {
+              "2K26": {
+                "address": 142,
+                "hex": "0x8E",
+                "length": 20,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LOSERTEAMCITY",
+            "display_name": "Loser Team City",
+            "versions": {
+              "2K26": {
+                "address": 104,
+                "hex": "0x68",
+                "length": 18,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LOSERTEAMNAME",
+            "display_name": "Loser Team Name",
+            "versions": {
+              "2K26": {
+                "address": 79,
+                "hex": "0x4F",
+                "length": 25,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "POSITION",
+            "display_name": "Position",
+            "versions": {
+              "2K26": {
+                "address": 24,
+                "hex": "0x18",
+                "type": "float"
+              }
+            }
+          },
+          {
+            "normalized_name": "RESULT",
+            "display_name": "Result",
+            "versions": {
+              "2K26": {
+                "address": 24,
+                "hex": "0x18",
+                "type": "result_score"
+              }
+            }
+          },
+          {
+            "normalized_name": "SEASON",
+            "display_name": "Season",
+            "versions": {
+              "2K26": {
+                "address": 32,
+                "hex": "0x20",
+                "type": "byte"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMCITY",
+            "display_name": "Team City",
+            "versions": {
+              "2K26": {
+                "address": 61,
+                "hex": "0x3D",
+                "length": 25,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMLOGO",
+            "display_name": "Team Logo",
+            "versions": {
+              "2K26": {
+                "address": 0,
+                "hex": "0x0",
+                "type": "uint64"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMNAME",
+            "display_name": "Team Name",
+            "versions": {
+              "2K26": {
+                "address": 36,
+                "hex": "0x24",
+                "length": 25,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "TYPE",
+            "display_name": "Type",
+            "versions": {
+              "2K26": {
+                "address": 16,
+                "hex": "0x10",
+                "type": "byte"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "League Leaders": {
+        "NBA History List/League Leaders": [
+          {
+            "normalized_name": "DATA",
+            "display_name": "Data",
+            "versions": {
+              "2K26": {
+                "address": 24,
+                "hex": "0x18",
+                "type": "float"
+              }
+            }
+          },
+          {
+            "normalized_name": "FIRSTNAME",
+            "display_name": "First Name",
+            "versions": {
+              "2K26": {
+                "address": 122,
+                "hex": "0x7A",
+                "length": 20,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LASTNAME",
+            "display_name": "Last Name",
+            "versions": {
+              "2K26": {
+                "address": 142,
+                "hex": "0x8E",
+                "length": 20,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LOSERTEAMCITY",
+            "display_name": "Loser Team City",
+            "versions": {
+              "2K26": {
+                "address": 104,
+                "hex": "0x68",
+                "length": 18,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LOSERTEAMNAME",
+            "display_name": "Loser Team Name",
+            "versions": {
+              "2K26": {
+                "address": 79,
+                "hex": "0x4F",
+                "length": 25,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "POSITION",
+            "display_name": "Position",
+            "versions": {
+              "2K26": {
+                "address": 24,
+                "hex": "0x18",
+                "type": "float"
+              }
+            }
+          },
+          {
+            "normalized_name": "RESULT",
+            "display_name": "Result",
+            "versions": {
+              "2K26": {
+                "address": 24,
+                "hex": "0x18",
+                "type": "result_score"
+              }
+            }
+          },
+          {
+            "normalized_name": "SEASON",
+            "display_name": "Season",
+            "versions": {
+              "2K26": {
+                "address": 32,
+                "hex": "0x20",
+                "type": "byte"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMCITY",
+            "display_name": "Team City",
+            "versions": {
+              "2K26": {
+                "address": 61,
+                "hex": "0x3D",
+                "length": 25,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMLOGO",
+            "display_name": "Team Logo",
+            "versions": {
+              "2K26": {
+                "address": 0,
+                "hex": "0x0",
+                "type": "uint64"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMNAME",
+            "display_name": "Team Name",
+            "versions": {
+              "2K26": {
+                "address": 36,
+                "hex": "0x24",
+                "length": 25,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "TYPE",
+            "display_name": "Type",
+            "versions": {
+              "2K26": {
+                "address": 16,
+                "hex": "0x10",
+                "type": "byte"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Past Champions": {
+        "NBA History List/Past Champions": [
+          {
+            "normalized_name": "DATA",
+            "display_name": "Data",
+            "versions": {
+              "2K26": {
+                "address": 24,
+                "hex": "0x18",
+                "type": "float"
+              }
+            }
+          },
+          {
+            "normalized_name": "FIRSTNAME",
+            "display_name": "First Name",
+            "versions": {
+              "2K26": {
+                "address": 122,
+                "hex": "0x7A",
+                "length": 20,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LASTNAME",
+            "display_name": "Last Name",
+            "versions": {
+              "2K26": {
+                "address": 142,
+                "hex": "0x8E",
+                "length": 20,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LOSERTEAMCITY",
+            "display_name": "Loser Team City",
+            "versions": {
+              "2K26": {
+                "address": 104,
+                "hex": "0x68",
+                "length": 18,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LOSERTEAMNAME",
+            "display_name": "Loser Team Name",
+            "versions": {
+              "2K26": {
+                "address": 79,
+                "hex": "0x4F",
+                "length": 25,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "POSITION",
+            "display_name": "Position",
+            "versions": {
+              "2K26": {
+                "address": 24,
+                "hex": "0x18",
+                "type": "float"
+              }
+            }
+          },
+          {
+            "normalized_name": "RESULT",
+            "display_name": "Result",
+            "versions": {
+              "2K26": {
+                "address": 24,
+                "hex": "0x18",
+                "type": "result_score"
+              }
+            }
+          },
+          {
+            "normalized_name": "SEASON",
+            "display_name": "Season",
+            "versions": {
+              "2K26": {
+                "address": 32,
+                "hex": "0x20",
+                "type": "byte"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMCITY",
+            "display_name": "Team City",
+            "versions": {
+              "2K26": {
+                "address": 61,
+                "hex": "0x3D",
+                "length": 25,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMLOGO",
+            "display_name": "Team Logo",
+            "versions": {
+              "2K26": {
+                "address": 0,
+                "hex": "0x0",
+                "type": "uint64"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMNAME",
+            "display_name": "Team Name",
+            "versions": {
+              "2K26": {
+                "address": 36,
+                "hex": "0x24",
+                "length": 25,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "TYPE",
+            "display_name": "Type",
+            "versions": {
+              "2K26": {
+                "address": 16,
+                "hex": "0x10",
+                "type": "byte"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Season Awards": {
+        "NBA History List/Season Awards": [
+          {
+            "normalized_name": "DATA",
+            "display_name": "Data",
+            "versions": {
+              "2K26": {
+                "address": 24,
+                "hex": "0x18",
+                "type": "float"
+              }
+            }
+          },
+          {
+            "normalized_name": "FIRSTNAME",
+            "display_name": "First Name",
+            "versions": {
+              "2K26": {
+                "address": 122,
+                "hex": "0x7A",
+                "length": 20,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LASTNAME",
+            "display_name": "Last Name",
+            "versions": {
+              "2K26": {
+                "address": 142,
+                "hex": "0x8E",
+                "length": 20,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LOSERTEAMCITY",
+            "display_name": "Loser Team City",
+            "versions": {
+              "2K26": {
+                "address": 104,
+                "hex": "0x68",
+                "length": 18,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LOSERTEAMNAME",
+            "display_name": "Loser Team Name",
+            "versions": {
+              "2K26": {
+                "address": 79,
+                "hex": "0x4F",
+                "length": 25,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "POSITION",
+            "display_name": "Position",
+            "versions": {
+              "2K26": {
+                "address": 24,
+                "hex": "0x18",
+                "type": "float"
+              }
+            }
+          },
+          {
+            "normalized_name": "RESULT",
+            "display_name": "Result",
+            "versions": {
+              "2K26": {
+                "address": 24,
+                "hex": "0x18",
+                "type": "result_score"
+              }
+            }
+          },
+          {
+            "normalized_name": "SEASON",
+            "display_name": "Season",
+            "versions": {
+              "2K26": {
+                "address": 32,
+                "hex": "0x20",
+                "type": "byte"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMCITY",
+            "display_name": "Team City",
+            "versions": {
+              "2K26": {
+                "address": 61,
+                "hex": "0x3D",
+                "length": 25,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMLOGO",
+            "display_name": "Team Logo",
+            "versions": {
+              "2K26": {
+                "address": 0,
+                "hex": "0x0",
+                "type": "uint64"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMNAME",
+            "display_name": "Team Name",
+            "versions": {
+              "2K26": {
+                "address": 36,
+                "hex": "0x24",
+                "length": 25,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "TYPE",
+            "display_name": "Type",
+            "versions": {
+              "2K26": {
+                "address": 16,
+                "hex": "0x10",
+                "type": "byte"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "NBA Records offsets": [
+    {
+      "Career/Basic Info": {
+        "Basic Info": [
+          {
+            "normalized_name": "FIRSTNAME",
+            "display_name": "First Name",
+            "versions": {
+              "2K26": {
+                "address": 12,
+                "group": "Basic Info",
+                "hex": "0xC",
+                "length": 20,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LASTNAME",
+            "display_name": "Last Name",
+            "versions": {
+              "2K26": {
+                "address": 32,
+                "group": "Basic Info",
+                "hex": "0x20",
+                "length": 20,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "SIGNATUREID",
+            "display_name": "Signature ID",
+            "versions": {
+              "2K26": {
+                "address": 8,
+                "group": "Basic Info",
+                "hex": "0x8",
+                "type": "uint"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMLOGO",
+            "display_name": "Team Logo",
+            "versions": {
+              "2K26": {
+                "address": 0,
+                "group": "Basic Info",
+                "hex": "0x0",
+                "type": "uint64"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Career/Date Info": {
+        "Date Info": [
+          {
+            "normalized_name": "DAY",
+            "display_name": "Day",
+            "versions": {
+              "2K26": {
+                "address": 56,
+                "group": "Date Info",
+                "hex": "0x38",
+                "length": 5,
+                "startBit": 0,
+                "type": "bitfield"
+              }
+            }
+          },
+          {
+            "normalized_name": "MONTH",
+            "display_name": "Month",
+            "versions": {
+              "2K26": {
+                "address": 56,
+                "group": "Date Info",
+                "hex": "0x38",
+                "length": 4,
+                "startBit": 5,
+                "type": "bitfield"
+              }
+            }
+          },
+          {
+            "normalized_name": "YEAR",
+            "display_name": "Year",
+            "versions": {
+              "2K26": {
+                "address": 57,
+                "group": "Date Info",
+                "hex": "0x39",
+                "length": 12,
+                "startBit": 1,
+                "type": "bitfield"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Career/Record Stats": {
+        "Record Stats": [
+          {
+            "normalized_name": "DATA",
+            "display_name": "Data",
+            "versions": {
+              "2K26": {
+                "address": 52,
+                "group": "Record Stats",
+                "hex": "0x34",
+                "type": "float"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Season/Basic Info": {
+        "Basic Info": [
+          {
+            "normalized_name": "FIRSTNAME",
+            "display_name": "First Name",
+            "versions": {
+              "2K26": {
+                "address": 12,
+                "group": "Basic Info",
+                "hex": "0xC",
+                "length": 20,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LASTNAME",
+            "display_name": "Last Name",
+            "versions": {
+              "2K26": {
+                "address": 32,
+                "group": "Basic Info",
+                "hex": "0x20",
+                "length": 20,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "SIGNATUREID",
+            "display_name": "Signature ID",
+            "versions": {
+              "2K26": {
+                "address": 8,
+                "group": "Basic Info",
+                "hex": "0x8",
+                "type": "uint"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMLOGO",
+            "display_name": "Team Logo",
+            "versions": {
+              "2K26": {
+                "address": 0,
+                "group": "Basic Info",
+                "hex": "0x0",
+                "type": "uint64"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Season/Date Info": {
+        "Date Info": [
+          {
+            "normalized_name": "DAY",
+            "display_name": "Day",
+            "versions": {
+              "2K26": {
+                "address": 56,
+                "group": "Date Info",
+                "hex": "0x38",
+                "length": 5,
+                "startBit": 0,
+                "type": "bitfield"
+              }
+            }
+          },
+          {
+            "normalized_name": "MONTH",
+            "display_name": "Month",
+            "versions": {
+              "2K26": {
+                "address": 56,
+                "group": "Date Info",
+                "hex": "0x38",
+                "length": 4,
+                "startBit": 5,
+                "type": "bitfield"
+              }
+            }
+          },
+          {
+            "normalized_name": "YEAR",
+            "display_name": "Year",
+            "versions": {
+              "2K26": {
+                "address": 57,
+                "group": "Date Info",
+                "hex": "0x39",
+                "length": 12,
+                "startBit": 1,
+                "type": "bitfield"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Season/Record Stats": {
+        "Record Stats": [
+          {
+            "normalized_name": "DATA",
+            "display_name": "Data",
+            "versions": {
+              "2K26": {
+                "address": 52,
+                "group": "Record Stats",
+                "hex": "0x34",
+                "type": "float"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Single Game (Playoffs)/Basic Info": {
+        "Basic Info": [
+          {
+            "normalized_name": "FIRSTNAME",
+            "display_name": "First Name",
+            "versions": {
+              "2K26": {
+                "address": 12,
+                "group": "Basic Info",
+                "hex": "0xC",
+                "length": 20,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LASTNAME",
+            "display_name": "Last Name",
+            "versions": {
+              "2K26": {
+                "address": 32,
+                "group": "Basic Info",
+                "hex": "0x20",
+                "length": 20,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "SIGNATUREID",
+            "display_name": "Signature ID",
+            "versions": {
+              "2K26": {
+                "address": 8,
+                "group": "Basic Info",
+                "hex": "0x8",
+                "type": "uint"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMLOGO",
+            "display_name": "Team Logo",
+            "versions": {
+              "2K26": {
+                "address": 0,
+                "group": "Basic Info",
+                "hex": "0x0",
+                "type": "uint64"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Single Game (Playoffs)/Date Info": {
+        "Date Info": [
+          {
+            "normalized_name": "DAY",
+            "display_name": "Day",
+            "versions": {
+              "2K26": {
+                "address": 56,
+                "group": "Date Info",
+                "hex": "0x38",
+                "length": 5,
+                "startBit": 0,
+                "type": "bitfield"
+              }
+            }
+          },
+          {
+            "normalized_name": "MONTH",
+            "display_name": "Month",
+            "versions": {
+              "2K26": {
+                "address": 56,
+                "group": "Date Info",
+                "hex": "0x38",
+                "length": 4,
+                "startBit": 5,
+                "type": "bitfield"
+              }
+            }
+          },
+          {
+            "normalized_name": "YEAR",
+            "display_name": "Year",
+            "versions": {
+              "2K26": {
+                "address": 57,
+                "group": "Date Info",
+                "hex": "0x39",
+                "length": 12,
+                "startBit": 1,
+                "type": "bitfield"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Single Game (Playoffs)/Record Stats": {
+        "Record Stats": [
+          {
+            "normalized_name": "DATA",
+            "display_name": "Data",
+            "versions": {
+              "2K26": {
+                "address": 52,
+                "group": "Record Stats",
+                "hex": "0x34",
+                "type": "float"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Single Game (Regular)/Basic Info": {
+        "Basic Info": [
+          {
+            "normalized_name": "FIRSTNAME",
+            "display_name": "First Name",
+            "versions": {
+              "2K26": {
+                "address": 12,
+                "group": "Basic Info",
+                "hex": "0xC",
+                "length": 20,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LASTNAME",
+            "display_name": "Last Name",
+            "versions": {
+              "2K26": {
+                "address": 32,
+                "group": "Basic Info",
+                "hex": "0x20",
+                "length": 20,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "SIGNATUREID",
+            "display_name": "Signature ID",
+            "versions": {
+              "2K26": {
+                "address": 8,
+                "group": "Basic Info",
+                "hex": "0x8",
+                "type": "uint"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMLOGO",
+            "display_name": "Team Logo",
+            "versions": {
+              "2K26": {
+                "address": 0,
+                "group": "Basic Info",
+                "hex": "0x0",
+                "type": "uint64"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Single Game (Regular)/Date Info": {
+        "Date Info": [
+          {
+            "normalized_name": "DAY",
+            "display_name": "Day",
+            "versions": {
+              "2K26": {
+                "address": 56,
+                "group": "Date Info",
+                "hex": "0x38",
+                "length": 5,
+                "startBit": 0,
+                "type": "bitfield"
+              }
+            }
+          },
+          {
+            "normalized_name": "MONTH",
+            "display_name": "Month",
+            "versions": {
+              "2K26": {
+                "address": 56,
+                "group": "Date Info",
+                "hex": "0x38",
+                "length": 4,
+                "startBit": 5,
+                "type": "bitfield"
+              }
+            }
+          },
+          {
+            "normalized_name": "YEAR",
+            "display_name": "Year",
+            "versions": {
+              "2K26": {
+                "address": 57,
+                "group": "Date Info",
+                "hex": "0x39",
+                "length": 12,
+                "startBit": 1,
+                "type": "bitfield"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Single Game (Regular)/Record Stats": {
+        "Record Stats": [
+          {
+            "normalized_name": "DATA",
+            "display_name": "Data",
+            "versions": {
+              "2K26": {
+                "address": 52,
+                "group": "Record Stats",
+                "hex": "0x34",
+                "type": "float"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

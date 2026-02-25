@@ -1,0 +1,25 @@
+{
+  "default": {
+    "trade_aggression_multiplier": 1.0,
+    "salary_cap_volatility": 0.18,
+    "star_movement_probability": 0.62,
+    "loyalty_bias_boost": -0.08,
+    "spacing_bias_multiplier": 1.25
+  },
+  "by_season": {
+    "2025-26": {
+      "trade_aggression_multiplier": 1.0,
+      "salary_cap_volatility": 0.2,
+      "star_movement_probability": 0.64,
+      "loyalty_bias_boost": -0.09,
+      "spacing_bias_multiplier": 1.27
+    },
+    "2026-27": {
+      "trade_aggression_multiplier": 1.03,
+      "salary_cap_volatility": 0.22,
+      "star_movement_probability": 0.67,
+      "loyalty_bias_boost": -0.1,
+      "spacing_bias_multiplier": 1.29
+    }
+  }
+}

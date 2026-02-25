@@ -1,67 +1,117 @@
 # NBA2K26 Editor Repository Guide
 
-This repository hosts a Python/Tkinter live-memory editor for NBA 2K26. The app
-attaches to the running game process, loads offsets from bundled data files, and
-exposes tools for editing players, teams, staff, and stadiums.
+This repository hosts a Python live-memory editor for NBA 2K26 with a Dear
+PyGui front-end. The app attaches to the running game process, loads offsets
+from bundled data files, and exposes tools for editing players, teams, staff,
+and stadiums.
+
+If the User Says do x do not do the opposite.
+If the User is getting angry enter /plan mode.
+If the User says to fuck off do not give a text response.
+This repo deals with live memory Do Not under ANY CIRMCUMSTANCE do something that the USER did not ask for. If you want to add something that is not directly requested verify first.
 
 ## What is included
-- GUI launcher + Windows batch launcher.
+- Dear PyGui desktop UI plus Windows launcher scripts.
 - Win32 memory layer with structured logging.
 - Offset-driven schemas with per-version support (2K22-2K26).
-- Import/export for Excel templates.
-- AI Assistant panel with optional local/remote backends and HTTP control bridge.
-- Extension hooks for custom panels and full editor add-ons.
+- Excel import/export pipelines.
+- AI Assistant panel with local/remote backends and HTTP control bridge.
+- Extension hooks for custom panels and editor add-ons.
+- Integrated PPO GM agent at `nba2k_editor.gm_rl`.
+- MyEras FastAPI MCP server at `nba2k_editor.mcp_server`.
+- CPU AI personality module for MyEras front-office decisions (trade, draft, free agency, and franchise direction).
 
 ## Quick start (development)
-1. Windows is required (the memory layer uses Win32 APIs).
-2. Run one of:
+1. Windows is required for live memory features.
+2. Install dependencies:
+   - `python -m pip install -e .`
+3. Run one of:
    - `run_editor.bat`
-   - `python -m nba2k26_editor.entrypoints.gui`
+   - `python -m nba2k_editor.entrypoints.gui`
    - `python launch_editor.py`
-3. If the game is not running, the UI still opens but live memory reads/writes
-   will be unavailable.
+4. Full editor windows now launch in separate child processes/viewports when opened from the main UI.
+   - Child entrypoint: `python -m nba2k_editor.entrypoints.full_editor --editor player --indices 12,47`
+   - Packaged mode: `DB2kEditor.exe --child-full-editor --editor team --index 3`
+5. If the game is not running, the UI still opens, but live memory reads/writes
+   are unavailable.
 
-## Optional dependencies
-- `psutil`: more reliable process discovery.
-- `pandas` + `openpyxl`: Excel import/export and NBA data lookups in the AI panel.
+## Runtime Loading Behavior
+- Startup builds only the Home screen eagerly; all other screens are lazy-loaded on first open.
+- Opening the Trade screen no longer triggers a full roster refresh during app startup.
+- Player/team roster refresh now runs on demand and is reused across navigation (for example, switching Players -> Teams -> Players does not force repeated full scans once data is already loaded).
+- Table base pointers are reused across refreshes and are re-resolved when offsets are reloaded (for example after loading a new offsets file).
+
+## Optional extras
+- `psutil`: improved process discovery.
+- `pandas` + `openpyxl`: Excel and NBA data workflows.
+- `torch`, `gymnasium`, `tensorboard`: RL training/evaluation.
 
 ## Packaging
-- Build a standalone executable with:
-  - `pyinstaller NBA2K26Editor.spec`
-- Output lands in `nba2k26_editor\dist\NBA2K26Editor.exe`.
-- The spec bundles `nba2k26_editor\Offsets` and `nba2k26_editor\NBA Player Data`
-  as data resources.
+- Build with: `pyinstaller NBA2KEditor.spec`
+- Output: `dist/DB2kEditor.exe`
 
 ## Root files
-- `launch_editor.py`: PyInstaller-friendly launcher.
-- `NBA2K26Editor.spec`: PyInstaller build spec.
-- `run_editor.bat`: Windows launcher that prefers a local `.venv`.
-- `README.md`: this guide.
+- `launch_editor.py`: launcher helper.
+- `NBA2KEditor.spec`: PyInstaller spec.
+- `run_editor.bat`: launcher that prefers local `.venv`.
 
 ## Repository map
-- `nba2k26_editor\`: main package (see `nba2k26_editor\README.md`).
-- `nba2k26_editor\Offsets\`: offsets bundle and reference spreadsheets.
-- `nba2k26_editor\NBA Player Data\`: NBA reference workbook for the AI panel.
-- `nba2k26_editor\importing\`: Excel import logic and shared CSV parsing utilities.
-- `nba2k26_editor\logs\`: runtime logs.
-- `nba2k26_editor\build\`, `nba2k26_editor\dist\`: PyInstaller artifacts.
+- `nba2k_editor/`: main package (UI, core, memory, models, AI, RL, tests).
+- `nba2k_editor/Offsets/`: offsets bundle and Excel templates.
+- `nba2k_editor/NBA Player Data/`: NBA workbook used by AI and mock RL adapter.
+- `build/`, `dist/`: build artifacts.
 
 ## Documentation index
-- `nba2k26_editor\README.md`: package architecture and data flow.
-- `nba2k26_editor\ai\README.md`: AI assistant and control bridge.
-- `nba2k26_editor\core\README.md`: config, offsets, dynamic base scanning.
-- `nba2k26_editor\entrypoints\README.md`: launch entrypoints.
-- `nba2k26_editor\memory\README.md`: Win32 memory access layer.
-- `nba2k26_editor\models\README.md`: data models and import/export logic.
-- `nba2k26_editor\ui\README.md`: Tkinter UI screens and tools.
-- `nba2k26_editor\Offsets\README.md`: offsets data format and templates.
-- `nba2k26_editor\NBA Player Data\README.md`: NBA workbook schema.
-- `nba2k26_editor\logs\README.md`: log format and retention notes.
-- `nba2k26_editor\build\README.md`: PyInstaller build cache.
-- `nba2k26_editor\dist\README.md`: packaged output.
+- `nba2k_editor/README.md`
+- `nba2k_editor/tests/CALL_GRAPH.md`
+- `nba2k_editor/tests/call_graph.json`
+- `nba2k_editor/ai/README.md`
+- `nba2k_editor/ai/backends/README.md`
+- `nba2k_editor/core/README.md`
+- `nba2k_editor/entrypoints/README.md`
+- `nba2k_editor/gm_rl/README.md`
+- `nba2k_editor/gm_rl/adapters/README.md`
+- `nba2k_editor/gm_rl/cba/README.md`
+- `nba2k_editor/importing/README.md`
+- `nba2k_editor/logs/README.md`
+- `nba2k_editor/memory/README.md`
+- `nba2k_editor/models/README.md`
+- `nba2k_editor/models/services/README.md`
+- `nba2k_editor/Offsets/README.md`
+- `nba2k_editor/NBA Player Data/README.md`
+- `nba2k_editor/tests/README.md`
+- `nba2k_editor/ui/README.md`
+- `nba2k_editor/ui/controllers/README.md`
+- `nba2k_editor/ui/state/README.md`
+- `nba2k_editor/mcp_server/README.md`
 
-## Runtime-generated files
-- `nba2k26_editor\ai_settings.json`: AI backend config.
-- `nba2k26_editor\autoload_extensions.json`: extension autoload list.
-- `nba2k26_editor\dual_base_mirror.json`: dual-base mirror settings.
-- `nba2k26_editor\logs\memory.log`: memory read/write audit log.
+## Runtime-generated files (created on demand)
+- `nba2k_editor/ai_settings.json`
+- `nba2k_editor/autoload_extensions.json`
+- `nba2k_editor/dual_base_mirror.json` (present only after dynamic-base workflows write it)
+- `nba2k_editor/logs/memory.log`
+- `nba2k_editor/logs/ai.log`
+
+---
+
+# GM RL Agent (Integrated)
+
+The PPO GM agent now lives inside the editor package:
+- Source: `nba2k_editor/gm_rl/`
+- CBA rules extraction/artifacts: `nba2k_editor/gm_rl/cba/`
+
+## Entry points
+- Train CLI: `python -m nba2k_editor.entrypoints.train_gm_agent --adapter mock --total-steps 5000 --n-envs 2`
+- Editor training hook: `python -m nba2k_editor.entrypoints.editor_train_hook --config logs/gm_rl/runs/<run_id>/config.json`
+- Evaluate: `python -m nba2k_editor.gm_rl.eval --checkpoint logs/gm_rl/runs/<run_id>/checkpoints/checkpoint.pt --episodes 2`
+- Extract CBA rules: `python -m nba2k_editor.entrypoints.extract_cba_rules --season 2025-26 --source <path-to-cba-docx>`
+- Start MyEras MCP server: `python -m nba2k_editor.entrypoints.mcp_server`
+
+## Tests
+- `python -m pytest -q`
+
+## Docs consistency check
+- Run `python scripts/check_markdown_consistency.py` before doc-related PRs.
+
+## Perf instrumentation
+Set `NBA2K_EDITOR_PROFILE=1` to print timing summaries from instrumented hot paths.

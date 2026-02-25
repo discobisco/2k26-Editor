@@ -1,0 +1,679 @@
+{
+  "Teams offsets": [
+    {
+      "Team Vitals": {
+        "Vitals": [
+          {
+            "normalized_name": "CROWDID",
+            "display_name": "Crowd Id",
+            "versions": {
+              "2K26": {
+                "address": 5028,
+                "hex": "0x13A4",
+                "type": "ushort"
+              }
+            }
+          },
+          {
+            "normalized_name": "FANINTEREST",
+            "display_name": "Fan Interest",
+            "versions": {
+              "2K26": {
+                "address": 5040,
+                "hex": "0x13B0",
+                "type": "float"
+              }
+            }
+          },
+          {
+            "normalized_name": "GLEAGUETEAMADDRESS",
+            "display_name": "G-League Team Address",
+            "versions": {
+              "2K26": {
+                "address": 4056,
+                "hex": "0xFD8",
+                "type": "team_address_dropdown"
+              }
+            }
+          },
+          {
+            "normalized_name": "HISTORICYEAR",
+            "display_name": "Historic Year",
+            "versions": {
+              "2K26": {
+                "address": 5670,
+                "hex": "0x1626",
+                "length": 7,
+                "startBit": 3,
+                "type": "bitfield"
+              }
+            }
+          },
+          {
+            "normalized_name": "LEDID",
+            "display_name": "LED Id",
+            "versions": {
+              "2K26": {
+                "address": 3418,
+                "hex": "0xD5A",
+                "length": 24,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LOGO1",
+            "display_name": "Logo 1",
+            "versions": {
+              "2K26": {
+                "address": 482,
+                "hex": "0x1E2",
+                "length": 256,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LOGO2",
+            "display_name": "Logo 2",
+            "versions": {
+              "2K26": {
+                "address": 858,
+                "hex": "0x35A",
+                "length": 256,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LOGO3",
+            "display_name": "Logo 3",
+            "versions": {
+              "2K26": {
+                "address": 1114,
+                "hex": "0x45A",
+                "length": 256,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LOGO4",
+            "display_name": "Logo 4",
+            "versions": {
+              "2K26": {
+                "address": 1370,
+                "hex": "0x55A",
+                "length": 256,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LOGO5",
+            "display_name": "Logo 5",
+            "versions": {
+              "2K26": {
+                "address": 1626,
+                "hex": "0x65A",
+                "length": 256,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LOGO6",
+            "display_name": "Logo 6",
+            "versions": {
+              "2K26": {
+                "address": 1882,
+                "hex": "0x75A",
+                "length": 256,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LOGO7",
+            "display_name": "Logo 7",
+            "versions": {
+              "2K26": {
+                "address": 2138,
+                "hex": "0x85A",
+                "length": 256,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LONGESTLOSSSTREAK",
+            "display_name": "Longest Loss Streak",
+            "versions": {
+              "2K26": {
+                "address": 5018,
+                "hex": "0x139A",
+                "length": 6,
+                "startBit": 7,
+                "type": "bitfield"
+              }
+            }
+          },
+          {
+            "normalized_name": "LONGESTWINSTREAK",
+            "display_name": "Longest Win Streak",
+            "versions": {
+              "2K26": {
+                "address": 5018,
+                "hex": "0x139A",
+                "length": 7,
+                "startBit": 0,
+                "type": "bitfield"
+              }
+            }
+          },
+          {
+            "normalized_name": "LUXURYTAX",
+            "display_name": "LUXURY_TAX",
+            "versions": {
+              "2K26": {
+                "address": 5131,
+                "hex": "0x140B",
+                "type": "dropdown"
+              }
+            }
+          },
+          {
+            "normalized_name": "MANTRA",
+            "display_name": "Mantra",
+            "versions": {
+              "2K26": {
+                "address": 3674,
+                "hex": "0xE5A",
+                "length": 68,
+                "type": "wstring"
+              }
+            }
+          },
+          {
+            "normalized_name": "MASCOTSIZE",
+            "display_name": "Mascot Size",
+            "versions": {
+              "2K26": {
+                "address": 4892,
+                "hex": "0x131C",
+                "length": 2,
+                "startBit": 0,
+                "type": "bitfield"
+              }
+            }
+          },
+          {
+            "normalized_name": "METROINCOMEM",
+            "display_name": "Metro Income M",
+            "versions": {
+              "2K26": {
+                "address": 5048,
+                "hex": "0x13B8",
+                "type": "uint"
+              }
+            }
+          },
+          {
+            "normalized_name": "METROPOPULATION",
+            "display_name": "Metro Population",
+            "versions": {
+              "2K26": {
+                "address": 5044,
+                "hex": "0x13B4",
+                "type": "uint"
+              }
+            }
+          },
+          {
+            "normalized_name": "MLEREMAINING",
+            "display_name": "MLE Remaining",
+            "versions": {
+              "2K26": {
+                "address": 4880,
+                "hex": "0x1310",
+                "length": 24,
+                "startBit": 3,
+                "type": "bitfield"
+              }
+            }
+          },
+          {
+            "normalized_name": "MURALLOGO",
+            "display_name": "Mural Logo",
+            "versions": {
+              "2K26": {
+                "address": 2394,
+                "hex": "0x95A",
+                "length": 256,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "NONBIRDEXCEPTIONAVAILABLE",
+            "display_name": "Non Bird Exception Available",
+            "versions": {
+              "2K26": {
+                "address": 4880,
+                "hex": "0x1310",
+                "length": 1,
+                "startBit": 0,
+                "type": "bitfield"
+              }
+            }
+          },
+          {
+            "normalized_name": "PASOUNDLD",
+            "display_name": "Pa Sound ld",
+            "versions": {
+              "2K26": {
+                "address": 4886,
+                "hex": "0x1316",
+                "type": "ushort"
+              }
+            }
+          },
+          {
+            "normalized_name": "PLAYBYPLAYSOUNDLD",
+            "display_name": "Play By Play Sound ld",
+            "versions": {
+              "2K26": {
+                "address": 4884,
+                "hex": "0x1314",
+                "type": "ushort"
+              }
+            }
+          },
+          {
+            "normalized_name": "PROMOTIONS",
+            "display_name": "Promotions",
+            "versions": {
+              "2K26": {
+                "address": 5080,
+                "hex": "0x13D8",
+                "type": "uint"
+              }
+            }
+          },
+          {
+            "normalized_name": "RIVAL1TEAM",
+            "display_name": "Rival 1 Team",
+            "versions": {
+              "2K26": {
+                "address": 4128,
+                "hex": "0x1020",
+                "type": "team_address_dropdown"
+              }
+            }
+          },
+          {
+            "normalized_name": "RIVAL2TEAM",
+            "display_name": "Rival 2 Team",
+            "versions": {
+              "2K26": {
+                "address": 4136,
+                "hex": "0x1028",
+                "type": "team_address_dropdown"
+              }
+            }
+          },
+          {
+            "normalized_name": "RIVAL3TEAM",
+            "display_name": "Rival 3 Team",
+            "versions": {
+              "2K26": {
+                "address": 4144,
+                "hex": "0x1030",
+                "type": "team_address_dropdown"
+              }
+            }
+          },
+          {
+            "normalized_name": "STATE",
+            "display_name": "State",
+            "versions": {
+              "2K26": {
+                "address": 4892,
+                "hex": "0x131C",
+                "length": 2,
+                "startBit": 4,
+                "type": "bitfield"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMCHEMISTRY",
+            "display_name": "Team Chemistry",
+            "versions": {
+              "2K26": {
+                "address": 4852,
+                "hex": "0x12F4",
+                "type": "float"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMOPERATIONS",
+            "display_name": "Team Operations",
+            "versions": {
+              "2K26": {
+                "address": 5084,
+                "hex": "0x13DC",
+                "type": "uint"
+              }
+            }
+          },
+          {
+            "normalized_name": "TVHOMES",
+            "display_name": "Tv Homes",
+            "versions": {
+              "2K26": {
+                "address": 5052,
+                "hex": "0x13BC",
+                "type": "uint"
+              }
+            }
+          },
+          {
+            "normalized_name": "UNIQUEID",
+            "display_name": "Unique ID",
+            "versions": {
+              "2K26": {
+                "address": 4104,
+                "hex": "0x1008",
+                "type": "ushort"
+              }
+            }
+          },
+          {
+            "normalized_name": "UNIQUESIGNATURECRC32B",
+            "display_name": "Unique Signature CRC32B",
+            "versions": {
+              "2K26": {
+                "address": 4096,
+                "hex": "0x1000",
+                "length": 4,
+                "type": "hex_bytes"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Team Info": {
+        "Info": [
+          {
+            "normalized_name": "ARENANAME",
+            "display_name": "Arena Name",
+            "versions": {
+              "2K26": {
+                "address": 344,
+                "hex": "0x158",
+                "length": 36,
+                "type": "wstring"
+              }
+            }
+          },
+          {
+            "normalized_name": "ARENAOPERATIONS",
+            "display_name": "Arena Operations",
+            "versions": {
+              "2K26": {
+                "address": 5088,
+                "hex": "0x13E0",
+                "type": "uint"
+              }
+            }
+          },
+          {
+            "normalized_name": "CITYNAME",
+            "display_name": "City Name",
+            "versions": {
+              "2K26": {
+                "address": 788,
+                "hex": "0x314",
+                "length": 18,
+                "type": "wstring"
+              }
+            }
+          },
+          {
+            "normalized_name": "CITYSHORTNAME",
+            "display_name": "City Short Name",
+            "versions": {
+              "2K26": {
+                "address": 824,
+                "hex": "0x338",
+                "length": 7,
+                "type": "wstring"
+              }
+            }
+          },
+          {
+            "normalized_name": "STADIUM",
+            "display_name": "Stadium",
+            "versions": {
+              "2K26": {
+                "address": 4040,
+                "hex": "0xFC8",
+                "type": "stadium_address_dropdown"
+              }
+            }
+          },
+          {
+            "normalized_name": "STATESHORTNAME",
+            "display_name": "State Short Name",
+            "versions": {
+              "2K26": {
+                "address": 838,
+                "hex": "0x346",
+                "length": 7,
+                "type": "wstring"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEAMNAME",
+            "display_name": "Team Name",
+            "versions": {
+              "2K26": {
+                "address": 738,
+                "hex": "0x2E2",
+                "length": 24,
+                "type": "wstring"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Team Business": {
+        "Pricing": [
+          {
+            "normalized_name": "CONCESSIONPRICES",
+            "display_name": "Concession Prices",
+            "versions": {
+              "2K26": {
+                "address": 5072,
+                "hex": "0x13D0",
+                "type": "float"
+              }
+            }
+          },
+          {
+            "normalized_name": "LUXURYBOXPRICES",
+            "display_name": "Luxury Box Prices",
+            "versions": {
+              "2K26": {
+                "address": 5076,
+                "hex": "0x13D4",
+                "type": "float"
+              }
+            }
+          },
+          {
+            "normalized_name": "TICKETS",
+            "display_name": "Tickets",
+            "versions": {
+              "2K26": {
+                "address": 5068,
+                "hex": "0x13CC",
+                "type": "float"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Team Budget": {
+        "Budget": [
+          {
+            "normalized_name": "PLAYERPAYROLL",
+            "display_name": "Player Payroll",
+            "versions": {
+              "2K26": {
+                "address": 5092,
+                "hex": "0x13E4",
+                "type": "uint"
+              }
+            }
+          },
+          {
+            "normalized_name": "STAFFPAYROLL",
+            "display_name": "Staff Payroll",
+            "versions": {
+              "2K26": {
+                "address": 5100,
+                "hex": "0x13EC",
+                "type": "uint"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Team Colors": {
+        "Colors": [
+          {
+            "normalized_name": "COLORMETERSHOT",
+            "display_name": "Shot Meter Color",
+            "versions": {
+              "2K26": {
+                "address": 5156,
+                "hex": "0x1424",
+                "length": 3,
+                "type": "hex_bytes"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEXTDARK",
+            "display_name": "Text Dark",
+            "versions": {
+              "2K26": {
+                "address": 5164,
+                "hex": "0x142C",
+                "length": 3,
+                "type": "hex_bytes"
+              }
+            }
+          },
+          {
+            "normalized_name": "TEXTLIGHT",
+            "display_name": "Text Light",
+            "versions": {
+              "2K26": {
+                "address": 5160,
+                "hex": "0x1428",
+                "length": 3,
+                "type": "hex_bytes"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Team Jerseys": {
+        "Jerseys": [
+          {
+            "normalized_name": "PRACTICEJERSEYAWAY",
+            "display_name": "Practice Jersey Away",
+            "versions": {
+              "2K26": {
+                "address": 4032,
+                "hex": "0xFC0",
+                "type": "uniform_dropdown"
+              }
+            }
+          },
+          {
+            "normalized_name": "PRACTICEJERSEYHOME",
+            "display_name": "Practice Jersey Home",
+            "versions": {
+              "2K26": {
+                "address": 4024,
+                "hex": "0xFB8",
+                "type": "uniform_dropdown"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Team Type": {
+        "Type": [
+          {
+            "normalized_name": "DIVISION",
+            "display_name": "Division",
+            "versions": {
+              "2K26": {
+                "address": 5034,
+                "hex": "0x13AA",
+                "length": 5,
+                "startBit": 6,
+                "type": "bitfield"
+              }
+            }
+          },
+          {
+            "normalized_name": "MLETYPE",
+            "display_name": "MLE Type",
+            "versions": {
+              "2K26": {
+                "address": 4880,
+                "hex": "0x1310",
+                "length": 2,
+                "startBit": 1,
+                "type": "bitfield"
+              }
+            }
+          },
+          {
+            "normalized_name": "ROSTERTYPE",
+            "display_name": "Roster Type",
+            "versions": {
+              "2K26": {
+                "address": 4895,
+                "hex": "0x131F",
+                "length": 5,
+                "startBit": 2,
+                "type": "bitfield"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

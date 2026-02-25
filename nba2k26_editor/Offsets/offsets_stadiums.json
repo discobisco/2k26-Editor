@@ -1,0 +1,180 @@
+{
+  "Stadiums offsets": [
+    {
+      "Stadium": {
+        "Files": [
+          {
+            "normalized_name": "ARENAID",
+            "display_name": "Arena Id",
+            "versions": {
+              "2K26": {
+                "address": 186,
+                "group": "Files",
+                "hex": "0xBA",
+                "length": 38,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "BACKBOARDSHAKES",
+            "display_name": "Backboard Shakes",
+            "versions": {
+              "2K26": {
+                "address": 2023,
+                "group": "Files",
+                "hex": "0x7E7",
+                "length": 2,
+                "type": "bitfield"
+              }
+            }
+          },
+          {
+            "normalized_name": "CITYFLOORID",
+            "display_name": "City Floor Id",
+            "versions": {
+              "2K26": {
+                "address": 264,
+                "group": "Files",
+                "hex": "0x108",
+                "length": 120,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "DORNASID",
+            "display_name": "DornasID",
+            "versions": {
+              "2K26": {
+                "address": 178,
+                "group": "Files",
+                "hex": "0xB2",
+                "length": 4,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "FLOORID",
+            "display_name": "Floor Id",
+            "versions": {
+              "2K26": {
+                "address": 224,
+                "group": "Files",
+                "hex": "0xE0",
+                "length": 40,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "normalized_name": "LEDID",
+            "display_name": "LED Id",
+            "versions": {
+              "2K26": {
+                "address": 182,
+                "group": "Files",
+                "hex": "0xB6",
+                "length": 4,
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "Vitals": [
+          {
+            "normalized_name": "ARENANAME",
+            "display_name": "Arena Name",
+            "versions": {
+              "2K26": {
+                "address": 0,
+                "group": "Vitals",
+                "hex": "0x0",
+                "length": 33,
+                "type": "wstring"
+              }
+            }
+          },
+          {
+            "normalized_name": "CITYNAME",
+            "display_name": "City Name",
+            "versions": {
+              "2K26": {
+                "address": 130,
+                "group": "Vitals",
+                "hex": "0x82",
+                "length": 24,
+                "type": "wstring"
+              }
+            }
+          },
+          {
+            "normalized_name": "CITYSHORTNAME",
+            "display_name": "City Short Name",
+            "versions": {
+              "2K26": {
+                "address": 384,
+                "group": "Vitals",
+                "hex": "0x180",
+                "length": 9,
+                "type": "wstring"
+              }
+            }
+          },
+          {
+            "normalized_name": "CROWDTYPE",
+            "display_name": "Crowd Type",
+            "versions": {
+              "2K26": {
+                "address": 2018,
+                "group": "Vitals",
+                "hex": "0x7E2",
+                "length": 1,
+                "type": "uint"
+              }
+            }
+          },
+          {
+            "normalized_name": "ID",
+            "display_name": "ID",
+            "versions": {
+              "2K26": {
+                "address": 2002,
+                "group": "Vitals",
+                "hex": "0x7D2",
+                "type": "ushort"
+              }
+            }
+          },
+          {
+            "normalized_name": "NICKNAME",
+            "display_name": "Nickname",
+            "versions": {
+              "2K26": {
+                "address": 66,
+                "group": "Vitals",
+                "hex": "0x42",
+                "length": 32,
+                "type": "wstring"
+              }
+            }
+          },
+          {
+            "normalized_name": "STATESHORTNAME",
+            "display_name": "State Short Name",
+            "versions": {
+              "2K26": {
+                "address": 402,
+                "group": "Vitals",
+                "hex": "0x192",
+                "length": 8,
+                "type": "wstring"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

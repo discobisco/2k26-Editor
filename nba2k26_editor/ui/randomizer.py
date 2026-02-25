@@ -1,146 +1,125 @@
-"""Randomizer window (ported from the monolithic editor)."""
+"""Randomizer modal for the Dear PyGui UI."""
 from __future__ import annotations
 
 import random
-import tkinter as tk
-from tkinter import ttk
+from typing import Dict, Tuple
+
+import dearpygui.dearpygui as dpg
 
 from ..core.conversions import to_int
 from ..models.data_model import PlayerDataModel
-from .widgets import bind_mousewheel
+
+CategoryFieldKey = Tuple[str, str]
 
 
-class RandomizerWindow(tk.Toplevel):
-    """
-    Randomize player attributes/tendencies/durability for selected teams.
+class RandomizerWindow:
+    """Randomize player attributes/tendencies/durability across selected teams."""
 
-    Provides per-field min/max controls and applies randomized values to all
-    players on the checked teams using live memory writes where possible.
-    """
-
-    def __init__(self, parent: tk.Tk, model: PlayerDataModel) -> None:
-        super().__init__(parent)
-        self.title("Randomizer")
+    def __init__(self, app, model: PlayerDataModel) -> None:
+        self.app = app
         self.model = model
-        self.min_vars: dict[tuple[str, str], tk.IntVar] = {}
-        self.max_vars: dict[tuple[str, str], tk.IntVar] = {}
-        self.team_vars: dict[str, tk.BooleanVar] = {}
-        self.configure(bg="#F5F5F5")
-        self.transient(parent)
-        self.grab_set()
+        self.window_tag: int | str = dpg.generate_uuid()
+        self.min_tags: Dict[CategoryFieldKey, int | str] = {}
+        self.max_tags: Dict[CategoryFieldKey, int | str] = {}
+        self.team_check_tags: Dict[str, int | str] = {}
         self._build_ui()
-        self.update_idletasks()
-        x = parent.winfo_rootx() + (parent.winfo_width() - self.winfo_width()) // 2
-        y = parent.winfo_rooty() + (parent.winfo_height() - self.winfo_height()) // 2
-        self.geometry(f"+{x}+{y}")
 
+    # ------------------------------------------------------------------
+    # UI builders
+    # ------------------------------------------------------------------
     def _build_ui(self) -> None:
-        """Construct the notebook with category tabs and team selection."""
-        notebook = ttk.Notebook(self)
-        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        for cat in ("Attributes", "Tendencies", "Durability"):
-            frame = tk.Frame(notebook, bg="#F5F5F5")
-            notebook.add(frame, text=cat)
-            self._build_category_page(frame, cat)
-        team_frame = tk.Frame(notebook, bg="#F5F5F5")
-        notebook.add(team_frame, text="Teams")
-        self._build_team_page(team_frame)
-        tk.Button(self, text="Close", command=self.destroy, bg="#B0413E", fg="white", relief=tk.FLAT).pack(pady=(0, 10))
+        with dpg.window(
+            label="Randomizer",
+            tag=self.window_tag,
+            modal=True,
+            no_collapse=True,
+            width=820,
+            height=620,
+        ):
+            dpg.add_text(
+                "Pick per-field min/max values, choose teams, and randomize players in-place.",
+                wrap=760,
+            )
+            dpg.add_spacer(height=6)
+            with dpg.tab_bar():
+                for cat in ("Attributes", "Tendencies", "Durability"):
+                    fields = self.model.categories.get(cat, [])
+                    if not fields:
+                        continue
+                    with dpg.tab(label=cat):
+                        self._build_category_tab(cat, fields)
+            dpg.add_spacer(height=10)
+            dpg.add_text("Teams")
+            with dpg.child_window(height=160, border=True):
+                for team in self._team_names():
+                    tag = dpg.add_checkbox(label=team, default_value=False)
+                    self.team_check_tags[team] = tag
+            dpg.add_spacer(height=8)
+            with dpg.group(horizontal=True):
+                dpg.add_button(label="Randomize Selected", width=180, callback=lambda: self._randomize_selected())
+                dpg.add_button(label="Close", width=90, callback=lambda: dpg.delete_item(self.window_tag))
 
-    def _build_category_page(self, parent: tk.Frame, category: str) -> None:
-        """Add min/max controls for each field in a category."""
-        canvas = tk.Canvas(parent, bg="#F5F5F5", highlightthickness=0)
-        scrollbar = tk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        scroll_frame = tk.Frame(canvas, bg="#F5F5F5")
-        scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        bind_mousewheel(scroll_frame, canvas)
-        tk.Label(scroll_frame, text="Field", bg="#F5F5F5", font=("Segoe UI", 10, "bold")).grid(
-            row=0, column=0, sticky=tk.W, padx=(10, 5), pady=2
-        )
-        tk.Label(scroll_frame, text="Min", bg="#F5F5F5", font=("Segoe UI", 10, "bold")).grid(row=0, column=1, padx=5, pady=2)
-        tk.Label(scroll_frame, text="Max", bg="#F5F5F5", font=("Segoe UI", 10, "bold")).grid(row=0, column=2, padx=5, pady=2)
-        fields = self.model.categories.get(category, [])
-        for idx, field in enumerate(fields, start=1):
-            name = field.get("name", f"Field {idx}")
-            tk.Label(scroll_frame, text=name, bg="#F5F5F5").grid(row=idx, column=0, sticky=tk.W, padx=(10, 5), pady=2)
-            if category in ("Attributes", "Durability"):
-                default_min, default_max = 25, 99
-                spin_from, spin_to = 25, 99
-            elif category == "Tendencies":
-                default_min, default_max = 0, 100
-                spin_from, spin_to = 0, 100
-            else:
-                default_min = 0
-                length = to_int(field.get("length", 8))
-                default_max = (1 << length) - 1 if length else 255
-                spin_from, spin_to = 0, default_max
-            min_var = tk.IntVar(value=default_min)
-            max_var = tk.IntVar(value=default_max)
-            self.min_vars[(category, name)] = min_var
-            self.max_vars[(category, name)] = max_var
-            tk.Spinbox(scroll_frame, from_=spin_from, to=spin_to, textvariable=min_var, width=5).grid(row=idx, column=1, padx=2, pady=2)
-            tk.Spinbox(scroll_frame, from_=spin_from, to=spin_to, textvariable=max_var, width=5).grid(row=idx, column=2, padx=2, pady=2)
+    def _build_category_tab(self, category: str, fields: list[dict]) -> None:
+        with dpg.child_window(height=320, border=True):
+            with dpg.table(
+                header_row=True,
+                resizable=True,
+                policy=dpg.mvTable_SizingStretchProp,
+                borders_innerH=True,
+                borders_innerV=True,
+                borders_outerH=True,
+                borders_outerV=True,
+            ):
+                dpg.add_table_column(label="Field", width_fixed=False)
+                dpg.add_table_column(label="Min", width_fixed=True, init_width_or_weight=80)
+                dpg.add_table_column(label="Max", width_fixed=True, init_width_or_weight=80)
+                for field in fields:
+                    name = field.get("name") or "Field"
+                    dpg.add_table_row()
+                    dpg.add_text(str(name))
+                    min_default, max_default, min_limit, max_limit = self._default_bounds(category, field)
+                    min_tag = dpg.add_input_int(default_value=min_default, min_value=min_limit, max_value=max_limit, step=1, width=90)
+                    max_tag = dpg.add_input_int(default_value=max_default, min_value=min_limit, max_value=max_limit, step=1, width=90)
+                    self.min_tags[(category, str(name))] = min_tag
+                    self.max_tags[(category, str(name))] = max_tag
 
-    def _build_team_page(self, parent: tk.Frame) -> None:
-        """Add team checkboxes and randomize action."""
-        tk.Button(parent, text="Randomize Selected", command=self._randomize_selected, bg="#52796F", fg="white", relief=tk.FLAT).pack(
-            pady=(5, 10)
-        )
-        canvas = tk.Canvas(parent, bg="#F5F5F5", highlightthickness=0)
-        scrollbar = tk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        scroll_frame = tk.Frame(canvas, bg="#F5F5F5")
-        scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        bind_mousewheel(scroll_frame, canvas)
-        team_names = []
-        try:
-            team_names = self.model.get_teams()
-        except Exception:
-            team_names = []
-        if not team_names:
-            team_names = [name for _, name in self.model.team_list]
-        for idx, team_name in enumerate(team_names):
-            var = tk.BooleanVar(value=False)
-            self.team_vars[team_name] = var
-            tk.Checkbutton(scroll_frame, text=team_name, variable=var, bg="#F5F5F5").grid(row=idx, column=0, sticky=tk.W, padx=10, pady=2)
-
+    # ------------------------------------------------------------------
+    # Actions
+    # ------------------------------------------------------------------
     def _randomize_selected(self) -> None:
-        """Apply randomized values within per-field bounds to selected teams."""
-        import tkinter.messagebox as mb
-
-        selected = [team for team, var in self.team_vars.items() if var.get()]
+        selected = [team for team, tag in self.team_check_tags.items() if dpg.does_item_exist(tag) and dpg.get_value(tag)]
         if not selected:
-            mb.showinfo("Randomizer", "No teams selected for randomization.")
+            self.app.show_warning("Randomizer", "Select at least one team first.")
             return
-        categories = ["Attributes", "Tendencies", "Durability"]
+        categories = ("Attributes", "Tendencies", "Durability")
         updated_players = 0
         for team_name in selected:
-            players = self.model.get_players_by_team(team_name)
+            try:
+                players = self.model.get_players_by_team(team_name)
+            except Exception:
+                players = []
             if not players:
                 continue
             for player in players:
                 player_updated = False
                 for cat in categories:
-                    fields = self.model.categories.get(cat, [])
-                    for field in fields:
+                    for field in self.model.categories.get(cat, []):
                         fname = field.get("name")
                         if not isinstance(fname, str) or not fname:
                             continue
                         key = (cat, fname)
-                        if key not in self.min_vars or key not in self.max_vars:
+                        min_tag = self.min_tags.get(key)
+                        max_tag = self.max_tags.get(key)
+                        if min_tag is None or max_tag is None:
                             continue
                         offset_raw = field.get("offset")
                         if offset_raw in (None, ""):
                             continue
-                        min_val = self.min_vars[key].get()
-                        max_val = self.max_vars[key].get()
+                        try:
+                            min_val = int(dpg.get_value(min_tag))
+                            max_val = int(dpg.get_value(max_tag))
+                        except Exception:
+                            continue
                         if min_val > max_val:
                             min_val, max_val = max_val, min_val
                         rating = random.randint(min_val, max_val)
@@ -161,7 +140,36 @@ class RandomizerWindow(tk.Toplevel):
             self.model.refresh_players()
         except Exception:
             pass
-        mb.showinfo("Randomizer", f"Randomization complete. {updated_players} players updated.")
+        self.app.show_message("Randomizer", f"Randomization complete. {updated_players} players updated.")
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+    def _default_bounds(self, category: str, field: dict) -> tuple[int, int, int, int]:
+        if category in ("Attributes", "Durability"):
+            return 25, 99, 0, 120
+        if category == "Tendencies":
+            return 0, 100, 0, 120
+        length = to_int(field.get("length", 8)) or 8
+        max_val = (1 << length) - 1 if length else 255
+        return 0, max_val, 0, max_val
+
+    def _team_names(self) -> list[str]:
+        try:
+            names = self.model.get_teams()
+        except Exception:
+            names = []
+        if names:
+            return list(names)
+        try:
+            return [name for _, name in self.model.team_list]
+        except Exception:
+            return []
 
 
-__all__ = ["RandomizerWindow"]
+def open_randomizer(app) -> RandomizerWindow:
+    """Convenience helper to open the randomizer modal."""
+    return RandomizerWindow(app, app.model)
+
+
+__all__ = ["RandomizerWindow", "open_randomizer"]
