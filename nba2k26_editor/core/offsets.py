@@ -2036,8 +2036,8 @@ def _parse_pointer_chain_config(base_cfg: dict | None) -> list[dict[str, object]
     if "direct_table" in base_cfg:
         direct_table = bool(base_cfg.get("direct_table"))
     else:
-        # Empty chains represent direct table bases unless explicitly overridden.
-        direct_table = isinstance(chain_data, list) and len(chain_data) == 0
+        # Default behavior: base pointer is a pointer slot that must be dereferenced.
+        direct_table = False
     steps = _normalize_chain_steps(chain_data)
     chains.append({
         "rva": base_addr,
