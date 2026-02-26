@@ -1888,12 +1888,8 @@ class PlayerDataModel:
         snapshot: dict[str, object] = {}
         if not player:
             return snapshot
-        if self.mem.hproc is None or self.mem.base_addr is None:
-            try:
-                if not self.mem.open_process():
-                    return snapshot
-            except Exception:
-                return snapshot
+        if not self.mem.open_process():
+            return snapshot
         record_addr = self._player_record_address(player.index, record_ptr=getattr(player, "record_ptr", None))
         if record_addr is None:
             return snapshot
