@@ -1,0 +1,347 @@
+{
+  "Stadiums": {
+    "Stadium": {
+      "Vitals": [
+        {
+          "normalized_name": "ARENANAME",
+          "display_name": "Arena Name",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 0,
+              "hex": "0x0",
+              "length": 528,
+              "startBit": 0,
+              "type": "string"
+            },
+            "2K26": {
+              "address": 0,
+              "hex": "0x0",
+              "length": 33,
+              "type": "wstring"
+            }
+          }
+        },
+        {
+          "normalized_name": "ARENACAPACITY",
+          "display_name": "ARENA_CAPACITY",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 1820,
+              "hex": "0x71C",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "CITYNAME",
+          "display_name": "City Name",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 252,
+              "hex": "0xFC",
+              "length": 144,
+              "startBit": 0,
+              "type": "string"
+            },
+            "2K26": {
+              "address": 384,
+              "hex": "0x180",
+              "length": 9,
+              "type": "wstring"
+            }
+          }
+        },
+        {
+          "normalized_name": "CROWDLOUDNESS",
+          "display_name": "CROWD_LOUDNESS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 1825,
+              "hex": "0x721",
+              "length": 8,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "ID",
+          "display_name": "ID",
+          "versions": {
+            "2K26": {
+              "address": 2002,
+              "hex": "0x7D2",
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "MUSICPROBABILITY",
+          "display_name": "MUSIC_PROBABILITY",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 1824,
+              "hex": "0x720",
+              "length": 8,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "NICKNAME",
+          "display_name": "Nickname",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 66,
+              "hex": "0x42",
+              "length": 512,
+              "startBit": 0,
+              "type": "string"
+            },
+            "2K26": {
+              "address": 66,
+              "hex": "0x42",
+              "length": 32,
+              "type": "wstring"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATE",
+          "display_name": "STATE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 270,
+              "hex": "0x10E",
+              "length": 64,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATESHORTNAME",
+          "display_name": "State Short Name",
+          "versions": {
+            "2K26": {
+              "address": 402,
+              "hex": "0x192",
+              "length": 8,
+              "type": "wstring"
+            }
+          }
+        }
+      ],
+      "Files": [
+        {
+          "normalized_name": "ALTFLOORFILE1",
+          "display_name": "ALT_FLOOR_FILE#1",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 216,
+              "hex": "0xD8",
+              "length": 96,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "ALTFLOORFILE2",
+          "display_name": "ALT_FLOOR_FILE#2",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 228,
+              "hex": "0xE4",
+              "length": 96,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "ALTFLOORFILE3",
+          "display_name": "ALT_FLOOR_FILE#3",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 240,
+              "hex": "0xF0",
+              "length": 96,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "ALTFLOORJERSEY1",
+          "display_name": "ALT_FLOOR_JERSEY#1",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 1838,
+              "hex": "0x72E",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "ALTFLOORJERSEY2",
+          "display_name": "ALT_FLOOR_JERSEY#2",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 1840,
+              "hex": "0x730",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "ALTFLOORJERSEY3",
+          "display_name": "ALT_FLOOR_JERSEY#3",
+          "versions": {
+            "2K23": {
+              "address": 4852,
+              "hex": "0x12F4",
+              "length": 16,
+              "startBit": 7,
+              "type": "combo"
+            },
+            "2K24": {
+              "address": 1828,
+              "hex": "0x724",
+              "length": 16,
+              "startBit": 7,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "ARENAID",
+          "display_name": "Arena Id",
+          "versions": {
+            "2K26": {
+              "address": 186,
+              "hex": "0xBA",
+              "length": 38,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "ARENAFILE",
+          "display_name": "ARENA_FILE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 194,
+              "hex": "0xC2",
+              "length": 80,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "CITYFLOORID",
+          "display_name": "City Floor Id",
+          "versions": {
+            "2K26": {
+              "address": 264,
+              "hex": "0x108",
+              "length": 120,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "DORNASID",
+          "display_name": "DornasID",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 178,
+              "hex": "0xB2",
+              "length": 64,
+              "startBit": 0,
+              "type": "string"
+            },
+            "2K26": {
+              "address": 178,
+              "hex": "0xB2",
+              "length": 4,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "FLOORID",
+          "display_name": "Floor Id",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 204,
+              "hex": "0xCC",
+              "length": 96,
+              "startBit": 0,
+              "type": "string"
+            },
+            "2K26": {
+              "address": 224,
+              "hex": "0xE0",
+              "length": 40,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "LEDID",
+          "display_name": "LED Id",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 186,
+              "hex": "0xBA",
+              "length": 64,
+              "startBit": 0,
+              "type": "string"
+            },
+            "2K26": {
+              "address": 182,
+              "hex": "0xB6",
+              "length": 4,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "SOUNDID",
+          "display_name": "SOUND_ID",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 1826,
+              "hex": "0x722",
+              "length": 8,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "UNIQUEID",
+          "display_name": "UNIQUEID",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 1822,
+              "hex": "0x71E",
+              "length": 8,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

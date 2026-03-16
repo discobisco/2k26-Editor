@@ -1,0 +1,3277 @@
+{
+  "Teams": {
+    "Vitals": {
+      "Vitals": [
+        {
+          "normalized_name": "ABB",
+          "display_name": "ABB",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 778,
+              "hex": "0x30A",
+              "length": 272,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "ADVANCEDROTATION",
+          "display_name": "ADVANCED_ROTATION",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4151,
+              "hex": "0x1037",
+              "length": 1,
+              "startBit": 7,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "AUDIOSIGNATURECRC32B",
+          "display_name": "AUDIO_SIGNATURE_CRC32B",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3236,
+              "hex": "0xCA4",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "CHEMISTRY",
+          "display_name": "CHEMISTRY",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3780,
+              "hex": "0xEC4",
+              "length": 32,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "CITY",
+          "display_name": "CITY",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3200,
+              "hex": "0xC80",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "CITYABBREV",
+          "display_name": "City Abbrev",
+          "versions": {
+            "2K25": {
+              "address": 810,
+              "length": 8,
+              "type": "WString"
+            }
+          }
+        },
+        {
+          "normalized_name": "CITYNAME",
+          "display_name": "City Name",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 742,
+              "hex": "0x2E6",
+              "length": 320,
+              "startBit": 0,
+              "type": "string"
+            },
+            "2K25": {
+              "address": 774,
+              "length": 24,
+              "type": "WString"
+            },
+            "2K26": {
+              "address": 788,
+              "desc": "City Name",
+              "hex": "0x314",
+              "length": 18,
+              "section": "Vitals",
+              "type": "wstring"
+            }
+          }
+        },
+        {
+          "normalized_name": "CITYSHORTNAME",
+          "display_name": "City Short Name",
+          "versions": {
+            "2K26": {
+              "address": 824,
+              "desc": "City Short Name",
+              "hex": "0x338",
+              "length": 7,
+              "section": "Vitals",
+              "type": "wstring"
+            }
+          }
+        },
+        {
+          "normalized_name": "CONCESSIONPRICES",
+          "display_name": "Concession Prices",
+          "versions": {
+            "2K26": {
+              "address": 5072,
+              "desc": "Concession Prices",
+              "hex": "0x13D0",
+              "section": "Pricing",
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "CROWDID",
+          "display_name": "Crowd Id",
+          "versions": {
+            "2K26": {
+              "address": 5028,
+              "desc": "Crowd Id",
+              "hex": "0x13A4",
+              "section": "Vitals",
+              "type": "ushort"
+            },
+            "2K22,2K23,2K24": {
+              "address": 3956,
+              "hex": "0xF74",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "CURRENTINDEX",
+          "display_name": "CURRENT_INDEX",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3242,
+              "hex": "0xCAA",
+              "length": 8,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "FANINTEREST",
+          "display_name": "Fan Interest",
+          "versions": {
+            "2K26": {
+              "address": 5040,
+              "desc": "Fan Interest",
+              "hex": "0x13B0",
+              "section": "Info",
+              "type": "float"
+            },
+            "2K22,2K23,2K24": {
+              "address": 3964,
+              "hex": "0xF7C",
+              "length": 32,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "HISTORICYEAR",
+          "display_name": "Historic Year",
+          "versions": {
+            "2K25": {
+              "address": 5658,
+              "length": 7,
+              "startBit": 3,
+              "type": "Integer"
+            }
+          }
+        },
+        {
+          "normalized_name": "ISDOWNTOWN",
+          "display_name": "IS_DOWNTOWN",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4151,
+              "hex": "0x1037",
+              "length": 1,
+              "startBit": 7,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "LONGESTLOSSSTREAK",
+          "display_name": "Longest Loss Streak",
+          "versions": {
+            "2K26": {
+              "address": 5018,
+              "bit_length": 6,
+              "bit_offset": 7,
+              "desc": "Longest Loss Streak",
+              "hex": "0x139A",
+              "length": 6,
+              "section": "Info",
+              "startBit": 7,
+              "type": "bitfield"
+            },
+            "2K22,2K23,2K24": {
+              "address": 3961,
+              "hex": "0xF79",
+              "length": 6,
+              "startBit": 7,
+              "type": "bit"
+            }
+          }
+        },
+        {
+          "normalized_name": "LONGESTWINSTREAK",
+          "display_name": "Longest Win Streak",
+          "versions": {
+            "2K26": {
+              "address": 5018,
+              "bit_length": 7,
+              "bit_offset": 0,
+              "desc": "Longest Win Streak",
+              "hex": "0x139A",
+              "length": 7,
+              "section": "Info",
+              "startBit": 0,
+              "type": "bitfield"
+            },
+            "2K22,2K23,2K24": {
+              "address": 3961,
+              "hex": "0xF79",
+              "length": 7,
+              "startBit": 0,
+              "type": "bit"
+            }
+          }
+        },
+        {
+          "normalized_name": "LUXURYBOXPRICES",
+          "display_name": "Luxury Box Prices",
+          "versions": {
+            "2K26": {
+              "address": 5076,
+              "desc": "Luxury Box Prices",
+              "hex": "0x13D4",
+              "section": "Pricing",
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "LUXURYTAX",
+          "display_name": "LUXURY_TAX",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4151,
+              "hex": "0x1037",
+              "length": 1,
+              "startBit": 6,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "MANTRA",
+          "display_name": "Mantra",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 2860,
+              "hex": "0xB2C",
+              "length": 544,
+              "startBit": 0,
+              "type": "string"
+            },
+            "2K26": {
+              "address": 3674,
+              "desc": "Team Mantra",
+              "hex": "0xE5A",
+              "length": 68,
+              "section": "Vitals",
+              "type": "wstring"
+            }
+          }
+        },
+        {
+          "normalized_name": "METROINCOMEM",
+          "display_name": "Metro Income M",
+          "versions": {
+            "2K26": {
+              "address": 5048,
+              "desc": "Metro Income M",
+              "hex": "0x13B8",
+              "section": "Info",
+              "type": "uint"
+            },
+            "2K22,2K23,2K24": {
+              "address": 3972,
+              "hex": "0xF84",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "METROPOPULATION",
+          "display_name": "Metro Population",
+          "versions": {
+            "2K26": {
+              "address": 5044,
+              "desc": "Metro Population",
+              "hex": "0x13B4",
+              "section": "Info",
+              "type": "uint"
+            },
+            "2K22,2K23,2K24": {
+              "address": 3968,
+              "hex": "0xF80",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "MLEREMAINING",
+          "display_name": "MLE Remaining",
+          "versions": {
+            "2K26": {
+              "address": 4880,
+              "bit_length": 24,
+              "bit_offset": 3,
+              "desc": "Mid-Level Exception Remaining Amount",
+              "hex": "0x1310",
+              "length": 24,
+              "section": "Info",
+              "startBit": 3,
+              "type": "bitfield"
+            },
+            "2K22,2K23,2K24": {
+              "address": 3808,
+              "hex": "0xEE0",
+              "length": 24,
+              "startBit": 3,
+              "type": "bit"
+            }
+          }
+        },
+        {
+          "normalized_name": "NONBIRDEXCEPTIONAVAILABLE",
+          "display_name": "NON_BIRD_EXCEPTION_AVAILABLE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3808,
+              "hex": "0xEE0",
+              "length": 1,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYERPAYROLL",
+          "display_name": "Player Payroll",
+          "versions": {
+            "2K26": {
+              "address": 5092,
+              "desc": "Player Payroll Budget",
+              "hex": "0x13E4",
+              "section": "Budget",
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "POPULARITY",
+          "display_name": "POPULARITY",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3248,
+              "hex": "0xCB0",
+              "length": 8,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "PROMOTIONS",
+          "display_name": "Promotions",
+          "versions": {
+            "2K26": {
+              "address": 5080,
+              "desc": "Promotions",
+              "hex": "0x13D8",
+              "section": "Info",
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "RIVAL1",
+          "display_name": "RIVAL#1",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3264,
+              "hex": "0xCC0",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "RIVAL2",
+          "display_name": "RIVAL#2",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3272,
+              "hex": "0xCC8",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "RIVAL3",
+          "display_name": "RIVAL#3",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3280,
+              "hex": "0xCD0",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "SALARY",
+          "display_name": "SALARY",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3260,
+              "hex": "0xCBC",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOWCITYINNAME",
+          "display_name": "SHOW_CITY_IN_NAME",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4151,
+              "hex": "0x1037",
+              "length": 1,
+              "startBit": 5,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFPAYROLL",
+          "display_name": "Staff Payroll",
+          "versions": {
+            "2K26": {
+              "address": 5100,
+              "desc": "Staff Payroll Budget",
+              "hex": "0x13EC",
+              "section": "Budget",
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATESHORTNAME",
+          "display_name": "State Short Name",
+          "versions": {
+            "2K26": {
+              "address": 838,
+              "desc": "State Short Name",
+              "hex": "0x346",
+              "length": 7,
+              "section": "Vitals",
+              "type": "wstring"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMCHEMISTRY",
+          "display_name": "Team Chemistry",
+          "versions": {
+            "2K26": {
+              "address": 4852,
+              "desc": "Team Chemistry",
+              "hex": "0x12F4",
+              "section": "Info",
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMNAME",
+          "display_name": "Team Name",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 692,
+              "hex": "0x2B4",
+              "length": 320,
+              "startBit": 0,
+              "type": "string"
+            },
+            "2K25": {
+              "address": 724,
+              "length": 24,
+              "type": "WString"
+            },
+            "2K26": {
+              "address": 738,
+              "desc": "Team Name",
+              "hex": "0x2E2",
+              "length": 24,
+              "section": "Vitals",
+              "type": "wstring"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMOPERATIONS",
+          "display_name": "Team Operations",
+          "versions": {
+            "2K26": {
+              "address": 5084,
+              "desc": "Team Operations Budget",
+              "hex": "0x13DC",
+              "section": "Budget",
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEXTDARK",
+          "display_name": "Text Dark",
+          "versions": {
+            "2K26": {
+              "address": 5164,
+              "custom_width": 280,
+              "desc": "Text Dark Color",
+              "has_button": true,
+              "hex": "0x142C",
+              "length": 3,
+              "section": "Color",
+              "type": "hex_bytes"
+            },
+            "2K22,2K23,2K24": {
+              "address": 4188,
+              "hex": "0x105C",
+              "length": 24,
+              "startBit": 0,
+              "type": "color"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEXTLIGHT",
+          "display_name": "Text Light",
+          "versions": {
+            "2K26": {
+              "address": 5160,
+              "custom_width": 280,
+              "desc": "Text Light Color",
+              "has_button": true,
+              "hex": "0x1428",
+              "length": 3,
+              "section": "Color",
+              "type": "hex_bytes"
+            },
+            "2K22,2K23,2K24": {
+              "address": 4184,
+              "hex": "0x1058",
+              "length": 24,
+              "startBit": 0,
+              "type": "color"
+            }
+          }
+        },
+        {
+          "normalized_name": "TICKETS",
+          "display_name": "Tickets",
+          "versions": {
+            "2K26": {
+              "address": 5068,
+              "desc": "Ticket Pricing",
+              "hex": "0x13CC",
+              "section": "Pricing",
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "TVHOMES",
+          "display_name": "Tv Homes",
+          "versions": {
+            "2K26": {
+              "address": 5052,
+              "desc": "Tv Homes",
+              "hex": "0x13BC",
+              "section": "Info",
+              "type": "uint"
+            },
+            "2K22,2K23,2K24": {
+              "address": 3976,
+              "hex": "0xF88",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "UNIQUEID",
+          "display_name": "Unique ID",
+          "versions": {
+            "2K26": {
+              "address": 4104,
+              "desc": "Unique Team ID",
+              "hex": "0x1008",
+              "readonly": true,
+              "section": "Vitals",
+              "type": "ushort"
+            },
+            "2K22,2K23,2K24": {
+              "address": 3240,
+              "hex": "0xCA8",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "UNIQUESIGNATURECRC32B",
+          "display_name": "Unique Signature CRC32B",
+          "versions": {
+            "2K26": {
+              "address": 4096,
+              "desc": "Unique Signature CRC32B (little-endian display)",
+              "hex": "0x1000",
+              "length": 4,
+              "section": "Vitals",
+              "type": "hex_bytes"
+            },
+            "2K22,2K23,2K24": {
+              "address": 3232,
+              "hex": "0xCA0",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "USEREDITED",
+          "display_name": "USER_EDITED",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4151,
+              "hex": "0x1037",
+              "length": 1,
+              "startBit": 4,
+              "type": "combo"
+            }
+          }
+        }
+      ],
+      "Type": [
+        {
+          "normalized_name": "TYPE",
+          "display_name": "TYPE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3819,
+              "hex": "0xEEB",
+              "length": 5,
+              "startBit": 2,
+              "type": "combo"
+            }
+          }
+        }
+      ],
+      "Info": [
+        {
+          "normalized_name": "2NDLOGO",
+          "display_name": "2ND_LOGO",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 436,
+              "hex": "0x1B4",
+              "length": 2048,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "3DLOGO",
+          "display_name": "3D_LOGO",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 1068,
+              "hex": "0x42C",
+              "length": 2048,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "3DMIRRORLOGO",
+          "display_name": "3D_MIRROR_LOGO",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 1324,
+              "hex": "0x52C",
+              "length": 2048,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "ARENANAME",
+          "display_name": "Arena Name",
+          "versions": {
+            "2K26": {
+              "address": 344,
+              "desc": "Arena Name",
+              "hex": "0x158",
+              "length": 36,
+              "section": "Vitals",
+              "type": "wstring"
+            },
+            "2K22,2K23,2K24": {
+              "address": 312,
+              "hex": "0x138",
+              "length": 480,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "ARENAOPERATIONS",
+          "display_name": "Arena Operations",
+          "versions": {
+            "2K26": {
+              "address": 5088,
+              "desc": "Arena Operations Budget",
+              "hex": "0x13E0",
+              "section": "Budget",
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "CUTSCENELOGO",
+          "display_name": "CUT_SCENE_LOGO",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 374,
+              "hex": "0x176",
+              "length": 496,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "LEDID",
+          "display_name": "LED Id",
+          "versions": {
+            "2K26": {
+              "address": 3418,
+              "desc": "LED Id",
+              "hex": "0xD5A",
+              "length": 24,
+              "section": "Vitals",
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOGO1",
+          "display_name": "Logo 1",
+          "versions": {
+            "2K26": {
+              "address": 482,
+              "desc": "Logo 1",
+              "hex": "0x1E2",
+              "length": 256,
+              "section": "Vitals",
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOGO2",
+          "display_name": "Logo 2",
+          "versions": {
+            "2K26": {
+              "address": 858,
+              "desc": "Logo 2",
+              "hex": "0x35A",
+              "length": 256,
+              "section": "Vitals",
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOGO3",
+          "display_name": "Logo 3",
+          "versions": {
+            "2K26": {
+              "address": 1114,
+              "desc": "Logo 3",
+              "hex": "0x45A",
+              "length": 256,
+              "section": "Vitals",
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOGO4",
+          "display_name": "Logo 4",
+          "versions": {
+            "2K26": {
+              "address": 1370,
+              "desc": "Logo 4",
+              "hex": "0x55A",
+              "length": 256,
+              "section": "Vitals",
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOGO5",
+          "display_name": "Logo 5",
+          "versions": {
+            "2K26": {
+              "address": 1626,
+              "desc": "Logo 5",
+              "hex": "0x65A",
+              "length": 256,
+              "section": "Vitals",
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOGO6",
+          "display_name": "Logo 6",
+          "versions": {
+            "2K26": {
+              "address": 1882,
+              "desc": "Logo 6",
+              "hex": "0x75A",
+              "length": 256,
+              "section": "Vitals",
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOGO7",
+          "display_name": "Logo 7",
+          "versions": {
+            "2K26": {
+              "address": 2138,
+              "desc": "Logo 7",
+              "hex": "0x85A",
+              "length": 256,
+              "section": "Vitals",
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "MAINLOGO",
+          "display_name": "MAINLOGO",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 812,
+              "hex": "0x32C",
+              "length": 2048,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "MURALLOGO",
+          "display_name": "Mural Logo",
+          "versions": {
+            "2K26": {
+              "address": 2394,
+              "desc": "Mural Logo",
+              "hex": "0x95A",
+              "length": 256,
+              "section": "Vitals",
+              "type": "string"
+            },
+            "2K22,2K23,2K24": {
+              "address": 2092,
+              "hex": "0x82C",
+              "length": 2048,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "NENOLOGOA",
+          "display_name": "NENO_LOGO#A",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 2348,
+              "hex": "0x92C",
+              "length": 2048,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "NENOLOGOB",
+          "display_name": "NENO_LOGO#B",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 2604,
+              "hex": "0xA2C",
+              "length": 2048,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "PASOUNDLD",
+          "display_name": "Pa Sound ld",
+          "versions": {
+            "2K26": {
+              "address": 4886,
+              "desc": "Pa Sound ld",
+              "hex": "0x1316",
+              "section": "Vitals",
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "PASOUNDID",
+          "display_name": "PA_SOUND_ID",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3814,
+              "hex": "0xEE6",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYBYPLAYSOUNDLD",
+          "display_name": "Play By Play Sound ld",
+          "versions": {
+            "2K26": {
+              "address": 4884,
+              "desc": "Play By Play Sound ld",
+              "hex": "0x1314",
+              "section": "Vitals",
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYBYPLAYSOUNDID",
+          "display_name": "PLAY_BY_PLAY_SOUND_ID",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3812,
+              "hex": "0xEE4",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "STADIUM",
+          "display_name": "STADIUM",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3192,
+              "hex": "0xC78",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "WMLOGO",
+          "display_name": "WM_LOGO",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 1580,
+              "hex": "0x62C",
+              "length": 2048,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "WMLOGOALT",
+          "display_name": "WM_LOGO_ALT",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 1836,
+              "hex": "0x72C",
+              "length": 2048,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        }
+      ],
+      "Color": [
+        {
+          "normalized_name": "COLORMETERSHOT",
+          "display_name": "Shot Meter Color",
+          "versions": {
+            "2K26": {
+              "address": 5156,
+              "custom_width": 280,
+              "desc": "Shot Meter Color",
+              "has_button": true,
+              "hex": "0x1424",
+              "length": 3,
+              "section": "Color",
+              "type": "hex_bytes"
+            },
+            "2K22,2K23,2K24": {
+              "address": 4180,
+              "hex": "0x1054",
+              "length": 24,
+              "startBit": 0,
+              "type": "color"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMCOLOR1",
+          "display_name": "TEAMCOLOR#1",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3252,
+              "hex": "0xCB4",
+              "length": 24,
+              "startBit": 0,
+              "type": "color"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMCOLOR2",
+          "display_name": "TEAMCOLOR#2",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3256,
+              "hex": "0xCB8",
+              "length": 24,
+              "startBit": 0,
+              "type": "color"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMCOLOR3",
+          "display_name": "TEAMCOLOR#3",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4160,
+              "hex": "0x1040",
+              "length": 24,
+              "startBit": 0,
+              "type": "color"
+            }
+          }
+        }
+      ]
+    },
+    "Jerseys": {
+      "Jerseys": [
+        {
+          "normalized_name": "JERSEY1",
+          "display_name": "Jersey #1",
+          "versions": {
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3784,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY2",
+          "display_name": "Jersey #2",
+          "versions": {
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3792,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY3",
+          "display_name": "Jersey #3",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 2952,
+              "hex": "0xB88",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3800,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY4",
+          "display_name": "Jersey #4",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 2960,
+              "hex": "0xB90",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3808,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY5",
+          "display_name": "Jersey #5",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 2968,
+              "hex": "0xB98",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3816,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY6",
+          "display_name": "Jersey #6",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 2976,
+              "hex": "0xBA0",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3824,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY7",
+          "display_name": "Jersey #7",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 2984,
+              "hex": "0xBA8",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3832,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY8",
+          "display_name": "Jersey #8",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 2992,
+              "hex": "0xBB0",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3840,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY9",
+          "display_name": "Jersey #9",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3000,
+              "hex": "0xBB8",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3848,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY10",
+          "display_name": "Jersey #10",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3008,
+              "hex": "0xBC0",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3856,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY11",
+          "display_name": "Jersey #11",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3016,
+              "hex": "0xBC8",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3864,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY12",
+          "display_name": "Jersey #12",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3024,
+              "hex": "0xBD0",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3872,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY13",
+          "display_name": "Jersey #13",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3032,
+              "hex": "0xBD8",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3880,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY14",
+          "display_name": "Jersey #14",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3040,
+              "hex": "0xBE0",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3888,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY15",
+          "display_name": "Jersey #15",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3048,
+              "hex": "0xBE8",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3896,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY16",
+          "display_name": "Jersey #16",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3056,
+              "hex": "0xBF0",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3904,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY17",
+          "display_name": "Jersey #17",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3064,
+              "hex": "0xBF8",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3912,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY18",
+          "display_name": "Jersey #18",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3072,
+              "hex": "0xC00",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3920,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY19",
+          "display_name": "Jersey #19",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3080,
+              "hex": "0xC08",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3928,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY20",
+          "display_name": "Jersey #20",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3088,
+              "hex": "0xC10",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3936,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY21",
+          "display_name": "Jersey #21",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3096,
+              "hex": "0xC18",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3944,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY22",
+          "display_name": "Jersey #22",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3104,
+              "hex": "0xC20",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3952,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY23",
+          "display_name": "Jersey #23",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3112,
+              "hex": "0xC28",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3960,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY24",
+          "display_name": "Jersey #24",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3120,
+              "hex": "0xC30",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3968,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY25",
+          "display_name": "Jersey #25",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3128,
+              "hex": "0xC38",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 3976,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY26",
+          "display_name": "Jersey #26",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3136,
+              "hex": "0xC40",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY27",
+          "display_name": "Jersey #27",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3144,
+              "hex": "0xC48",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY28",
+          "display_name": "Jersey #28",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3152,
+              "hex": "0xC50",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY29",
+          "display_name": "Jersey #29",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3160,
+              "hex": "0xC58",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEY30",
+          "display_name": "Jersey #30",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3168,
+              "hex": "0xC60",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEYAWAY",
+          "display_name": "JERSEY_AWAY",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 2944,
+              "hex": "0xB80",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEYHOME",
+          "display_name": "JERSEY_HOME",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 2936,
+              "hex": "0xB78",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        }
+      ],
+      "Uniform Details - Practice": [
+        {
+          "normalized_name": "PRACTICEJERSEYAWAY",
+          "display_name": "Practice Jersey Away",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3184,
+              "hex": "0xC70",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 4032,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "PRACTICEJERSEYHOME",
+          "display_name": "Practice Jersey Home",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3176,
+              "hex": "0xC68",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 8,
+              "dereferenceAddress": 4024,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        }
+      ]
+    },
+    "Business": {
+      "Budget": [
+        {
+          "normalized_name": "ARENAOPERATIONS",
+          "display_name": "ARENA_OPERATIONS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4088,
+              "hex": "0xFF8",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "BURGER",
+          "display_name": "BURGER",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4008,
+              "hex": "0xFA8",
+              "length": 32,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "COFFEE",
+          "display_name": "COFFEE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4012,
+              "hex": "0xFAC",
+              "length": 32,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "GATE",
+          "display_name": "GATE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4056,
+              "hex": "0xFD8",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "HAT",
+          "display_name": "HAT",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4032,
+              "hex": "0xFC0",
+              "length": 32,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "HOTDOG",
+          "display_name": "HOT_DOG",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4000,
+              "hex": "0xFA0",
+              "length": 32,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "ICECREAM",
+          "display_name": "ICE_CREAM",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4020,
+              "hex": "0xFB4",
+              "length": 32,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "INARENAADVERTISING",
+          "display_name": "IN-ARENA_ADVERTISING",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4072,
+              "hex": "0xFE8",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "MEDIA",
+          "display_name": "MEDIA",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4068,
+              "hex": "0xFE4",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "MERCHANDISE",
+          "display_name": "MERCHANDISE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4060,
+              "hex": "0xFDC",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "NACHOS",
+          "display_name": "NACHOS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4016,
+              "hex": "0xFB0",
+              "length": 32,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "PARKING",
+          "display_name": "PARKING",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3996,
+              "hex": "0xF9C",
+              "length": 32,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYERBUDGET",
+          "display_name": "PLAYER_BUDGET",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4116,
+              "hex": "0x1014",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYERPAYROLL",
+          "display_name": "PLAYER_PAYROLL",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4084,
+              "hex": "0xFF4",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYOFFS",
+          "display_name": "PLAYOFFS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4080,
+              "hex": "0xFF0",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYOFFS1",
+          "display_name": "PLAYOFFS#1",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4108,
+              "hex": "0x100C",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "PROGRAM",
+          "display_name": "PROGRAM",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4028,
+              "hex": "0xFBC",
+              "length": 32,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "PROMOTIONS",
+          "display_name": "PROMOTIONS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4092,
+              "hex": "0xFFC",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "RESTAURANT",
+          "display_name": "RESTAURANT",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4024,
+              "hex": "0xFB8",
+              "length": 32,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "SODA",
+          "display_name": "SODA",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4004,
+              "hex": "0xFA4",
+              "length": 32,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "SOUVENIR",
+          "display_name": "SOUVENIR",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4036,
+              "hex": "0xFC4",
+              "length": 32,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFBUDGET",
+          "display_name": "STAFF_BUDGET",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4120,
+              "hex": "0x1018",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFPAYROLL",
+          "display_name": "STAFF_PAYROLL",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4096,
+              "hex": "0x1000",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMOPERATIONS",
+          "display_name": "TEAM_OPERATIONS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4044,
+              "hex": "0xFCC",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMOPERATIONS1",
+          "display_name": "TEAM_OPERATIONS#1",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4100,
+              "hex": "0x1004",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "UNALLOCATEDFUNDS",
+          "display_name": "UNALLOCATED_FUNDS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4112,
+              "hex": "0x1010",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        }
+      ],
+      "Pricing": [
+        {
+          "normalized_name": "CONCESSIONS",
+          "display_name": "CONCESSIONS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4064,
+              "hex": "0xFE0",
+              "length": 32,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "TICKET",
+          "display_name": "TICKET",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3992,
+              "hex": "0xF98",
+              "length": 32,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        }
+      ]
+    },
+    "Team Players": {
+      "Team Players": [
+        {
+          "normalized_name": "PLAYER1",
+          "display_name": "Player 1",
+          "versions": {
+            "2K25,2K26": {
+              "address": 0,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYER10",
+          "display_name": "Player 10",
+          "versions": {
+            "2K25,2K26": {
+              "address": 72,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYER11",
+          "display_name": "Player 11",
+          "versions": {
+            "2K25,2K26": {
+              "address": 80,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYER12",
+          "display_name": "Player 12",
+          "versions": {
+            "2K25,2K26": {
+              "address": 88,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYER13",
+          "display_name": "Player 13",
+          "versions": {
+            "2K25,2K26": {
+              "address": 96,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYER14",
+          "display_name": "Player 14",
+          "versions": {
+            "2K25,2K26": {
+              "address": 104,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYER15",
+          "display_name": "Player 15",
+          "versions": {
+            "2K25,2K26": {
+              "address": 112,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYER2",
+          "display_name": "Player 2",
+          "versions": {
+            "2K25,2K26": {
+              "address": 8,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYER3",
+          "display_name": "Player 3",
+          "versions": {
+            "2K25,2K26": {
+              "address": 16,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYER4",
+          "display_name": "Player 4",
+          "versions": {
+            "2K25,2K26": {
+              "address": 24,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYER5",
+          "display_name": "Player 5",
+          "versions": {
+            "2K25,2K26": {
+              "address": 32,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYER6",
+          "display_name": "Player 6",
+          "versions": {
+            "2K25,2K26": {
+              "address": 40,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYER7",
+          "display_name": "Player 7",
+          "versions": {
+            "2K25,2K26": {
+              "address": 48,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYER8",
+          "display_name": "Player 8",
+          "versions": {
+            "2K25,2K26": {
+              "address": 56,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYER9",
+          "display_name": "Player 9",
+          "versions": {
+            "2K25,2K26": {
+              "address": 64,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "2WAYPLAYER1",
+          "display_name": "Two Way Player 1",
+          "versions": {
+            "2K25,2K26": {
+              "address": 176,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "2WAYPLAYER2",
+          "display_name": "Two Way Player 2",
+          "versions": {
+            "2K25,2K26": {
+              "address": 184,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "2WAYPLAYER3",
+          "display_name": "Two Way Player 3",
+          "versions": {
+            "2K25,2K26": {
+              "address": 192,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        }
+      ]
+    },
+    "Team Stadium": {
+      "Team Stadium": [
+        {
+          "normalized_name": "ARENANICKNAME",
+          "display_name": "Arena Nickname",
+          "versions": {
+            "2K26": {
+              "address": 66,
+              "dereferenceAddress": 4040,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "WString"
+            }
+          }
+        },
+        {
+          "normalized_name": "STADIUMARENAID",
+          "display_name": "Stadium Arena ID",
+          "versions": {
+            "2K26": {
+              "address": 186,
+              "dereferenceAddress": 4040,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "STADIUMCITYNAME",
+          "display_name": "Stadium City Name",
+          "versions": {
+            "2K26": {
+              "address": 130,
+              "dereferenceAddress": 4040,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "WString"
+            }
+          }
+        },
+        {
+          "normalized_name": "STADIUMCITYSHORTNAME",
+          "display_name": "Stadium City Short Name",
+          "versions": {
+            "2K26": {
+              "address": 384,
+              "dereferenceAddress": 4040,
+              "length": 8,
+              "requiresDereference": true,
+              "type": "WString"
+            }
+          }
+        },
+        {
+          "normalized_name": "STADIUMDORNAS",
+          "display_name": "Stadium Dornas",
+          "versions": {
+            "2K26": {
+              "address": 178,
+              "dereferenceAddress": 4040,
+              "length": 3,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "STADIUMFLOORID",
+          "display_name": "Stadium Floor ID",
+          "versions": {
+            "2K26": {
+              "address": 224,
+              "dereferenceAddress": 4040,
+              "length": 36,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "STADIUMLEDID",
+          "display_name": "Stadium LED ID",
+          "versions": {
+            "2K26": {
+              "address": 182,
+              "dereferenceAddress": 4040,
+              "length": 3,
+              "requiresDereference": true,
+              "type": "String"
+            }
+          }
+        },
+        {
+          "normalized_name": "STADIUMSTATESHORTNAME",
+          "display_name": "Stadium State Short Name",
+          "versions": {
+            "2K26": {
+              "address": 402,
+              "dereferenceAddress": 4040,
+              "length": 8,
+              "requiresDereference": true,
+              "type": "WString"
+            }
+          }
+        }
+      ]
+    },
+    "Team Stats": {
+      "Teams": [
+        {
+          "normalized_name": "CHAMPIONSHIPS",
+          "display_name": "CHAMPIONSHIPS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3251,
+              "hex": "0xCB3",
+              "length": 8,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "CONFERENCECHAMPIONSHIPS",
+          "display_name": "CONFERENCE_CHAMPIONSHIPS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3247,
+              "hex": "0xCAF",
+              "length": 8,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "CURRENTYEARSTATS",
+          "display_name": "CURRENT_YEAR_STATS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3712,
+              "hex": "0xE80",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "DIVISIONTITLES",
+          "display_name": "DIVISION_TITLES",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3250,
+              "hex": "0xCB2",
+              "length": 8,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "FIRSTPICKSCOUNT",
+          "display_name": "FIRST_PICKS_COUNT",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4146,
+              "hex": "0x1032",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "HISTORICLOSSES",
+          "display_name": "HISTORIC_LOSSES",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3794,
+              "hex": "0xED2",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "HISTORICWIN",
+          "display_name": "HISTORIC_WIN",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3792,
+              "hex": "0xED0",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "LASTLOTTERYYEAR",
+          "display_name": "LAST_LOTTERY_YEAR",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4142,
+              "hex": "0x102E",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "LASTNONLOTTERYYEAR",
+          "display_name": "LAST_NON-LOTTERY_YEAR",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4144,
+              "hex": "0x1030",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "LASTPLAYOFFYEAR",
+          "display_name": "LAST_PLAYOFF_YEAR",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3244,
+              "hex": "0xCAC",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "LASTYEARPLAYOFFSOPPONENT",
+          "display_name": "LAST_YEAR_PLAYOFFS_OPPONENT",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3800,
+              "hex": "0xED8",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "LASTYEARPLAYOFFSSERIESGAMES",
+          "display_name": "LAST_YEAR_PLAYOFFS_SERIES_GAMES",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3255,
+              "hex": "0xCB7",
+              "length": 3,
+              "startBit": 0,
+              "type": "bit"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOTTERYPICKSCOUNT",
+          "display_name": "LOTTERY_PICKS_COUNT",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 4148,
+              "hex": "0x1034",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYOFFAPPEARANCES",
+          "display_name": "PLAYOFF_APPEARANCES",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3246,
+              "hex": "0xCAE",
+              "length": 8,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID1",
+          "display_name": "STATS_ID#1",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3714,
+              "hex": "0xE82",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID2",
+          "display_name": "STATS_ID#2",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3716,
+              "hex": "0xE84",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID3",
+          "display_name": "STATS_ID#3",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3718,
+              "hex": "0xE86",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID4",
+          "display_name": "STATS_ID#4",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3720,
+              "hex": "0xE88",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID5",
+          "display_name": "STATS_ID#5",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3722,
+              "hex": "0xE8A",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID6",
+          "display_name": "STATS_ID#6",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3724,
+              "hex": "0xE8C",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID7",
+          "display_name": "STATS_ID#7",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3726,
+              "hex": "0xE8E",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID8",
+          "display_name": "STATS_ID#8",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3728,
+              "hex": "0xE90",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID9",
+          "display_name": "STATS_ID#9",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3730,
+              "hex": "0xE92",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID10",
+          "display_name": "STATS_ID#10",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3732,
+              "hex": "0xE94",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID11",
+          "display_name": "STATS_ID#11",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3734,
+              "hex": "0xE96",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID12",
+          "display_name": "STATS_ID#12",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3736,
+              "hex": "0xE98",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID13",
+          "display_name": "STATS_ID#13",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3738,
+              "hex": "0xE9A",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID14",
+          "display_name": "STATS_ID#14",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3740,
+              "hex": "0xE9C",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID15",
+          "display_name": "STATS_ID#15",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3742,
+              "hex": "0xE9E",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID16",
+          "display_name": "STATS_ID#16",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3744,
+              "hex": "0xEA0",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID17",
+          "display_name": "STATS_ID#17",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3746,
+              "hex": "0xEA2",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID18",
+          "display_name": "STATS_ID#18",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3748,
+              "hex": "0xEA4",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID19",
+          "display_name": "STATS_ID#19",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3750,
+              "hex": "0xEA6",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID20",
+          "display_name": "STATS_ID#20",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3752,
+              "hex": "0xEA8",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID21",
+          "display_name": "STATS_ID#21",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3754,
+              "hex": "0xEAA",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID22",
+          "display_name": "STATS_ID#22",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3756,
+              "hex": "0xEAC",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID23",
+          "display_name": "STATS_ID#23",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 3758,
+              "hex": "0xEAE",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        }
+      ]
+    },
+    "Team Stats Edit": {
+      "Teams": [
+        {
+          "normalized_name": "2NDPTS",
+          "display_name": "2NDPTS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 40,
+              "hex": "0x28",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "3POINTATTEMPTED",
+          "display_name": "3PT_ATTEMPTED",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 18,
+              "hex": "0x12",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "3POINTMADE",
+          "display_name": "3PT_MADE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 16,
+              "hex": "0x10",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "ASSISTS",
+          "display_name": "ASSISTS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 34,
+              "hex": "0x22",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "ATTEMPTED",
+          "display_name": "ATTEMPTED",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 14,
+              "hex": "0xE",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "BENCH",
+          "display_name": "BENCH",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 54,
+              "hex": "0x36",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "BLOCKS",
+          "display_name": "BLOCKS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 32,
+              "hex": "0x20",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENSEREBOUNDS",
+          "display_name": "DEFENSIVE_REBOUNDS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 26,
+              "hex": "0x1A",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "FOUL",
+          "display_name": "FOUL",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 36,
+              "hex": "0x24",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREETHROWATTEMPTED",
+          "display_name": "FREE_THROWS_ATTEMPTED",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 22,
+              "hex": "0x16",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREETHROWMADE",
+          "display_name": "FREE_THROWS_MADE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 20,
+              "hex": "0x14",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "L",
+          "display_name": "L",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 60,
+              "hex": "0x3C",
+              "length": 8,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "MADE",
+          "display_name": "MADE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 12,
+              "hex": "0xC",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "O3PA",
+          "display_name": "O3PA",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 50,
+              "hex": "0x32",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "O3PM",
+          "display_name": "O3PM",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 48,
+              "hex": "0x30",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "OFFENSIVEREBOUNDS",
+          "display_name": "OFFENSIVE_REBOUNDS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 24,
+              "hex": "0x18",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "OFGA",
+          "display_name": "OFGA",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 46,
+              "hex": "0x2E",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "OFGM",
+          "display_name": "OFGM",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 44,
+              "hex": "0x2C",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "PA",
+          "display_name": "PA",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 10,
+              "hex": "0xA",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "PACE",
+          "display_name": "PACE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 6,
+              "hex": "0x6",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "PIP",
+          "display_name": "PIP",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 42,
+              "hex": "0x2A",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "POINTS",
+          "display_name": "POINTS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 8,
+              "hex": "0x8",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "POSS",
+          "display_name": "POSS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 58,
+              "hex": "0x3A",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "PTSTO",
+          "display_name": "PTS-TO",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 38,
+              "hex": "0x26",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "STEALS",
+          "display_name": "STEALS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 28,
+              "hex": "0x1C",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "TURNOVER",
+          "display_name": "TURNOVER",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 30,
+              "hex": "0x1E",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "W",
+          "display_name": "W",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 5,
+              "hex": "0x5",
+              "length": 8,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

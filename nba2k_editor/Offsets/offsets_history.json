@@ -1,0 +1,267 @@
+{
+  "NBA History": {
+    "History Tab": {
+      "History Tab": [
+        {
+          "normalized_name": "DATA",
+          "display_name": "Data",
+          "versions": {
+            "2K26": {
+              "address": 24,
+              "hex": "0x18",
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "FIRSTNAME",
+          "display_name": "First Name",
+          "versions": {
+            "2K26": {
+              "address": 122,
+              "hex": "0x7A",
+              "length": 20,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "LASTNAME",
+          "display_name": "Last Name",
+          "versions": {
+            "2K26": {
+              "address": 142,
+              "hex": "0x8E",
+              "length": 20,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOSERTEAMCITY",
+          "display_name": "Loser Team City",
+          "versions": {
+            "2K26": {
+              "address": 104,
+              "hex": "0x68",
+              "length": 18,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOSERTEAMNAME",
+          "display_name": "Loser Team Name",
+          "versions": {
+            "2K26": {
+              "address": 79,
+              "hex": "0x4F",
+              "length": 25,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "POSITION",
+          "display_name": "Position",
+          "versions": {
+            "2K26": {
+              "address": 24,
+              "hex": "0x18",
+              "position_dropdown": true,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "RESULT",
+          "display_name": "Result",
+          "versions": {
+            "2K26": {
+              "address": 24,
+              "hex": "0x18",
+              "offset2": 28,
+              "type": "result_score"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASON",
+          "display_name": "Season",
+          "versions": {
+            "2K26": {
+              "address": 32,
+              "hex": "0x20",
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMCITY",
+          "display_name": "Team City",
+          "versions": {
+            "2K26": {
+              "address": 61,
+              "hex": "0x3D",
+              "label_past_champions": "Winner Team City",
+              "length": 25,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMLOGO",
+          "display_name": "Team Logo",
+          "versions": {
+            "2K26": {
+              "address": 0,
+              "hex": "0x0",
+              "show_hex": true,
+              "team_dropdown": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMNAME",
+          "display_name": "Team Name",
+          "versions": {
+            "2K26": {
+              "address": 36,
+              "hex": "0x24",
+              "label_past_champions": "Winner Team Name",
+              "length": 25,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "TYPE",
+          "display_name": "Type",
+          "versions": {
+            "2K26": {
+              "address": 16,
+              "hex": "0x10",
+              "type": "byte"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "NBA Records": {
+    "Record": {
+      "Basic Info": [
+        {
+          "normalized_name": "FIRSTNAME",
+          "display_name": "First Name",
+          "versions": {
+            "2K26": {
+              "address": 12,
+              "hex": "0xC",
+              "length": 20,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "LASTNAME",
+          "display_name": "Last Name",
+          "versions": {
+            "2K26": {
+              "address": 32,
+              "hex": "0x20",
+              "length": 20,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "SIGNATUREID",
+          "display_name": "Signature ID",
+          "versions": {
+            "2K26": {
+              "address": 8,
+              "hex": "0x8",
+              "show_hex": false,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMLOGO",
+          "display_name": "Team Logo",
+          "versions": {
+            "2K26": {
+              "address": 0,
+              "hex": "0x0",
+              "show_hex": true,
+              "team_dropdown": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ],
+      "Date Info": [
+        {
+          "normalized_name": "DAY",
+          "display_name": "Day",
+          "versions": {
+            "2K26": {
+              "address": 56,
+              "bit_length": 5,
+              "bit_offset": 0,
+              "hex": "0x38",
+              "length": 5,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "MONTH",
+          "display_name": "Month",
+          "versions": {
+            "2K26": {
+              "address": 56,
+              "bit_length": 4,
+              "bit_offset": 5,
+              "hex": "0x38",
+              "length": 4,
+              "startBit": 5,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "YEAR",
+          "display_name": "Year",
+          "versions": {
+            "2K26": {
+              "address": 57,
+              "bit_length": 12,
+              "bit_offset": 1,
+              "hex": "0x39",
+              "length": 12,
+              "startBit": 1,
+              "type": "bitfield"
+            }
+          }
+        }
+      ],
+      "Record Stats": [
+        {
+          "normalized_name": "DATA",
+          "display_name": "Data",
+          "versions": {
+            "2K26": {
+              "address": 52,
+              "hex": "0x34",
+              "type": "float"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

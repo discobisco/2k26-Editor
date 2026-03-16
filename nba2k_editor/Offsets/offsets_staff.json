@@ -1,0 +1,1074 @@
+{
+  "Staff": {
+    "Vitals": {
+      "Vitals": [
+        {
+          "normalized_name": "UNIQUEPHOTOID",
+          "display_name": "*Unique Photo ID",
+          "versions": {
+            "2K26": {
+              "address": 264,
+              "hex": "0x108",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "FACEID",
+          "display_name": "Face ID",
+          "versions": {
+            "2K26": {
+              "address": 274,
+              "hex": "0x112",
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "FIRSTNAME",
+          "display_name": "First Name",
+          "versions": {
+            "2K26": {
+              "address": 80,
+              "hex": "0x50",
+              "length": 40,
+              "type": "wstring"
+            }
+          }
+        },
+        {
+          "normalized_name": "HEIGHT",
+          "display_name": "Height",
+          "versions": {
+            "2K26": {
+              "address": 0,
+              "hex": "0x0",
+              "is_pointer": true,
+              "pointer_offsets": [
+                0
+              ],
+              "scale": 0.01,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "LASTNAME",
+          "display_name": "Last Name",
+          "versions": {
+            "2K26": {
+              "address": 120,
+              "hex": "0x78",
+              "length": 40,
+              "type": "wstring"
+            }
+          }
+        },
+        {
+          "normalized_name": "POSITION",
+          "display_name": "Position",
+          "versions": {
+            "2K26": {
+              "address": 362,
+              "bit_length": 6,
+              "hex": "0x16A",
+              "hex_format": true,
+              "length": 1,
+              "readonly": true,
+              "type": "ubyte",
+              "value_mapping": {
+                "0": {
+                  "en": "Head Coach"
+                },
+                "1": {
+                  "en": "Head Scout"
+                },
+                "10": {
+                  "en": "Wing Whisperer"
+                },
+                "11": {
+                  "en": "Big Man Coach"
+                },
+                "12": {
+                  "en": "Post D Coach"
+                },
+                "13": {
+                  "en": "Perimeter D Coach"
+                },
+                "14": {
+                  "en": "Domestic Scout"
+                },
+                "15": {
+                  "en": "Domestic Scout"
+                },
+                "19": {
+                  "en": "Foreign Scout"
+                },
+                "2": {
+                  "en": "Team Doctor"
+                },
+                "20": {
+                  "en": "Strength Trainer"
+                },
+                "21": {
+                  "en": "Stamina Trainer"
+                },
+                "22": {
+                  "en": "Sports Psych"
+                },
+                "23": {
+                  "en": "Sports Science"
+                },
+                "24": {
+                  "en": "Physio"
+                },
+                "25": {
+                  "en": "Sleep Doctor"
+                },
+                "3": {
+                  "en": "GM"
+                },
+                "4": {
+                  "en": "CFO"
+                },
+                "5": {
+                  "en": "Governor"
+                },
+                "6": {
+                  "en": "Assistant Head Coach"
+                },
+                "7": {
+                  "en": "Assistant GM"
+                },
+                "8": {
+                  "en": "Shot Doctor"
+                },
+                "9": {
+                  "en": "Guard Guru"
+                }
+              }
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFCOACHINGBENCHUTILIZATION",
+          "display_name": "Staff Coaching - BENCH_UTILIZATION",
+          "versions": {
+            "2K23,2K24": {
+              "address": 138,
+              "hex": "0x8A",
+              "length": 64,
+              "startBit": 0,
+              "type": "slider"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSARMSCALE",
+          "display_name": "Staff Vitals - ARM_SCALE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 0,
+              "dereferenceAddress": 12,
+              "hex": "0x0",
+              "length": 32,
+              "requiresDereference": true,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSBODYLENGTH",
+          "display_name": "Staff Vitals - BODYLENGTH",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 0,
+              "dereferenceAddress": 4,
+              "hex": "0x0",
+              "length": 32,
+              "requiresDereference": true,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSCURRENTTEAM",
+          "display_name": "Staff Vitals - CURRENT_TEAM",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 24,
+              "hex": "0x18",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSFACEID",
+          "display_name": "Staff Vitals - FACEID",
+          "versions": {
+            "2K22": {
+              "address": 253,
+              "hex": "0xFD",
+              "length": 14,
+              "startBit": 3,
+              "type": "bit"
+            },
+            "2K23,2K24": {
+              "address": 254,
+              "hex": "0xFE",
+              "length": 14,
+              "startBit": 0,
+              "type": "bit"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSFIRSTNAME",
+          "display_name": "Staff Vitals - FIRSTNAME",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 48,
+              "hex": "0x30",
+              "length": 320,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSHAIRLENGTH",
+          "display_name": "Staff Vitals - HAIR_LENGTH",
+          "versions": {
+            "2K22": {
+              "address": 0,
+              "dereferenceAddress": 28,
+              "hex": "0x0",
+              "length": 32,
+              "requiresDereference": true,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSHANDSCALE",
+          "display_name": "Staff Vitals - HAND_SCALE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 0,
+              "dereferenceAddress": 24,
+              "hex": "0x0",
+              "length": 32,
+              "requiresDereference": true,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSHEIGHT",
+          "display_name": "Staff Vitals - HEIGHT_CM",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 0,
+              "hex": "0x0",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSLASTNAME",
+          "display_name": "Staff Vitals - LASTNAME",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 88,
+              "hex": "0x58",
+              "length": 320,
+              "startBit": 0,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSLOWERSCALE",
+          "display_name": "Staff Vitals - LOWER_SCALE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 0,
+              "dereferenceAddress": 20,
+              "hex": "0x0",
+              "length": 32,
+              "requiresDereference": true,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSNECKHEADSCALE",
+          "display_name": "Staff Vitals - NECK_HEAD_SCALE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 0,
+              "dereferenceAddress": 16,
+              "hex": "0x0",
+              "length": 32,
+              "requiresDereference": true,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSPOSITION",
+          "display_name": "Staff Vitals - POSITION",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 270,
+              "hex": "0x10E",
+              "length": 3,
+              "startBit": 2,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSSALARY",
+          "display_name": "Staff Vitals - SALARY",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 248,
+              "hex": "0xF8",
+              "length": 24,
+              "startBit": 0,
+              "type": "bit"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSSHOULDERWIDTH",
+          "display_name": "Staff Vitals - SHOULDERWIDTH",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 0,
+              "dereferenceAddress": 8,
+              "hex": "0x0",
+              "length": 32,
+              "requiresDereference": true,
+              "startBit": 0,
+              "type": "float"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSSKINCOLOR",
+          "display_name": "Staff Vitals - SKINCOLOR",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 0,
+              "dereferenceAddress": 38,
+              "hex": "0x0",
+              "length": 4,
+              "requiresDereference": true,
+              "startBit": 6,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSUNIQUEPHOTOID",
+          "display_name": "Staff Vitals - UNIQUE_PHOTO_ID",
+          "versions": {
+            "2K22": {
+              "address": 208,
+              "hex": "0xD0",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            },
+            "2K23,2K24": {
+              "address": 216,
+              "hex": "0xD8",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSWINGSPAN",
+          "display_name": "Staff Vitals - WINGSPAN_CM",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 0,
+              "dereferenceAddress": 2,
+              "hex": "0x0",
+              "length": 16,
+              "requiresDereference": true,
+              "startBit": 0,
+              "type": "number"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSYEARSINLEAGUE",
+          "display_name": "Staff Vitals - YEARS_IN_LEAGUE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 272,
+              "hex": "0x110",
+              "length": 7,
+              "startBit": 7,
+              "type": "bit"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFVITALSYEARSLEFT",
+          "display_name": "Staff Vitals - YEARS_LEFT",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 274,
+              "hex": "0x112",
+              "length": 4,
+              "startBit": 0,
+              "type": "bit"
+            }
+          }
+        }
+      ],
+      "Team": [
+        {
+          "normalized_name": "CURRENTTEAM",
+          "display_name": "Current Team",
+          "versions": {
+            "2K26": {
+              "address": 24,
+              "hex": "0x18",
+              "readonly": true,
+              "show_hex": true,
+              "team_address_dropdown": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ],
+      "Contract": [
+        {
+          "normalized_name": "SALARY",
+          "display_name": "Salary",
+          "versions": {
+            "2K26": {
+              "address": 269,
+              "bit_length": 24,
+              "hex": "0x10D",
+              "length": 24,
+              "startBit": 0,
+              "startbit": 0,
+              "type": "bit"
+            }
+          }
+        },
+        {
+          "normalized_name": "YEARSLEFT",
+          "display_name": "Years Left",
+          "versions": {
+            "2K26": {
+              "address": 293,
+              "bit_length": 4,
+              "hex": "0x125",
+              "length": 4,
+              "startBit": 4,
+              "startbit": 4,
+              "type": "bit"
+            }
+          }
+        }
+      ]
+    },
+    "Attributes": {
+      "Attributes": [
+        {
+          "normalized_name": "ANALYTICS",
+          "display_name": "Analytics",
+          "versions": {
+            "2K26": {
+              "address": 343,
+              "hex": "0x157",
+              "length": 1,
+              "type": "ubyte"
+            }
+          }
+        },
+        {
+          "normalized_name": "BUSINESS",
+          "display_name": "Business",
+          "versions": {
+            "2K26": {
+              "address": 340,
+              "hex": "0x154",
+              "length": 1,
+              "type": "ubyte"
+            }
+          }
+        },
+        {
+          "normalized_name": "CHARISMA",
+          "display_name": "Charisma",
+          "versions": {
+            "2K26": {
+              "address": 342,
+              "hex": "0x156",
+              "length": 1,
+              "type": "ubyte"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENSECOACHING",
+          "display_name": "Defensive Coaching",
+          "versions": {
+            "2K26": {
+              "address": 339,
+              "hex": "0x153",
+              "length": 1,
+              "type": "ubyte"
+            }
+          }
+        },
+        {
+          "normalized_name": "OFFENSIVECOACHING",
+          "display_name": "Offensive Coaching",
+          "versions": {
+            "2K26": {
+              "address": 338,
+              "hex": "0x152",
+              "length": 1,
+              "type": "ubyte"
+            }
+          }
+        },
+        {
+          "normalized_name": "POTENTIAL",
+          "display_name": "Potential",
+          "versions": {
+            "2K26": {
+              "address": 281,
+              "hex": "0x119",
+              "length": 1,
+              "type": "ubyte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SPORTSMEDICINE",
+          "display_name": "Sports Medicine",
+          "versions": {
+            "2K26": {
+              "address": 341,
+              "hex": "0x155",
+              "length": 1,
+              "type": "ubyte"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFATTRIBUTESBUSINESS",
+          "display_name": "Staff Attributes - BUSINESS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 259,
+              "hex": "0x103",
+              "length": 4,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFATTRIBUTESCONTRACTS",
+          "display_name": "Staff Attributes - CONTRACTS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 258,
+              "hex": "0x102",
+              "length": 4,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFATTRIBUTESDEFENSE",
+          "display_name": "Staff Attributes - DEFENSE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 256,
+              "hex": "0x100",
+              "length": 4,
+              "startBit": 4,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFATTRIBUTESMAXBUSINESS",
+          "display_name": "Staff Attributes - MAX_BUSINESS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 263,
+              "hex": "0x107",
+              "length": 4,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFATTRIBUTESMAXCONTRACTS",
+          "display_name": "Staff Attributes - MAX_CONTRACTS",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 262,
+              "hex": "0x106",
+              "length": 4,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFATTRIBUTESMAXDEFENSE",
+          "display_name": "Staff Attributes - MAX_DEFENSE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 260,
+              "hex": "0x104",
+              "length": 4,
+              "startBit": 4,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFATTRIBUTESMAXOFFENSE",
+          "display_name": "Staff Attributes - MAX_OFFENSE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 260,
+              "hex": "0x104",
+              "length": 4,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFATTRIBUTESMAXSCOUTING",
+          "display_name": "Staff Attributes - MAX_SCOUTING",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 261,
+              "hex": "0x105",
+              "length": 4,
+              "startBit": 4,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFATTRIBUTESMAXTRADING",
+          "display_name": "Staff Attributes - MAX_TRADING",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 262,
+              "hex": "0x106",
+              "length": 4,
+              "startBit": 4,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFATTRIBUTESMAXTRAINING",
+          "display_name": "Staff Attributes - MAX_TRAINING",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 261,
+              "hex": "0x105",
+              "length": 4,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFATTRIBUTESOFFENSE",
+          "display_name": "Staff Attributes - OFFENSE",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 256,
+              "hex": "0x100",
+              "length": 4,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFATTRIBUTESPOTENTIAL",
+          "display_name": "Staff Attributes - POTENTIAL",
+          "versions": {
+            "2K22,2K23": {
+              "address": 264,
+              "hex": "0x108",
+              "length": 4,
+              "startBit": 4,
+              "type": "combo"
+            },
+            "2K24": {
+              "address": 264,
+              "hex": "0x108",
+              "length": 4,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFATTRIBUTESSCOUTING",
+          "display_name": "Staff Attributes - SCOUTING",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 257,
+              "hex": "0x101",
+              "length": 4,
+              "startBit": 4,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFATTRIBUTESTRADING",
+          "display_name": "Staff Attributes - TRADING",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 258,
+              "hex": "0x102",
+              "length": 4,
+              "startBit": 4,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFATTRIBUTESTRAINING",
+          "display_name": "Staff Attributes - TRAINING",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 257,
+              "hex": "0x101",
+              "length": 4,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        }
+      ]
+    },
+    "Team Style": {
+      "Team Style": [
+        {
+          "normalized_name": "STAFFSTYLEACTIVESYSTEM",
+          "display_name": "Staff Style - ACTIVE_SYSTEM",
+          "versions": {
+            "2K22,2K23": {
+              "address": 267,
+              "hex": "0x10B",
+              "length": 3,
+              "startBit": 4,
+              "type": "combo"
+            },
+            "2K24": {
+              "address": 267,
+              "hex": "0x10B",
+              "length": 3,
+              "startBit": 1,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFSTYLEBALANCEDPROFICIENCY",
+          "display_name": "Staff Style - BALANCED_PROFICIENCY",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 236,
+              "hex": "0xEC",
+              "length": 8,
+              "startBit": 0,
+              "type": "slider"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFSTYLEDEFENSEPROFICIENCY",
+          "display_name": "Staff Style - DEFENSE_PROFICIENCY",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 243,
+              "hex": "0xF3",
+              "length": 8,
+              "startBit": 0,
+              "type": "slider"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFSTYLEGRITGRINDPROFICIENCY",
+          "display_name": "Staff Style - GRIT_&_GRIND_PROFICIENCY",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 237,
+              "hex": "0xED",
+              "length": 8,
+              "startBit": 0,
+              "type": "slider"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFSTYLEPACESPACEPROFICIENCY",
+          "display_name": "Staff Style - PACE_&_SPACE_PROFICIENCY",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 238,
+              "hex": "0xEE",
+              "length": 8,
+              "startBit": 0,
+              "type": "slider"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFSTYLEPERIMETERCENTERICPROFICIENCY",
+          "display_name": "Staff Style - PERIMETER_CENTERIC_PROFICIENCY",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 239,
+              "hex": "0xEF",
+              "length": 8,
+              "startBit": 0,
+              "type": "slider"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFSTYLEPOSTCENTRICPROFICIENCY",
+          "display_name": "Staff Style - POST_CENTRIC_PROFICIENCY",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 240,
+              "hex": "0xF0",
+              "length": 8,
+              "startBit": 0,
+              "type": "slider"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFSTYLEPREFERREDSYSTEM",
+          "display_name": "Staff Style - PREFERRED_SYSTEM",
+          "versions": {
+            "2K22,2K23": {
+              "address": 266,
+              "hex": "0x10A",
+              "length": 3,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K24": {
+              "address": 265,
+              "hex": "0x109",
+              "length": 3,
+              "startBit": 4,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFSTYLE7SECONDSPROFICIENCY",
+          "display_name": "Staff Style - SEVEN_SECONDS_PROFICIENCY",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 242,
+              "hex": "0xF2",
+              "length": 8,
+              "startBit": 0,
+              "type": "slider"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFSTYLESTYLEN1",
+          "display_name": "Staff Style - STYLE_N#1",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 276,
+              "hex": "0x114",
+              "length": 4,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFSTYLESTYLEN2",
+          "display_name": "Staff Style - STYLE_N#2",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 277,
+              "hex": "0x115",
+              "length": 4,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFSTYLESTYLEN3",
+          "display_name": "Staff Style - STYLE_N#3",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 278,
+              "hex": "0x116",
+              "length": 4,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFSTYLETRIANGLEPROFICIENCY",
+          "display_name": "Staff Style - TRIANGLE_PROFICIENCY",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 241,
+              "hex": "0xF1",
+              "length": 8,
+              "startBit": 0,
+              "type": "slider"
+            }
+          }
+        }
+      ]
+    },
+    "Familiarity": {
+      "Familiarity": [
+        {
+          "normalized_name": "BALANCEDPROFICIENCY",
+          "display_name": "Balanced Proficiency",
+          "versions": {
+            "2K26": {
+              "address": 344,
+              "hex": "0x158",
+              "length": 1,
+              "type": "ubyte"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENSEPROFICIENCY",
+          "display_name": "Defense Proficiency",
+          "versions": {
+            "2K26": {
+              "address": 351,
+              "hex": "0x15F",
+              "length": 1,
+              "type": "ubyte"
+            }
+          }
+        },
+        {
+          "normalized_name": "GRITGRINDPROFICIENCY",
+          "display_name": "Grit & Grind Proficiency",
+          "versions": {
+            "2K26": {
+              "address": 345,
+              "hex": "0x159",
+              "length": 1,
+              "type": "ubyte"
+            }
+          }
+        },
+        {
+          "normalized_name": "PACESPACEPROFICIENCY",
+          "display_name": "Pace &Space Proficiency",
+          "versions": {
+            "2K26": {
+              "address": 346,
+              "hex": "0x15A",
+              "length": 1,
+              "type": "ubyte"
+            }
+          }
+        },
+        {
+          "normalized_name": "PERIMETERCENTRICPROFICIENCY",
+          "display_name": "Perimeter Centric Proficiency",
+          "versions": {
+            "2K26": {
+              "address": 347,
+              "hex": "0x15B",
+              "length": 1,
+              "type": "ubyte"
+            }
+          }
+        },
+        {
+          "normalized_name": "POSTCENTRICPROFICIENCY",
+          "display_name": "Post Centric Proficiency",
+          "versions": {
+            "2K26": {
+              "address": 348,
+              "hex": "0x15C",
+              "length": 1,
+              "type": "ubyte"
+            }
+          }
+        },
+        {
+          "normalized_name": "7SECONDSPROFICIENCY",
+          "display_name": "Seven Seconds Proficiency",
+          "versions": {
+            "2K26": {
+              "address": 350,
+              "hex": "0x15E",
+              "length": 1,
+              "type": "ubyte"
+            }
+          }
+        },
+        {
+          "normalized_name": "TRIANGLEPROFICIENCY",
+          "display_name": "Triangle Proficiency",
+          "versions": {
+            "2K26": {
+              "address": 349,
+              "hex": "0x15D",
+              "length": 1,
+              "type": "ubyte"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
