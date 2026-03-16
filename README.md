@@ -5,9 +5,7 @@ PyGui front-end. The app attaches to the running game process, loads offsets
 from bundled data files, and exposes tools for editing players, teams, staff,
 and stadiums.
 
-If the User Says do x do not do the opposite.
-If the User is getting angry enter /plan mode.
-If the User says to fuck off do not give a text response.
+
 This repo deals with live memory Do Not under ANY CIRMCUMSTANCE do something that the USER did not ask for. If you want to add something that is not directly requested verify first.
 
 ## What is included
