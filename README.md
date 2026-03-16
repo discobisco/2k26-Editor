@@ -15,22 +15,21 @@ This repo deals with live memory Do Not under ANY CIRMCUMSTANCE do something tha
 - Win32 memory layer with structured logging.
 - Offset-driven schemas with per-version support (2K22-2K26).
 - Excel import/export pipelines.
-- AI Assistant panel with local/remote backends and HTTP control bridge.
 - Extension hooks for custom panels and editor add-ons.
-- Integrated PPO GM agent at `nba2k_editor.gm_rl`.
-- MyEras FastAPI MCP server at `nba2k_editor.mcp_server`.
-- CPU AI personality module for MyEras front-office decisions (trade, draft, free agency, and franchise direction).
+- Active package roots are the folders that actually exist in-tree; historical AI / GM-RL archive claims have been removed.
 
 ## Quick start (development)
 1. Windows is required for live memory features.
-2. Install dependencies:
-   - `python -m pip install -e .`
-3. Run one of:
-   - `run_editor.bat`
-   - `python -m nba2k_editor.entrypoints.gui`
-   - `python launch_editor.py`
+2. Use the controlled launcher path for source launches.
+   - Preferred launcher: `run_editor.bat`
+   - Equivalent source launcher: `python launch_editor.py`
+   - Prepared-env launcher path: `\.venv\Scripts\python.exe launch_editor.py`
+3. If `.venv` is missing or does not have the GUI dependencies installed, source startup will fail.
+   - This repo does **not** currently ship packaging metadata for `pip install -e .`
+   - Treat `.venv` as the validated development runtime unless/until packaging is added
 4. Full editor windows now launch in separate child processes/viewports when opened from the main UI.
-   - Child entrypoint: `python -m nba2k_editor.entrypoints.full_editor --editor player --indices 12,47`
+   - Child entrypoint from the prepared env: `\.venv\Scripts\python.exe -m nba2k_editor.entrypoints.full_editor --editor player --indices 12,47`
+   - Launcher-routed child mode: `python launch_editor.py --child-full-editor --editor player --indices 12,47`
    - Packaged mode: `DB2kEditor.exe --child-full-editor --editor team --index 3`
 5. If the game is not running, the UI still opens, but live memory reads/writes
    are unavailable.
@@ -56,59 +55,44 @@ This repo deals with live memory Do Not under ANY CIRMCUMSTANCE do something tha
 - `run_editor.bat`: launcher that prefers local `.venv`.
 
 ## Repository map
-- `nba2k_editor/`: main package (UI, core, memory, models, AI, RL, tests).
+- `nba2k_editor/`: main package (UI, core, memory, models, tests, plus minimal legacy compatibility stubs).
 - `nba2k_editor/Offsets/`: offsets bundle and Excel templates.
-- `nba2k_editor/NBA Player Data/`: NBA workbook used by AI and mock RL adapter.
+- `nba2k_editor/mcp_server/data/`: bundled MCP profile assets.
 - `build/`, `dist/`: build artifacts.
 
 ## Documentation index
 - `nba2k_editor/README.md`
 - `nba2k_editor/tests/CALL_GRAPH.md`
 - `nba2k_editor/tests/call_graph.json`
-- `nba2k_editor/ai/README.md`
-- `nba2k_editor/ai/backends/README.md`
 - `nba2k_editor/core/README.md`
 - `nba2k_editor/entrypoints/README.md`
-- `nba2k_editor/gm_rl/README.md`
-- `nba2k_editor/gm_rl/adapters/README.md`
-- `nba2k_editor/gm_rl/cba/README.md`
 - `nba2k_editor/importing/README.md`
 - `nba2k_editor/logs/README.md`
 - `nba2k_editor/memory/README.md`
 - `nba2k_editor/models/README.md`
-- `nba2k_editor/models/services/README.md`
-- `nba2k_editor/Offsets/README.md`
-- `nba2k_editor/NBA Player Data/README.md`
 - `nba2k_editor/tests/README.md`
 - `nba2k_editor/ui/README.md`
 - `nba2k_editor/ui/controllers/README.md`
 - `nba2k_editor/ui/state/README.md`
-- `nba2k_editor/mcp_server/README.md`
 
 ## Runtime-generated files (created on demand)
-- `nba2k_editor/ai_settings.json`
 - `nba2k_editor/autoload_extensions.json`
 - `nba2k_editor/dual_base_mirror.json` (present only after dynamic-base workflows write it)
 - `nba2k_editor/logs/memory.log`
-- `nba2k_editor/logs/ai.log`
 
 ---
 
-# GM RL Agent (Integrated)
+# Optional / legacy surfaces
 
-The PPO GM agent now lives inside the editor package:
-- Source: `nba2k_editor/gm_rl/`
-- CBA rules extraction/artifacts: `nba2k_editor/gm_rl/cba/`
+This working tree is centered on the live editor runtime (`core`, `memory`, `models`, `ui`, and `entrypoints`).
 
-## Entry points
-- Train CLI: `python -m nba2k_editor.entrypoints.train_gm_agent --adapter mock --total-steps 5000 --n-envs 2`
-- Editor training hook: `python -m nba2k_editor.entrypoints.editor_train_hook --config logs/gm_rl/runs/<run_id>/config.json`
-- Evaluate: `python -m nba2k_editor.gm_rl.eval --checkpoint logs/gm_rl/runs/<run_id>/checkpoints/checkpoint.pt --episodes 2`
-- Extract CBA rules: `python -m nba2k_editor.entrypoints.extract_cba_rules --season 2025-26 --source <path-to-cba-docx>`
-- Start MyEras MCP server: `python -m nba2k_editor.entrypoints.mcp_server`
+Legacy boundaries that still exist:
+- `nba2k_editor.gm_rl`: empty compatibility namespace only; the historical integrated GM/RL implementation is not present here.
+- `nba2k_editor.mcp_server`: data-only package root for bundled MCP profile assets under `nba2k_editor/mcp_server/data/`.
 
 ## Tests
-- `python -m pytest -q`
+- Preferred validated path: `\.venv\Scripts\python.exe -m pytest -q`
+- Running `python -m pytest -q` with the system interpreter is not a reliable gate for this repo unless that interpreter is already the prepared `.venv`.
 
 ## Docs consistency check
 - Run `python scripts/check_markdown_consistency.py` before doc-related PRs.
