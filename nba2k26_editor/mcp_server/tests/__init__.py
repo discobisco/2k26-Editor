@@ -1,2 +1,0 @@
-"""MyEras MCP server tests."""
-
