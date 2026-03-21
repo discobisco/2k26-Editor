@@ -18,7 +18,6 @@ _STADIUM_EDITOR_CONFIG = EntityEditorConfig(
     detailed_errors=True,
     require_process_for_save=False,
     empty_categories_message="No stadium categories detected in offsets files.",
-    notice_text="Live editing will activate once stadium base pointers/stride are defined in offsets files.",
     refresh_before_load="refresh_stadiums",
 )
 

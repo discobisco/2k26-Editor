@@ -228,6 +228,7 @@ class FullPlayerEditor:
 
         career_key = "Stats - Career"
         season_key = "Stats - Season"
+        season_high_key = "Season High Stats"
         awards_key = cls._PLAYER_STATS_AWARDS_CATEGORY
         ids_key = cls._PLAYER_STATS_IDS_CATEGORY
 
@@ -242,16 +243,27 @@ class FullPlayerEditor:
             prepared.pop(career_key, None)
 
         if season_key in prepared:
-            season_fields = cls._clone_fields_with_source(prepared.get(season_key, []), season_key)
+            season_source_fields = prepared.get(season_key, [])
+            season_fields: list[dict[str, object]] = []
+            season_high_fields: list[dict[str, object]] = []
+            for field in cls._clone_fields_with_source(season_source_fields, season_key):
+                raw_group = str(field.get("source_table_group") or field.get("source_group") or "").strip().lower()
+                if raw_group == season_high_key.lower():
+                    season_high_fields.append(field)
+                else:
+                    season_fields.append(field)
             selector_added = False
-            if id_fields:
+            if season_fields and id_fields:
                 selector_field = cls._build_season_slot_selector_field(cls._clone_fields_with_source(id_fields, ids_key))
                 if selector_field:
                     season_fields = [selector_field, *season_fields]
                     selector_added = True
-            if awards_fields:
+            if season_fields and awards_fields:
                 season_fields.extend(cls._clone_fields_with_source(awards_fields, awards_key))
-            prepared["Season Stats"] = season_fields
+            if season_fields:
+                prepared["Season Stats"] = season_fields
+            if season_high_fields:
+                prepared[season_high_key] = season_high_fields
             prepared.pop(season_key, None)
             if selector_added:
                 prepared.pop(ids_key, None)

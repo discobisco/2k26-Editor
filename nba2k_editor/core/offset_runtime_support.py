@@ -111,11 +111,11 @@ def _parse_pointer_chain_config(
     chain_data = base_cfg.get("chain")
     if chain_data is None:
         raise offset_schema_error("Base pointer config must include a 'chain' list (use [] for direct table pointers).")
+    steps = normalize_chain_steps(chain_data)
     if "direct_table" in base_cfg:
         direct_table = bool(base_cfg.get("direct_table"))
     else:
         direct_table = False
-    steps = normalize_chain_steps(chain_data)
     chains.append(
         {
             "rva": base_addr,

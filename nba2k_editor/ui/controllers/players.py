@@ -18,25 +18,30 @@ from ...models.player import Player
 from ..full_editor_launch import launch_full_editor_process as _launch_full_editor_process
 
 
+def _player_display_label(player: Player) -> str:
+    return player.full_name or f"Player {player.index}"
+
 def render_player_list(app: Any, items: list[str] | None = None, message: str | None = None) -> None:
     if app.player_list_container is None or not dpg.does_item_exist(app.player_list_container):
         return
     if items is None:
         items = []
-    if message:
-        items = [message]
-    if not app.player_listbox_tag or not dpg.does_item_exist(app.player_listbox_tag):
-        with dpg.group(parent=app.player_list_container):
-            app.player_listbox_tag = dpg.add_listbox(
-                items=items,
-                num_items=28,
-                callback=app._on_player_selected,
-            )
-    else:
-        dpg.configure_item(app.player_listbox_tag, items=items)
-    if not items or message:
+    if dpg.does_item_exist(app.player_list_container):
+        dpg.delete_item(app.player_list_container, children_only=True)
+    app.player_listbox_tag = None
+    app.player_row_tags = []
+    if message or not items:
+        dpg.add_text(message or "No players available.", parent=app.player_list_container)
         app.clear_player_selection()
         return
+    for row_index, item in enumerate(items):
+        row_tag = dpg.add_selectable(
+            label=item,
+            parent=app.player_list_container,
+            callback=app._on_player_selected,
+            user_data=row_index,
+        )
+        app.player_row_tags.append(row_tag)
     app.set_selected_player_indices([0])
 
 
@@ -133,20 +138,21 @@ def filter_player_list(app: Any) -> None:
         if hasattr(app, "player_count_text_tag") and app.player_count_text_tag:
             dpg.set_value(app.player_count_text_tag, app.player_count_var.get())
         return
-    visible_names: list[str] = []
     if not search:
         app.filtered_player_indices = list(range(len(app.current_players)))
-        visible_names = [p.full_name for p in app.current_players]
     else:
         for idx, player in enumerate(app.current_players):
-            if search in player.full_name.lower():
+            if search in _player_display_label(player).lower():
                 app.filtered_player_indices.append(idx)
-                visible_names.append(player.full_name)
-    if not visible_names:
+    if not app.filtered_player_indices:
         app._render_player_list(message="No players match the current filter.")
     else:
-        app.player_list_items = visible_names
-        app._render_player_list(items=visible_names)
+        app.player_list_items = [
+            _player_display_label(app.current_players[idx])
+            for idx in app.filtered_player_indices
+            if 0 <= idx < len(app.current_players)
+        ]
+        app._render_player_list(items=app.player_list_items)
     app.player_count_var.set(f"Players: {len(app.filtered_player_indices)}")
     if getattr(app, "player_count_text_tag", None):
         dpg.set_value(app.player_count_text_tag, app.player_count_var.get())
@@ -158,17 +164,69 @@ def on_team_selected(app: Any, _sender, value: str | None) -> None:
     app._refresh_player_list()
 
 
-def on_player_selected(app: Any, _sender=None, app_data=None) -> None:
-    name = str(app_data) if app_data is not None else ""
-    idx = app.player_list_items.index(name) if name in app.player_list_items else -1
-    selected_players: list[Player] = []
-    if 0 <= idx < len(app.filtered_player_indices):
-        p_idx = app.filtered_player_indices[idx]
-        if 0 <= p_idx < len(app.current_players):
-            selected_players.append(app.current_players[p_idx])
-    app.selected_players = selected_players
-    app.selected_player = selected_players[0] if selected_players else None
+def _resolve_player_row_index(app: Any, value: object) -> int:
+    if isinstance(value, int):
+        return value if 0 <= value < len(app.filtered_player_indices) else -1
+    if isinstance(value, (list, tuple)) and value:
+        return _resolve_player_row_index(app, value[0])
+    return -1
+
+
+
+def _get_selected_player_row(app: Any) -> int:
+    row_index = getattr(app, "selected_player_row", -1)
+    if isinstance(row_index, int) and 0 <= row_index < len(app.filtered_player_indices):
+        player_index = app.filtered_player_indices[row_index]
+        if 0 <= player_index < len(app.current_players):
+            player = app.current_players[player_index]
+            if player is getattr(app, "selected_player", None):
+                return row_index
+    selected = getattr(app, "selected_player", None)
+    selected_index = getattr(selected, "index", None)
+    for row_index, player_index in enumerate(app.filtered_player_indices):
+        if 0 <= player_index < len(app.current_players):
+            player = app.current_players[player_index]
+            if getattr(player, "index", None) == selected_index:
+                return row_index
+    return -1
+
+
+
+def _set_selected_player_row(app: Any, row_index: int, *, sync_widget: bool) -> None:
+    selected_player: Player | None = None
+    resolved_row_index = -1
+    if 0 <= row_index < len(app.filtered_player_indices):
+        player_index = app.filtered_player_indices[row_index]
+        if 0 <= player_index < len(app.current_players):
+            selected_player = app.current_players[player_index]
+            resolved_row_index = row_index
+    app.selected_player_row = resolved_row_index
+    app.selected_player = selected_player
+    app.selected_players = [selected_player] if selected_player is not None else []
+    if sync_widget:
+        row_tags = list(getattr(app, "player_row_tags", []) or [])
+        for current_row_index, row_tag in enumerate(row_tags):
+            if not dpg.does_item_exist(row_tag):
+                continue
+            try:
+                dpg.set_value(row_tag, current_row_index == resolved_row_index)
+            except Exception:
+                pass
+        if app.player_listbox_tag and dpg.does_item_exist(app.player_listbox_tag):
+            value = app.player_list_items[resolved_row_index] if selected_player is not None and 0 <= resolved_row_index < len(app.player_list_items) else None
+            try:
+                dpg.set_value(app.player_listbox_tag, value)
+            except Exception:
+                pass
     app._update_detail_fields()
+
+
+
+def on_player_selected(app: Any, sender=None, app_data=None, user_data=None, *_args, **_kwargs) -> None:
+    row_index = _resolve_player_row_index(app, user_data)
+    if row_index < 0:
+        row_index = _resolve_player_row_index(app, app_data)
+    _set_selected_player_row(app, row_index, sync_widget=True)
 
 
 def update_detail_fields(app: Any) -> None:
@@ -180,8 +238,11 @@ def update_detail_fields(app: Any) -> None:
         app.var_first.set("")
         app.var_last.set("")
         app.var_player_team.set("")
-        for var in app.player_detail_fields.values():
+        for label, var in app.player_detail_fields.items():
             var.set("--")
+            widget = app.player_detail_widgets.get(label)
+            if widget and dpg.does_item_exist(widget):
+                dpg.set_value(widget, var.get())
         if app.btn_save:
             dpg.configure_item(app.btn_save, enabled=False)
         if app.btn_edit:
@@ -274,8 +335,8 @@ def save_player(app: Any) -> None:
     app._refresh_player_list()
 
 
-def open_full_editor(app: Any) -> None:
-    selected = app.selected_players or ([app.selected_player] if app.selected_player else [])
+def open_full_editor(app: Any, *args, **kwargs) -> None:
+    selected = list(app.selected_players)
     if not selected:
         return
     player_indices: list[int] = []
@@ -298,7 +359,7 @@ def open_full_editor(app: Any) -> None:
         app.show_error("Player Editor", f"Unable to open player editor window: {exc}")
 
 
-def open_copy_dialog(app: Any) -> None:
+def open_copy_dialog(app: Any, _sender: Any = None, _app_data: Any = None) -> None:
     src = app.selected_player
     if not src:
         app.show_info("Copy Player Data", "Select a player to copy from.")
@@ -532,33 +593,31 @@ def get_player_list_items(app: Any) -> list[str]:
 
 
 def get_selected_player_indices(app: Any) -> list[int]:
-    if not app.player_listbox_tag or not dpg.does_item_exist(app.player_listbox_tag):
-        return []
-    val = dpg.get_value(app.player_listbox_tag)
-    if val is None:
-        return []
-    try:
-        idx = app.player_list_items.index(val)
-    except ValueError:
-        return []
-    return [idx]
+    row_index = _get_selected_player_row(app)
+    return [row_index] if row_index >= 0 else []
 
 
 def set_selected_player_indices(app: Any, indices: list[int]) -> None:
     if not indices:
         return
-    idx = indices[0]
-    if 0 <= idx < len(app.player_list_items) and app.player_listbox_tag and dpg.does_item_exist(app.player_listbox_tag):
-        dpg.set_value(app.player_listbox_tag, app.player_list_items[idx])
-        app._on_player_selected(app.player_listbox_tag, app.player_list_items[idx])
+    _set_selected_player_row(app, indices[0], sync_widget=True)
 
 
 def clear_player_selection(app: Any) -> None:
+    row_tags = list(getattr(app, "player_row_tags", []) or [])
+    for row_tag in row_tags:
+        if not dpg.does_item_exist(row_tag):
+            continue
+        try:
+            dpg.set_value(row_tag, False)
+        except Exception:
+            pass
     if app.player_listbox_tag and dpg.does_item_exist(app.player_listbox_tag):
         try:
             dpg.set_value(app.player_listbox_tag, None)
         except Exception:
             pass
+    app.selected_player_row = -1
     app.selected_player = None
     app.selected_players = []
     app._update_detail_fields()

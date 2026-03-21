@@ -13,8 +13,7 @@ class Player:
 
     @property
     def full_name(self) -> str:
-        name = f"{self.first_name} {self.last_name}".strip()
-        return name if name else f"Player {self.index}"
+        return f"{self.first_name} {self.last_name}".strip()
 
     def __repr__(self) -> str:
         return f"<Player index={self.index} name='{self.full_name}' team='{self.team}' team_id={self.team_id}>"

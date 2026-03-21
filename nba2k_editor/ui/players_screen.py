@@ -70,8 +70,8 @@ def _build_player_detail_panel(app):
             app.player_detail_widgets[label] = val_tag
     dpg.add_spacer(height=8)
     with dpg.group(horizontal=True):
-        app.btn_edit = dpg.add_button(label="Edit Player", callback=lambda: app._open_full_editor(), enabled=False)
-        app.btn_copy = dpg.add_button(label="Copy Player", callback=lambda: app._open_copy_dialog(), enabled=False)
+        app.btn_edit = dpg.add_button(label="Edit Player", callback=lambda *a: app._open_full_editor(*a), enabled=False)
+        app.btn_copy = dpg.add_button(label="Copy Player", callback=lambda *a: app._open_copy_dialog(*a), enabled=False)
     with dpg.group(horizontal=True):
         export_cb = app._export_selected_player if hasattr(app, "_export_selected_player") else (lambda *_a, **_k: None)
         import_cb = app._import_selected_player if hasattr(app, "_import_selected_player") else (lambda *_a, **_k: None)

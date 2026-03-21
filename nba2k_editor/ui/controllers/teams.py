@@ -41,9 +41,13 @@ def filter_team_list(app: Any, *_args) -> None:
     app.filtered_team_names = filtered
     app.team_list_items = filtered
     app._ensure_team_listbox()
+    empty_text_tag = getattr(app, "team_empty_text_tag", None)
+    has_items = bool(filtered)
+    if empty_text_tag and dpg.does_item_exist(empty_text_tag):
+        dpg.configure_item(empty_text_tag, show=not has_items)
     if not app.team_listbox_tag or not dpg.does_item_exist(app.team_listbox_tag):
         return
-    dpg.configure_item(app.team_listbox_tag, items=filtered or ["No teams available."])
+    dpg.configure_item(app.team_listbox_tag, items=filtered)
     target_name = app.team_edit_var.get()
     if not target_name or target_name not in filtered:
         target_name = filtered[0] if filtered else ""

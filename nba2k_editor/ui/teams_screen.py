@@ -38,7 +38,7 @@ def build_teams_screen(app) -> None:
         with dpg.group(horizontal=True):
             with dpg.child_window(tag="team_list_container", width=340, autosize_y=True, border=True) as list_container:
                 app.team_list_container = list_container
-                dpg.add_text("No teams available.")
+                app.team_empty_text_tag = dpg.add_text("No teams available.")
 
             with dpg.child_window(tag="team_detail_container", autosize_x=True, autosize_y=True, border=True, menubar=False):
                 app.team_editor_detail_name_tag = dpg.add_text(

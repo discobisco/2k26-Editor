@@ -552,7 +552,7 @@ class PlayerDataModel:
         super_map = {str(k).lower(): str(v).strip().lower() for k, v in super_types.items()}
         canon_map = {str(k).lower(): str(v) for k, v in canonical.items()}
         # Omit internal/helper categories that should not render as tabs.
-        hidden_cats = {"team pointers"}
+        hidden_cats = {"team pointers", "team players"}
         grouped: dict[str, list[dict]] = {}
         for cat_name, fields in (self.categories or {}).items():
             cat_lower = str(cat_name).lower()
@@ -1050,106 +1050,95 @@ class PlayerDataModel:
         except Exception:
             return None
 
-        def _validate_player_table(base_addr: int | None) -> bool:
-            if base_addr is None:
+        def _is_valid_player_base(base_addr: int | None) -> bool:
+            if base_addr is None or base_addr <= 0:
                 return False
-            if self._current_offset_state().player_stride <= 0:
+            state = self._current_offset_state()
+            if state.player_stride <= 0 or state.name_max_chars <= 0:
                 return False
-            if self._current_offset_state().off_last_name < 0 or self._current_offset_state().off_first_name < 0 or self._current_offset_state().name_max_chars <= 0:
-                return False
-
-            def _looks_like_name_token(value: str) -> bool:
-                text = (value or "").strip()
-                if not text:
+            team_base = None
+            if state.off_team_ptr > 0 and state.team_stride > 0:
+                team_base = self._resolved_team_base
+                if team_base is None:
+                    team_base = self._resolve_team_base_ptr()
+            valid_rows = 0
+            sample_rows = min(6, int(getattr(self, "max_players", 6) or 6))
+            for row in range(sample_rows):
+                record_addr = base_addr + (row * state.player_stride)
+                try:
+                    last_name = self._read_string(record_addr + state.off_last_name, state.name_max_chars, state.last_name_encoding).strip()
+                    first_name = self._read_string(record_addr + state.off_first_name, state.name_max_chars, state.first_name_encoding).strip()
+                except Exception:
+                    continue
+                if not first_name and not last_name:
+                    continue
+                combined = f"{first_name}{last_name}"
+                if any(ord(ch) < 32 or ord(ch) > 126 for ch in combined):
+                    continue
+                lowered = combined.lower()
+                if "logo" in lowered or "manifest" in lowered:
                     return False
-                if len(text) > self._current_offset_state().name_max_chars:
-                    return False
-                if any(ord(ch) < 32 for ch in text):
-                    return False
-                if text.lower().startswith("logo"):
-                    return False
-                alpha_count = sum(1 for ch in text if ch.isalpha())
-                return alpha_count >= 2
+                if team_base is not None:
+                    try:
+                        team_ptr = self.mem.read_uint64(record_addr + state.off_team_ptr)
+                    except Exception:
+                        continue
+                    rel = team_ptr - team_base
+                    if team_ptr <= 0 or rel < 0 or (rel % state.team_stride) != 0:
+                        continue
+                valid_rows += 1
+                if valid_rows >= 2:
+                    return True
+            return False
 
-            try:
-                sample_rows = 8
-                min_valid_rows = 3
-                min_strong_rows = 2
-                valid_rows = 0
-                strong_rows = 0
-                logo_hits = 0
-
-                team_base = self._resolve_team_base_ptr()
-                team_ptr_aligned_rows = 0
-                team_id_rows = 0
-
-                for row in range(sample_rows):
-                    record_addr = base_addr + (row * self._current_offset_state().player_stride)
-                    first = self._read_string(record_addr + self._current_offset_state().off_first_name, self._current_offset_state().name_max_chars, self._current_offset_state().first_name_encoding).strip()
-                    last = self._read_string(record_addr + self._current_offset_state().off_last_name, self._current_offset_state().name_max_chars, self._current_offset_state().last_name_encoding).strip()
-
-                    if "logo" in first.lower() or "logo" in last.lower():
-                        logo_hits += 1
-
-                    first_ok = _looks_like_name_token(first)
-                    last_ok = _looks_like_name_token(last)
-                    if first_ok or last_ok:
-                        valid_rows += 1
-                    if first_ok and last_ok:
-                        strong_rows += 1
-
-                    if self._current_offset_state().off_team_ptr > 0 and team_base is not None and self._current_offset_state().team_stride > 0:
-                        try:
-                            team_ptr = self.mem.read_uint64(record_addr + self._current_offset_state().off_team_ptr)
-                        except Exception:
-                            team_ptr = 0
-                        if team_ptr == 0:
-                            team_ptr_aligned_rows += 1
-                        elif team_ptr > 0 and team_ptr >= team_base:
-                            rel = team_ptr - team_base
-                            if rel % self._current_offset_state().team_stride == 0:
-                                team_index = int(rel // self._current_offset_state().team_stride)
-                                if 0 <= team_index < self._current_offset_state().max_teams_scan:
-                                    team_ptr_aligned_rows += 1
-                    elif self._current_offset_state().off_team_id > 0:
-                        try:
-                            team_id = int(self.mem.read_uint32(record_addr + self._current_offset_state().off_team_id))
-                        except Exception:
-                            team_id = -1
-                        if 0 <= team_id < self._current_offset_state().max_teams_scan:
-                            team_id_rows += 1
-
-                if logo_hits > 0:
-                    return False
-                if strong_rows < min_strong_rows or valid_rows < min_valid_rows:
-                    return False
-                if self._current_offset_state().off_team_ptr > 0 and team_base is not None and self._current_offset_state().team_stride > 0 and team_ptr_aligned_rows < 2:
-                    return False
-                if self._current_offset_state().off_team_ptr <= 0 and self._current_offset_state().off_team_id > 0 and team_id_rows < 2:
-                    return False
-
-                self._resolved_player_base = base_addr
-                return True
-            except Exception:
-                return False
-
-        if self._current_offset_state().player_ptr_chains:
-            for chain in self._current_offset_state().player_ptr_chains:
-                candidate = self._resolve_pointer_from_chain(chain)
-                if _validate_player_table(candidate):
-                    _log_debug(f"[data_model] player_base resolved to 0x{candidate:X}")
-                    return self._resolved_player_base
+        for chain in self._current_offset_state().player_ptr_chains:
+            candidate = self._resolve_pointer_from_chain(chain)
+            if not _is_valid_player_base(candidate):
+                continue
+            self._resolved_player_base = candidate
+            _log_debug(f"[data_model] player_base resolved to 0x{candidate:X}")
+            return self._resolved_player_base
         return None
 
-    def _resolve_team_base_ptr(self) -> int | None:
-        if self._resolved_team_base is not None:
-            return self._resolved_team_base
+    def _resolve_cached_named_base_ptr(
+        self,
+        *,
+        cached_attr: str,
+        pointer_chains: Sequence[dict[str, object]],
+        validator,
+        resolved_log: str,
+        validation_failed_log: str | None = None,
+        no_chains_log: str | None = None,
+        process_not_open_log: str | None = None,
+        log_candidate=None,
+    ) -> int | None:
+        cached_base = getattr(self, cached_attr)
+        if cached_base is not None:
+            return cached_base
         try:
             if not self.mem.open_process():
+                if process_not_open_log:
+                    _log_debug(process_not_open_log)
                 return None
         except Exception:
             return None
+        for idx, chain in enumerate(pointer_chains or []):
+            base = self._resolve_pointer_from_chain(chain)
+            if log_candidate is not None:
+                log_candidate(idx, base)
+            if validator(base):
+                setattr(self, cached_attr, base)
+                _log_debug(resolved_log.format(base=base))
+                return base
+        if pointer_chains:
+            if validation_failed_log:
+                _log_debug(validation_failed_log)
+        elif no_chains_log:
+            _log_debug(no_chains_log)
+        setattr(self, cached_attr, None)
+        return None
 
+    def _resolve_team_base_ptr(self) -> int | None:
         def _is_valid_team_base(base_addr: int | None) -> bool:
             if base_addr is None:
                 return False
@@ -1176,80 +1165,56 @@ class PlayerDataModel:
                     return True
             return False
 
-        if self._current_offset_state().team_ptr_chains:
-            for chain in self._current_offset_state().team_ptr_chains:
-                base = self._resolve_pointer_from_chain(chain)
-                if _is_valid_team_base(base):
-                    self._resolved_team_base = base
-                    _log_debug(f"[data_model] team_base resolved to 0x{base:X}")
-                    return base
-        self._resolved_team_base = None
-        return None
+        return self._resolve_cached_named_base_ptr(
+            cached_attr="_resolved_team_base",
+            pointer_chains=self._current_offset_state().team_ptr_chains,
+            validator=_is_valid_team_base,
+            resolved_log="[data_model] team_base resolved to 0x{base:X}",
+        )
 
     def _resolve_staff_base_ptr(self) -> int | None:
-        if self._resolved_staff_base is not None:
-            return self._resolved_staff_base
-        def _log(msg: str) -> None:
-            _log_debug(msg)
-        try:
-            if not self.mem.open_process():
-                _log("[data_model] staff_base skipped; process not open")
-                return None
-        except Exception:
-            return None
-
         name_field = self._staff_name_fields.get("first") or self._staff_name_fields.get("last")
 
         def _is_valid_staff_base(base_addr: int | None) -> bool:
             if base_addr is None:
-                _log("[data_model] staff_base candidate is None")
+                _log_debug("[data_model] staff_base candidate is None")
                 return False
             if not name_field or name_field.get("offset", 0) <= 0:
-                _log("[data_model] staff_base validation: no name field; accepting candidate")
+                _log_debug("[data_model] staff_base validation: no name field; accepting candidate")
                 return True  # no reliable validation; accept candidate
             offset = int(name_field.get("offset") or 0)
             length = int(name_field.get("length") or 0)
             encoding = str(name_field.get("encoding") or self._current_offset_state().staff_name_encoding)
             if length <= 0:
-                _log(f"[data_model] staff_base validation: no explicit name length (offset=0x{offset:X}); accepting")
+                _log_debug(f"[data_model] staff_base validation: no explicit name length (offset=0x{offset:X}); accepting")
                 return True
             try:
                 name = self._read_string(base_addr + offset, length, encoding).strip()
             except Exception:
-                _log(f"[data_model] staff_base validation: read failed at 0x{base_addr + offset:X}")
+                _log_debug(f"[data_model] staff_base validation: read failed at 0x{base_addr + offset:X}")
                 return False
             if not name:
-                _log("[data_model] staff_base validation: empty name")
+                _log_debug("[data_model] staff_base validation: empty name")
                 return False
             if any(ord(ch) < 32 for ch in name):
-                _log("[data_model] staff_base validation: control characters in name")
+                _log_debug("[data_model] staff_base validation: control characters in name")
                 return False
             return True
 
-        if self._current_offset_state().staff_ptr_chains:
-            for idx, chain in enumerate(self._current_offset_state().staff_ptr_chains):
-                base = self._resolve_pointer_from_chain(chain)
-                _log(f"[data_model] staff_base candidate[{idx}] = 0x{base:X}" if base is not None else f"[data_model] staff_base candidate[{idx}] = None")
-                if _is_valid_staff_base(base):
-                    self._resolved_staff_base = base
-                    _log(f"[data_model] staff_base resolved to 0x{base:X}")
-                    return base
-        if self._current_offset_state().staff_ptr_chains:
-            _log("[data_model] staff_base not resolved; pointer chains present but validation failed")
-        else:
-            _log("[data_model] staff_base skipped; no pointer chains configured")
-        self._resolved_staff_base = None
-        return None
+        return self._resolve_cached_named_base_ptr(
+            cached_attr="_resolved_staff_base",
+            pointer_chains=self._current_offset_state().staff_ptr_chains,
+            validator=_is_valid_staff_base,
+            resolved_log="[data_model] staff_base resolved to 0x{base:X}",
+            validation_failed_log="[data_model] staff_base not resolved; pointer chains present but validation failed",
+            no_chains_log="[data_model] staff_base skipped; no pointer chains configured",
+            process_not_open_log="[data_model] staff_base skipped; process not open",
+            log_candidate=lambda idx, base: _log_debug(
+                f"[data_model] staff_base candidate[{idx}] = 0x{base:X}" if base is not None else f"[data_model] staff_base candidate[{idx}] = None"
+            ),
+        )
 
     def _resolve_stadium_base_ptr(self) -> int | None:
-        if self._resolved_stadium_base is not None:
-            return self._resolved_stadium_base
-        try:
-            if not self.mem.open_process():
-                return None
-        except Exception:
-            return None
-
         name_field = self._stadium_name_field
 
         def _is_valid_stadium_base(base_addr: int | None) -> bool:
@@ -1270,19 +1235,137 @@ class PlayerDataModel:
                 return False
             return not any(ord(ch) < 32 for ch in name)
 
-        if self._current_offset_state().stadium_ptr_chains:
-            for chain in self._current_offset_state().stadium_ptr_chains:
-                base = self._resolve_pointer_from_chain(chain)
-                if _is_valid_stadium_base(base):
-                    self._resolved_stadium_base = base
-                    _log_debug(f"[data_model] stadium_base resolved to 0x{base:X}")
-                    return base
-        if self._current_offset_state().stadium_ptr_chains:
-            _log_debug("[data_model] stadium_base not resolved; pointer chains present but validation failed")
-        else:
-            _log_debug("[data_model] stadium_base skipped; no pointer chains configured")
-        self._resolved_stadium_base = None
-        return None
+        return self._resolve_cached_named_base_ptr(
+            cached_attr="_resolved_stadium_base",
+            pointer_chains=self._current_offset_state().stadium_ptr_chains,
+            validator=_is_valid_stadium_base,
+            resolved_log="[data_model] stadium_base resolved to 0x{base:X}",
+            validation_failed_log="[data_model] stadium_base not resolved; pointer chains present but validation failed",
+            no_chains_log="[data_model] stadium_base skipped; no pointer chains configured",
+        )
+
+    def _read_name_field(self, field: dict[str, object] | None, rec_addr: int, fallback_encoding: str) -> str:
+        if not field:
+            return ""
+        offset = int(field.get("offset") or 0)
+        length = int(field.get("length") or 0)
+        if offset < 0 or length <= 0:
+            return ""
+        try:
+            return self._read_string(
+                rec_addr + offset,
+                length,
+                str(field.get("encoding") or fallback_encoding),
+            ).strip()
+        except Exception:
+            return ""
+
+    def _refresh_named_entities(
+        self,
+        *,
+        max_scan: int,
+        record_size: int,
+        resolve_base,
+        read_name,
+        dirty_key: str,
+        empty_log: str,
+        missing_log: str,
+        process_log: str,
+    ) -> list[tuple[int, str]]:
+        entities: list[tuple[int, str]] = []
+        if record_size <= 0:
+            _log_debug(empty_log)
+            return entities
+        if read_name is None:
+            _log_debug(missing_log)
+            return entities
+        try:
+            if not self.mem.open_process():
+                _log_debug(process_log)
+                return entities
+        except Exception:
+            return entities
+        base_ptr = resolve_base()
+        if base_ptr is None:
+            return entities
+        for idx in range(max_scan):
+            rec_addr = base_ptr + idx * record_size
+            name = read_name(rec_addr)
+            if not name or any(ord(ch) < 32 for ch in name):
+                continue
+            entities.append((idx, name))
+        self.clear_dirty(dirty_key)
+        return entities
+
+    def _read_entity_bitfield(
+        self,
+        entity_kind: EntityKind,
+        entity_index: int,
+        offset: int,
+        start_bit: int,
+        length: int,
+        *,
+        requires_deref: bool = False,
+        deref_offset: int = 0,
+        record_ptr: int | None = None,
+        ensure_process_open: bool = True,
+    ) -> int | None:
+        try:
+            if ensure_process_open and not self.mem.open_process():
+                return None
+            record_addr = self._resolve_entity_address(entity_kind, entity_index, record_ptr=record_ptr)
+            if record_addr is None:
+                return None
+            addr = self._resolve_field_address(
+                record_addr,
+                offset,
+                requires_deref=requires_deref,
+                deref_offset=deref_offset,
+            )
+            if addr is None:
+                return None
+            bits_needed = start_bit + length
+            bytes_needed = (bits_needed + 7) // 8
+            raw = self.mem.read_bytes(addr, bytes_needed)
+            value = int.from_bytes(raw, "little")
+            value >>= start_bit
+            mask = (1 << length) - 1
+            return value & mask
+        except Exception:
+            return None
+
+    def _write_entity_bitfield(
+        self,
+        entity_kind: EntityKind,
+        entity_index: int,
+        offset: int,
+        start_bit: int,
+        length: int,
+        value: int,
+        *,
+        requires_deref: bool = False,
+        deref_offset: int = 0,
+        deref_cache: dict[int, int] | None = None,
+        record_ptr: int | None = None,
+    ) -> bool:
+        try:
+            if not self.mem.open_process():
+                return False
+            record_addr = self._resolve_entity_address(entity_kind, entity_index, record_ptr=record_ptr)
+            if record_addr is None:
+                return False
+            return self._write_field_bits(
+                record_addr,
+                offset,
+                start_bit,
+                length,
+                value,
+                requires_deref=requires_deref,
+                deref_offset=deref_offset,
+                deref_cache=deref_cache,
+            )
+        except Exception:
+            return False
 
     def _scan_team_names(self) -> list[tuple[int, str]]:
         """Read team names from memory using the resolved team table base."""
@@ -1305,45 +1388,56 @@ class PlayerDataModel:
             teams.append((i, name))
         return teams
 
-    def get_team_fields(self, team_idx: int) -> Dict[str, str] | None:
-        """Return editable team fields for the given team index."""
+    def _team_field_record_address(self, team_idx: int) -> int | None:
         if not self.mem.hproc or self.mem.base_addr is None:
             return None
         if self._current_offset_state().team_record_size <= 0 or not self._current_offset_state().team_field_defs:
             return None
-        team_base_ptr = self._resolve_team_base_ptr()
-        if team_base_ptr is None:
-            return None
-        rec_addr = team_base_ptr + team_idx * self._current_offset_state().team_record_size
+        return self._team_record_address(team_idx)
+
+    def _read_string_fields(
+        self,
+        record_addr: int,
+        field_defs: dict[str, tuple[int, int, str]],
+    ) -> Dict[str, str]:
         fields: Dict[str, str] = {}
-        for label, (offset, max_chars, encoding) in self._current_offset_state().team_field_defs.items():
+        for label, (offset, max_chars, encoding) in field_defs.items():
             try:
-                val = self._read_string(rec_addr + offset, max_chars, encoding).rstrip("\x00")
+                value = self._read_string(record_addr + offset, max_chars, encoding).rstrip("\x00")
             except Exception:
-                val = ""
-            fields[label] = val
+                value = ""
+            fields[label] = value
         return fields
 
-    def set_team_fields(self, team_idx: int, values: Dict[str, str]) -> bool:
-        """Write provided values into the specified team record."""
-        if not self.mem.hproc or self.mem.base_addr is None:
-            return False
-        if self._current_offset_state().team_record_size <= 0 or not self._current_offset_state().team_field_defs:
-            return False
-        team_base_ptr = self._resolve_team_base_ptr()
-        if team_base_ptr is None:
-            return False
-        rec_addr = team_base_ptr + team_idx * self._current_offset_state().team_record_size
+    def _write_string_fields(
+        self,
+        record_addr: int,
+        field_defs: dict[str, tuple[int, int, str]],
+        values: Dict[str, str],
+    ) -> bool:
         success = True
-        for label, (offset, max_chars, encoding) in self._current_offset_state().team_field_defs.items():
+        for label, (offset, max_chars, encoding) in field_defs.items():
             if label not in values:
                 continue
-            val = values[label]
             try:
-                self._write_string(rec_addr + offset, val, max_chars, encoding)
+                self._write_string(record_addr + offset, values[label], max_chars, encoding)
             except Exception:
                 success = False
         return success
+
+    def get_team_fields(self, team_idx: int) -> Dict[str, str] | None:
+        """Return editable team fields for the given team index."""
+        rec_addr = self._team_field_record_address(team_idx)
+        if rec_addr is None:
+            return None
+        return self._read_string_fields(rec_addr, self._current_offset_state().team_field_defs)
+
+    def set_team_fields(self, team_idx: int, values: Dict[str, str]) -> bool:
+        """Write provided values into the specified team record."""
+        rec_addr = self._team_field_record_address(team_idx)
+        if rec_addr is None:
+            return False
+        return self._write_string_fields(rec_addr, self._current_offset_state().team_field_defs, values)
 
     def _scan_all_players(self, limit: int) -> list[Player]:
         """Enumerate player records from the live player table with team resolution."""
@@ -1603,50 +1697,25 @@ class PlayerDataModel:
             name_first = self._staff_name_fields.get("first")
             name_last = self._staff_name_fields.get("last")
             active_field = name_first or name_last
-            if self._current_offset_state().staff_record_size <= 0:
-                _log_debug("[data_model] refresh_staff skipped; self._current_offset_state().staff_record_size <= 0")
-                return self.staff_list
-            if not active_field:
-                _log_debug("[data_model] refresh_staff skipped; no staff name field resolved")
-                return self.staff_list
-            if int(active_field.get("offset", 0)) < 0:
+            if active_field and int(active_field.get("offset", 0)) < 0:
                 _log_debug("[data_model] refresh_staff skipped; staff name offset < 0")
                 return self.staff_list
-            try:
-                if not self.mem.open_process():
-                    _log_debug("[data_model] refresh_staff skipped; process not open")
-                    return self.staff_list
-            except Exception:
-                return self.staff_list
-            base_ptr = self._resolve_staff_base_ptr()
-            if base_ptr is None:
-                return self.staff_list
 
-            def _read_field(field: dict[str, object] | None, rec_addr: int) -> str:
-                if not field:
-                    return ""
-                offset = int(field.get("offset") or 0)
-                length = int(field.get("length") or 0)
-                if offset < 0 or length <= 0:
-                    return ""
-                addr = rec_addr + offset
-                try:
-                    return self._read_string(addr, length, str(field.get("encoding") or self._current_offset_state().staff_name_encoding)).strip()
-                except Exception:
-                    return ""
+            def _read_staff_name(rec_addr: int) -> str:
+                first = self._read_name_field(name_first, rec_addr, self._current_offset_state().staff_name_encoding)
+                last = self._read_name_field(name_last, rec_addr, self._current_offset_state().staff_name_encoding)
+                return " ".join(part for part in (first, last) if part).strip()
 
-            for idx in range(self._current_offset_state().max_staff_scan):
-                rec_addr = base_ptr + idx * self._current_offset_state().staff_record_size
-                first = _read_field(name_first, rec_addr)
-                last = _read_field(name_last, rec_addr)
-                name_parts = [part for part in (first, last) if part]
-                if not name_parts:
-                    continue
-                display = " ".join(name_parts).strip()
-                if not display or any(ord(ch) < 32 for ch in display):
-                    continue
-                self.staff_list.append((idx, display))
-            self.clear_dirty("staff")
+            self.staff_list = self._refresh_named_entities(
+                max_scan=self._current_offset_state().max_staff_scan,
+                record_size=self._current_offset_state().staff_record_size,
+                resolve_base=self._resolve_staff_base_ptr,
+                read_name=_read_staff_name if active_field else None,
+                dirty_key="staff",
+                empty_log="[data_model] refresh_staff skipped; self._current_offset_state().staff_record_size <= 0",
+                missing_log="[data_model] refresh_staff skipped; no staff name field resolved",
+                process_log="[data_model] refresh_staff skipped; process not open",
+            )
             return self.staff_list
 
     def get_staff(self) -> list[str]:
@@ -1658,45 +1727,23 @@ class PlayerDataModel:
         with timed("data_model.refresh_stadiums"):
             self.stadium_list = []
             name_field = self._stadium_name_field
-            if self._current_offset_state().stadium_record_size <= 0:
-                _log_debug("[data_model] refresh_stadiums skipped; self._current_offset_state().stadium_record_size <= 0")
-                return self.stadium_list
-            if not name_field:
-                _log_debug("[data_model] refresh_stadiums skipped; no stadium name field resolved")
-                return self.stadium_list
-            if int(name_field.get("offset", 0)) < 0:
+            if name_field and int(name_field.get("offset", 0)) < 0:
                 _log_debug("[data_model] refresh_stadiums skipped; stadium name offset < 0")
                 return self.stadium_list
-            try:
-                if not self.mem.open_process():
-                    _log_debug("[data_model] refresh_stadiums skipped; process not open")
-                    return self.stadium_list
-            except Exception:
-                return self.stadium_list
-            base_ptr = self._resolve_stadium_base_ptr()
-            if base_ptr is None:
-                return self.stadium_list
 
-            def _read_field(field: dict[str, object] | None, rec_addr: int) -> str:
-                if not field:
-                    return ""
-                offset = int(field.get("offset") or 0)
-                length = int(field.get("length") or 0)
-                if offset < 0 or length <= 0:
-                    return ""
-                addr = rec_addr + offset
-                try:
-                    return self._read_string(addr, length, str(field.get("encoding") or self._current_offset_state().stadium_name_encoding)).strip()
-                except Exception:
-                    return ""
+            def _read_stadium_name(rec_addr: int) -> str:
+                return self._read_name_field(name_field, rec_addr, self._current_offset_state().stadium_name_encoding)
 
-            for idx in range(self._current_offset_state().max_stadium_scan):
-                rec_addr = base_ptr + idx * self._current_offset_state().stadium_record_size
-                name = _read_field(name_field, rec_addr)
-                if not name or any(ord(ch) < 32 for ch in name):
-                    continue
-                self.stadium_list.append((idx, name))
-            self.clear_dirty("stadiums")
+            self.stadium_list = self._refresh_named_entities(
+                max_scan=self._current_offset_state().max_stadium_scan,
+                record_size=self._current_offset_state().stadium_record_size,
+                resolve_base=self._resolve_stadium_base_ptr,
+                read_name=_read_stadium_name if name_field else None,
+                dirty_key="stadiums",
+                empty_log="[data_model] refresh_stadiums skipped; self._current_offset_state().stadium_record_size <= 0",
+                missing_log="[data_model] refresh_stadiums skipped; no stadium name field resolved",
+                process_log="[data_model] refresh_stadiums skipped; process not open",
+            )
             return self.stadium_list
 
     def get_stadiums(self) -> list[str]:
@@ -2869,31 +2916,17 @@ class PlayerDataModel:
         record_ptr: int | None = None,
         ensure_process_open: bool = True,
     ) -> int | None:
-        try:
-            if ensure_process_open and not self.mem.open_process():
-                return None
-            record_addr = self._player_record_address(player_index, record_ptr=record_ptr)
-            if record_addr is None:
-                return None
-            if requires_deref and deref_offset:
-                try:
-                    struct_ptr = self.mem.read_uint64(record_addr + deref_offset)
-                except Exception:
-                    return None
-                if not struct_ptr:
-                    return None
-                addr = struct_ptr + offset
-            else:
-                addr = record_addr + offset
-            bits_needed = start_bit + length
-            bytes_needed = (bits_needed + 7) // 8
-            raw = self.mem.read_bytes(addr, bytes_needed)
-            value = int.from_bytes(raw, "little")
-            value >>= start_bit
-            mask = (1 << length) - 1
-            return value & mask
-        except Exception:
-            return None
+        return self._get_entity_field_value(
+            "player",
+            player_index,
+            offset,
+            start_bit,
+            length,
+            requires_deref=requires_deref,
+            deref_offset=deref_offset,
+            record_ptr=record_ptr,
+            ensure_process_open=ensure_process_open,
+        )
 
     def get_field_value_typed(
         self,
@@ -2913,33 +2946,16 @@ class PlayerDataModel:
         Read a field value with awareness of its declared type.
         Floats are decoded as IEEE-754; all other types fall back to bitfield reads.
         """
-        ftype = (field_type or "").lower()
-        if "float" in ftype:
-            try:
-                if ensure_process_open and not self.mem.open_process():
-                    return None
-                record_addr = self._player_record_address(player_index, record_ptr=record_ptr)
-                if record_addr is None:
-                    return None
-                addr = record_addr + offset
-                if requires_deref and deref_offset:
-                    struct_ptr = self.mem.read_uint64(record_addr + deref_offset)
-                    if not struct_ptr:
-                        return None
-                    addr = struct_ptr + offset
-                byte_len = self._effective_byte_length(byte_length, length, default=4)
-                fmt = "<d" if byte_len >= 8 else "<f"
-                raw = self.mem.read_bytes(addr, 8 if fmt == "<d" else 4)
-                return struct.unpack(fmt, raw[: 8 if fmt == "<d" else 4])[0]
-            except Exception:
-                return None
-        return self.get_field_value(
+        return self._get_entity_field_value_typed(
+            "player",
             player_index,
             offset,
             start_bit,
             length,
             requires_deref=requires_deref,
             deref_offset=deref_offset,
+            field_type=field_type,
+            byte_length=byte_length,
             record_ptr=record_ptr,
             ensure_process_open=ensure_process_open,
         )
@@ -2954,31 +2970,15 @@ class PlayerDataModel:
         deref_offset: int = 0,
     ) -> int | None:
         """Read a bitfield from the specified team record."""
-        try:
-            if not self.mem.open_process():
-                return None
-            record_addr = self._team_record_address(team_index)
-            if record_addr is None:
-                return None
-            if requires_deref and deref_offset:
-                try:
-                    struct_ptr = self.mem.read_uint64(record_addr + deref_offset)
-                except Exception:
-                    return None
-                if not struct_ptr:
-                    return None
-                addr = struct_ptr + offset
-            else:
-                addr = record_addr + offset
-            bits_needed = start_bit + length
-            bytes_needed = (bits_needed + 7) // 8
-            raw = self.mem.read_bytes(addr, bytes_needed)
-            value = int.from_bytes(raw, "little")
-            value >>= start_bit
-            mask = (1 << length) - 1
-            return value & mask
-        except Exception:
-            return None
+        return self._get_entity_field_value(
+            "team",
+            team_index,
+            offset,
+            start_bit,
+            length,
+            requires_deref=requires_deref,
+            deref_offset=deref_offset,
+        )
 
     def _write_field_bits(
         self,
@@ -3060,23 +3060,17 @@ class PlayerDataModel:
         *,
         record_ptr: int | None = None,
     ) -> bool:
-        try:
-            if not self.mem.open_process():
-                return False
-            record_addr = self._player_record_address(player_index, record_ptr=record_ptr)
-            if record_addr is None:
-                return False
-            return self._write_field_bits(
-                record_addr,
-                offset,
-                start_bit,
-                length,
-                value,
-                requires_deref=requires_deref,
-                deref_offset=deref_offset,
-            )
-        except Exception:
-            return False
+        return self._set_entity_field_value(
+            "player",
+            player_index,
+            offset,
+            start_bit,
+            length,
+            value,
+            requires_deref=requires_deref,
+            deref_offset=deref_offset,
+            record_ptr=record_ptr,
+        )
 
     def set_field_value_typed(
         self,
@@ -3096,50 +3090,17 @@ class PlayerDataModel:
         Write a field value with awareness of its declared type.
         Floats are encoded as IEEE-754; all other types fall back to bitfield writes.
         """
-        ftype = (field_type or "").lower()
-        if "float" in ftype:
-            try:
-                if not self.mem.open_process():
-                    return False
-                record_addr = self._player_record_address(player_index, record_ptr=record_ptr)
-                if record_addr is None:
-                    return False
-                addr = record_addr + offset
-                if requires_deref and deref_offset:
-                    struct_ptr = self.mem.read_uint64(record_addr + deref_offset)
-                    if not struct_ptr:
-                        return False
-                    addr = struct_ptr + offset
-                byte_len = self._effective_byte_length(byte_length, length, default=4)
-                fmt = "<d" if byte_len >= 8 else "<f"
-                if isinstance(value, (int, float)):
-                    fval = float(value)
-                else:
-                    fval = float(str(value).strip())
-                data = struct.pack(fmt, fval)
-                data = data[: 8 if fmt == "<d" else 4]
-                self.mem.write_bytes(addr, data)
-                return True
-            except Exception:
-                return False
-        try:
-            if isinstance(value, (int, float, bool)):
-                int_val = int(value)
-            else:
-                text = str(value).strip()
-                if not text:
-                    return False
-                int_val = int(text)
-        except Exception:
-            return False
-        return self.set_field_value(
+        return self._set_entity_field_value_typed(
+            "player",
             player_index,
             offset,
             start_bit,
             length,
-            int_val,
+            value,
             requires_deref=requires_deref,
             deref_offset=deref_offset,
+            field_type=field_type,
+            byte_length=byte_length,
             record_ptr=record_ptr,
         )
 
@@ -3156,24 +3117,69 @@ class PlayerDataModel:
         deref_cache: dict[int, int] | None = None,
     ) -> bool:
         """Write a bitfield into the specified team record."""
-        try:
-            if not self.mem.open_process():
-                return False
-            record_addr = self._team_record_address(team_index)
-            if record_addr is None:
-                return False
-            return self._write_field_bits(
-                record_addr,
-                offset,
-                start_bit,
-                length,
-                value,
-                requires_deref=requires_deref,
-                deref_offset=deref_offset,
-                deref_cache=deref_cache,
-            )
-        except Exception:
-            return False
+        return self._set_entity_field_value(
+            "team",
+            team_index,
+            offset,
+            start_bit,
+            length,
+            value,
+            requires_deref=requires_deref,
+            deref_offset=deref_offset,
+            deref_cache=deref_cache,
+        )
+
+    def _get_entity_field_value(
+        self,
+        entity_kind: EntityKind,
+        entity_index: int,
+        offset: int,
+        start_bit: int,
+        length: int,
+        *,
+        requires_deref: bool = False,
+        deref_offset: int = 0,
+        record_ptr: int | None = None,
+        ensure_process_open: bool = True,
+    ) -> int | None:
+        return self._read_entity_bitfield(
+            entity_kind,
+            entity_index,
+            offset,
+            start_bit,
+            length,
+            requires_deref=requires_deref,
+            deref_offset=deref_offset,
+            record_ptr=record_ptr,
+            ensure_process_open=ensure_process_open,
+        )
+
+    def _set_entity_field_value(
+        self,
+        entity_kind: EntityKind,
+        entity_index: int,
+        offset: int,
+        start_bit: int,
+        length: int,
+        value: int,
+        *,
+        requires_deref: bool = False,
+        deref_offset: int = 0,
+        deref_cache: dict[int, int] | None = None,
+        record_ptr: int | None = None,
+    ) -> bool:
+        return self._write_entity_bitfield(
+            entity_kind,
+            entity_index,
+            offset,
+            start_bit,
+            length,
+            value,
+            requires_deref=requires_deref,
+            deref_offset=deref_offset,
+            deref_cache=deref_cache,
+            record_ptr=record_ptr,
+        )
 
     def _get_entity_field_value_typed(
         self,
@@ -3187,13 +3193,15 @@ class PlayerDataModel:
         deref_offset: int = 0,
         field_type: str | None = None,
         byte_length: int = 0,
+        record_ptr: int | None = None,
+        ensure_process_open: bool = True,
     ) -> object | None:
         ftype = (field_type or "").lower()
         if "float" in ftype:
             try:
-                if not self.mem.open_process():
+                if ensure_process_open and not self.mem.open_process():
                     return None
-                record_addr = self._resolve_entity_address(entity_kind, entity_index)
+                record_addr = self._resolve_entity_address(entity_kind, entity_index, record_ptr=record_ptr)
                 if record_addr is None:
                     return None
                 addr = self._resolve_field_address(
@@ -3210,34 +3218,17 @@ class PlayerDataModel:
                 return struct.unpack(fmt, raw[: 8 if fmt == "<d" else 4])[0]
             except Exception:
                 return None
-        if entity_kind == "team":
-            return self.get_team_field_value(
-                entity_index,
-                offset,
-                start_bit,
-                length,
-                requires_deref=requires_deref,
-                deref_offset=deref_offset,
-            )
-        if entity_kind == "staff":
-            return self.get_staff_field_value(
-                entity_index,
-                offset,
-                start_bit,
-                length,
-                requires_deref=requires_deref,
-                deref_offset=deref_offset,
-            )
-        if entity_kind == "stadium":
-            return self.get_stadium_field_value(
-                entity_index,
-                offset,
-                start_bit,
-                length,
-                requires_deref=requires_deref,
-                deref_offset=deref_offset,
-            )
-        return None
+        return self._get_entity_field_value(
+            entity_kind,
+            entity_index,
+            offset,
+            start_bit,
+            length,
+            requires_deref=requires_deref,
+            deref_offset=deref_offset,
+            record_ptr=record_ptr,
+            ensure_process_open=ensure_process_open,
+        )
 
     def _set_entity_field_value_typed(
         self,
@@ -3253,13 +3244,14 @@ class PlayerDataModel:
         field_type: str | None = None,
         byte_length: int = 0,
         deref_cache: dict[int, int] | None = None,
+        record_ptr: int | None = None,
     ) -> bool:
         ftype = (field_type or "").lower()
         if "float" in ftype:
             try:
                 if not self.mem.open_process():
                     return False
-                record_addr = self._resolve_entity_address(entity_kind, entity_index)
+                record_addr = self._resolve_entity_address(entity_kind, entity_index, record_ptr=record_ptr)
                 if record_addr is None:
                     return False
                 addr = self._resolve_field_address(
@@ -3290,40 +3282,18 @@ class PlayerDataModel:
         except Exception:
             return False
 
-        if entity_kind == "team":
-            return self.set_team_field_value(
-                entity_index,
-                offset,
-                start_bit,
-                length,
-                int_val,
-                requires_deref=requires_deref,
-                deref_offset=deref_offset,
-                deref_cache=deref_cache,
-            )
-        if entity_kind == "staff":
-            return self.set_staff_field_value(
-                entity_index,
-                offset,
-                start_bit,
-                length,
-                int_val,
-                requires_deref=requires_deref,
-                deref_offset=deref_offset,
-                deref_cache=deref_cache,
-            )
-        if entity_kind == "stadium":
-            return self.set_stadium_field_value(
-                entity_index,
-                offset,
-                start_bit,
-                length,
-                int_val,
-                requires_deref=requires_deref,
-                deref_offset=deref_offset,
-                deref_cache=deref_cache,
-            )
-        return False
+        return self._set_entity_field_value(
+            entity_kind,
+            entity_index,
+            offset,
+            start_bit,
+            length,
+            int_val,
+            requires_deref=requires_deref,
+            deref_offset=deref_offset,
+            deref_cache=deref_cache,
+            record_ptr=record_ptr,
+        )
 
     def get_team_field_value_typed(
         self,
@@ -3389,28 +3359,15 @@ class PlayerDataModel:
         requires_deref: bool = False,
         deref_offset: int = 0,
     ) -> int | None:
-        try:
-            if not self.mem.open_process():
-                return None
-            record_addr = self._staff_record_address(staff_index)
-            if record_addr is None:
-                return None
-            if requires_deref and deref_offset:
-                struct_ptr = self.mem.read_uint64(record_addr + deref_offset)
-                if not struct_ptr:
-                    return None
-                addr = struct_ptr + offset
-            else:
-                addr = record_addr + offset
-            bits_needed = start_bit + length
-            bytes_needed = (bits_needed + 7) // 8
-            raw = self.mem.read_bytes(addr, bytes_needed)
-            value = int.from_bytes(raw, "little")
-            value >>= start_bit
-            mask = (1 << length) - 1
-            return value & mask
-        except Exception:
-            return None
+        return self._get_entity_field_value(
+            "staff",
+            staff_index,
+            offset,
+            start_bit,
+            length,
+            requires_deref=requires_deref,
+            deref_offset=deref_offset,
+        )
 
     def get_staff_field_value_typed(
         self,
@@ -3448,24 +3405,17 @@ class PlayerDataModel:
         deref_offset: int = 0,
         deref_cache: dict[int, int] | None = None,
     ) -> bool:
-        try:
-            if not self.mem.open_process():
-                return False
-            record_addr = self._staff_record_address(staff_index)
-            if record_addr is None:
-                return False
-            return self._write_field_bits(
-                record_addr,
-                offset,
-                start_bit,
-                length,
-                value,
-                requires_deref=requires_deref,
-                deref_offset=deref_offset,
-                deref_cache=deref_cache,
-            )
-        except Exception:
-            return False
+        return self._set_entity_field_value(
+            "staff",
+            staff_index,
+            offset,
+            start_bit,
+            length,
+            value,
+            requires_deref=requires_deref,
+            deref_offset=deref_offset,
+            deref_cache=deref_cache,
+        )
 
     def set_staff_field_value_typed(
         self,
@@ -3504,28 +3454,15 @@ class PlayerDataModel:
         requires_deref: bool = False,
         deref_offset: int = 0,
     ) -> int | None:
-        try:
-            if not self.mem.open_process():
-                return None
-            record_addr = self._stadium_record_address(stadium_index)
-            if record_addr is None:
-                return None
-            if requires_deref and deref_offset:
-                struct_ptr = self.mem.read_uint64(record_addr + deref_offset)
-                if not struct_ptr:
-                    return None
-                addr = struct_ptr + offset
-            else:
-                addr = record_addr + offset
-            bits_needed = start_bit + length
-            bytes_needed = (bits_needed + 7) // 8
-            raw = self.mem.read_bytes(addr, bytes_needed)
-            value = int.from_bytes(raw, "little")
-            value >>= start_bit
-            mask = (1 << length) - 1
-            return value & mask
-        except Exception:
-            return None
+        return self._get_entity_field_value(
+            "stadium",
+            stadium_index,
+            offset,
+            start_bit,
+            length,
+            requires_deref=requires_deref,
+            deref_offset=deref_offset,
+        )
 
     def get_stadium_field_value_typed(
         self,
@@ -3563,24 +3500,17 @@ class PlayerDataModel:
         deref_offset: int = 0,
         deref_cache: dict[int, int] | None = None,
     ) -> bool:
-        try:
-            if not self.mem.open_process():
-                return False
-            record_addr = self._stadium_record_address(stadium_index)
-            if record_addr is None:
-                return False
-            return self._write_field_bits(
-                record_addr,
-                offset,
-                start_bit,
-                length,
-                value,
-                requires_deref=requires_deref,
-                deref_offset=deref_offset,
-                deref_cache=deref_cache,
-            )
-        except Exception:
-            return False
+        return self._set_entity_field_value(
+            "stadium",
+            stadium_index,
+            offset,
+            start_bit,
+            length,
+            value,
+            requires_deref=requires_deref,
+            deref_offset=deref_offset,
+            deref_cache=deref_cache,
+        )
 
     def set_stadium_field_value_typed(
         self,

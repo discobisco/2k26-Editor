@@ -69,7 +69,7 @@ def build_entity_list_screen(app, cfg: EntityListScreenConfig) -> None:
         with dpg.group(horizontal=True):
             with dpg.child_window(tag=cfg.list_container_tag, width=360, autosize_y=True, border=True) as list_container:
                 setattr(app, cfg.list_container_attr, list_container)
-                dpg.add_text(cfg.empty_text)
+                setattr(app, f"{cfg.screen_key}_empty_text_tag", dpg.add_text(cfg.empty_text))
             with dpg.child_window(tag=cfg.detail_container_tag, autosize_x=True, autosize_y=True, border=True):
                 dpg.add_text(f"{cfg.title} Details", color=to_rgba(TEXT_HEADING))
                 setattr(

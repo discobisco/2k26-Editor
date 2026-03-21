@@ -18,7 +18,6 @@ _STAFF_EDITOR_CONFIG = EntityEditorConfig(
     detailed_errors=True,
     require_process_for_save=False,
     empty_categories_message="No staff categories detected in offsets files.",
-    notice_text="Live editing will activate once staff base pointers/stride are defined in offsets files.",
 )
 
 

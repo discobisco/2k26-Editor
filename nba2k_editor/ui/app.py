@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import queue
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields as dataclass_fields
 from typing import Any, Callable
 
 import dearpygui.dearpygui as dpg
@@ -18,7 +18,6 @@ from .app_shell import (
     build_ui as shell_build_ui,
     copy_to_clipboard as shell_copy_to_clipboard,
 )
-from .full_editor_launch import launch_full_editor_process
 
 from ..core.config import MODULE_NAME
 from ..core.offsets import TEAM_FIELD_DEFS
@@ -58,13 +57,30 @@ def _bind_controller_method(handler: Callable[..., Any]) -> Callable[..., Any]:
     return _bind_passthrough_method(handler.__name__, handler)
 
 
-def _module_builder(name: str, fallback: Callable[[Any], None]) -> Callable[[Any], None]:
-    def _builder(app: Any) -> None:
-        resolved = globals().get(name, fallback)
-        resolved(app)
+def _bind_dpg_team_listbox_select(handler: Callable[..., Any]) -> Callable[..., Any]:
+    def _method(
+        self: Any,
+        sender: Any = None,
+        app_data: Any = None,
+        user_data: Any = None,
+    ) -> Any:
+        return handler(self, sender, app_data)
 
-    _builder.__name__ = name
-    return _builder
+    _method.__name__ = handler.__name__
+    return _method
+
+
+def _bind_dpg_player_selected(handler: Callable[..., Any]) -> Callable[..., Any]:
+    def _method(
+        self: Any,
+        sender: Any = None,
+        app_data: Any = None,
+        user_data: Any = None,
+    ) -> Any:
+        return handler(self, sender, app_data, user_data)
+
+    _method.__name__ = handler.__name__
+    return _method
 
 
 build_home_screen = _default_build_home_screen
@@ -139,6 +155,7 @@ class TeamUIState:
 class StaffUIState:
     staff_entries: list[tuple[int, str]] = field(default_factory=list)
     _filtered_staff_entries: list[tuple[int, str]] = field(default_factory=list)
+    selected_staff_index: int | None = None
     staff_search_var: BoundVar = field(default_factory=BoundVar)
     staff_status_var: BoundVar = field(default_factory=BoundVar)
     staff_count_var: BoundVar = field(default_factory=lambda: BoundVar("Staff: 0"))
@@ -152,6 +169,7 @@ class StaffUIState:
 class StadiumUIState:
     stadium_entries: list[tuple[int, str]] = field(default_factory=list)
     _filtered_stadium_entries: list[tuple[int, str]] = field(default_factory=list)
+    selected_stadium_index: int | None = None
     stadium_search_var: BoundVar = field(default_factory=BoundVar)
     stadium_status_var: BoundVar = field(default_factory=BoundVar)
     stadium_count_var: BoundVar = field(default_factory=lambda: BoundVar("Stadiums: 0"))
@@ -222,46 +240,26 @@ class ExcelUIState:
     _excel_export_entity_label: str = ""
 
 
+def _state_bag_attr_map() -> dict[str, str]:
+    mappings: dict[str, str] = {}
+    for bag_attr, bag_type in (
+        ("player_ui", PlayerUIState),
+        ("team_ui", TeamUIState),
+        ("staff_ui", StaffUIState),
+        ("stadium_ui", StadiumUIState),
+        ("league_ui", LeagueUIState),
+        ("trade_ui", TradeUIState),
+        ("excel_ui", ExcelUIState),
+    ):
+        for bag_field in dataclass_fields(bag_type):
+            mappings[bag_field.name] = bag_attr
+    return mappings
+
+
 class PlayerEditorApp(UIHostMixin):
     """Dear PyGui implementation of the editor shell."""
 
-    _STATE_BAG_ATTRS: dict[str, str] = {
-        **{name: "player_ui" for name in (
-            "selected_team", "selected_player", "selected_players", "current_players", "filtered_player_indices",
-            "player_list_items", "player_search_var", "player_count_var", "scan_status_var", "player_name_var",
-            "player_ovr_var", "var_first", "var_last", "var_player_team", "player_detail_fields",
-            "player_detail_widgets", "player_list_container", "player_listbox_tag", "player_team_listbox",
-            "team_combo_tag", "dataset_combo_tag", "btn_save", "btn_edit", "btn_copy",
-            "btn_player_export", "btn_player_import", "copy_dialog_tag",
-        )},
-        **{name: "team_ui" for name in (
-            "team_var", "team_edit_var", "team_name_var", "team_field_vars", "team_field_input_tags",
-            "team_count_var", "team_search_var", "team_scan_status_var", "team_list_container",
-            "team_list_items", "team_listbox_tag", "btn_team_save", "btn_team_full", "all_team_names",
-            "filtered_team_names",
-        )},
-        **{name: "staff_ui" for name in (
-            "staff_entries", "_filtered_staff_entries", "staff_search_var", "staff_status_var", "staff_count_var",
-            "staff_list_container", "staff_list_items", "staff_listbox_tag", "btn_staff_full",
-        )},
-        **{name: "stadium_ui" for name in (
-            "stadium_entries", "_filtered_stadium_entries", "stadium_search_var", "stadium_status_var",
-            "stadium_count_var", "stadium_list_container", "stadium_list_items", "stadium_listbox_tag",
-            "btn_stadium_full",
-        )},
-        **{name: "league_ui" for name in ("league_page_super_types", "league_states")},
-        **{name: "trade_ui" for name in (
-            "trade_team_options", "trade_team_lookup", "trade_participants", "trade_active_team_var",
-            "trade_roster_active", "trade_state", "trade_selected_slot", "trade_selected_player_obj",
-            "trade_contract_meta", "trade_status_var", "trade_active_team_combo_tag", "trade_add_team_combo_tag",
-            "trade_participants_list_tag", "trade_roster_list_tag", "trade_outgoing_container",
-            "trade_incoming_container", "trade_slot_combo_tag", "trade_status_text_tag",
-        )},
-        **{name: "excel_ui" for name in (
-            "excel_status_var", "excel_progress_var", "excel_progress_bar_tag", "excel_status_text_tag",
-            "_excel_export_queue", "_excel_export_thread", "_excel_export_polling", "_excel_export_entity_label",
-        )},
-    }
+    _STATE_BAG_ATTRS: dict[str, str] = _state_bag_attr_map()
 
     def __getattr__(self, name: str) -> Any:
         bag_name = self._STATE_BAG_ATTRS.get(name)
@@ -493,6 +491,9 @@ _CONTROLLER_METHOD_BINDINGS: tuple[tuple[str, Callable[..., Any]], ...] = (
 
 for _method_name, _handler in _CONTROLLER_METHOD_BINDINGS:
     setattr(PlayerEditorApp, _method_name, _bind_controller_method(_handler))
+
+PlayerEditorApp._on_team_listbox_select = _bind_dpg_team_listbox_select(teams_controller.on_team_listbox_select)
+PlayerEditorApp._on_player_selected = _bind_dpg_player_selected(players_controller.on_player_selected)
 
 for _method_name, _handler in (
     ("build_ui", shell_build_ui),
