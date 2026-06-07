@@ -1,0 +1,32 @@
+# Python bytecode/cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build/package output
+build/
+dist/
+*.egg-info/
+
+# Local/editor/agent state
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.hermes/
+
+# Windows reserved/scratch artifact seen in this workspace
+NUL
