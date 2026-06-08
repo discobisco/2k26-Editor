@@ -16,8 +16,10 @@ class FakeMemory:
         self.base_addr = 0x1000
         self.bytes_by_addr: dict[int, bytes] = {}
         self.u64_by_addr: dict[int, int] = {}
+        self.read_u64_counts: dict[int, int] = {}
 
     def read_u64(self, addr: int) -> int:
+        self.read_u64_counts[addr] = self.read_u64_counts.get(addr, 0) + 1
         if addr in self.u64_by_addr:
             return self.u64_by_addr[addr]
         return struct.unpack("<Q", self.read_bytes(addr, 8))[0]
@@ -31,6 +33,16 @@ class FakeMemory:
     def read_ascii(self, addr: int, max_chars: int) -> str:
         raw = self.read_bytes(addr, max_chars)
         return raw.split(b"\x00", 1)[0].decode("ascii", errors="ignore")
+
+    def read_wstring(self, addr: int, max_chars: int) -> str:
+        raw = self.read_bytes(addr, max_chars * 2)
+        return raw.decode("utf-16le", errors="ignore").split("\x00", 1)[0]
+
+    def write_bytes(self, addr: int, data: bytes) -> None:
+        self.bytes_by_addr[addr] = bytes(data)
+
+    def write_uint32(self, addr: int, value: int) -> None:
+        self.write_bytes(addr, int(value).to_bytes(4, "little"))
 
 
 class FakeOffsets:
@@ -83,6 +95,330 @@ def _write_u64(memory: FakeMemory, addr: int, value: int) -> None:
 
 def _write_byte(memory: FakeMemory, addr: int, value: int) -> None:
     memory.bytes_by_addr[addr] = bytes([value & 0xFF])
+
+
+def _write_wstring(memory: FakeMemory, addr: int, text: str, length: int = 20) -> None:
+    memory.bytes_by_addr[addr] = text.encode("utf-16le")[: length * 2].ljust(length * 2, b"\x00")
+
+
+def test_fixed_width_numeric_types_do_not_require_redundant_bytelength() -> None:
+    memory = FakeMemory()
+    memory.u64_by_addr[0x1200] = 0x7000
+    layout = {
+        "Players": {
+            "Vitals": {
+                "ID": [
+                    {"normalized_name": "SIGNATUREID", "display_name": "Signature ID", "versions": {"2K26": {"address": 0x10, "type": "uint"}}},
+                    {"normalized_name": "HEIGHTCM", "display_name": "Height (cm)", "versions": {"2K26": {"address": 0x14, "type": "ushort"}}},
+                    {"normalized_name": "TEAMADDRESS", "display_name": "Team Address", "versions": {"2K26": {"address": 0x18, "type": "uint64"}}},
+                ]
+            }
+        }
+    }
+    offsets = FakeOffsets(
+        {
+            "base_pointers": {"Player": {"address": 0x200, "chain": []}},
+            "game_info": {"playerSize": 0x100},
+        },
+        layout,
+    )
+    model = EditorDataModel(memory=memory, offsets_api=offsets, target_executable="NBA2K26.exe")
+    memory.bytes_by_addr[0x7010] = (0x12345678).to_bytes(4, "little")
+    memory.bytes_by_addr[0x7014] = (0x8765).to_bytes(2, "little")
+    memory.u64_by_addr[0x7018] = 0xAABBCCDDEEFF0011
+
+    fields = model.grouped_fields("Players")["Vitals"]["ID"]
+    assert model.read_entry_value(fields[0], index=0)["raw_value"] == 0x12345678
+    assert model.read_entry_value(fields[1], index=0)["raw_value"] == 0x8765
+    assert model.read_entry_value(fields[2], index=0)["raw_value"] == 0xAABBCCDDEEFF0011
+
+
+def test_dereferenced_fields_use_pointer_slot_then_field_offset() -> None:
+    memory = FakeMemory()
+    memory.u64_by_addr[0x1200] = 0x7000
+    memory.u64_by_addr[0x7000 + 0xFC8] = 0x9000
+    _write_wstring(memory, 0x9000 + 0x82, "Philadelphia", length=24)
+    layout = {
+        "Teams": {
+            "Team Stadium": {
+                "Team Stadium": [
+                    {
+                        "normalized_name": "STADIUMCITYNAME",
+                        "display_name": "Stadium City Name",
+                        "versions": {
+                            "2K26": {
+                                "address": 0x82,
+                                "type": "WString",
+                                "length": 24,
+                                "requiresDereference": True,
+                                "dereferenceAddress": 0xFC8,
+                            }
+                        },
+                    }
+                ]
+            }
+        }
+    }
+    offsets = FakeOffsets(
+        {
+            "base_pointers": {"Team": {"address": 0x200, "chain": []}},
+            "game_info": {"teamSize": 0x1000},
+        },
+        layout,
+    )
+    model = EditorDataModel(memory=memory, offsets_api=offsets, target_executable="NBA2K26.exe")
+
+    field = model.grouped_fields("Teams")["Team Stadium"]["Team Stadium"][0]
+    assert model.read_entry_value(field, index=0)["raw_value"] == "Philadelphia"
+
+
+def test_ptr_string_reads_pointer_target_but_remains_read_only() -> None:
+    memory = FakeMemory()
+    memory.u64_by_addr[0x1200] = 0x7000
+    memory.u64_by_addr[0x7000 + 0xB0] = 0x9000
+    _write_ascii(memory, 0x9000, "Kentucky", length=40)
+    layout = {
+        "Players": {
+            "Vitals": {
+                "Vitals": [
+                    {
+                        "normalized_name": "COLLEGEFROM",
+                        "display_name": "College/From",
+                        "versions": {
+                            "2K26": {
+                                "address": 0xB0,
+                                "type": "ptr_string",
+                                "length": 40,
+                                "unicode": False,
+                                "from_address_dropdown": True,
+                            }
+                        },
+                    }
+                ]
+            }
+        }
+    }
+    offsets = FakeOffsets(
+        {
+            "base_pointers": {"Player": {"address": 0x200, "chain": []}},
+            "game_info": {"playerSize": 0x1000},
+        },
+        layout,
+    )
+    model = EditorDataModel(memory=memory, offsets_api=offsets, target_executable="NBA2K26.exe")
+
+    field = model.grouped_fields("Players")["Vitals"]["Vitals"][0]
+    value = model.read_entry_value(field, index=0)
+    assert value["raw_value"] == "Kentucky"
+    assert value["display_value"] == "Kentucky"
+    assert value["writeable"] is False
+    assert value["value_behavior"] == "implementation_required"
+
+
+def test_player_current_team_address_displays_team_label() -> None:
+    memory = FakeMemory()
+    memory.u64_by_addr[0x1200] = 0x7000
+    memory.u64_by_addr[0x1300] = 0x9000
+    memory.u64_by_addr[0x7000 + 0x60] = 0x9200
+    memory.u64_by_addr[0x7000 + 0x1000 + 0x60] = 0x9300
+    _write_ascii(memory, 0x9200, "Philadelphia", length=24)
+    _write_ascii(memory, 0x9220, "76ers", length=24)
+    _write_ascii(memory, 0x9300, "Boston", length=24)
+    _write_ascii(memory, 0x9320, "Celtics", length=24)
+    layout = {
+        "Players": {
+            "Vitals": {
+                "Team": [
+                    {
+                        "normalized_name": "CURRENTTEAM",
+                        "display_name": "Current Team",
+                        "versions": {
+                            "2K26": {
+                                "address": 0x60,
+                                "type": "uint64",
+                                "team_address_dropdown": True,
+                            }
+                        },
+                    }
+                ]
+            }
+        },
+        "Teams": {
+            "Info": {
+                "Info": [
+                    _field("CITYNAME", 0x00, "string", 24),
+                    _field("TEAMNAME", 0x20, "string", 24),
+                ]
+            }
+        },
+    }
+    offsets = FakeOffsets(
+        {
+            "base_pointers": {
+                "Player": {"address": 0x200, "chain": []},
+                "Team": {"address": 0x300, "chain": []},
+            },
+            "game_info": {"playerSize": 0x1000, "teamSize": 0x100},
+        },
+        layout,
+    )
+    model = EditorDataModel(memory=memory, offsets_api=offsets, target_executable="NBA2K26.exe")
+
+    field = model.grouped_fields("Players")["Vitals"]["Team"][0]
+    value = model.read_entry_value(field, index=0)
+    assert value["raw_value"] == 0x9200
+    assert value["display_value"] == "Philadelphia 76ers"
+
+    model.selected_items["Players"] = RecordListItem("Players", 0, 0x7000, "Tyrese Maxey")
+    assert model.selected_player_detail_values()["Team"] == "Philadelphia 76ers"
+
+    player_a = RecordListItem("Players", 0, 0x7000, "Tyrese Maxey")
+    player_b = RecordListItem("Players", 1, 0x8000, "Jayson Tatum")
+    team_a = RecordListItem("Teams", 2, 0x9200, "Philadelphia 76ers")
+    team_b = RecordListItem("Teams", 3, 0x9300, "Boston Celtics")
+    model.loaded_items["Players"] = {item.display_label: item for item in (player_a, player_b)}
+    model.loaded_items["Teams"] = {item.display_label: item for item in (team_a, team_b)}
+
+    assert model.player_team_filter_options() == ("All Players", "[2] Philadelphia 76ers", "[3] Boston Celtics")
+    assert model.player_item_labels_for_team_filter("All Players") == ["[0] Tyrese Maxey", "[1] Jayson Tatum"]
+    assert model.player_item_labels_for_team_filter("[2] Philadelphia 76ers") == ["[0] Tyrese Maxey"]
+    assert model.player_item_labels_for_team_filter("[3] Boston Celtics") == ["[1] Jayson Tatum"]
+
+    current_team_read_counts = {0x7000 + 0x60: memory.read_u64_counts[0x7000 + 0x60], 0x8000 + 0x60: memory.read_u64_counts[0x8000 + 0x60]}
+    assert model.player_item_labels_for_team_filter("[2] Philadelphia 76ers") == ["[0] Tyrese Maxey"]
+    assert model.player_item_labels_for_team_filter("[3] Boston Celtics") == ["[1] Jayson Tatum"]
+    assert memory.read_u64_counts[0x7000 + 0x60] == current_team_read_counts[0x7000 + 0x60]
+    assert memory.read_u64_counts[0x8000 + 0x60] == current_team_read_counts[0x8000 + 0x60]
+
+
+def test_grouped_fields_skips_hidden_payloads() -> None:
+    layout = {
+        "Players": {
+            "Vitals": {
+                "Body": [
+                    {"normalized_name": "APPEARANCEDATA", "display_name": "Appearance Data", "versions": {"2K26": {"address": 0x78, "type": "binary", "hidden": True}}},
+                    {"normalized_name": "HEIGHTCM", "display_name": "Height (cm)", "versions": {"2K26": {"address": 0x14, "type": "ushort"}}},
+                ]
+            }
+        }
+    }
+    offsets = FakeOffsets(
+        {
+            "base_pointers": {"Player": {"address": 0x200, "chain": []}},
+            "game_info": {"playerSize": 0x100},
+        },
+        layout,
+    )
+    model = EditorDataModel(memory=FakeMemory(), offsets_api=offsets, target_executable="NBA2K26.exe")
+
+    fields = model.grouped_fields("Players")["Vitals"]["Body"]
+    assert [field.field["normalized_name"] for field in fields] == ["HEIGHTCM"]
+
+
+def test_color_payload_reads_hex_and_writes_exact_bytes() -> None:
+    memory = FakeMemory()
+    memory.u64_by_addr[0x1200] = 0x7000
+    memory.bytes_by_addr[0x7010] = bytes.fromhex("2e3c70")
+    layout = {
+        "Jerseys": {
+            "Colors": {
+                "Colors": [
+                    {"normalized_name": "PRIMARYCOLOR", "display_name": "Primary Color", "versions": {"2K26": {"address": 0x10, "type": "color", "length": 3}}},
+                ]
+            }
+        }
+    }
+    offsets = FakeOffsets(
+        {
+            "base_pointers": {"Jersey": {"address": 0x200, "chain": []}},
+            "game_info": {"jerseySize": 0x100},
+        },
+        layout,
+    )
+    model = EditorDataModel(memory=memory, offsets_api=offsets, target_executable="NBA2K26.exe")
+    field = model.grouped_fields("Jerseys")["Colors"]["Colors"][0]
+
+    value = model.read_entry_value(field, index=0)
+    assert value["raw_value"] == bytes.fromhex("2e3c70")
+    assert value["display_value"] == "#2E3C70"
+
+    model.write_entry_value(field, index=0, value="#AABBCC")
+    assert memory.bytes_by_addr[0x7010] == bytes.fromhex("aabbcc")
+
+
+def test_result_score_reads_and_writes_two_float_components() -> None:
+    memory = FakeMemory()
+    memory.u64_by_addr[0x1200] = 0x7000
+    memory.bytes_by_addr[0x7018] = struct.pack("<f", 108.0)
+    memory.bytes_by_addr[0x701C] = struct.pack("<f", 101.0)
+    layout = {
+        "NBA History": {
+            "History Tab": {
+                "History Tab": [
+                    {"normalized_name": "RESULT", "display_name": "Result", "versions": {"2K26": {"address": 0x18, "offset2": 0x1C, "type": "result_score"}}},
+                ]
+            }
+        }
+    }
+    offsets = FakeOffsets(
+        {
+            "base_pointers": {"NBAHistory": {"address": 0x200, "chain": []}},
+            "game_info": {"historySize": 0xA8},
+        },
+        layout,
+    )
+    model = EditorDataModel(memory=memory, offsets_api=offsets, target_executable="NBA2K26.exe")
+    field = model.grouped_fields("NBA History")["History Tab"]["History Tab"][0]
+
+    value = model.read_entry_value(field, index=0)
+    assert value["raw_value"] == (108, 101)
+    assert value["display_value"] == "108-101"
+
+    model.write_entry_value(field, index=0, value="99-98")
+    assert struct.unpack("<f", memory.bytes_by_addr[0x7018])[0] == 99.0
+    assert struct.unpack("<f", memory.bytes_by_addr[0x701C])[0] == 98.0
+
+
+def test_address_dropdown_reads_pointer_sized_value_and_displays_target_label() -> None:
+    memory = FakeMemory()
+    memory.u64_by_addr[0x1200] = 0x7000
+    memory.u64_by_addr[0x1300] = 0x9000
+    memory.u64_by_addr[0x7020] = 0x9000
+    _write_wstring(memory, 0x9000, "Xfinity Mobile Arena", length=32)
+    _write_wstring(memory, 0x9020, "Philadelphia", length=32)
+    layout = {
+        "Teams": {
+            "Vitals": {
+                "Info": [
+                    {"normalized_name": "STADIUM", "display_name": "Stadium", "versions": {"2K26": {"address": 0x20, "type": "stadium_address_dropdown"}}},
+                ]
+            }
+        },
+        "Stadiums": {
+            "Arena Info": {
+                "Basic": [
+                    {"normalized_name": "ARENANAME", "display_name": "Arena Name", "versions": {"2K26": {"address": 0x00, "type": "WString", "length": 32}}},
+                    {"normalized_name": "CITYNAME", "display_name": "City Name", "versions": {"2K26": {"address": 0x20, "type": "WString", "length": 32}}},
+                ]
+            }
+        },
+    }
+    offsets = FakeOffsets(
+        {
+            "base_pointers": {
+                "Team": {"address": 0x200, "chain": []},
+                "Stadium": {"address": 0x300, "chain": []},
+            },
+            "game_info": {"teamSize": 0x100, "stadiumSize": 0x200},
+        },
+        layout,
+    )
+    model = EditorDataModel(memory=memory, offsets_api=offsets, target_executable="NBA2K26.exe")
+    field = model.grouped_fields("Teams")["Vitals"]["Info"][0]
+
+    value = model.read_entry_value(field, index=0)
+    assert value["raw_value"] == 0x9000
+    assert value["display_value"] == "Xfinity Mobile Arena Philadelphia"
 
 
 def test_domain_base_applies_final_offset_after_pointer_read() -> None:

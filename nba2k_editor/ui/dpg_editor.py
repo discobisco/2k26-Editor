@@ -7,6 +7,7 @@ from nba2k_editor.models.data_model import (
     EDITOR_DOMAINS,
     EditorDataModel,
     FieldEntry,
+    PLAYER_TEAM_FILTER_ALL,
     RecordListItem,
     target_display_label,
     verify_edits,
@@ -164,6 +165,7 @@ class DpgEditorApp:
         self.history_tabs: dict[str, str] = {section: tabs[0] for section, tabs in HISTORY_SECTION_TABS.items()}
         self.record_section = "Single Game (Regular)"
         self.record_stat = "Points"
+        self.player_team_filter = PLAYER_TEAM_FILTER_ALL
 
     def _screen_tag(self, domain: str) -> str:
         return _tag(domain, "screen")
@@ -185,6 +187,9 @@ class DpgEditorApp:
 
     def _list_tag(self, domain: str) -> str:
         return _tag(domain, "list")
+
+    def _player_team_filter_tag(self) -> str:
+        return _tag("Players", "team_filter")
 
     def _record_list_rows_for_height(self, viewport_height: int) -> int:
         return max(MIN_RECORD_LIST_ROWS, (viewport_height - RECORD_LIST_VERTICAL_MARGIN) // RECORD_LIST_ROW_HEIGHT)
@@ -325,6 +330,9 @@ class DpgEditorApp:
                 print("DPG_LOADED_LISTS NBA2K Editor", flush=True)
 
     def _sync_domain_list(self, dpg: Any, domain: str) -> None:
+        if domain == "Players":
+            self._sync_player_list(dpg)
+            return
         labels = self.model.domain_item_labels(domain)
         self._safe_configure(dpg, self._list_tag(domain), items=labels)
         self._safe_set(dpg, self._count_tag(domain), f"{self._display_label(domain)}: {self.model.domain_item_count(domain)}")
@@ -334,7 +342,41 @@ class DpgEditorApp:
         self._safe_set(dpg, self._status_tag(domain), self.model.domain_status(domain))
         if domain in {"NBA History", "NBA Records"}:
             self._sync_record_preview(dpg, domain)
+        if domain == "Teams":
+            self._sync_player_team_filter(dpg)
+            self._sync_player_list(dpg)
         self._update_detail_panel(dpg, domain)
+
+    def _sync_player_team_filter(self, dpg: Any) -> None:
+        options = list(self.model.player_team_filter_options())
+        if self.player_team_filter not in options:
+            self.player_team_filter = PLAYER_TEAM_FILTER_ALL
+        self._safe_configure(dpg, self._player_team_filter_tag(), items=options)
+        self._safe_set(dpg, self._player_team_filter_tag(), self.player_team_filter)
+
+    def _sync_player_list(self, dpg: Any) -> None:
+        domain = "Players"
+        self._sync_player_team_filter(dpg)
+        labels = self.model.player_item_labels_for_team_filter(self.player_team_filter)
+        self._safe_configure(dpg, self._list_tag(domain), items=labels)
+        total_count = self.model.domain_item_count(domain)
+        visible_count = len(labels)
+        count_text = f"Players: {visible_count}" if self.player_team_filter == PLAYER_TEAM_FILTER_ALL else f"Players: {visible_count} / {total_count}"
+        self._safe_set(dpg, self._count_tag(domain), count_text)
+        selected = self.model.selected_item(domain)
+        selected_label = selected.display_label if selected is not None else ""
+        if labels and selected_label not in labels:
+            selected = self.model.select_item_by_label(domain, labels[0])
+        elif not labels:
+            selected = self.model.select_item_by_label(domain, None)
+        if selected is not None and labels:
+            self._safe_set(dpg, self._list_tag(domain), selected.display_label)
+        self._safe_set(dpg, self._status_tag(domain), self.model.domain_status(domain))
+        self._update_detail_panel(dpg, domain)
+
+    def _set_player_team_filter(self, dpg: Any, selected: str | None) -> None:
+        self.player_team_filter = str(selected or PLAYER_TEAM_FILTER_ALL)
+        self._sync_player_list(dpg)
 
     def _sync_record_preview(self, dpg: Any, domain: str) -> None:
         if domain == "NBA Records":
@@ -622,7 +664,13 @@ class DpgEditorApp:
             dpg.add_spacer(height=10)
             with dpg.group(horizontal=True):
                 dpg.add_text("Team")
-                dpg.add_combo(("All Players",), default_value="All Players", width=220)
+                dpg.add_combo(
+                    list(self.model.player_team_filter_options()),
+                    tag=self._player_team_filter_tag(),
+                    default_value=PLAYER_TEAM_FILTER_ALL,
+                    width=220,
+                    callback=lambda _s, app_data, _u=None, *args: self._set_player_team_filter(dpg, app_data),
+                )
             dpg.add_spacer(height=14)
             with dpg.group(horizontal=True):
                 with dpg.child_window(width=420, height=-1, border=True, no_scrollbar=True):

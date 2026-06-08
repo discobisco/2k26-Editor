@@ -358,6 +358,7 @@
               "address": 5131,
               "desc": "Luxury Tax",
               "hex": "0x140B",
+              "length": 1,
               "section": "Info",
               "type": "dropdown"
             }

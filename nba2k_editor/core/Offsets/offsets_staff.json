@@ -10,7 +10,7 @@
               "address": 264,
               "hex": "0x108",
               "readonly": "True",
-              "type": "Integer"
+              "type": "ushort"
             }
           }
         },
@@ -21,7 +21,7 @@
             "2K26": {
               "address": 274,
               "hex": "0x112",
-              "type": "Integer"
+              "type": "ushort"
             }
           }
         },
@@ -71,10 +71,10 @@
           "versions": {
             "2K26": {
               "address": 362,
-              "hex": "0x16A",
-              "length": 1,
-              "readonly": "True",
-              "type": "Integer"
+              "hex": "0x16a",
+              "readonly": true,
+              "type": "ubyte",
+              "length": 1
             }
           }
         },
@@ -548,7 +548,7 @@
               "address": 24,
               "hex": "0x18",
               "readonly": "False",
-              "type": "Integer"
+              "type": "uint64"
             }
           }
         },

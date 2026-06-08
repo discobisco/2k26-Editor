@@ -20,6 +20,7 @@ class FakeDpg:
         self.items: set[str] = set()
         self.configs: dict[str, dict[str, object]] = {}
         self.combos: list[tuple[list[str], str | None]] = []
+        self.combo_callbacks: dict[str, Any] = {}
 
     def window(self, **kwargs: object) -> "FakeDpg":
         self.calls.append(("window", kwargs.get("label")))
@@ -88,6 +89,9 @@ class FakeDpg:
 
     def add_listbox(self, *_args: object, **kwargs: object) -> str:
         self.listbox_callback = kwargs["callback"]
+        tag = kwargs.get("tag")
+        if isinstance(tag, str):
+            self.items.add(tag)
         return "listbox"
 
     def add_table_column(self, **kwargs: object) -> str:
@@ -105,6 +109,11 @@ class FakeDpg:
     def add_combo(self, items: list[str], **kwargs: object) -> str:
         tag = kwargs.get("tag")
         self.combos.append((items, tag if isinstance(tag, str) else None))
+        if isinstance(tag, str):
+            self.items.add(tag)
+            callback = kwargs.get("callback")
+            if callback is not None:
+                self.combo_callbacks[tag] = callback
         return "combo"
 
     def does_item_exist(self, _tag: str) -> bool:
@@ -133,12 +142,23 @@ class FakeModel:
         self.selections: list[tuple[str | None, str | None]] = []
         self.target_executable = "NBA2K26.exe"
         self.summary_calls: list[dict[str, object]] = []
+        self.player_labels = ["[0] Tyrese Maxey", "[1] Jayson Tatum"]
+        self.team_labels = ["[2] Philadelphia 76ers", "[3] Boston Celtics"]
+        self.filtered_player_labels = {"[2] Philadelphia 76ers": ["[0] Tyrese Maxey"], "[3] Boston Celtics": ["[1] Jayson Tatum"]}
+        self.selected_items: dict[str, RecordListItem | None] = {"Players": None, "Teams": None}
 
     def runtime_status_text(self) -> str:
         return "not attached"
 
-    def select_item_by_label(self, domain: str | None, selected_label: str | None) -> None:
+    def select_item_by_label(self, domain: str | None, selected_label: str | None) -> RecordListItem | None:
         self.selections.append((domain, selected_label))
+        if domain == "Players" and selected_label in self.player_labels:
+            self.selected_items["Players"] = RecordListItem("Players", self.player_labels.index(str(selected_label)), 0x7000, str(selected_label).split("] ", 1)[-1])
+        elif domain == "Teams" and selected_label in self.team_labels:
+            self.selected_items["Teams"] = RecordListItem("Teams", self.team_labels.index(str(selected_label)), 0x9000, str(selected_label).split("] ", 1)[-1])
+        elif domain in self.selected_items:
+            self.selected_items[domain] = None
+        return self.selected_items.get(str(domain))
 
     def selected_detail_title(self, domain: str, display_label: str) -> str:
         return f"Select a {display_label}"
@@ -146,8 +166,42 @@ class FakeModel:
     def selected_record_address_text(self, domain: str) -> str:
         return "--"
 
+    def domain_item_labels(self, domain: str) -> list[str]:
+        if domain == "Players":
+            return list(self.player_labels)
+        if domain == "Teams":
+            return list(self.team_labels)
+        return []
+
+    def domain_item_count(self, domain: str) -> int:
+        return len(self.domain_item_labels(domain))
+
+    def selected_item(self, domain: str) -> RecordListItem | None:
+        return self.selected_items.get(domain)
+
+    def domain_status(self, _domain: str) -> str:
+        return "loaded"
+
+    def player_team_filter_options(self) -> tuple[str, ...]:
+        return ("All Players", *self.team_labels)
+
+    def player_item_labels_for_team_filter(self, selected_team_label: str | None) -> list[str]:
+        selected = str(selected_team_label or "")
+        if not selected or selected == "All Players":
+            return list(self.player_labels)
+        return list(self.filtered_player_labels.get(selected, []))
+
+    def player_item_count_for_team_filter(self, selected_team_label: str | None) -> int:
+        return len(self.player_item_labels_for_team_filter(selected_team_label))
+
     def team_summary_labels(self) -> tuple[str, ...]:
         return ("Team Name",)
+
+    def selected_player_detail_values(self) -> dict[str, str]:
+        return {"OVR": "--"}
+
+    def selected_team_summary_values(self) -> dict[str, str]:
+        return {"Team Name": "--"}
 
     def record_summary_labels(self, domain: str) -> tuple[str, ...]:
         if domain == "NBA History":
@@ -363,6 +417,26 @@ def test_players_list_pane_omits_status_text() -> None:
     app._build_players_screen(dpg)
 
     assert "not attached" not in dpg.texts
+
+
+def test_players_team_filter_uses_loaded_teams_and_filters_player_list() -> None:
+    dpg = FakeDpg()
+    app = DpgEditorApp(FakeModel())  # type: ignore[arg-type]
+
+    app._build_players_screen(dpg)
+    app._sync_domain_list(dpg, "Teams")
+
+    assert dpg.configs["Players__team_filter"]["items"] == [
+        "All Players",
+        "[2] Philadelphia 76ers",
+        "[3] Boston Celtics",
+    ]
+
+    dpg.combo_callbacks["Players__team_filter"]("sender", "[2] Philadelphia 76ers", None, None)
+
+    assert dpg.configs["Players__list"]["items"] == ["[0] Tyrese Maxey"]
+    assert dpg.values["Players__team_filter"] == "[2] Philadelphia 76ers"
+    assert dpg.values["Players__count"] == "Players: 1 / 2"
 
 
 def test_item_editor_uses_top_level_tabs_instead_of_section_dropdowns() -> None:

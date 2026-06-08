@@ -56,6 +56,8 @@ _LABEL_FIELD_NAMES: dict[str, tuple[str, ...]] = {
     "NBA Records": ("FIRSTNAME", "LASTNAME", "DATA"),
 }
 
+PLAYER_TEAM_FILTER_ALL = "All Players"
+
 
 def _plausible_record_name_part(value: object) -> bool:
     text = str(value or "").strip()
@@ -83,6 +85,7 @@ def _has_alpha_text(value: object) -> bool:
 
 PLAYER_DETAIL_FIELD_SPECS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("OVR", ("OVR", "OVERALL", "OVERALLRATING", "OVERALL RATING")),
+    ("Team", ("CURRENTTEAM", "CURRENT TEAM")),
     ("Position", ("POSITION",)),
     ("Number", ("JERSEYNUM", "JERSEY NUMBER", "NUMBER")),
     ("Height", ("HEIGHT",)),
@@ -179,6 +182,12 @@ _IMPLEMENTATION_REQUIRED_FLAGS = {
     "offset2",
 }
 
+_ADDRESS_DROPDOWN_TYPES: dict[str, str] = {
+    "team_address_dropdown": "Teams",
+    "stadium_address_dropdown": "Stadiums",
+    "uniform_dropdown": "Jerseys",
+}
+
 
 def record_address(*, base: int, index: int, stride: int) -> int:
     """Return the absolute record address for a zero-based record number."""
@@ -200,9 +209,12 @@ def _type_key(payload: dict[str, Any]) -> str:
 
 
 def _implemented_payload(payload: dict[str, Any]) -> bool:
+    type_key = _type_key(payload)
+    if type_key == "result_score":
+        return "offset2" in payload
     if _IMPLEMENTATION_REQUIRED_FLAGS & set(payload):
         return False
-    return _type_key(payload) in {
+    return type_key in {
         "uint",
         "number",
         "integer",
@@ -223,7 +235,30 @@ def _implemented_payload(payload: dict[str, Any]) -> bool:
         "wstring",
         "binary",
         "hex_bytes",
+        "color",
+        *_ADDRESS_DROPDOWN_TYPES,
     }
+
+
+def _readable_payload(payload: dict[str, Any]) -> bool:
+    if _implemented_payload(payload):
+        return True
+    return _type_key(payload) == "ptr_string" and "offset2" not in payload
+
+
+_FIXED_NUMERIC_TYPE_WIDTHS: dict[str, int] = {
+    "byte": 1,
+    "ubyte": 1,
+    "ushort": 2,
+    "uint": 4,
+    "uint64": 8,
+    "ulonglong": 8,
+    "pointer": 8,
+    "address": 8,
+    "team_address_dropdown": 8,
+    "stadium_address_dropdown": 8,
+    "uniform_dropdown": 8,
+}
 
 
 def _numeric_width(payload: dict[str, Any]) -> int:
@@ -233,6 +268,9 @@ def _numeric_width(payload: dict[str, Any]) -> int:
     authored_length = offsets_mod._resolved_length_bits(payload)
     if authored_length > 0:
         return authored_length
+    type_width = _FIXED_NUMERIC_TYPE_WIDTHS.get(_type_key(payload))
+    if type_width:
+        return type_width
     raise KeyError("authored payload is missing length, bit_length, or byteLength")
 
 
@@ -334,6 +372,11 @@ def _mapped_raw_value(payload: dict[str, Any], value: Any) -> Any | None:
 
 
 def _raw_to_display_value(section: str, field: dict[str, Any], payload: dict[str, Any], raw_value: Any) -> Any:
+    type_key = _type_key(payload)
+    if type_key == "color" and isinstance(raw_value, (bytes, bytearray)):
+        return _color_hex(bytes(raw_value))
+    if type_key == "result_score" and isinstance(raw_value, tuple) and len(raw_value) == 2:
+        return _format_result_score(raw_value)
     mapped = _mapped_display_value(payload, raw_value)
     if mapped is not None:
         return mapped
@@ -365,6 +408,11 @@ def _raw_to_display_value(section: str, field: dict[str, Any], payload: dict[str
 
 
 def _display_to_raw_value(section: str, field: dict[str, Any], payload: dict[str, Any], value: Any) -> Any:
+    type_key = _type_key(payload)
+    if type_key == "color":
+        return _parse_color_value(value, _numeric_width(payload))
+    if type_key == "result_score":
+        return _parse_result_score(value)
     mapped = _mapped_raw_value(payload, value)
     if mapped is not None:
         return mapped
@@ -429,8 +477,83 @@ def _write_string(memory: Any, address: int, payload: dict[str, Any], value: Any
     memory.write_bytes(address, raw.ljust(max_chars, b"\x00"))
 
 
+def _read_ptr_string(memory: Any, address: int, payload: dict[str, Any]) -> str:
+    pointer_size = int(getattr(memory, "pointer_size", 8) or 8)
+    if pointer_size == 8 and hasattr(memory, "read_u64"):
+        pointer = int(memory.read_u64(address))
+    elif pointer_size == 4 and hasattr(memory, "read_uint32"):
+        pointer = int(memory.read_uint32(address))
+    else:
+        pointer = int.from_bytes(memory.read_bytes(address, pointer_size), "little")
+    if pointer <= 0:
+        return ""
+    string_payload = dict(payload)
+    string_payload["type"] = "wstring" if bool(payload.get("unicode")) else "string"
+    return _read_string(memory, pointer, string_payload)
+
+
+def _result_score_addresses(address: int, payload: dict[str, Any]) -> tuple[int, int]:
+    first_offset = _field_offset(payload)
+    second_offset = to_int(payload.get("offset2"))
+    if second_offset <= 0:
+        raise KeyError("result_score payload is missing offset2")
+    record_base = int(address) - first_offset
+    return int(address), record_base + second_offset
+
+
+def _coerce_result_component(value: float) -> int | float:
+    rounded = round(float(value))
+    return int(rounded) if abs(float(value) - rounded) < 0.0001 else float(value)
+
+
+def _read_result_score(memory: Any, address: int, payload: dict[str, Any]) -> tuple[int | float, int | float]:
+    first_address, second_address = _result_score_addresses(address, payload)
+    first = struct.unpack("<f", memory.read_bytes(first_address, 4))[0]
+    second = struct.unpack("<f", memory.read_bytes(second_address, 4))[0]
+    return _coerce_result_component(first), _coerce_result_component(second)
+
+
+def _parse_result_score(value: Any) -> tuple[float, float]:
+    if isinstance(value, (tuple, list)) and len(value) == 2:
+        return float(value[0]), float(value[1])
+    text = str(value).strip()
+    separator = "-" if "-" in text else ":" if ":" in text else None
+    if separator is None:
+        raise ValueError("result_score must be a two-part value like '1-0'")
+    left, right = text.split(separator, 1)
+    return float(left.strip()), float(right.strip())
+
+
+def _format_result_component(value: int | float) -> str:
+    numeric = float(value)
+    rounded = round(numeric)
+    return str(int(rounded)) if abs(numeric - rounded) < 0.0001 else f"{numeric:g}"
+
+
+def _format_result_score(value: tuple[int | float, int | float]) -> str:
+    return f"{_format_result_component(value[0])}-{_format_result_component(value[1])}"
+
+
+def _color_hex(raw_value: bytes) -> str:
+    return "#" + bytes(raw_value).hex().upper()
+
+
+def _parse_color_value(value: Any, width: int) -> bytes:
+    if isinstance(value, (bytes, bytearray)):
+        raw = bytes(value)
+    else:
+        text = str(value).strip()
+        if text.startswith("#"):
+            text = text[1:]
+        text = re.sub(r"[^0-9A-Fa-f]", "", text)
+        raw = bytes.fromhex(text)
+    if len(raw) != width:
+        raise ValueError(f"color value must be exactly {width} bytes")
+    return raw
+
+
 def _read_authored_value(memory: Any, address: int, payload: dict[str, Any]) -> Any:
-    if not _implemented_payload(payload):
+    if not _readable_payload(payload):
         raise NotImplementedError(f"authored type requires backend implementation: {payload.get('type')}")
     type_key = _type_key(payload)
     if _uses_bitfield_io(payload):
@@ -449,6 +572,7 @@ def _read_authored_value(memory: Any, address: int, payload: dict[str, Any]) -> 
         "combo",
         "dropdown",
         "slider",
+        *_ADDRESS_DROPDOWN_TYPES,
     }:
         width = _numeric_width(payload)
         if width == 4 and hasattr(memory, "read_uint32"):
@@ -460,6 +584,12 @@ def _read_authored_value(memory: Any, address: int, payload: dict[str, Any]) -> 
         return struct.unpack("<f", memory.read_bytes(address, 4))[0]
     if type_key in {"string", "wstring"}:
         return _read_string(memory, address, payload)
+    if type_key == "ptr_string":
+        return _read_ptr_string(memory, address, payload)
+    if type_key == "result_score":
+        return _read_result_score(memory, address, payload)
+    if type_key == "color":
+        return memory.read_bytes(address, _numeric_width(payload))
     if type_key in {"binary", "hex_bytes"}:
         return memory.read_bytes(address, _numeric_width(payload))
     raise NotImplementedError(f"authored type requires backend implementation: {payload.get('type')}")
@@ -485,6 +615,7 @@ def _write_authored_value(memory: Any, address: int, payload: dict[str, Any], va
         "combo",
         "dropdown",
         "slider",
+        *_ADDRESS_DROPDOWN_TYPES,
     }:
         width = _numeric_width(payload)
         if width == 4 and hasattr(memory, "write_uint32"):
@@ -495,6 +626,13 @@ def _write_authored_value(memory: Any, address: int, payload: dict[str, Any], va
         memory.write_bytes(address, struct.pack("<f", float(value)))
     elif type_key in {"string", "wstring"}:
         _write_string(memory, address, payload, value)
+    elif type_key == "result_score":
+        first, second = _parse_result_score(value)
+        first_address, second_address = _result_score_addresses(address, payload)
+        memory.write_bytes(first_address, struct.pack("<f", first))
+        memory.write_bytes(second_address, struct.pack("<f", second))
+    elif type_key == "color":
+        memory.write_bytes(address, _parse_color_value(value, _numeric_width(payload)))
     elif type_key in {"binary", "hex_bytes"}:
         width = _numeric_width(payload)
         raw = bytes(value)
@@ -533,6 +671,7 @@ class EditorDataModel:
         self._field_entries_cache: dict[str, tuple[FieldEntry, ...]] = {}
         self._field_context_cache: dict[str, dict[int, tuple[str, str]]] = {}
         self._field_lookup_cache: dict[str, dict[str, FieldEntry]] = {}
+        self._player_team_pointer_cache: dict[int, int | None] = {}
 
     def _active_config(self) -> dict[str, Any]:
         self.offsets.initialize_offsets(self.target_executable, force=False)
@@ -607,13 +746,15 @@ class EditorDataModel:
         address = base_address + _field_offset(payload)
         if bool(payload.get("requiresDereference")):
             pointer_size = int(getattr(self.memory, "pointer_size", 8) or 8)
+            dereference_offset = to_int(payload.get("dereferenceAddress"))
+            pointer_slot = base_address + dereference_offset if dereference_offset else address
             if pointer_size == 8 and hasattr(self.memory, "read_u64"):
-                pointer = self.memory.read_u64(address)
+                pointer = self.memory.read_u64(pointer_slot)
             elif pointer_size == 4 and hasattr(self.memory, "read_uint32"):
-                pointer = self.memory.read_uint32(address)
+                pointer = self.memory.read_uint32(pointer_slot)
             else:
-                pointer = int.from_bytes(self.memory.read_bytes(address, pointer_size), "little")
-            address = pointer + to_int(payload.get("dereferenceAddress"))
+                pointer = int.from_bytes(self.memory.read_bytes(pointer_slot, pointer_size), "little")
+            address = pointer + _field_offset(payload)
         return address
 
     def attach(self) -> bool:
@@ -642,6 +783,7 @@ class EditorDataModel:
         self._field_entries_cache.clear()
         self._field_context_cache.clear()
         self._field_lookup_cache.clear()
+        self._player_team_pointer_cache.clear()
         self.loaded_items = {domain: {} for domain in EDITOR_DOMAINS}
         self.selected_items = {domain: None for domain in EDITOR_DOMAINS}
         self.last_status = self.runtime_status_text()
@@ -656,6 +798,42 @@ class EditorDataModel:
     def domain_item_count(self, domain: str) -> int:
         return len(self.loaded_items[domain])
 
+    def player_team_filter_options(self) -> tuple[str, ...]:
+        return (PLAYER_TEAM_FILTER_ALL, *self.domain_item_labels("Teams"))
+
+    def _read_player_current_team_pointer(self, item: RecordListItem) -> int | None:
+        entry = self._field_by_normalized_name("Players", "CURRENTTEAM")
+        if entry is None:
+            return None
+        try:
+            return int(self.read_entry_value(entry, index=item.index).get("raw_value"))
+        except Exception:
+            return None
+
+    def _player_current_team_pointer(self, item: RecordListItem) -> int | None:
+        if item.index not in self._player_team_pointer_cache:
+            self._player_team_pointer_cache[item.index] = self._read_player_current_team_pointer(item)
+        return self._player_team_pointer_cache[item.index]
+
+    def _cache_player_team_pointers(self, items: list[RecordListItem]) -> None:
+        self._player_team_pointer_cache = {item.index: self._read_player_current_team_pointer(item) for item in items}
+
+    def player_item_labels_for_team_filter(self, selected_team_label: str | None) -> list[str]:
+        selected = str(selected_team_label or "").strip()
+        if not selected or selected == PLAYER_TEAM_FILTER_ALL:
+            return self.domain_item_labels("Players")
+        team = self.loaded_items["Teams"].get(selected)
+        if team is None:
+            return []
+        labels: list[str] = []
+        for label, player in self.loaded_items["Players"].items():
+            if self._player_current_team_pointer(player) == team.address:
+                labels.append(label)
+        return labels
+
+    def player_item_count_for_team_filter(self, selected_team_label: str | None) -> int:
+        return len(self.player_item_labels_for_team_filter(selected_team_label))
+
     def selected_item(self, domain: str) -> RecordListItem | None:
         return self.selected_items[domain]
 
@@ -669,6 +847,8 @@ class EditorDataModel:
             items = self.scan_records(domain, limit=limit)
             by_label = {item.display_label: item for item in items}
             self.loaded_items[domain] = by_label
+            if domain == "Players":
+                self._cache_player_team_pointers(items)
             labels = list(by_label)
             if labels:
                 current = self.selected_items.get(domain)
@@ -682,6 +862,8 @@ class EditorDataModel:
         except Exception as exc:
             self.loaded_items[domain] = {}
             self.selected_items[domain] = None
+            if domain == "Players":
+                self._player_team_pointer_cache.clear()
             self.domain_statuses[domain] = self.runtime_status_text() if "not attached" in str(exc).lower() else f"scan failed: {exc}"
             return []
 
@@ -897,8 +1079,10 @@ class EditorDataModel:
         grouped: OrderedDict[str, OrderedDict[str, list[FieldEntry]]] = OrderedDict()
         for entry in self._layout_entries(domain):
             try:
-                self._field_version_payload(entry.field)
+                payload = self._field_version_payload(entry.field)
             except KeyError:
+                continue
+            if bool(payload.get("hidden")):
                 continue
             grouped.setdefault(entry.section, OrderedDict()).setdefault(entry.group, []).append(entry)
         return grouped
@@ -917,33 +1101,41 @@ class EditorDataModel:
         return []
 
     def _team_pointer_display(self, raw_value: Any) -> str | None:
+        return self._record_pointer_display(raw_value, "Teams")
+
+    def _record_pointer_display(self, raw_value: Any, target_domain: str) -> str | None:
         try:
-            team_pointer = int(raw_value)
-            team_base = self.domain_base("Teams")
-            team_stride = self.domain_stride("Teams")
+            pointer = int(raw_value)
+            target_base = self.domain_base(target_domain)
+            target_stride = self.domain_stride(target_domain)
         except Exception:
             return None
-        if team_pointer <= 0 or team_stride <= 0:
+        if pointer <= 0 or target_stride <= 0:
             return None
-        delta = team_pointer - team_base
-        if delta < 0 or delta % team_stride != 0:
-            return None
-        team_name_entry = self._field_by_normalized_name("Teams", "TEAMNAME")
-        if team_name_entry is None:
+        delta = pointer - target_base
+        if delta < 0 or delta % target_stride != 0:
             return None
         try:
-            value = self._read_field_at_record_address("Teams", team_pointer, team_name_entry.field)["display_value"]
+            label = self._label_for_record_address(target_domain, delta // target_stride, pointer, self._label_entries(target_domain))
         except Exception:
             return None
-        text = str(value).strip()
+        text = str(label).strip()
         return text or None
+
+    def _pointer_display_for_payload(self, payload: dict[str, Any], raw_value: Any) -> str | None:
+        target_domain = _ADDRESS_DROPDOWN_TYPES.get(_type_key(payload))
+        if target_domain:
+            return self._record_pointer_display(raw_value, target_domain)
+        if bool(payload.get("team_dropdown")) or bool(payload.get("team_address_dropdown")):
+            return self._team_pointer_display(raw_value)
+        return None
 
     def _read_field_at_record_address(self, domain: str, record_addr: int, field: dict[str, Any]) -> dict[str, Any]:
         payload = self._field_version_payload(field)
         address = self._field_address(domain, record_addr, field, payload)
         raw_value = _read_authored_value(self.memory, address, payload)
         section, _group = self._field_context(domain, field)
-        display_value = self._team_pointer_display(raw_value) if bool(payload.get("team_dropdown")) else None
+        display_value = self._pointer_display_for_payload(payload, raw_value)
         if display_value is None:
             display_value = _raw_to_display_value(section, field, payload, raw_value)
         return {
@@ -1099,7 +1291,7 @@ class EditorDataModel:
         address = self._field_address(domain, self.record_address(domain, index), field, payload)
         raw_value = _read_authored_value(self.memory, address, payload)
         section, _group = self._field_context(domain, field)
-        display_value = self._team_pointer_display(raw_value) if bool(payload.get("team_dropdown")) else None
+        display_value = self._pointer_display_for_payload(payload, raw_value)
         if display_value is None:
             display_value = _raw_to_display_value(section, field, payload, raw_value)
         return {
@@ -1119,6 +1311,11 @@ class EditorDataModel:
         section, _group = self._field_context(domain, field)
         raw_value = _display_to_raw_value(section, field, payload, value)
         _write_authored_value(self.memory, address, payload, raw_value)
+        if domain == "Players" and _field_identity(field.get("normalized_name") or field.get("display_name")) == "CURRENTTEAM":
+            try:
+                self._player_team_pointer_cache[index] = int(raw_value)
+            except Exception:
+                self._player_team_pointer_cache.pop(index, None)
 
     def write_and_readback(self, domain: str, *, index: int, field: dict[str, Any], value: Any) -> dict[str, Any]:
         self.write_value(domain, index=index, field=field, value=value)

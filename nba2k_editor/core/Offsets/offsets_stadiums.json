@@ -151,7 +151,7 @@
             "2K26": {
               "address": 2002,
               "hex": "0x7D2",
-              "type": "Integer"
+              "type": "ushort"
             }
           }
         },

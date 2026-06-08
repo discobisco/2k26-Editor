@@ -3096,11 +3096,11 @@
               "type": "Integer"
             },
             "2K26": {
-              "address": 841,
-              "hex": "0x349",
-              "length": 3,
-              "startBit": 3,
-              "type": "Integer"
+              "address": 840,
+              "hex": "0x348",
+              "type": "bitfield",
+              "bit_offset": 3,
+              "bit_length": 3
             }
           }
         },
@@ -3991,11 +3991,11 @@
               "type": "Integer"
             },
             "2K26": {
-              "address": 839,
-              "hex": "0x347",
-              "length": 3,
-              "startBit": 0,
-              "type": "Integer"
+              "address": 919,
+              "hex": "0x397",
+              "type": "bitfield",
+              "bit_offset": 0,
+              "bit_length": 3
             }
           }
         },
@@ -12357,11 +12357,11 @@
               "type": "Integer"
             },
             "2K26": {
-              "address": 627,
-              "hex": "0x273",
-              "length": 6,
-              "startBit": 2,
-              "type": "Integer"
+              "address": 992,
+              "hex": "0x3e0",
+              "type": "bitfield",
+              "bit_offset": 0,
+              "bit_length": 6
             }
           }
         }
@@ -12379,10 +12379,10 @@
             },
             "2K26": {
               "address": 465,
-              "hex": "0x1D1",
-              "length": 6,
-              "startBit": 6,
-              "type": "Integer"
+              "hex": "0x1d1",
+              "type": "bitfield",
+              "bit_offset": 6,
+              "bit_length": 6
             }
           }
         },
@@ -12392,10 +12392,7 @@
           "versions": {
             "2K26": {
               "address": 992,
-              "bit_length": 5,
-              "bit_offset": 7,
-              "hex": "0x3E0",
-              "length": 5,
+              "hex": "0x3e0",
               "options": [
                 "\u65e0",
                 "\u57fa\u7840",
@@ -12425,8 +12422,9 @@
                 "Domantas Sabonis",
                 "Ivica Zubac"
               ],
-              "startBit": 7,
-              "type": "bitfield"
+              "type": "bitfield",
+              "bit_offset": 7,
+              "bit_length": 5
             }
           }
         },
@@ -12456,10 +12454,10 @@
             },
             "2K26": {
               "address": 452,
-              "hex": "0x1C4",
-              "length": 5,
-              "startBit": 6,
-              "type": "Integer"
+              "hex": "0x1c4",
+              "type": "bitfield",
+              "bit_offset": 6,
+              "bit_length": 5
             }
           }
         },
@@ -12496,10 +12494,7 @@
             },
             "2K26": {
               "address": 924,
-              "bit_length": 4,
-              "bit_offset": 0,
-              "hex": "0x39C",
-              "length": 4,
+              "hex": "0x39c",
               "options": [
                 "Big",
                 "Small",
@@ -12521,8 +12516,9 @@
                 "Domantas Sabonis",
                 "Normal WNBA"
               ],
-              "startBit": 0,
-              "type": "bitfield"
+              "type": "bitfield",
+              "bit_offset": 0,
+              "bit_length": 4
             }
           }
         },
@@ -12572,16 +12568,14 @@
           "versions": {
             "2K26": {
               "address": 983,
-              "bit_length": 2,
-              "bit_offset": 6,
-              "hex": "0x3D7",
-              "length": 2,
+              "hex": "0x3d7",
               "options": [
                 "Big",
                 "Small"
               ],
-              "startBit": 6,
-              "type": "bitfield"
+              "type": "bitfield",
+              "bit_offset": 6,
+              "bit_length": 2
             }
           }
         },
@@ -12645,10 +12639,7 @@
           "versions": {
             "2K26": {
               "address": 979,
-              "bit_length": 6,
-              "bit_offset": 1,
-              "hex": "0x3D3",
-              "length": 6,
+              "hex": "0x3d3",
               "options": [
                 "Basic",
                 "Normal",
@@ -12722,8 +12713,9 @@
                 "Zion Williamson",
                 "Trae Young"
               ],
-              "startBit": 1,
-              "type": "bitfield"
+              "type": "bitfield",
+              "bit_offset": 1,
+              "bit_length": 6
             },
             "2K24": {
               "address": 898,
@@ -12746,10 +12738,10 @@
             },
             "2K26": {
               "address": 447,
-              "hex": "0x1BF",
-              "length": 5,
-              "startBit": 2,
-              "type": "Integer"
+              "hex": "0x1bf",
+              "type": "bitfield",
+              "bit_offset": 2,
+              "bit_length": 5
             }
           }
         },
@@ -12804,11 +12796,11 @@
               "type": "Integer"
             },
             "2K26": {
-              "address": 0,
-              "hex": "0x0",
-              "length": 6,
-              "startBit": 3,
-              "type": "Integer"
+              "address": 946,
+              "hex": "0x3b2",
+              "type": "bitfield",
+              "bit_offset": 3,
+              "bit_length": 6
             }
           }
         },
@@ -12823,11 +12815,11 @@
               "type": "Integer"
             },
             "2K26": {
-              "address": 876,
-              "hex": "0x36C",
-              "length": 6,
-              "startBit": 7,
-              "type": "Integer"
+              "address": 948,
+              "hex": "0x3b4",
+              "type": "bitfield",
+              "bit_offset": 7,
+              "bit_length": 6
             }
           }
         },
@@ -12836,11 +12828,11 @@
           "display_name": "Moving Behind The Back",
           "versions": {
             "2K26": {
-              "address": 904,
-              "hex": "0x388",
-              "length": 6,
-              "startBit": 6,
-              "type": "Integer"
+              "address": 976,
+              "hex": "0x3d0",
+              "type": "bitfield",
+              "bit_offset": 6,
+              "bit_length": 6
             }
           }
         },
@@ -12869,11 +12861,11 @@
               "type": "Integer"
             },
             "2K26": {
-              "address": 908,
-              "hex": "0x38C",
-              "length": 6,
-              "startBit": 0,
-              "type": "Integer"
+              "address": 980,
+              "hex": "0x3d4",
+              "type": "bitfield",
+              "bit_offset": 0,
+              "bit_length": 6
             }
           }
         },
@@ -12902,11 +12894,11 @@
               "type": "Integer"
             },
             "2K26": {
-              "address": 908,
-              "hex": "0x38C",
-              "length": 5,
-              "startBit": 7,
-              "type": "Integer"
+              "address": 980,
+              "hex": "0x3d4",
+              "type": "bitfield",
+              "bit_offset": 7,
+              "bit_length": 5
             }
           }
         },
@@ -12936,10 +12928,10 @@
             },
             "2K26": {
               "address": 452,
-              "hex": "0x1C4",
-              "length": 6,
-              "startBit": 0,
-              "type": "Integer"
+              "hex": "0x1c4",
+              "type": "bitfield",
+              "bit_offset": 0,
+              "bit_length": 6
             }
           }
         },
@@ -12968,11 +12960,11 @@
               "type": "Integer"
             },
             "2K26": {
-              "address": 887,
-              "hex": "0x377",
-              "length": 6,
-              "startBit": 1,
-              "type": "Integer"
+              "address": 959,
+              "hex": "0x3bf",
+              "type": "bitfield",
+              "bit_offset": 1,
+              "bit_length": 6
             }
           }
         },
@@ -12987,11 +12979,11 @@
               "type": "Integer"
             },
             "2K26": {
-              "address": 852,
-              "hex": "0x354",
-              "length": 5,
-              "startBit": 0,
-              "type": "Integer"
+              "address": 699,
+              "hex": "0x2bb",
+              "type": "bitfield",
+              "bit_offset": 2,
+              "bit_length": 6
             }
           }
         },
@@ -13026,10 +13018,7 @@
             },
             "2K26": {
               "address": 948,
-              "bit_length": 6,
-              "bit_offset": 0,
-              "hex": "0x3B4",
-              "length": 6,
+              "hex": "0x3b4",
               "options": [
                 "Basic",
                 "Normal",
@@ -13085,8 +13074,9 @@
                 "Zion Williamson",
                 "Trae Young"
               ],
-              "startBit": 0,
-              "type": "bitfield"
+              "type": "bitfield",
+              "bit_offset": 0,
+              "bit_length": 6
             }
           }
         },
@@ -13174,11 +13164,11 @@
               "type": "Integer"
             },
             "2K26": {
-              "address": 752,
-              "hex": "0x2F0",
-              "length": 4,
-              "startBit": 3,
-              "type": "Integer"
+              "address": 824,
+              "hex": "0x338",
+              "type": "bitfield",
+              "bit_offset": 3,
+              "bit_length": 4
             }
           }
         }
@@ -13231,9 +13221,9 @@
             "2K26": {
               "address": 263,
               "hex": "0x107",
-              "length": 1,
-              "startBit": 6,
-              "type": "Integer"
+              "type": "bitfield",
+              "bit_offset": 6,
+              "bit_length": 1
             }
           }
         },
@@ -13277,9 +13267,9 @@
             "2K26": {
               "address": 263,
               "hex": "0x107",
-              "length": 1,
-              "startBit": 7,
-              "type": "Integer"
+              "type": "bitfield",
+              "bit_offset": 7,
+              "bit_length": 1
             }
           }
         },
@@ -13796,10 +13786,7 @@
           "versions": {
             "2K26": {
               "address": 841,
-              "bit_length": 5,
-              "bit_offset": 6,
               "hex": "0x349",
-              "length": 5,
               "options": [
                 "None",
                 "Kobe Bryant",
@@ -13832,8 +13819,9 @@
                 "360 Spin",
                 "Warm Hands"
               ],
-              "startBit": 6,
-              "type": "bitfield"
+              "type": "bitfield",
+              "bit_offset": 6,
+              "bit_length": 5
             }
           }
         },
