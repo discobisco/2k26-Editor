@@ -152,11 +152,17 @@ def _target_executable(label: str) -> str:
     return f"NBA2K{digits}.exe"
 
 
+def _parse_id_prefixed_option(value: object) -> int | None:
+    match = re.match(r"^\s*\[(\d+)\]", str(value or ""))
+    return int(match.group(1)) if match else None
+
+
 class DpgEditorApp:
     def __init__(self, model: EditorDataModel) -> None:
         self.model = model
         self.current_screen = "Home"
         self.open_rows: dict[str, FieldEntry] = {}
+        self.row_raw_values: dict[str, Any] = {}
         self.nav_button_tags: dict[str, str] = {}
         self.item_themes: dict[str, str] = {}
         self._record_list_rows = 0
@@ -166,6 +172,8 @@ class DpgEditorApp:
         self.record_section = "Single Game (Regular)"
         self.record_stat = "Points"
         self.player_team_filter = PLAYER_TEAM_FILTER_ALL
+        self.player_search_text = ""
+        self.player_season_stat_id_selection: dict[tuple[int, str], str] = {}
 
     def _screen_tag(self, domain: str) -> str:
         return _tag(domain, "screen")
@@ -190,6 +198,9 @@ class DpgEditorApp:
 
     def _player_team_filter_tag(self) -> str:
         return _tag("Players", "team_filter")
+
+    def _player_search_tag(self) -> str:
+        return _tag("Players", "search")
 
     def _record_list_rows_for_height(self, viewport_height: int) -> int:
         return max(MIN_RECORD_LIST_ROWS, (viewport_height - RECORD_LIST_VERTICAL_MARGIN) // RECORD_LIST_ROW_HEIGHT)
@@ -357,11 +368,13 @@ class DpgEditorApp:
     def _sync_player_list(self, dpg: Any) -> None:
         domain = "Players"
         self._sync_player_team_filter(dpg)
-        labels = self.model.player_item_labels_for_team_filter(self.player_team_filter)
+        labels = self.model.player_item_labels_for_team_filter(self.player_team_filter, self.player_search_text)
         self._safe_configure(dpg, self._list_tag(domain), items=labels)
+        self._safe_set(dpg, self._player_search_tag(), self.player_search_text)
         total_count = self.model.domain_item_count(domain)
         visible_count = len(labels)
-        count_text = f"Players: {visible_count}" if self.player_team_filter == PLAYER_TEAM_FILTER_ALL else f"Players: {visible_count} / {total_count}"
+        has_filter = self.player_team_filter != PLAYER_TEAM_FILTER_ALL or bool(self.player_search_text.strip())
+        count_text = f"Players: {visible_count} / {total_count}" if has_filter else f"Players: {visible_count}"
         self._safe_set(dpg, self._count_tag(domain), count_text)
         selected = self.model.selected_item(domain)
         selected_label = selected.display_label if selected is not None else ""
@@ -376,6 +389,10 @@ class DpgEditorApp:
 
     def _set_player_team_filter(self, dpg: Any, selected: str | None) -> None:
         self.player_team_filter = str(selected or PLAYER_TEAM_FILTER_ALL)
+        self._sync_player_list(dpg)
+
+    def _set_player_search_text(self, dpg: Any, search_text: str | None) -> None:
+        self.player_search_text = str(search_text or "")
         self._sync_player_list(dpg)
 
     def _sync_record_preview(self, dpg: Any, domain: str) -> None:
@@ -532,21 +549,48 @@ class DpgEditorApp:
     def _editor_status_tag(self, item: RecordListItem) -> str:
         return _tag("editor", item.domain, item.index, "status")
 
+    def _season_stat_selector_key(self, item: RecordListItem) -> tuple[int, str]:
+        return (item.index, "Stats")
+
+    def _season_stat_selector_tag(self, item: RecordListItem) -> str:
+        return _tag("editor", item.domain, item.index, "Stats", "active_season_stat_id")
+
+    def _selected_season_stat_selector(self, dpg: Any, item: RecordListItem, entry: FieldEntry) -> str | None:
+        if not self.model.is_player_selected_stat_detail_entry(entry):
+            return None
+        selected = str(dpg.get_value(self._season_stat_selector_tag(item)) or self.player_season_stat_id_selection.get(self._season_stat_selector_key(item), ""))
+        if not selected:
+            raise ValueError("missing active Season Stat ID selector")
+        return selected
+
+    def _set_player_season_stat_id(self, dpg: Any, item: RecordListItem, selected: str | None) -> None:
+        selected_text = str(selected or "")
+        self.player_season_stat_id_selection[self._season_stat_selector_key(item)] = selected_text
+        self._safe_set(dpg, self._season_stat_selector_tag(item), selected_text)
+        self._load_item_editor(dpg, item)
+
+    def _read_editor_entry_value(self, dpg: Any, item: RecordListItem, entry: FieldEntry) -> dict[str, Any]:
+        return self.model.read_entry_value(entry, index=item.index, stat_selector=self._selected_season_stat_selector(dpg, item, entry))
+
+    def _write_editor_entry_value(self, dpg: Any, item: RecordListItem, entry: FieldEntry, value: str) -> dict[str, Any]:
+        return self.model.write_entry_value(entry, index=item.index, value=value, stat_selector=self._selected_season_stat_selector(dpg, item, entry))
+
     def _load_item_editor(self, dpg: Any, item: RecordListItem) -> None:
         loaded = 0
         failed = 0
         prefix = f"{item.domain}:{item.index}:"
-        for row_key, entry in self.open_rows.items():
-            if not row_key.startswith(prefix):
-                continue
+        rows = [(row_key, entry) for row_key, entry in self.open_rows.items() if row_key.startswith(prefix)]
+        for row_key, entry in rows:
             try:
-                value = self.model.read_entry_value(entry, index=item.index)
+                value = self._read_editor_entry_value(dpg, item, entry)
+                self.row_raw_values[row_key] = value.get("raw_value")
                 text = str(value["display_value"])
                 dpg.set_value(self._row_current_tag(item, entry), text)
                 dpg.set_value(self._row_new_tag(item, entry), text)
                 dpg.set_value(self._row_status_tag(item, entry), f"0x{value['address']:X}")
                 loaded += 1
             except Exception as exc:
+                self.row_raw_values.pop(row_key, None)
                 dpg.set_value(self._row_current_tag(item, entry), "")
                 dpg.set_value(self._row_new_tag(item, entry), "")
                 dpg.set_value(self._row_status_tag(item, entry), str(exc)[:90])
@@ -565,7 +609,8 @@ class DpgEditorApp:
             if new_text == old_text:
                 continue
             try:
-                readback = self.model.write_entry_value(entry, index=item.index, value=new_text)
+                readback = self._write_editor_entry_value(dpg, item, entry, new_text)
+                self.row_raw_values[row_key] = readback.get("raw_value")
                 text = str(readback["display_value"])
                 dpg.set_value(self._row_current_tag(item, entry), text)
                 dpg.set_value(self._row_new_tag(item, entry), text)
@@ -581,6 +626,29 @@ class DpgEditorApp:
         if dpg.does_item_exist(win_tag):
             dpg.focus_item(win_tag)
             return
+
+        def options_for(entry: FieldEntry) -> list[str]:
+            return self.model.field_options(entry)
+
+        def render_table(render_entries: list[FieldEntry]) -> None:
+            with dpg.table(header_row=True, resizable=True, policy=dpg.mvTable_SizingStretchProp):
+                dpg.add_table_column(label="Field")
+                dpg.add_table_column(label="Current")
+                dpg.add_table_column(label="New")
+                dpg.add_table_column(label="Address / Status")
+                for entry in render_entries:
+                    row_key = f"{item.domain}:{item.index}:{entry.ordinal}"
+                    self.open_rows[row_key] = entry
+                    with dpg.table_row():
+                        dpg.add_text(entry.display_name)
+                        dpg.add_input_text(tag=self._row_current_tag(item, entry), readonly=True, width=-1)
+                        options = options_for(entry)
+                        if options:
+                            dpg.add_combo(options, tag=self._row_new_tag(item, entry), width=-1)
+                        else:
+                            dpg.add_input_text(tag=self._row_new_tag(item, entry), width=-1)
+                        dpg.add_text("", tag=self._row_status_tag(item, entry))
+
         with dpg.window(label=f"{item.domain} [{item.index}] {item.label}", tag=win_tag, width=1120, height=760):
             with dpg.group(horizontal=True):
                 dpg.add_button(label="Reload", callback=lambda *_args, i=item: self._load_item_editor(dpg, i))
@@ -590,36 +658,32 @@ class DpgEditorApp:
                     for section, groups in self.model.grouped_fields(item.domain).items():
                         with dpg.tab(label=section):
                             for group, entries in groups.items():
+                                entries_list = list(entries)
                                 with dpg.collapsing_header(label=group, default_open=group in {"ID", "Vitals", "Basic Info"}):
-                                    with dpg.table(header_row=True, resizable=True, policy=dpg.mvTable_SizingStretchProp):
-                                        dpg.add_table_column(label="Field")
-                                        dpg.add_table_column(label="Current")
-                                        dpg.add_table_column(label="New")
-                                        dpg.add_table_column(label="Address / Status")
-                                        target_match = re.search(r"nba2k(\d{2})", self.model.target_executable, flags=re.IGNORECASE)
-                                        target_version = "2K" + target_match.group(1) if target_match else "2K26"
-                                        for entry in entries:
-                                            row_key = f"{item.domain}:{item.index}:{entry.ordinal}"
-                                            self.open_rows[row_key] = entry
-                                            with dpg.table_row():
-                                                dpg.add_text(entry.display_name)
-                                                dpg.add_input_text(tag=self._row_current_tag(item, entry), readonly=True, width=-1)
-                                                versions = entry.field.get("versions")
-                                                options: list[str] = []
-                                                if isinstance(versions, dict):
-                                                    for raw_key, payload in versions.items():
-                                                        tokens = [chunk.strip().upper() for chunk in str(raw_key).split(",") if chunk.strip()]
-                                                        if target_version.upper() not in tokens or not isinstance(payload, dict):
-                                                            continue
-                                                        raw_options = payload.get("dropdown") or payload.get("values")
-                                                        if isinstance(raw_options, list):
-                                                            options = [str(option) for option in raw_options]
-                                                        break
-                                                if options:
-                                                    dpg.add_combo(options, tag=self._row_new_tag(item, entry), width=-1)
-                                                else:
-                                                    dpg.add_input_text(tag=self._row_new_tag(item, entry), width=-1)
-                                                dpg.add_text("", tag=self._row_status_tag(item, entry))
+                                    if item.domain == "Players" and section == "Stats" and group == "Season IDs":
+                                        options = self.model.player_season_stat_id_options(item.index)
+                                        if options:
+                                            key = self._season_stat_selector_key(item)
+                                            selected = self.player_season_stat_id_selection.get(key)
+                                            if selected not in options:
+                                                selected = next((option for option in options if _parse_id_prefixed_option(option) is not None), options[0])
+                                                self.player_season_stat_id_selection[key] = selected
+                                            with dpg.group(horizontal=True):
+                                                dpg.add_text("Active Season Stat ID")
+                                                dpg.add_combo(
+                                                    options,
+                                                    tag=self._season_stat_selector_tag(item),
+                                                    default_value=selected,
+                                                    width=280,
+                                                    callback=lambda _s, app_data, _u=None, *args, i=item: self._set_player_season_stat_id(dpg, i, app_data),
+                                                )
+                                            dpg.add_spacer(height=6)
+                                        else:
+                                            dpg.add_text("No Season Stat ID values available")
+                                            dpg.add_spacer(height=6)
+                                    if item.domain == "Players" and section == "Stats" and group == "Season IDs":
+                                        entries_list = [entry for entry in entries_list if not self.model.is_player_season_id_selector_entry(entry)]
+                                    render_table(entries_list)
         self._load_item_editor(dpg, item)
 
     def _add_nav_button(self, dpg: Any, screen: str, label: str) -> None:
@@ -670,6 +734,14 @@ class DpgEditorApp:
                     default_value=PLAYER_TEAM_FILTER_ALL,
                     width=220,
                     callback=lambda _s, app_data, _u=None, *args: self._set_player_team_filter(dpg, app_data),
+                )
+                dpg.add_spacer(width=18)
+                dpg.add_text("Search")
+                dpg.add_input_text(
+                    tag=self._player_search_tag(),
+                    hint="Search players",
+                    width=320,
+                    callback=lambda _s, app_data, _u=None, *args: self._set_player_search_text(dpg, app_data),
                 )
             dpg.add_spacer(height=14)
             with dpg.group(horizontal=True):

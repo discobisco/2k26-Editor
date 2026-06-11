@@ -128,26 +128,68 @@ def convert_rating_to_raw(rating: float, length: int) -> int:
         return 0
 
 
-def convert_minmax_potential_to_raw(rating: float, length: int, minimum: float = 40.0, maximum: float = 99.0) -> int:
-    """Convert Minimum/Maximum Potential display ratings into raw bitfield values."""
+def convert_potential_to_raw(rating: float, length: int | None = None, minimum: float = 40.0, maximum: float = 99.0) -> int:
+    """Convert Potential display ratings into raw values, bounded to the 40-99 display scale."""
     try:
         clamped = max(minimum, min(maximum, float(rating)))
-        max_raw = (1 << length) - 1
-        return int(max(0, min(max_raw, round(clamped))))
     except Exception:
-        return int(minimum)
+        clamped = minimum
+    return convert_rating_to_raw(clamped, int(length or 0)) if length and length > 0 else int(round(clamped))
 
 
-def convert_raw_to_minmax_potential(raw: int, length: int, minimum: float = 40.0, maximum: float = 99.0) -> int:
-    """Convert raw Minimum/Maximum Potential values back into the 40-99 range."""
+def convert_raw_to_potential(raw: int, length: int | None = None, minimum: float = 40.0, maximum: float = 99.0) -> int:
+    """Convert raw Potential values through the rating curve, bounded to 40-99."""
+    if length and length > 0:
+        rating = convert_raw_to_rating(raw, int(length))
+    else:
+        try:
+            rating = int(raw)
+        except Exception:
+            rating = int(minimum)
+    return max(int(minimum), min(int(maximum), int(rating)))
+
+
+def convert_minmax_potential_to_raw(rating: float, length: int, minimum: float = 0.0, maximum: float = 100.0) -> int:
+    """Convert Min/Max/Average potential-like display values on the 0-100 scale into raw values."""
+    return convert_rating_to_tendency_raw(rating, length)
+
+
+def convert_raw_to_minmax_potential(raw: int, length: int, minimum: float = 0.0, maximum: float = 100.0) -> int:
+    """Convert Min/Max/Average potential-like raw values into the 0-100 display scale."""
+    return convert_tendency_raw_to_rating(raw, length)
+
+
+def convert_raw_to_body_scale_display(raw: object, length: int = 0) -> int:
+    """Convert body scale raw float storage into the 0-100 editor display scale."""
     try:
-        rating = int(raw)
-        rating = max(int(minimum), rating)
-        if rating > maximum:
-            rating = int(maximum)
-        return rating
+        value = float(str(raw))
     except Exception:
-        return int(minimum)
+        value = 0.0
+    return convert_tendency_raw_to_rating(int(round(value * 50.0)), length)
+
+
+def convert_body_scale_display_to_raw(display_value: object, length: int = 0) -> float:
+    """Convert body scale 0-100 display values into raw float storage."""
+    return convert_rating_to_tendency_raw(float(str(display_value)), length) / 50.0
+
+
+def convert_raw_to_injury_duration_days(raw: int, maximum_days: int = 450) -> int:
+    """Convert player injury duration storage into displayed days, ignoring high status flag bits."""
+    try:
+        duration_ticks = int(raw) & 0xFFFFF
+    except Exception:
+        duration_ticks = 0
+    return max(0, min(int(maximum_days), duration_ticks // 1440))
+
+
+def convert_injury_duration_days_to_raw(days: float, maximum_days: int = 450) -> int:
+    """Convert displayed injury duration days into low duration ticks, clamped to the editor range."""
+    try:
+        value = int(round(float(days)))
+    except Exception:
+        value = 0
+    value = max(0, min(int(maximum_days), value))
+    return value * 1440
 
 
 def normalize_weight_value(value: object) -> float | None:
@@ -298,6 +340,12 @@ __all__ = [
     "WEIGHT_MAX_POUNDS",
     "convert_raw_to_rating",
     "convert_rating_to_raw",
+    "convert_potential_to_raw",
+    "convert_raw_to_potential",
+    "convert_raw_to_injury_duration_days",
+    "convert_injury_duration_days_to_raw",
+    "convert_raw_to_body_scale_display",
+    "convert_body_scale_display_to_raw",
     "convert_minmax_potential_to_raw",
     "convert_raw_to_minmax_potential",
     "normalize_weight_value",

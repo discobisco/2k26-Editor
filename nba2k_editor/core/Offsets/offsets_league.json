@@ -92,6 +92,7 @@
         "executable": "NBA2K26.exe",
         "version": "2026-06-06",
         "playerSize": 1176,
+        "playerSeasonStatsSize": 64,
         "teamSize": 5672,
         "stadiumSize": 4792,
         "staffSize": 432
@@ -100,6 +101,15 @@
         "Player": {
           "address": 132247032,
           "chain": []
+        },
+        "PlayerSeasonStats": {
+          "address": 132245104,
+          "chain": [
+            {
+              "offset": 472,
+              "dereference": true
+            }
+          ]
         },
         "Team": {
           "address": 132248328,
@@ -217,16 +227,11 @@
           "General": {}
         },
         "Stats": {
-          "Career High Stats": {},
-          "Season High Stats": {},
-          "Stat IDs": {},
+          "Season High": {},
+          "Career High": {},
           "Awards": {},
-          "Basic Info": {},
           "Edit": {},
-          "Game Stats": {},
-          "Other Stats": {},
-          "Rebounds Stats": {},
-          "Scoring Stats": {}
+          "Season IDs": {}
         }
       }
     },

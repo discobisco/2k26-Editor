@@ -10,11 +10,15 @@ from typing import Any, Iterable
 
 from nba2k_editor.core import offsets as offsets_mod
 from nba2k_editor.core.conversions import (
+    convert_injury_duration_days_to_raw,
+    convert_body_scale_display_to_raw,
     convert_kilograms_to_pounds,
-    convert_minmax_potential_to_raw,
+    convert_potential_to_raw,
     convert_pounds_to_kilograms,
     convert_rating_to_raw,
-    convert_raw_to_minmax_potential,
+    convert_raw_to_body_scale_display,
+    convert_raw_to_injury_duration_days,
+    convert_raw_to_potential,
     convert_raw_to_rating,
     convert_raw_to_year,
     convert_rating_to_tendency_raw,
@@ -189,6 +193,39 @@ _ADDRESS_DROPDOWN_TYPES: dict[str, str] = {
 }
 
 
+_STAT_ROLE_SELECTOR = "season_id_selector"
+_STAT_ROLE_DETAIL = "season_id_detail"
+
+
+def _stat_role(field: dict[str, Any]) -> str:
+    return str(field.get("stat_role") or "").strip()
+
+
+def _selected_record_source(field: dict[str, Any]) -> dict[str, Any] | None:
+    source = field.get("selected_record_source")
+    return source if isinstance(source, dict) else None
+
+
+def _is_player_season_id_selector_entry(entry: FieldEntry) -> bool:
+    return _stat_role(entry.field) == _STAT_ROLE_SELECTOR
+
+
+def _is_player_selected_stat_detail_entry(entry: FieldEntry) -> bool:
+    return _stat_role(entry.field) == _STAT_ROLE_DETAIL and _selected_record_source(entry.field) is not None
+
+
+def _player_season_id_option_label(entry: FieldEntry) -> str:
+    return entry.display_name.replace("_", " ").strip()
+
+
+def _player_season_id_identity_from_option(option: object) -> str:
+    text = str(option or "").strip()
+    text = re.sub(r"^\[\s*-?\d+\s*\]\s*", "", text)
+    text = re.sub(r"^--\s*", "", text)
+    text = re.sub(r"\s+\((?:unavailable|-?\d+)\)\s*$", "", text)
+    return _field_identity(text)
+
+
 def record_address(*, base: int, index: int, stride: int) -> int:
     """Return the absolute record address for a zero-based record number."""
     if index < 0:
@@ -261,16 +298,29 @@ _FIXED_NUMERIC_TYPE_WIDTHS: dict[str, int] = {
 }
 
 
+def _bits_to_bytes(bits: int) -> int:
+    return max(1, (int(bits) + 7) // 8)
+
+
 def _numeric_width(payload: dict[str, Any]) -> int:
     explicit_bytes = to_int(payload.get("byteLength"))
     if explicit_bytes > 0:
         return explicit_bytes
-    authored_length = offsets_mod._resolved_length_bits(payload)
-    if authored_length > 0:
-        return authored_length
-    type_width = _FIXED_NUMERIC_TYPE_WIDTHS.get(_type_key(payload))
+    type_key = _type_key(payload)
+    authored_length_bits = offsets_mod._resolved_length_bits(payload)
+    if type_key in {"color", "hex_bytes"}:
+        authored_length = to_int(payload.get("length"))
+        if authored_length > 0:
+            return authored_length
+    if type_key == "binary" and not ("bit_offset" in payload or "startBit" in payload):
+        authored_length = to_int(payload.get("length"))
+        if authored_length > 0:
+            return authored_length
+    type_width = _FIXED_NUMERIC_TYPE_WIDTHS.get(type_key)
     if type_width:
         return type_width
+    if authored_length_bits > 0:
+        return _bits_to_bytes(authored_length_bits)
     raise KeyError("authored payload is missing length, bit_length, or byteLength")
 
 
@@ -279,8 +329,20 @@ def _bit_window(payload: dict[str, Any]) -> tuple[int, int, int]:
     bit_length = offsets_mod._resolved_length_bits(payload)
     if bit_length <= 0:
         raise KeyError("authored bitfield payload is missing length, bit_length, or byteLength")
-    width = _numeric_width(payload)
+    width = _bits_to_bytes(bit_offset + bit_length)
     return bit_offset, bit_length, width
+
+
+_PARENT_POINTER_TYPES = {"pointer", "address", "uint64", "ulonglong"}
+
+
+def _read_pointer_value(memory: Any, address: int) -> int:
+    pointer_size = int(getattr(memory, "pointer_size", 8) or 8)
+    if pointer_size == 8 and hasattr(memory, "read_u64"):
+        return int(memory.read_u64(address))
+    if pointer_size == 4 and hasattr(memory, "read_uint32"):
+        return int(memory.read_uint32(address))
+    return int.from_bytes(memory.read_bytes(address, pointer_size), "little")
 
 
 def _read_bitfield(memory: Any, address: int, payload: dict[str, Any]) -> int:
@@ -371,6 +433,33 @@ def _mapped_raw_value(payload: dict[str, Any], value: Any) -> Any | None:
     return None
 
 
+def _id_prefixed_option(raw_id: int, label: str) -> str:
+    text = str(label).strip()
+    return f"[{int(raw_id)}] {text}" if text else f"[{int(raw_id)}]"
+
+
+def _parse_id_prefixed_option(value: Any) -> int | None:
+    match = re.match(r"^\s*\[(\d+)\]", str(value or ""))
+    return int(match.group(1)) if match else None
+
+
+_PLAYER_ZERO_TO_100_FIELD_IDS = {
+    "MINPOTENTIAL",
+    "MAXPOTENTIAL",
+    "MINIMUMPOTENTIAL",
+    "MAXIMUMPOTENTIAL",
+    "AVGPERCENT",
+    "AVERAGEPERCENT",
+    "BUSTPERCENT",
+    "BUSTPERCENTAGE",
+    "BOOMPERCENT",
+    "BOOMPERCENTAGE",
+    "FINANCIALSECURITY",
+    "LOYALTY",
+    "PLAYFORWINNER",
+}
+
+
 def _raw_to_display_value(section: str, field: dict[str, Any], payload: dict[str, Any], raw_value: Any) -> Any:
     type_key = _type_key(payload)
     if type_key == "color" and isinstance(raw_value, (bytes, bytearray)):
@@ -396,14 +485,20 @@ def _raw_to_display_value(section: str, field: dict[str, Any], payload: dict[str
         return int(raw_value) / 100
     if bool(payload.get("from_pounds")):
         return convert_pounds_to_kilograms(raw_value)
+    if bool(payload.get("body_scale_0_100")) or bool(payload.get("body_scale_25_75")):
+        return convert_raw_to_body_scale_display(raw_value, length_bits)
     if "scale" in payload:
         return float(raw_value) * float(payload.get("scale") or 1)
+    if field_id == "POTENTIAL":
+        return convert_raw_to_potential(to_int(raw_value), length_bits)
+    if field_id in _PLAYER_ZERO_TO_100_FIELD_IDS:
+        return convert_tendency_raw_to_rating(to_int(raw_value), length_bits)
+    if bool(payload.get("injury_duration_days")) or field_id in {"INJURY1DURATION", "INJURY2DURATION"}:
+        return convert_raw_to_injury_duration_days(to_int(raw_value))
     if section in {"Attributes", "Durability"}:
         return convert_raw_to_rating(int(raw_value), length_bits)
     if section == "Tendencies":
         return convert_tendency_raw_to_rating(int(raw_value), length_bits)
-    if _field_identity(field_name) in {"MINPOTENTIAL", "MAXPOTENTIAL", "MINIMUMPOTENTIAL", "MAXIMUMPOTENTIAL"}:
-        return convert_raw_to_minmax_potential(int(raw_value), length_bits)
     return raw_value
 
 
@@ -434,15 +529,21 @@ def _display_to_raw_value(section: str, field: dict[str, Any], payload: dict[str
         return int(round(float(value) * 100))
     if bool(payload.get("from_pounds")):
         return convert_kilograms_to_pounds(value)
+    if bool(payload.get("body_scale_0_100")) or bool(payload.get("body_scale_25_75")):
+        return convert_body_scale_display_to_raw(value, length_bits)
     if "scale" in payload:
         scale = float(payload.get("scale") or 1)
         return float(value) / scale if scale else value
+    if field_id == "POTENTIAL":
+        return convert_potential_to_raw(float(value), length_bits)
+    if field_id in _PLAYER_ZERO_TO_100_FIELD_IDS:
+        return convert_rating_to_tendency_raw(float(value), length_bits)
+    if bool(payload.get("injury_duration_days")) or field_id in {"INJURY1DURATION", "INJURY2DURATION"}:
+        return convert_injury_duration_days_to_raw(float(value))
     if section in {"Attributes", "Durability"}:
         return convert_rating_to_raw(float(value), length_bits)
     if section == "Tendencies":
         return convert_rating_to_tendency_raw(float(value), length_bits)
-    if _field_identity(field_name) in {"MINPOTENTIAL", "MAXPOTENTIAL", "MINIMUMPOTENTIAL", "MAXIMUMPOTENTIAL"}:
-        return convert_minmax_potential_to_raw(float(value), length_bits)
     return value
 
 
@@ -478,13 +579,7 @@ def _write_string(memory: Any, address: int, payload: dict[str, Any], value: Any
 
 
 def _read_ptr_string(memory: Any, address: int, payload: dict[str, Any]) -> str:
-    pointer_size = int(getattr(memory, "pointer_size", 8) or 8)
-    if pointer_size == 8 and hasattr(memory, "read_u64"):
-        pointer = int(memory.read_u64(address))
-    elif pointer_size == 4 and hasattr(memory, "read_uint32"):
-        pointer = int(memory.read_uint32(address))
-    else:
-        pointer = int.from_bytes(memory.read_bytes(address, pointer_size), "little")
+    pointer = _read_pointer_value(memory, address)
     if pointer <= 0:
         return ""
     string_payload = dict(payload)
@@ -742,7 +837,11 @@ class EditorDataModel:
             if parent_entry is None:
                 raise KeyError(f"missing parent field: {parent_name}")
             parent_payload = self._field_version_payload(parent_entry.field)
-            base_address += _field_offset(parent_payload)
+            parent_address = base_address + _field_offset(parent_payload)
+            if _type_key(parent_payload) in _PARENT_POINTER_TYPES:
+                base_address = _read_pointer_value(self.memory, parent_address)
+            else:
+                base_address = parent_address
         address = base_address + _field_offset(payload)
         if bool(payload.get("requiresDereference")):
             pointer_size = int(getattr(self.memory, "pointer_size", 8) or 8)
@@ -818,21 +917,169 @@ class EditorDataModel:
     def _cache_player_team_pointers(self, items: list[RecordListItem]) -> None:
         self._player_team_pointer_cache = {item.index: self._read_player_current_team_pointer(item) for item in items}
 
-    def player_item_labels_for_team_filter(self, selected_team_label: str | None) -> list[str]:
+    def player_item_labels_for_team_filter(self, selected_team_label: str | None, search_text: str | None = None) -> list[str]:
         selected = str(selected_team_label or "").strip()
+        query = str(search_text or "").strip().lower()
         if not selected or selected == PLAYER_TEAM_FILTER_ALL:
-            return self.domain_item_labels("Players")
-        team = self.loaded_items["Teams"].get(selected)
-        if team is None:
-            return []
-        labels: list[str] = []
-        for label, player in self.loaded_items["Players"].items():
-            if self._player_current_team_pointer(player) == team.address:
-                labels.append(label)
-        return labels
+            labels = self.domain_item_labels("Players")
+        else:
+            team = self.loaded_items["Teams"].get(selected)
+            if team is None:
+                return []
+            labels = [
+                label
+                for label, player in self.loaded_items["Players"].items()
+                if self._player_current_team_pointer(player) == team.address
+            ]
+        if not query:
+            return labels
+        return [label for label in labels if query in label.lower()]
 
-    def player_item_count_for_team_filter(self, selected_team_label: str | None) -> int:
-        return len(self.player_item_labels_for_team_filter(selected_team_label))
+    def player_item_count_for_team_filter(self, selected_team_label: str | None, search_text: str | None = None) -> int:
+        return len(self.player_item_labels_for_team_filter(selected_team_label, search_text))
+
+    def is_player_season_id_selector_entry(self, entry: FieldEntry) -> bool:
+        return _is_player_season_id_selector_entry(entry)
+
+    def is_player_selected_stat_detail_entry(self, entry: FieldEntry) -> bool:
+        return _is_player_selected_stat_detail_entry(entry)
+
+    def player_season_stat_id_options(self, player_index: int) -> list[str]:
+        options: list[str] = []
+        for entry in self._player_season_id_selector_entries(_STAT_ROLE_SELECTOR):
+            label = _player_season_id_option_label(entry)
+            try:
+                value = self.read_entry_value(entry, index=player_index)
+                stat_id = int(value.get("raw_value") or 0)
+            except Exception:
+                options.append(f"-- {label} (unavailable)")
+                continue
+            if stat_id > 0 and stat_id != 0xFFFF:
+                options.append(f"[{stat_id}] {label}")
+            else:
+                options.append(f"-- {label} ({stat_id})")
+        return options
+
+    def _player_season_id_selector_entries(self, selector_role: object) -> list[FieldEntry]:
+        role = str(selector_role or _STAT_ROLE_SELECTOR).strip()
+        entries: list[FieldEntry] = []
+        for groups in self.grouped_fields("Players").values():
+            for group_entries in groups.values():
+                entries.extend(entry for entry in group_entries if _stat_role(entry.field) == role)
+        return entries
+
+    def _player_season_id_selector_entry_for_option(self, selected: object, *, selector_role: object = _STAT_ROLE_SELECTOR) -> FieldEntry:
+        selected_identity = _player_season_id_identity_from_option(selected)
+        if not selected_identity:
+            raise ValueError("missing active Season Stat ID selector")
+        for entry in self._player_season_id_selector_entries(selector_role):
+            if selected_identity in {
+                _field_identity(entry.normalized_name),
+                _field_identity(_player_season_id_option_label(entry)),
+            }:
+                return entry
+        raise KeyError(f"unknown Season Stat ID selector: {selected}")
+
+    def _selected_record_source_for_entry(self, entry: FieldEntry) -> dict[str, Any]:
+        source = _selected_record_source(entry.field)
+        if source is None:
+            raise KeyError(f"field is missing selected_record_source: {entry.display_name}")
+        return source
+
+    def _player_season_stat_detail_base_address(self, entry: FieldEntry, player_index: int, selected: object) -> int:
+        source = self._selected_record_source_for_entry(entry)
+        selector_entry = self._player_season_id_selector_entry_for_option(
+            selected,
+            selector_role=source.get("selector_role") or _STAT_ROLE_SELECTOR,
+        )
+        stat_id = int(self.read_entry_value(selector_entry, index=player_index).get("raw_value") or 0)
+        invalid_ids = {int(value) for value in source.get("invalid_ids", []) if str(value).strip()}
+        if stat_id <= 0 or stat_id in invalid_ids:
+            raise ValueError(f"selected Season Stat ID has no stats row: {selected}")
+        base_key = str(source.get("base_pointer") or "").strip()
+        stride_key = str(source.get("stride") or "").strip()
+        if not base_key or not stride_key:
+            raise KeyError(f"selected_record_source for {entry.display_name} must include base_pointer and stride")
+        return self._resolve_base_pointer_by_key(base_key) + stat_id * self._stride_value(stride_key)
+
+    def _resolve_base_pointer_entry(self, base_entry: dict[str, Any], *, label: str) -> int:
+        if "address" not in base_entry:
+            raise KeyError(f"base entry for {label} is missing address")
+        authored_address = int(base_entry["address"])
+        module_base = getattr(self.memory, "base_addr", None)
+        final_offset = int(base_entry.get("finalOffset") or 0)
+        if not module_base:
+            return authored_address + final_offset
+        pointer_address = authored_address if bool(base_entry.get("absolute")) else int(module_base) + authored_address
+        if bool(base_entry.get("direct_table")):
+            return pointer_address + final_offset
+        pointer_size = int(getattr(self.memory, "pointer_size", 8) or 8)
+        resolved = self._read_pointer_value(pointer_address, pointer_size)
+        chain = base_entry.get("chain") or base_entry.get("steps") or []
+        if isinstance(chain, list):
+            for step in chain:
+                if not isinstance(step, dict):
+                    raise TypeError(f"base chain step for {label} must be an object")
+                resolved += int(step.get("offset") or 0)
+                if bool(step.get("dereference")):
+                    resolved = self._read_pointer_value(resolved, pointer_size)
+        return resolved + final_offset
+
+    def _read_pointer_value(self, address: int, pointer_size: int | None = None) -> int:
+        size = int(pointer_size or getattr(self.memory, "pointer_size", 8) or 8)
+        if size == 8 and hasattr(self.memory, "read_u64"):
+            return int(self.memory.read_u64(address))
+        elif size == 4 and hasattr(self.memory, "read_uint32"):
+            return int(self.memory.read_uint32(address))
+        return int.from_bytes(self.memory.read_bytes(address, size), "little")
+
+    def _base_pointer_entry(self, key: str) -> dict[str, Any]:
+        config = self._active_config()
+        base_pointers = config.get("base_pointers")
+        if not isinstance(base_pointers, dict):
+            raise KeyError("active config is missing base_pointers")
+        base_entry = base_pointers.get(key)
+        if not isinstance(base_entry, dict):
+            raise KeyError(f"active config is missing {key} base pointer")
+        return base_entry
+
+    def _resolve_base_pointer_by_key(self, key: str) -> int:
+        return self._resolve_base_pointer_entry(self._base_pointer_entry(key), label=key)
+
+    def _stride_value(self, key: str) -> int:
+        config = self._active_config()
+        game_info = config.get("game_info")
+        if not isinstance(game_info, dict):
+            raise KeyError("active config is missing game_info")
+        stride = int(game_info.get(key) or 0)
+        if stride <= 0:
+            raise KeyError(f"game_info is missing {key}")
+        return stride
+
+    def _record_id_value(self, domain: str, item: RecordListItem, id_field_name: str) -> int | None:
+        entry = self._field_by_normalized_name(domain, id_field_name)
+        if entry is None:
+            return None
+        try:
+            value = self.read_entry_value(entry, index=item.index).get("raw_value")
+            return int(value) if value is not None else None
+        except Exception:
+            return None
+
+    def _shoe_option_map(self) -> dict[int, str]:
+        options: dict[int, str] = {}
+        for item in self.loaded_items.get("Shoes", {}).values():
+            shoe_id = self._record_id_value("Shoes", item, "ID")
+            if shoe_id is not None:
+                options[shoe_id] = _id_prefixed_option(shoe_id, item.label)
+        return options
+
+    def field_options(self, entry: FieldEntry) -> list[str]:
+        payload = self._field_version_payload(entry.field)
+        if bool(payload.get("shoe_dropdown")):
+            return [option for _shoe_id, option in sorted(self._shoe_option_map().items())]
+        raw_options = payload.get("dropdown") or payload.get("values")
+        return [str(option) for option in raw_options] if isinstance(raw_options, list) else []
 
     def selected_item(self, domain: str) -> RecordListItem | None:
         return self.selected_items[domain]
@@ -1106,11 +1353,20 @@ class EditorDataModel:
     def _record_pointer_display(self, raw_value: Any, target_domain: str) -> str | None:
         try:
             pointer = int(raw_value)
+        except Exception:
+            return None
+        if pointer <= 0:
+            return None
+        for item in self.loaded_items.get(target_domain, {}).values():
+            if item.address == pointer:
+                text = str(item.label).strip()
+                return text or None
+        try:
             target_base = self.domain_base(target_domain)
             target_stride = self.domain_stride(target_domain)
         except Exception:
             return None
-        if pointer <= 0 or target_stride <= 0:
+        if target_stride <= 0:
             return None
         delta = pointer - target_base
         if delta < 0 or delta % target_stride != 0:
@@ -1128,6 +1384,11 @@ class EditorDataModel:
             return self._record_pointer_display(raw_value, target_domain)
         if bool(payload.get("team_dropdown")) or bool(payload.get("team_address_dropdown")):
             return self._team_pointer_display(raw_value)
+        if bool(payload.get("shoe_dropdown")):
+            try:
+                return self._shoe_option_map().get(int(raw_value))
+            except Exception:
+                return None
         return None
 
     def _read_field_at_record_address(self, domain: str, record_addr: int, field: dict[str, Any]) -> dict[str, Any]:
@@ -1146,6 +1407,17 @@ class EditorDataModel:
             "writeable": not bool(payload.get("readonly")) and _implemented_payload(payload),
             "value_behavior": "implemented" if _implemented_payload(payload) else "implementation_required",
         }
+
+    def _write_field_at_record_address(self, domain: str, record_addr: int, field: dict[str, Any], value: Any) -> None:
+        payload = self._field_version_payload(field)
+        if bool(payload.get("readonly")):
+            raise PermissionError(f"field is readonly: {field.get('normalized_name') or field.get('display_name')}")
+        address = self._field_address(domain, record_addr, field, payload)
+        section, _group = self._field_context(domain, field)
+        raw_value = _parse_id_prefixed_option(value) if bool(payload.get("shoe_dropdown")) else None
+        if raw_value is None:
+            raw_value = _display_to_raw_value(section, field, payload, value)
+        _write_authored_value(self.memory, address, payload, raw_value)
 
     def _label_for_record_address(self, domain: str, index: int, record_addr: int, label_entries: list[FieldEntry]) -> str:
         labels: list[str] = []
@@ -1211,10 +1483,20 @@ class EditorDataModel:
             index += 1
         return items
 
-    def read_entry_value(self, entry: FieldEntry, *, index: int) -> dict[str, Any]:
+    def read_entry_value(self, entry: FieldEntry, *, index: int, stat_selector: object | None = None) -> dict[str, Any]:
+        if stat_selector is not None and _is_player_selected_stat_detail_entry(entry):
+            return self._read_field_at_record_address(
+                entry.domain,
+                self._player_season_stat_detail_base_address(entry, index, stat_selector),
+                entry.field,
+            )
         return self.read_value(entry.domain, index=index, field=entry.field)
 
-    def write_entry_value(self, entry: FieldEntry, *, index: int, value: Any) -> dict[str, Any]:
+    def write_entry_value(self, entry: FieldEntry, *, index: int, value: Any, stat_selector: object | None = None) -> dict[str, Any]:
+        if stat_selector is not None and _is_player_selected_stat_detail_entry(entry):
+            record_addr = self._player_season_stat_detail_base_address(entry, index, stat_selector)
+            self._write_field_at_record_address(entry.domain, record_addr, entry.field, value)
+            return self._read_field_at_record_address(entry.domain, record_addr, entry.field)
         return self.write_and_readback(entry.domain, index=index, field=entry.field, value=value)
 
     def section_fields(self, domain: str, section: str, group: str) -> list[dict[str, Any]]:
@@ -1309,7 +1591,9 @@ class EditorDataModel:
             raise PermissionError(f"field is readonly: {field.get('normalized_name') or field.get('display_name')}")
         address = self._field_address(domain, self.record_address(domain, index), field, payload)
         section, _group = self._field_context(domain, field)
-        raw_value = _display_to_raw_value(section, field, payload, value)
+        raw_value = _parse_id_prefixed_option(value) if bool(payload.get("shoe_dropdown")) else None
+        if raw_value is None:
+            raw_value = _display_to_raw_value(section, field, payload, value)
         _write_authored_value(self.memory, address, payload, raw_value)
         if domain == "Players" and _field_identity(field.get("normalized_name") or field.get("display_name")) == "CURRENTTEAM":
             try:
