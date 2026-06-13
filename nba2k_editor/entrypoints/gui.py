@@ -4,6 +4,7 @@ import argparse
 import json
 from collections.abc import Sequence
 
+from nba2k_editor.entrypoints.runtime_cleanup import delete_runtime_cache_dirs
 from nba2k_editor.models.data_model import EditorDataModel, verify_edits
 from nba2k_editor.ui.dpg_editor import DpgEditorApp
 
@@ -20,6 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    delete_runtime_cache_dirs()
     if args.verify_edits:
         print(json.dumps(verify_edits(target_executable=args.target), sort_keys=True), flush=True)
         return 0

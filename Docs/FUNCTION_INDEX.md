@@ -2,13 +2,13 @@
 
 AST-generated index of every Python callable definition inside `nba2k_editor/` only.
 
-- Python files scanned: 19
-- Files with named function definitions: 12
-- Named functions/methods listed: 293
-- Lambda expressions listed: 26
-- Total callable definitions listed: 319
-- Direct methods listed: 190
-- Nested named functions listed: 2
+- Python files scanned: 20
+- Files with named function definitions: 13
+- Named functions/methods listed: 316
+- Lambda expressions listed: 25
+- Total callable definitions listed: 341
+- Direct methods listed: 195
+- Nested named functions listed: 16
 - Scope: all `*.py` files below `nba2k_editor/`, including nested functions and lambda expressions; excludes only cache folders.
 - Out of scope: every file outside `nba2k_editor/`.
 - Purpose: ownership map so new work checks existing behavior before adding another function under a different name.
@@ -17,18 +17,33 @@ AST-generated index of every Python callable definition inside `nba2k_editor/` o
 
 | Package | Declared owner lane | Source |
 |---|---|---|
-| `nba2k_editor` | NBA 2K26 editor package scaffold. This package will host the modularized code currently in ``2k26Editor.py``. | `nba2k_editor/__init__.py` |
+| `nba2k_editor` | NBA 2K26 editor package scaffold. | `__init__.py` |
 | `nba2k_editor.core` | Core utilities: configuration, logging, conversions, offsets, and extensions. | `core/__init__.py` |
 | `nba2k_editor.entrypoints` | Executable entrypoints for the modular editor. | `entrypoints/__init__.py` |
 | `nba2k_editor.memory` | Memory access layer (Win32 bindings and process helpers). | `memory/__init__.py` |
 | `nba2k_editor.models` | Data models for players, schemas, and roster metadata. | `models/__init__.py` |
 | `nba2k_editor.ui` | UI layer for the Dear PyGui-based editor. | `ui/__init__.py` |
 
-## Cleanup baseline after current pass
+## Current duplicate/reference check
 
-- AST-normalized exact duplicate function bodies: 0
-- Definition-only private functions by textual reference scan: 0
-- Removed stale definition-only functions, unused imports, UI fallback wrappers, and memory capability probes after live-code reference checks.
+- AST-normalized exact duplicate function bodies: 4
+- Definition-only private functions by textual reference scan: 1
+- Current index regenerated from the live `nba2k_editor/` AST.
+
+<details>
+<summary>Duplicate body groups</summary>
+
+- `DpgEditorApp._build_players_screen.<lambda>@938`, `DpgEditorApp._build_teams_screen.<lambda>@976`, `DpgEditorApp._build_history_screen.<lambda>@1012`, `DpgEditorApp._build_records_screen.<lambda>@1038`
+- `DpgEditorApp._build_players_screen.<lambda>@970`, `DpgEditorApp._build_teams_screen.<lambda>@998`
+
+</details>
+
+<details>
+<summary>Definition-only private functions</summary>
+
+- `DpgEditorApp._select_current`
+
+</details>
 
 ## Functions by file
 
@@ -91,37 +106,37 @@ _No callable definitions._
 |---:|---:|---|---|---|---|---|
 | 76 | 79 | function | `_field_offset` | `_field_offset(payload: dict[str, Any]) -> int` | — | No docstring; handles field offset behavior. |
 | 82 | 83 | function | `_type_key` | `_type_key(payload: dict[str, Any]) -> str` | — | No docstring; handles type key behavior. |
-| 86 | 115 | function | `_implemented_payload` | `_implemented_payload(payload: dict[str, Any]) -> bool` | — | No docstring; handles implemented payload behavior. |
-| 118 | 121 | function | `_readable_payload` | `_readable_payload(payload: dict[str, Any]) -> bool` | — | No docstring; handles readable payload behavior. |
-| 124 | 125 | function | `_bits_to_bytes` | `_bits_to_bytes(bits: int) -> int` | — | No docstring; handles bits to bytes behavior. |
-| 128 | 147 | function | `_numeric_width` | `_numeric_width(payload: dict[str, Any]) -> int` | — | No docstring; handles numeric width behavior. |
-| 150 | 156 | function | `_bit_window` | `_bit_window(payload: dict[str, Any]) -> tuple[int, int, int]` | — | No docstring; handles bit window behavior. |
-| 159 | 165 | function | `_read_pointer_value` | `_read_pointer_value(memory: Any, address: int) -> int` | — | No docstring; handles read pointer value behavior. |
-| 168 | 182 | function | `_field_address` | `_field_address(memory: Any, record_addr: int, payload: dict[str, Any], *, parent_payload: dict[str, Any] \| None=None) -> int` | — | No docstring; handles field address behavior. |
-| 185 | 189 | function | `_read_bitfield` | `_read_bitfield(memory: Any, address: int, payload: dict[str, Any]) -> int` | — | No docstring; handles read bitfield behavior. |
-| 192 | 197 | function | `_write_bitfield` | `_write_bitfield(memory: Any, address: int, payload: dict[str, Any], value: Any) -> None` | — | No docstring; handles write bitfield behavior. |
-| 200 | 205 | function | `_uses_bitfield_io` | `_uses_bitfield_io(payload: dict[str, Any]) -> bool` | — | No docstring; handles uses bitfield io behavior. |
-| 208 | 217 | function | `_list_mapping_value` | `_list_mapping_value(raw_value: Any, options: object) -> Any \| None` | — | No docstring; handles list mapping value behavior. |
-| 220 | 227 | function | `_reverse_list_mapping` | `_reverse_list_mapping(value: Any, options: object) -> int \| None` | — | No docstring; handles reverse list mapping behavior. |
-| 230 | 246 | function | `_mapped_display_value` | `_mapped_display_value(payload: dict[str, Any], raw_value: Any) -> Any \| None` | — | No docstring; handles mapped display value behavior. |
-| 249 | 262 | function | `_mapped_raw_value` | `_mapped_raw_value(payload: dict[str, Any], value: Any) -> Any \| None` | — | No docstring; handles mapped raw value behavior. |
-| 265 | 267 | function | `_id_prefixed_option` | `_id_prefixed_option(raw_id: int, label: str) -> str` | — | No docstring; handles id prefixed option behavior. |
-| 270 | 309 | function | `_raw_to_display_value` | `_raw_to_display_value(section: str, field: dict[str, Any], payload: dict[str, Any], raw_value: Any) -> Any` | — | No docstring; handles raw to display value behavior. |
-| 312 | 354 | function | `_display_to_raw_value` | `_display_to_raw_value(section: str, field: dict[str, Any], payload: dict[str, Any], value: Any) -> Any` | — | No docstring; handles display to raw value behavior. |
-| 357 | 361 | function | `_string_length` | `_string_length(payload: dict[str, Any]) -> int` | — | No docstring; handles string length behavior. |
-| 364 | 368 | function | `_read_string` | `_read_string(memory: Any, address: int, payload: dict[str, Any]) -> str` | — | No docstring; handles read string behavior. |
-| 371 | 379 | function | `_write_string` | `_write_string(memory: Any, address: int, payload: dict[str, Any], value: Any) -> None` | — | No docstring; handles write string behavior. |
-| 382 | 388 | function | `_read_ptr_string` | `_read_ptr_string(memory: Any, address: int, payload: dict[str, Any]) -> str` | — | No docstring; handles read ptr string behavior. |
-| 391 | 397 | function | `_result_score_addresses` | `_result_score_addresses(address: int, payload: dict[str, Any]) -> tuple[int, int]` | — | No docstring; handles result score addresses behavior. |
-| 400 | 402 | function | `_coerce_result_component` | `_coerce_result_component(value: float) -> int \| float` | — | No docstring; handles coerce result component behavior. |
-| 405 | 409 | function | `_read_result_score` | `_read_result_score(memory: Any, address: int, payload: dict[str, Any]) -> tuple[int \| float, int \| float]` | — | No docstring; handles read result score behavior. |
-| 412 | 420 | function | `_parse_result_score` | `_parse_result_score(value: Any) -> tuple[float, float]` | — | No docstring; handles parse result score behavior. |
-| 423 | 426 | function | `_format_result_component` | `_format_result_component(value: int \| float) -> str` | — | No docstring; handles format result component behavior. |
-| 429 | 430 | function | `_format_result_score` | `_format_result_score(value: tuple[int \| float, int \| float]) -> str` | — | No docstring; handles format result score behavior. |
-| 433 | 434 | function | `_color_hex` | `_color_hex(raw_value: bytes) -> str` | — | No docstring; handles color hex behavior. |
-| 437 | 448 | function | `_parse_color_value` | `_parse_color_value(value: Any, width: int) -> bytes` | — | No docstring; handles parse color value behavior. |
-| 451 | 491 | function | `_read_authored_value` | `_read_authored_value(memory: Any, address: int, payload: dict[str, Any]) -> Any` | — | No docstring; handles read authored value behavior. |
-| 494 | 539 | function | `_write_authored_value` | `_write_authored_value(memory: Any, address: int, payload: dict[str, Any], value: Any) -> None` | — | No docstring; handles write authored value behavior. |
+| 86 | 116 | function | `_implemented_payload` | `_implemented_payload(payload: dict[str, Any]) -> bool` | — | No docstring; handles implemented payload behavior. |
+| 119 | 122 | function | `_readable_payload` | `_readable_payload(payload: dict[str, Any]) -> bool` | — | No docstring; handles readable payload behavior. |
+| 125 | 126 | function | `_bits_to_bytes` | `_bits_to_bytes(bits: int) -> int` | — | No docstring; handles bits to bytes behavior. |
+| 129 | 148 | function | `_numeric_width` | `_numeric_width(payload: dict[str, Any]) -> int` | — | No docstring; handles numeric width behavior. |
+| 151 | 157 | function | `_bit_window` | `_bit_window(payload: dict[str, Any]) -> tuple[int, int, int]` | — | No docstring; handles bit window behavior. |
+| 160 | 166 | function | `_read_pointer_value` | `_read_pointer_value(memory: Any, address: int) -> int` | — | No docstring; handles read pointer value behavior. |
+| 169 | 183 | function | `_field_address` | `_field_address(memory: Any, record_addr: int, payload: dict[str, Any], *, parent_payload: dict[str, Any] \| None=None) -> int` | — | No docstring; handles field address behavior. |
+| 186 | 193 | function | `_read_bitfield` | `_read_bitfield(memory: Any, address: int, payload: dict[str, Any]) -> int` | — | No docstring; handles read bitfield behavior. |
+| 196 | 201 | function | `_write_bitfield` | `_write_bitfield(memory: Any, address: int, payload: dict[str, Any], value: Any) -> None` | — | No docstring; handles write bitfield behavior. |
+| 204 | 209 | function | `_uses_bitfield_io` | `_uses_bitfield_io(payload: dict[str, Any]) -> bool` | — | No docstring; handles uses bitfield io behavior. |
+| 212 | 221 | function | `_list_mapping_value` | `_list_mapping_value(raw_value: Any, options: object) -> Any \| None` | — | No docstring; handles list mapping value behavior. |
+| 224 | 231 | function | `_reverse_list_mapping` | `_reverse_list_mapping(value: Any, options: object) -> int \| None` | — | No docstring; handles reverse list mapping behavior. |
+| 234 | 250 | function | `_mapped_display_value` | `_mapped_display_value(payload: dict[str, Any], raw_value: Any) -> Any \| None` | — | No docstring; handles mapped display value behavior. |
+| 253 | 266 | function | `_mapped_raw_value` | `_mapped_raw_value(payload: dict[str, Any], value: Any) -> Any \| None` | — | No docstring; handles mapped raw value behavior. |
+| 269 | 271 | function | `_id_prefixed_option` | `_id_prefixed_option(raw_id: int, label: str) -> str` | — | No docstring; handles id prefixed option behavior. |
+| 274 | 313 | function | `_raw_to_display_value` | `_raw_to_display_value(section: str, field: dict[str, Any], payload: dict[str, Any], raw_value: Any) -> Any` | — | No docstring; handles raw to display value behavior. |
+| 316 | 358 | function | `_display_to_raw_value` | `_display_to_raw_value(section: str, field: dict[str, Any], payload: dict[str, Any], value: Any) -> Any` | — | No docstring; handles display to raw value behavior. |
+| 361 | 365 | function | `_string_length` | `_string_length(payload: dict[str, Any]) -> int` | — | No docstring; handles string length behavior. |
+| 368 | 372 | function | `_read_string` | `_read_string(memory: Any, address: int, payload: dict[str, Any]) -> str` | — | No docstring; handles read string behavior. |
+| 375 | 383 | function | `_write_string` | `_write_string(memory: Any, address: int, payload: dict[str, Any], value: Any) -> None` | — | No docstring; handles write string behavior. |
+| 386 | 392 | function | `_read_ptr_string` | `_read_ptr_string(memory: Any, address: int, payload: dict[str, Any]) -> str` | — | No docstring; handles read ptr string behavior. |
+| 395 | 401 | function | `_result_score_addresses` | `_result_score_addresses(address: int, payload: dict[str, Any]) -> tuple[int, int]` | — | No docstring; handles result score addresses behavior. |
+| 404 | 406 | function | `_coerce_result_component` | `_coerce_result_component(value: float) -> int \| float` | — | No docstring; handles coerce result component behavior. |
+| 409 | 413 | function | `_read_result_score` | `_read_result_score(memory: Any, address: int, payload: dict[str, Any]) -> tuple[int \| float, int \| float]` | — | No docstring; handles read result score behavior. |
+| 416 | 424 | function | `_parse_result_score` | `_parse_result_score(value: Any) -> tuple[float, float]` | — | No docstring; handles parse result score behavior. |
+| 427 | 430 | function | `_format_result_component` | `_format_result_component(value: int \| float) -> str` | — | No docstring; handles format result component behavior. |
+| 433 | 434 | function | `_format_result_score` | `_format_result_score(value: tuple[int \| float, int \| float]) -> str` | — | No docstring; handles format result score behavior. |
+| 437 | 438 | function | `_color_hex` | `_color_hex(raw_value: bytes) -> str` | — | No docstring; handles color hex behavior. |
+| 441 | 452 | function | `_parse_color_value` | `_parse_color_value(value: Any, width: int) -> bytes` | — | No docstring; handles parse color value behavior. |
+| 455 | 495 | function | `_read_authored_value` | `_read_authored_value(memory: Any, address: int, payload: dict[str, Any]) -> Any` | — | No docstring; handles read authored value behavior. |
+| 498 | 543 | function | `_write_authored_value` | `_write_authored_value(memory: Any, address: int, payload: dict[str, Any], value: Any) -> None` | — | No docstring; handles write authored value behavior. |
 
 ### `core/offsets.py`
 
@@ -152,8 +167,8 @@ _No callable definitions._
 
 | Line | End | Kind | Qualname | Signature | Decorators | What it does |
 |---:|---:|---|---|---|---|---|
-| 11 | 18 | function | `build_parser` | `build_parser() -> argparse.ArgumentParser` | — | No docstring; handles build parser behavior. |
-| 21 | 27 | function | `main` | `main(argv: Sequence[str] \| None=None) -> int` | — | No docstring; handles main behavior. |
+| 12 | 19 | function | `build_parser` | `build_parser() -> argparse.ArgumentParser` | — | No docstring; handles build parser behavior. |
+| 22 | 29 | function | `main` | `main(argv: Sequence[str] \| None=None) -> int` | — | No docstring; handles main behavior. |
 
 ### `entrypoints/runtime_cleanup.py`
 
@@ -305,6 +320,15 @@ _No callable definitions._
 | 81 | 82 | function | `_player_season_id_option_label` | `_player_season_id_option_label(entry: FieldEntry) -> str` | — | No docstring; handles player season id option label behavior. |
 | 85 | 90 | function | `_player_season_id_identity_from_option` | `_player_season_id_identity_from_option(option: object) -> str` | — | No docstring; handles player season id identity from option behavior. |
 
+### `models/team_record_routing.py`
+
+| Line | End | Kind | Qualname | Signature | Decorators | What it does |
+|---:|---:|---|---|---|---|---|
+| 54 | 58 | function | `team_record_row_group` | `team_record_row_group(section: str, stat: str) -> tuple[int, int]` | — | No docstring; handles team record row group behavior. |
+| 61 | 72 | function | `_selected_record_source_entry` | `_selected_record_source_entry(model: Any, *, role: str, target_domain: str) -> Any \| None` | — | No docstring; handles selected record source entry behavior. |
+| 75 | 79 | function | `_team_record_start_index` | `_team_record_start_index(source: dict[str, Any], item: Any) -> int \| None` | — | No docstring; handles team record start index behavior. |
+| 82 | 99 | function | `team_record_rows` | `team_record_rows(model: Any, item: Any, section: str, stat: str) -> list[dict[str, str]]` | — | No docstring; handles team record rows behavior. |
+
 ### `ui/__init__.py`
 
 _No callable definitions._
@@ -313,123 +337,141 @@ _No callable definitions._
 
 | Line | End | Kind | Qualname | Signature | Decorators | What it does |
 |---:|---:|---|---|---|---|---|
-| 146 | 147 | function | `_tag` | `_tag(*parts: object) -> str` | — | No docstring; handles tag behavior. |
-| 150 | 152 | function | `_target_executable` | `_target_executable(label: str) -> str` | — | No docstring; handles target executable behavior. |
-| 157 | 172 | method | `DpgEditorApp.__init__` | `__init__(self, model: EditorDataModel) -> None` | — | No docstring; handles init behavior. |
-| 174 | 175 | method | `DpgEditorApp._screen_tag` | `_screen_tag(self, domain: str) -> str` | — | No docstring; handles screen tag behavior. |
-| 177 | 178 | method | `DpgEditorApp._app_screen_tag` | `_app_screen_tag(self, screen: str) -> str` | — | No docstring; handles app screen tag behavior. |
-| 180 | 181 | method | `DpgEditorApp._home_status_tag` | `_home_status_tag(self) -> str` | — | No docstring; handles home status tag behavior. |
-| 183 | 184 | method | `DpgEditorApp._home_target_status_tag` | `_home_target_status_tag(self) -> str` | — | No docstring; handles home target status tag behavior. |
-| 186 | 187 | method | `DpgEditorApp._status_tag` | `_status_tag(self, domain: str) -> str` | — | No docstring; handles status tag behavior. |
-| 189 | 190 | method | `DpgEditorApp._count_tag` | `_count_tag(self, domain: str) -> str` | — | No docstring; handles count tag behavior. |
-| 192 | 193 | method | `DpgEditorApp._list_tag` | `_list_tag(self, domain: str) -> str` | — | No docstring; handles list tag behavior. |
-| 195 | 196 | method | `DpgEditorApp._player_team_filter_tag` | `_player_team_filter_tag(self) -> str` | — | No docstring; handles player team filter tag behavior. |
-| 198 | 199 | method | `DpgEditorApp._player_search_tag` | `_player_search_tag(self) -> str` | — | No docstring; handles player search tag behavior. |
-| 201 | 202 | method | `DpgEditorApp._record_list_rows_for_height` | `_record_list_rows_for_height(self, viewport_height: int) -> int` | — | No docstring; handles record list rows for height behavior. |
-| 204 | 210 | method | `DpgEditorApp._resize_record_lists` | `_resize_record_lists(self, dpg: Any) -> None` | — | No docstring; handles resize record lists behavior. |
-| 212 | 213 | method | `DpgEditorApp._detail_tag` | `_detail_tag(self, domain: str, name: str) -> str` | — | No docstring; handles detail tag behavior. |
-| 215 | 216 | method | `DpgEditorApp._preview_tag` | `_preview_tag(self, domain: str, row: int, label: str) -> str` | — | No docstring; handles preview tag behavior. |
-| 218 | 219 | method | `DpgEditorApp._record_card_tag` | `_record_card_tag(self, row: int) -> str` | — | No docstring; handles record card tag behavior. |
-| 221 | 222 | method | `DpgEditorApp._record_cards_container_tag` | `_record_cards_container_tag(self) -> str` | — | No docstring; handles record cards container tag behavior. |
-| 224 | 225 | method | `DpgEditorApp._record_career_table_tag` | `_record_career_table_tag(self) -> str` | — | No docstring; handles record career table tag behavior. |
-| 227 | 228 | method | `DpgEditorApp._record_career_cell_tag` | `_record_career_cell_tag(self, row: int, label: str) -> str` | — | No docstring; handles record career cell tag behavior. |
-| 230 | 231 | method | `DpgEditorApp._record_stat_group_tag` | `_record_stat_group_tag(self, section: str) -> str` | — | No docstring; handles record stat group tag behavior. |
-| 233 | 234 | method | `DpgEditorApp._history_tab_group_tag` | `_history_tab_group_tag(self, section: str) -> str` | — | No docstring; handles history tab group tag behavior. |
-| 236 | 237 | method | `DpgEditorApp._history_table_group_tag` | `_history_table_group_tag(self, section: str) -> str` | — | No docstring; handles history table group tag behavior. |
-| 239 | 240 | method | `DpgEditorApp._history_table_content_tag` | `_history_table_content_tag(self, section: str) -> str` | — | No docstring; handles history table content tag behavior. |
-| 242 | 243 | method | `DpgEditorApp._history_preview_tag` | `_history_preview_tag(self, section: str, row: int, label: str) -> str` | — | No docstring; handles history preview tag behavior. |
-| 245 | 246 | method | `DpgEditorApp._record_card_title_tag` | `_record_card_title_tag(self, row: int) -> str` | — | No docstring; handles record card title tag behavior. |
-| 248 | 249 | method | `DpgEditorApp._heading_tag` | `_heading_tag(self, domain: str) -> str` | — | No docstring; handles heading tag behavior. |
-| 251 | 252 | method | `DpgEditorApp._team_input_tag` | `_team_input_tag(self, label: str) -> str` | — | No docstring; handles team input tag behavior. |
-| 254 | 255 | method | `DpgEditorApp._nav_tag` | `_nav_tag(self, screen: str) -> str` | — | No docstring; handles nav tag behavior. |
-| 257 | 258 | method | `DpgEditorApp._display_label` | `_display_label(self, domain: str) -> str` | — | No docstring; handles display label behavior. |
-| 260 | 261 | method | `DpgEditorApp._game_status_text` | `_game_status_text(self) -> str` | — | No docstring; handles game status text behavior. |
-| 263 | 265 | method | `DpgEditorApp._safe_set` | `_safe_set(self, dpg: Any, tag: str, value: object) -> None` | — | No docstring; handles safe set behavior. |
-| 267 | 269 | method | `DpgEditorApp._safe_configure` | `_safe_configure(self, dpg: Any, tag: str, **kwargs: object) -> None` | — | No docstring; handles safe configure behavior. |
-| 271 | 273 | method | `DpgEditorApp._safe_delete_children` | `_safe_delete_children(self, dpg: Any, tag: str) -> None` | — | No docstring; handles safe delete children behavior. |
-| 275 | 277 | method | `DpgEditorApp._bind_item_theme` | `_bind_item_theme(self, dpg: Any, item: str, theme: str) -> None` | — | No docstring; handles bind item theme behavior. |
-| 279 | 282 | method | `DpgEditorApp._refresh_nav_state` | `_refresh_nav_state(self, dpg: Any) -> None` | — | No docstring; handles refresh nav state behavior. |
-| 284 | 290 | method | `DpgEditorApp._show_screen` | `_show_screen(self, dpg: Any, domain: str) -> None` | — | No docstring; handles show screen behavior. |
-| 292 | 296 | method | `DpgEditorApp._set_target` | `_set_target(self, dpg: Any, selected: str) -> None` | — | No docstring; handles set target behavior. |
-| 298 | 304 | method | `DpgEditorApp._refresh_status_labels` | `_refresh_status_labels(self, dpg: Any) -> None` | — | No docstring; handles refresh status labels behavior. |
-| 306 | 308 | method | `DpgEditorApp._attach` | `_attach(self, dpg: Any) -> None` | — | No docstring; handles attach behavior. |
-| 310 | 311 | method | `DpgEditorApp._attach_and_scan` | `_attach_and_scan(self, dpg: Any, domain: str) -> None` | — | No docstring; handles attach and scan behavior. |
-| 313 | 314 | method | `DpgEditorApp._attach_and_load_all` | `_attach_and_load_all(self, dpg: Any) -> None` | — | No docstring; handles attach and load all behavior. |
-| 316 | 322 | method | `DpgEditorApp._start_background_scan` | `_start_background_scan(self, dpg: Any, domains: tuple[str, ...]) -> None` | — | No docstring; handles start background scan behavior. |
-| 324 | 337 | method | `DpgEditorApp._poll_background_scan` | `_poll_background_scan(self, dpg: Any) -> None` | — | No docstring; handles poll background scan behavior. |
-| 339 | 355 | method | `DpgEditorApp._sync_domain_list` | `_sync_domain_list(self, dpg: Any, domain: str) -> None` | — | No docstring; handles sync domain list behavior. |
-| 357 | 362 | method | `DpgEditorApp._sync_player_team_filter` | `_sync_player_team_filter(self, dpg: Any) -> None` | — | No docstring; handles sync player team filter behavior. |
-| 364 | 384 | method | `DpgEditorApp._sync_player_list` | `_sync_player_list(self, dpg: Any) -> None` | — | No docstring; handles sync player list behavior. |
-| 386 | 388 | method | `DpgEditorApp._set_player_team_filter` | `_set_player_team_filter(self, dpg: Any, selected: str \| None) -> None` | — | No docstring; handles set player team filter behavior. |
-| 390 | 392 | method | `DpgEditorApp._set_player_search_text` | `_set_player_search_text(self, dpg: Any, search_text: str \| None) -> None` | — | No docstring; handles set player search text behavior. |
-| 394 | 411 | method | `DpgEditorApp._sync_record_screen_rows` | `_sync_record_screen_rows(self, dpg: Any, domain: str) -> None` | — | No docstring; handles sync record screen rows behavior. |
-| 413 | 440 | method | `DpgEditorApp._show_record_screen_rows` | `_show_record_screen_rows(self, dpg: Any) -> None` | — | No docstring; handles show record screen rows behavior. |
-| 442 | 449 | method | `DpgEditorApp._show_history_screen_rows` | `_show_history_screen_rows(self, dpg: Any) -> None` | — | No docstring; handles show history screen rows behavior. |
-| 451 | 461 | method | `DpgEditorApp._render_history_table` | `_render_history_table(self, dpg: Any, section: str, labels: tuple[str, ...], rows: list[dict[str, str]]) -> None` | — | No docstring; handles render history table behavior. |
-| 463 | 468 | method | `DpgEditorApp._history_cell_value` | `_history_cell_value(self, row_values: dict[str, str], label: str) -> str` | — | No docstring; handles history cell value behavior. |
-| 470 | 474 | method | `DpgEditorApp._history_type_for_tab` | `_history_type_for_tab(self, section: str, tab: str) -> int \| None` | — | No docstring; handles history type for tab behavior. |
-| 476 | 478 | method | `DpgEditorApp._active_history_type` | `_active_history_type(self) -> int \| None` | — | No docstring; handles active history type behavior. |
-| 480 | 484 | method | `DpgEditorApp._record_row_group` | `_record_row_group(self, section: str, stat: str) -> tuple[int, int]` | — | No docstring; handles record row group behavior. |
-| 486 | 487 | method | `DpgEditorApp._active_record_row_group` | `_active_record_row_group(self) -> tuple[int, int]` | — | No docstring; handles active record row group behavior. |
-| 489 | 492 | method | `DpgEditorApp._set_history_section` | `_set_history_section(self, dpg: Any, label: str) -> None` | — | No docstring; handles set history section behavior. |
-| 494 | 498 | method | `DpgEditorApp._set_history_tab` | `_set_history_tab(self, dpg: Any, label: str) -> None` | — | No docstring; handles set history tab behavior. |
-| 500 | 506 | method | `DpgEditorApp._set_record_section` | `_set_record_section(self, dpg: Any, label: str) -> None` | — | No docstring; handles set record section behavior. |
-| 508 | 511 | method | `DpgEditorApp._set_record_stat` | `_set_record_stat(self, dpg: Any, label: str) -> None` | — | No docstring; handles set record stat behavior. |
-| 513 | 516 | method | `DpgEditorApp._select_current` | `_select_current(self, dpg: Any, domain: str, selected_label: str \| None=None) -> None` | — | No docstring; handles select current behavior. |
-| 518 | 523 | method | `DpgEditorApp._open_selected` | `_open_selected(self, dpg: Any, domain: str) -> None` | — | No docstring; handles open selected behavior. |
-| 525 | 542 | method | `DpgEditorApp._update_detail_panel` | `_update_detail_panel(self, dpg: Any, domain: str) -> None` | — | No docstring; handles update detail panel behavior. |
-| 544 | 551 | method | `DpgEditorApp._save_team_summary` | `_save_team_summary(self, dpg: Any) -> None` | — | No docstring; handles save team summary behavior. |
-| 553 | 554 | method | `DpgEditorApp._row_current_tag` | `_row_current_tag(self, item: RecordListItem, entry: FieldEntry) -> str` | — | No docstring; handles row current tag behavior. |
-| 556 | 557 | method | `DpgEditorApp._row_new_tag` | `_row_new_tag(self, item: RecordListItem, entry: FieldEntry) -> str` | — | No docstring; handles row new tag behavior. |
-| 559 | 560 | method | `DpgEditorApp._row_status_tag` | `_row_status_tag(self, item: RecordListItem, entry: FieldEntry) -> str` | — | No docstring; handles row status tag behavior. |
-| 562 | 563 | method | `DpgEditorApp._editor_status_tag` | `_editor_status_tag(self, item: RecordListItem) -> str` | — | No docstring; handles editor status tag behavior. |
-| 565 | 566 | method | `DpgEditorApp._season_stat_selector_key` | `_season_stat_selector_key(self, item: RecordListItem) -> tuple[int, str]` | — | No docstring; handles season stat selector key behavior. |
-| 568 | 569 | method | `DpgEditorApp._season_stat_selector_tag` | `_season_stat_selector_tag(self, item: RecordListItem) -> str` | — | No docstring; handles season stat selector tag behavior. |
-| 571 | 577 | method | `DpgEditorApp._selected_season_stat_selector` | `_selected_season_stat_selector(self, dpg: Any, item: RecordListItem, entry: FieldEntry) -> str \| None` | — | No docstring; handles selected season stat selector behavior. |
-| 579 | 583 | method | `DpgEditorApp._set_player_season_stat_id` | `_set_player_season_stat_id(self, dpg: Any, item: RecordListItem, selected: str \| None) -> None` | — | No docstring; handles set player season stat id behavior. |
-| 585 | 586 | method | `DpgEditorApp._read_editor_entry_value` | `_read_editor_entry_value(self, dpg: Any, item: RecordListItem, entry: FieldEntry) -> dict[str, Any]` | — | No docstring; handles read editor entry value behavior. |
-| 588 | 589 | method | `DpgEditorApp._write_editor_entry_value` | `_write_editor_entry_value(self, dpg: Any, item: RecordListItem, entry: FieldEntry, value: str) -> dict[str, Any]` | — | No docstring; handles write editor entry value behavior. |
-| 591 | 611 | method | `DpgEditorApp._load_item_editor` | `_load_item_editor(self, dpg: Any, item: RecordListItem) -> None` | — | No docstring; handles load item editor behavior. |
-| 613 | 635 | method | `DpgEditorApp._save_item_editor` | `_save_item_editor(self, dpg: Any, item: RecordListItem) -> None` | — | No docstring; handles save item editor behavior. |
-| 637 | 700 | method | `DpgEditorApp._open_editor_window` | `_open_editor_window(self, dpg: Any, item: RecordListItem) -> None` | — | No docstring; handles open editor window behavior. |
-| 643 | 644 | method | `DpgEditorApp._open_editor_window.options_for` | `options_for(entry: FieldEntry) -> list[str]` | — | No docstring; handles options for behavior. |
-| 646 | 663 | method | `DpgEditorApp._open_editor_window.render_table` | `render_table(render_entries: list[FieldEntry]) -> None` | — | No docstring; handles render table behavior. |
-| 667 | 667 | lambda | `DpgEditorApp._open_editor_window.<lambda>@667` | `lambda *_args, i=item` | — | Lambda callback/expression. |
-| 668 | 668 | lambda | `DpgEditorApp._open_editor_window.<lambda>@668` | `lambda *_args, i=item` | — | Lambda callback/expression. |
-| 691 | 691 | lambda | `DpgEditorApp._open_editor_window.<lambda>@691` | `lambda _s, app_data, _u=None, *args, i=item` | — | Lambda callback/expression. |
-| 702 | 706 | method | `DpgEditorApp._add_nav_button` | `_add_nav_button(self, dpg: Any, screen: str, label: str) -> None` | — | No docstring; handles add nav button behavior. |
-| 705 | 705 | lambda | `DpgEditorApp._add_nav_button.<lambda>@705` | `lambda *_args, s=screen` | — | Lambda callback/expression. |
-| 708 | 714 | method | `DpgEditorApp._add_detail_row` | `_add_detail_row(self, dpg: Any, label: str, value_tag: str, *, accent: bool=False) -> None` | — | No docstring; handles add detail row behavior. |
-| 716 | 732 | method | `DpgEditorApp._build_home_screen` | `_build_home_screen(self, dpg: Any, *, show: bool=True) -> None` | — | No docstring; handles build home screen behavior. |
-| 721 | 721 | lambda | `DpgEditorApp._build_home_screen.<lambda>@721` | `lambda _s, app_data, _u` | — | Lambda callback/expression. |
-| 725 | 725 | lambda | `DpgEditorApp._build_home_screen.<lambda>@725` | `lambda *_args` | — | Lambda callback/expression. |
-| 734 | 770 | method | `DpgEditorApp._build_players_screen` | `_build_players_screen(self, dpg: Any, *, show: bool=False) -> None` | — | No docstring; handles build players screen behavior. |
-| 738 | 738 | lambda | `DpgEditorApp._build_players_screen.<lambda>@738` | `lambda *_args` | — | Lambda callback/expression. |
-| 749 | 749 | lambda | `DpgEditorApp._build_players_screen.<lambda>@749` | `lambda _s, app_data, _u=None, *args` | — | Lambda callback/expression. |
-| 757 | 757 | lambda | `DpgEditorApp._build_players_screen.<lambda>@757` | `lambda _s, app_data, _u=None, *args` | — | Lambda callback/expression. |
-| 762 | 762 | lambda | `DpgEditorApp._build_players_screen.<lambda>@762` | `lambda _s, app_data, _u=None, *_, d=domain` | — | Lambda callback/expression. |
-| 770 | 770 | lambda | `DpgEditorApp._build_players_screen.<lambda>@770` | `lambda *_args` | — | Lambda callback/expression. |
-| 772 | 798 | method | `DpgEditorApp._build_teams_screen` | `_build_teams_screen(self, dpg: Any, *, show: bool=False) -> None` | — | No docstring; handles build teams screen behavior. |
-| 776 | 776 | lambda | `DpgEditorApp._build_teams_screen.<lambda>@776` | `lambda *_args` | — | Lambda callback/expression. |
-| 784 | 784 | lambda | `DpgEditorApp._build_teams_screen.<lambda>@784` | `lambda _s, app_data, _u=None, *_, d=domain` | — | Lambda callback/expression. |
-| 797 | 797 | lambda | `DpgEditorApp._build_teams_screen.<lambda>@797` | `lambda *_args` | — | Lambda callback/expression. |
-| 798 | 798 | lambda | `DpgEditorApp._build_teams_screen.<lambda>@798` | `lambda *_args` | — | Lambda callback/expression. |
-| 800 | 805 | method | `DpgEditorApp._add_button_strip` | `_add_button_strip(self, dpg: Any, labels: tuple[str, ...], *, per_row: int, callback: Any \| None=None) -> None` | — | No docstring; handles add button strip behavior. |
-| 804 | 804 | lambda | `DpgEditorApp._add_button_strip.<lambda>@804` | `lambda *_args, selected=label` | — | Lambda callback/expression. |
-| 807 | 831 | method | `DpgEditorApp._build_history_screen` | `_build_history_screen(self, dpg: Any, *, show: bool=False) -> None` | — | No docstring; handles build history screen behavior. |
-| 812 | 812 | lambda | `DpgEditorApp._build_history_screen.<lambda>@812` | `lambda *_args` | — | Lambda callback/expression. |
-| 815 | 815 | lambda | `DpgEditorApp._build_history_screen.<lambda>@815` | `lambda *_args, selected=label` | — | Lambda callback/expression. |
-| 822 | 822 | lambda | `DpgEditorApp._build_history_screen.<lambda>@822` | `lambda selected` | — | Lambda callback/expression. |
-| 833 | 875 | method | `DpgEditorApp._build_records_screen` | `_build_records_screen(self, dpg: Any, *, show: bool=False) -> None` | — | No docstring; handles build records screen behavior. |
-| 838 | 838 | lambda | `DpgEditorApp._build_records_screen.<lambda>@838` | `lambda *_args` | — | Lambda callback/expression. |
-| 841 | 841 | lambda | `DpgEditorApp._build_records_screen.<lambda>@841` | `lambda *_args, selected=label` | — | Lambda callback/expression. |
-| 848 | 848 | lambda | `DpgEditorApp._build_records_screen.<lambda>@848` | `lambda selected` | — | Lambda callback/expression. |
-| 877 | 881 | method | `DpgEditorApp._build_history_or_records_screen` | `_build_history_or_records_screen(self, dpg: Any, domain: str, *, show: bool=False) -> None` | — | No docstring; handles build history or records screen behavior. |
-| 883 | 911 | method | `DpgEditorApp._build_domain_screen` | `_build_domain_screen(self, dpg: Any, domain: str, *, show: bool=False) -> None` | — | No docstring; handles build domain screen behavior. |
-| 896 | 896 | lambda | `DpgEditorApp._build_domain_screen.<lambda>@896` | `lambda *_args, d=domain` | — | Lambda callback/expression. |
-| 904 | 904 | lambda | `DpgEditorApp._build_domain_screen.<lambda>@904` | `lambda _s, app_data, _u=None, *_, d=domain` | — | Lambda callback/expression. |
-| 911 | 911 | lambda | `DpgEditorApp._build_domain_screen.<lambda>@911` | `lambda *_args, d=domain` | — | Lambda callback/expression. |
-| 913 | 957 | method | `DpgEditorApp.run` | `run(self, *, load_on_start: bool=True) -> None` | — | No docstring; handles run behavior. |
+| 153 | 154 | function | `_tag` | `_tag(*parts: object) -> str` | — | No docstring; handles tag behavior. |
+| 157 | 159 | function | `_target_executable` | `_target_executable(label: str) -> str` | — | No docstring; handles target executable behavior. |
+| 164 | 182 | method | `DpgEditorApp.__init__` | `__init__(self, model: EditorDataModel) -> None` | — | No docstring; handles init behavior. |
+| 184 | 185 | method | `DpgEditorApp._screen_tag` | `_screen_tag(self, domain: str) -> str` | — | No docstring; handles screen tag behavior. |
+| 187 | 188 | method | `DpgEditorApp._app_screen_tag` | `_app_screen_tag(self, screen: str) -> str` | — | No docstring; handles app screen tag behavior. |
+| 190 | 191 | method | `DpgEditorApp._home_status_tag` | `_home_status_tag(self) -> str` | — | No docstring; handles home status tag behavior. |
+| 193 | 194 | method | `DpgEditorApp._home_target_status_tag` | `_home_target_status_tag(self) -> str` | — | No docstring; handles home target status tag behavior. |
+| 196 | 197 | method | `DpgEditorApp._status_tag` | `_status_tag(self, domain: str) -> str` | — | No docstring; handles status tag behavior. |
+| 199 | 200 | method | `DpgEditorApp._count_tag` | `_count_tag(self, domain: str) -> str` | — | No docstring; handles count tag behavior. |
+| 202 | 203 | method | `DpgEditorApp._list_content_tag` | `_list_content_tag(self, domain: str) -> str` | — | No docstring; handles list content tag behavior. |
+| 205 | 206 | method | `DpgEditorApp._list_row_tag` | `_list_row_tag(self, domain: str, label: str) -> str` | — | No docstring; handles list row tag behavior. |
+| 208 | 209 | method | `DpgEditorApp._player_team_filter_tag` | `_player_team_filter_tag(self) -> str` | — | No docstring; handles player team filter tag behavior. |
+| 211 | 212 | method | `DpgEditorApp._player_search_tag` | `_player_search_tag(self) -> str` | — | No docstring; handles player search tag behavior. |
+| 215 | 216 | method | `DpgEditorApp._detail_tag` | `_detail_tag(self, domain: str, name: str) -> str` | — | No docstring; handles detail tag behavior. |
+| 218 | 219 | method | `DpgEditorApp._preview_tag` | `_preview_tag(self, domain: str, row: int, label: str) -> str` | — | No docstring; handles preview tag behavior. |
+| 221 | 222 | method | `DpgEditorApp._record_card_tag` | `_record_card_tag(self, row: int) -> str` | — | No docstring; handles record card tag behavior. |
+| 224 | 225 | method | `DpgEditorApp._record_cards_container_tag` | `_record_cards_container_tag(self) -> str` | — | No docstring; handles record cards container tag behavior. |
+| 227 | 228 | method | `DpgEditorApp._record_career_table_tag` | `_record_career_table_tag(self) -> str` | — | No docstring; handles record career table tag behavior. |
+| 230 | 231 | method | `DpgEditorApp._record_career_cell_tag` | `_record_career_cell_tag(self, row: int, label: str) -> str` | — | No docstring; handles record career cell tag behavior. |
+| 233 | 234 | method | `DpgEditorApp._record_stat_group_tag` | `_record_stat_group_tag(self, section: str) -> str` | — | No docstring; handles record stat group tag behavior. |
+| 236 | 237 | method | `DpgEditorApp._history_tab_group_tag` | `_history_tab_group_tag(self, section: str) -> str` | — | No docstring; handles history tab group tag behavior. |
+| 239 | 240 | method | `DpgEditorApp._history_table_group_tag` | `_history_table_group_tag(self, section: str) -> str` | — | No docstring; handles history table group tag behavior. |
+| 242 | 243 | method | `DpgEditorApp._history_table_content_tag` | `_history_table_content_tag(self, section: str) -> str` | — | No docstring; handles history table content tag behavior. |
+| 245 | 246 | method | `DpgEditorApp._history_preview_tag` | `_history_preview_tag(self, section: str, row: int, label: str) -> str` | — | No docstring; handles history preview tag behavior. |
+| 248 | 249 | method | `DpgEditorApp._record_card_title_tag` | `_record_card_title_tag(self, row: int) -> str` | — | No docstring; handles record card title tag behavior. |
+| 251 | 252 | method | `DpgEditorApp._heading_tag` | `_heading_tag(self, domain: str) -> str` | — | No docstring; handles heading tag behavior. |
+| 254 | 255 | method | `DpgEditorApp._team_input_tag` | `_team_input_tag(self, label: str) -> str` | — | No docstring; handles team input tag behavior. |
+| 257 | 258 | method | `DpgEditorApp._nav_tag` | `_nav_tag(self, screen: str) -> str` | — | No docstring; handles nav tag behavior. |
+| 260 | 261 | method | `DpgEditorApp._display_label` | `_display_label(self, domain: str) -> str` | — | No docstring; handles display label behavior. |
+| 263 | 264 | method | `DpgEditorApp._game_status_text` | `_game_status_text(self) -> str` | — | No docstring; handles game status text behavior. |
+| 266 | 268 | method | `DpgEditorApp._safe_set` | `_safe_set(self, dpg: Any, tag: str, value: object) -> None` | — | No docstring; handles safe set behavior. |
+| 270 | 272 | method | `DpgEditorApp._safe_configure` | `_safe_configure(self, dpg: Any, tag: str, **kwargs: object) -> None` | — | No docstring; handles safe configure behavior. |
+| 274 | 276 | method | `DpgEditorApp._safe_delete_children` | `_safe_delete_children(self, dpg: Any, tag: str) -> None` | — | No docstring; handles safe delete children behavior. |
+| 278 | 280 | method | `DpgEditorApp._bind_item_theme` | `_bind_item_theme(self, dpg: Any, item: str, theme: str) -> None` | — | No docstring; handles bind item theme behavior. |
+| 282 | 285 | method | `DpgEditorApp._refresh_nav_state` | `_refresh_nav_state(self, dpg: Any) -> None` | — | No docstring; handles refresh nav state behavior. |
+| 287 | 293 | method | `DpgEditorApp._show_screen` | `_show_screen(self, dpg: Any, domain: str) -> None` | — | No docstring; handles show screen behavior. |
+| 295 | 305 | method | `DpgEditorApp._set_target` | `_set_target(self, dpg: Any, selected: str) -> None` | — | No docstring; handles set target behavior. |
+| 307 | 313 | method | `DpgEditorApp._refresh_status_labels` | `_refresh_status_labels(self, dpg: Any) -> None` | — | No docstring; handles refresh status labels behavior. |
+| 315 | 317 | method | `DpgEditorApp._attach` | `_attach(self, dpg: Any) -> None` | — | No docstring; handles attach behavior. |
+| 319 | 320 | method | `DpgEditorApp._attach_and_scan` | `_attach_and_scan(self, dpg: Any, domain: str) -> None` | — | No docstring; handles attach and scan behavior. |
+| 322 | 323 | method | `DpgEditorApp._attach_and_load_all` | `_attach_and_load_all(self, dpg: Any) -> None` | — | No docstring; handles attach and load all behavior. |
+| 325 | 331 | method | `DpgEditorApp._start_background_scan` | `_start_background_scan(self, dpg: Any, domains: tuple[str, ...]) -> None` | — | No docstring; handles start background scan behavior. |
+| 333 | 346 | method | `DpgEditorApp._poll_background_scan` | `_poll_background_scan(self, dpg: Any) -> None` | — | No docstring; handles poll background scan behavior. |
+| 348 | 363 | method | `DpgEditorApp._sync_domain_list` | `_sync_domain_list(self, dpg: Any, domain: str) -> None` | — | No docstring; handles sync domain list behavior. |
+| 365 | 370 | method | `DpgEditorApp._sync_player_team_filter` | `_sync_player_team_filter(self, dpg: Any) -> None` | — | No docstring; handles sync player team filter behavior. |
+| 372 | 386 | method | `DpgEditorApp._sync_player_list` | `_sync_player_list(self, dpg: Any) -> None` | — | No docstring; handles sync player list behavior. |
+| 388 | 401 | method | `DpgEditorApp._sync_selection_state` | `_sync_selection_state(self, domain: str, labels: list[str], selected_label: str) -> None` | — | No docstring; handles sync selection state behavior. |
+| 403 | 419 | method | `DpgEditorApp._render_selectable_list` | `_render_selectable_list(self, dpg: Any, domain: str, labels: list[str]) -> None` | — | No docstring; handles render selectable list behavior. |
+| 418 | 418 | lambda | `DpgEditorApp._render_selectable_list.<lambda>@418` | `lambda *_args, d=domain, selected=label` | — | Lambda callback/expression. |
+| 421 | 422 | method | `DpgEditorApp._modifier_down` | `_modifier_down(self, dpg: Any, names: tuple[str, ...]) -> bool` | — | No docstring; handles modifier down behavior. |
+| 424 | 429 | method | `DpgEditorApp._sync_selection_rows` | `_sync_selection_rows(self, dpg: Any, domain: str, labels: list[str]) -> None` | — | No docstring; handles sync selection rows behavior. |
+| 431 | 452 | method | `DpgEditorApp._select_item_label` | `_select_item_label(self, dpg: Any, domain: str, selected: str) -> None` | — | No docstring; handles select item label behavior. |
+| 454 | 456 | method | `DpgEditorApp._set_player_team_filter` | `_set_player_team_filter(self, dpg: Any, selected: str \| None) -> None` | — | No docstring; handles set player team filter behavior. |
+| 458 | 460 | method | `DpgEditorApp._set_player_search_text` | `_set_player_search_text(self, dpg: Any, search_text: str \| None) -> None` | — | No docstring; handles set player search text behavior. |
+| 462 | 479 | method | `DpgEditorApp._sync_record_screen_rows` | `_sync_record_screen_rows(self, dpg: Any, domain: str) -> None` | — | No docstring; handles sync record screen rows behavior. |
+| 481 | 508 | method | `DpgEditorApp._show_record_screen_rows` | `_show_record_screen_rows(self, dpg: Any) -> None` | — | No docstring; handles show record screen rows behavior. |
+| 510 | 517 | method | `DpgEditorApp._show_history_screen_rows` | `_show_history_screen_rows(self, dpg: Any) -> None` | — | No docstring; handles show history screen rows behavior. |
+| 519 | 529 | method | `DpgEditorApp._render_history_table` | `_render_history_table(self, dpg: Any, section: str, labels: tuple[str, ...], rows: list[dict[str, str]]) -> None` | — | No docstring; handles render history table behavior. |
+| 531 | 536 | method | `DpgEditorApp._history_cell_value` | `_history_cell_value(self, row_values: dict[str, str], label: str) -> str` | — | No docstring; handles history cell value behavior. |
+| 538 | 542 | method | `DpgEditorApp._history_type_for_tab` | `_history_type_for_tab(self, section: str, tab: str) -> int \| None` | — | No docstring; handles history type for tab behavior. |
+| 544 | 546 | method | `DpgEditorApp._active_history_type` | `_active_history_type(self) -> int \| None` | — | No docstring; handles active history type behavior. |
+| 548 | 552 | method | `DpgEditorApp._record_row_group` | `_record_row_group(self, section: str, stat: str) -> tuple[int, int]` | — | No docstring; handles record row group behavior. |
+| 554 | 555 | method | `DpgEditorApp._active_record_row_group` | `_active_record_row_group(self) -> tuple[int, int]` | — | No docstring; handles active record row group behavior. |
+| 557 | 560 | method | `DpgEditorApp._set_history_section` | `_set_history_section(self, dpg: Any, label: str) -> None` | — | No docstring; handles set history section behavior. |
+| 562 | 566 | method | `DpgEditorApp._set_history_tab` | `_set_history_tab(self, dpg: Any, label: str) -> None` | — | No docstring; handles set history tab behavior. |
+| 568 | 574 | method | `DpgEditorApp._set_record_section` | `_set_record_section(self, dpg: Any, label: str) -> None` | — | No docstring; handles set record section behavior. |
+| 576 | 579 | method | `DpgEditorApp._set_record_stat` | `_set_record_stat(self, dpg: Any, label: str) -> None` | — | No docstring; handles set record stat behavior. |
+| 581 | 582 | method | `DpgEditorApp._select_current` | `_select_current(self, dpg: Any, domain: str, selected_label: str \| None=None) -> None` | — | No docstring; handles select current behavior. |
+| 584 | 589 | method | `DpgEditorApp._open_selected` | `_open_selected(self, dpg: Any, domain: str) -> None` | — | No docstring; handles open selected behavior. |
+| 591 | 608 | method | `DpgEditorApp._update_detail_panel` | `_update_detail_panel(self, dpg: Any, domain: str) -> None` | — | No docstring; handles update detail panel behavior. |
+| 610 | 617 | method | `DpgEditorApp._save_team_summary` | `_save_team_summary(self, dpg: Any) -> None` | — | No docstring; handles save team summary behavior. |
+| 619 | 620 | method | `DpgEditorApp._row_current_tag` | `_row_current_tag(self, item: RecordListItem, entry: FieldEntry) -> str` | — | No docstring; handles row current tag behavior. |
+| 622 | 623 | method | `DpgEditorApp._row_new_tag` | `_row_new_tag(self, item: RecordListItem, entry: FieldEntry) -> str` | — | No docstring; handles row new tag behavior. |
+| 625 | 626 | method | `DpgEditorApp._row_status_tag` | `_row_status_tag(self, item: RecordListItem, entry: FieldEntry) -> str` | — | No docstring; handles row status tag behavior. |
+| 628 | 629 | method | `DpgEditorApp._editor_status_tag` | `_editor_status_tag(self, item: RecordListItem) -> str` | — | No docstring; handles editor status tag behavior. |
+| 631 | 632 | method | `DpgEditorApp._season_stat_selector_key` | `_season_stat_selector_key(self, item: RecordListItem) -> tuple[int, str]` | — | No docstring; handles season stat selector key behavior. |
+| 634 | 635 | method | `DpgEditorApp._season_stat_selector_tag` | `_season_stat_selector_tag(self, item: RecordListItem) -> str` | — | No docstring; handles season stat selector tag behavior. |
+| 637 | 643 | method | `DpgEditorApp._selected_season_stat_selector` | `_selected_season_stat_selector(self, dpg: Any, item: RecordListItem, entry: FieldEntry) -> str \| None` | — | No docstring; handles selected season stat selector behavior. |
+| 645 | 649 | method | `DpgEditorApp._set_player_season_stat_id` | `_set_player_season_stat_id(self, dpg: Any, item: RecordListItem, selected: str \| None) -> None` | — | No docstring; handles set player season stat id behavior. |
+| 651 | 652 | method | `DpgEditorApp._read_editor_entry_value` | `_read_editor_entry_value(self, dpg: Any, item: RecordListItem, entry: FieldEntry) -> dict[str, Any]` | — | No docstring; handles read editor entry value behavior. |
+| 654 | 655 | method | `DpgEditorApp._write_editor_entry_value` | `_write_editor_entry_value(self, dpg: Any, item: RecordListItem, entry: FieldEntry, value: str) -> dict[str, Any]` | — | No docstring; handles write editor entry value behavior. |
+| 657 | 666 | method | `DpgEditorApp._selected_editor_items` | `_selected_editor_items(self, domain: str, fallback_item: RecordListItem) -> list[RecordListItem]` | — | No docstring; handles selected editor items behavior. |
+| 668 | 688 | method | `DpgEditorApp._load_item_editor` | `_load_item_editor(self, dpg: Any, item: RecordListItem) -> None` | — | No docstring; handles load item editor behavior. |
+| 690 | 716 | method | `DpgEditorApp._save_item_editor` | `_save_item_editor(self, dpg: Any, item: RecordListItem) -> None` | — | No docstring; handles save item editor behavior. |
+| 718 | 900 | method | `DpgEditorApp._open_editor_window` | `_open_editor_window(self, dpg: Any, item: RecordListItem) -> None` | — | No docstring; handles open editor window behavior. |
+| 725 | 726 | method | `DpgEditorApp._open_editor_window.options_for` | `options_for(entry: FieldEntry) -> list[str]` | — | No docstring; handles options for behavior. |
+| 728 | 745 | method | `DpgEditorApp._open_editor_window.render_table` | `render_table(render_entries: list[FieldEntry]) -> None` | — | No docstring; handles render table behavior. |
+| 747 | 860 | method | `DpgEditorApp._open_editor_window.render_team_records` | `render_team_records() -> None` | — | No docstring; handles render team records behavior. |
+| 750 | 751 | method | `DpgEditorApp._open_editor_window.render_team_records.local_tag` | `local_tag(*parts: object) -> str` | — | No docstring; handles local tag behavior. |
+| 753 | 754 | method | `DpgEditorApp._open_editor_window.render_team_records.heading_tag` | `heading_tag() -> str` | — | No docstring; handles heading tag behavior. |
+| 756 | 757 | method | `DpgEditorApp._open_editor_window.render_team_records.count_tag` | `count_tag() -> str` | — | No docstring; handles count tag behavior. |
+| 759 | 760 | method | `DpgEditorApp._open_editor_window.render_team_records.stat_group_tag` | `stat_group_tag(section: str) -> str` | — | No docstring; handles stat group tag behavior. |
+| 762 | 763 | method | `DpgEditorApp._open_editor_window.render_team_records.cards_container_tag` | `cards_container_tag() -> str` | — | No docstring; handles cards container tag behavior. |
+| 765 | 766 | method | `DpgEditorApp._open_editor_window.render_team_records.card_tag` | `card_tag(row: int) -> str` | — | No docstring; handles card tag behavior. |
+| 768 | 769 | method | `DpgEditorApp._open_editor_window.render_team_records.card_title_tag` | `card_title_tag(row: int) -> str` | — | No docstring; handles card title tag behavior. |
+| 771 | 772 | method | `DpgEditorApp._open_editor_window.render_team_records.preview_tag` | `preview_tag(row: int, label: str) -> str` | — | No docstring; handles preview tag behavior. |
+| 774 | 775 | method | `DpgEditorApp._open_editor_window.render_team_records.career_table_tag` | `career_table_tag() -> str` | — | No docstring; handles career table tag behavior. |
+| 777 | 778 | method | `DpgEditorApp._open_editor_window.render_team_records.career_cell_tag` | `career_cell_tag(row: int, label: str) -> str` | — | No docstring; handles career cell tag behavior. |
+| 780 | 808 | method | `DpgEditorApp._open_editor_window.render_team_records.show_team_record_rows` | `show_team_record_rows() -> None` | — | No docstring; handles show team record rows behavior. |
+| 810 | 817 | method | `DpgEditorApp._open_editor_window.render_team_records.set_team_record_section` | `set_team_record_section(label: str) -> None` | — | No docstring; handles set team record section behavior. |
+| 819 | 821 | method | `DpgEditorApp._open_editor_window.render_team_records.set_team_record_stat` | `set_team_record_stat(label: str) -> None` | — | No docstring; handles set team record stat behavior. |
+| 826 | 826 | lambda | `DpgEditorApp._open_editor_window.render_team_records.<lambda>@826` | `lambda *_args, selected=label` | — | Lambda callback/expression. |
+| 864 | 864 | lambda | `DpgEditorApp._open_editor_window.<lambda>@864` | `lambda *_args, i=item` | — | Lambda callback/expression. |
+| 865 | 865 | lambda | `DpgEditorApp._open_editor_window.<lambda>@865` | `lambda *_args, i=item` | — | Lambda callback/expression. |
+| 888 | 888 | lambda | `DpgEditorApp._open_editor_window.<lambda>@888` | `lambda _s, app_data, _u=None, *args, i=item` | — | Lambda callback/expression. |
+| 902 | 906 | method | `DpgEditorApp._add_nav_button` | `_add_nav_button(self, dpg: Any, screen: str, label: str) -> None` | — | No docstring; handles add nav button behavior. |
+| 905 | 905 | lambda | `DpgEditorApp._add_nav_button.<lambda>@905` | `lambda *_args, s=screen` | — | Lambda callback/expression. |
+| 908 | 914 | method | `DpgEditorApp._add_detail_row` | `_add_detail_row(self, dpg: Any, label: str, value_tag: str, *, accent: bool=False) -> None` | — | No docstring; handles add detail row behavior. |
+| 916 | 932 | method | `DpgEditorApp._build_home_screen` | `_build_home_screen(self, dpg: Any, *, show: bool=True) -> None` | — | No docstring; handles build home screen behavior. |
+| 921 | 921 | lambda | `DpgEditorApp._build_home_screen.<lambda>@921` | `lambda _s, app_data, _u` | — | Lambda callback/expression. |
+| 925 | 925 | lambda | `DpgEditorApp._build_home_screen.<lambda>@925` | `lambda *_args` | — | Lambda callback/expression. |
+| 934 | 970 | method | `DpgEditorApp._build_players_screen` | `_build_players_screen(self, dpg: Any, *, show: bool=False) -> None` | — | No docstring; handles build players screen behavior. |
+| 938 | 938 | lambda | `DpgEditorApp._build_players_screen.<lambda>@938` | `lambda *_args` | — | Lambda callback/expression. |
+| 949 | 949 | lambda | `DpgEditorApp._build_players_screen.<lambda>@949` | `lambda _s, app_data, _u=None, *args` | — | Lambda callback/expression. |
+| 957 | 957 | lambda | `DpgEditorApp._build_players_screen.<lambda>@957` | `lambda _s, app_data, _u=None, *args` | — | Lambda callback/expression. |
+| 970 | 970 | lambda | `DpgEditorApp._build_players_screen.<lambda>@970` | `lambda *_args` | — | Lambda callback/expression. |
+| 972 | 998 | method | `DpgEditorApp._build_teams_screen` | `_build_teams_screen(self, dpg: Any, *, show: bool=False) -> None` | — | No docstring; handles build teams screen behavior. |
+| 976 | 976 | lambda | `DpgEditorApp._build_teams_screen.<lambda>@976` | `lambda *_args` | — | Lambda callback/expression. |
+| 997 | 997 | lambda | `DpgEditorApp._build_teams_screen.<lambda>@997` | `lambda *_args` | — | Lambda callback/expression. |
+| 998 | 998 | lambda | `DpgEditorApp._build_teams_screen.<lambda>@998` | `lambda *_args` | — | Lambda callback/expression. |
+| 1000 | 1005 | method | `DpgEditorApp._add_button_strip` | `_add_button_strip(self, dpg: Any, labels: tuple[str, ...], *, per_row: int, callback: Any \| None=None) -> None` | — | No docstring; handles add button strip behavior. |
+| 1004 | 1004 | lambda | `DpgEditorApp._add_button_strip.<lambda>@1004` | `lambda *_args, selected=label` | — | Lambda callback/expression. |
+| 1007 | 1031 | method | `DpgEditorApp._build_history_screen` | `_build_history_screen(self, dpg: Any, *, show: bool=False) -> None` | — | No docstring; handles build history screen behavior. |
+| 1012 | 1012 | lambda | `DpgEditorApp._build_history_screen.<lambda>@1012` | `lambda *_args` | — | Lambda callback/expression. |
+| 1015 | 1015 | lambda | `DpgEditorApp._build_history_screen.<lambda>@1015` | `lambda *_args, selected=label` | — | Lambda callback/expression. |
+| 1022 | 1022 | lambda | `DpgEditorApp._build_history_screen.<lambda>@1022` | `lambda selected` | — | Lambda callback/expression. |
+| 1033 | 1075 | method | `DpgEditorApp._build_records_screen` | `_build_records_screen(self, dpg: Any, *, show: bool=False) -> None` | — | No docstring; handles build records screen behavior. |
+| 1038 | 1038 | lambda | `DpgEditorApp._build_records_screen.<lambda>@1038` | `lambda *_args` | — | Lambda callback/expression. |
+| 1041 | 1041 | lambda | `DpgEditorApp._build_records_screen.<lambda>@1041` | `lambda *_args, selected=label` | — | Lambda callback/expression. |
+| 1048 | 1048 | lambda | `DpgEditorApp._build_records_screen.<lambda>@1048` | `lambda selected` | — | Lambda callback/expression. |
+| 1077 | 1081 | method | `DpgEditorApp._build_history_or_records_screen` | `_build_history_or_records_screen(self, dpg: Any, domain: str, *, show: bool=False) -> None` | — | No docstring; handles build history or records screen behavior. |
+| 1083 | 1111 | method | `DpgEditorApp._build_domain_screen` | `_build_domain_screen(self, dpg: Any, domain: str, *, show: bool=False) -> None` | — | No docstring; handles build domain screen behavior. |
+| 1096 | 1096 | lambda | `DpgEditorApp._build_domain_screen.<lambda>@1096` | `lambda *_args, d=domain` | — | Lambda callback/expression. |
+| 1111 | 1111 | lambda | `DpgEditorApp._build_domain_screen.<lambda>@1111` | `lambda *_args, d=domain` | — | Lambda callback/expression. |
+| 1113 | 1155 | method | `DpgEditorApp.run` | `run(self, *, load_on_start: bool=True) -> None` | — | No docstring; handles run behavior. |
 
 ### `ui/theme.py`
 

@@ -2,7 +2,7 @@
 
 ## Project Docs First
 - Before making changes, read the project documentation to understand intent, workflows, and constraints.
-- Start with `README.md`, then read all additional `.md` files that match the area you will touch.
+- Start with the docs folder.
 - Ignore unrelated top-level folders; for runtime/editor work, focus on `nba2k_editor/`.
 
 ## Repo Operating Contract
