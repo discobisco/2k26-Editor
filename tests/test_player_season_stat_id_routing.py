@@ -11,17 +11,28 @@ SEASON_ID_DETAIL_SOURCE = {
     "invalid_ids": [0, 65535],
 }
 class FakeMemory:
+    hproc: object | None = None
     base_addr: int | None = None
+    module_name = "NBA2K26.exe"
     pointer_size = 8
 
     def __init__(self) -> None:
         self.data: dict[int, int] = {}
 
     def open_process(self) -> bool:
+        self.hproc = object()
         return True
+
+    def close(self) -> None:
+        self.hproc = None
 
     def read_bytes(self, addr: int, length: int) -> bytes:
         return bytes(self.data.get(addr + offset, 0) for offset in range(length))
+
+    def write_bytes(self, addr: int, raw: bytes) -> None:
+        for offset, byte in enumerate(bytes(raw)):
+            self.data[addr + offset] = byte
+
 
     def write_u16(self, addr: int, value: int) -> None:
         raw = int(value).to_bytes(2, "little")
@@ -33,8 +44,34 @@ class FakeMemory:
         for offset, byte in enumerate(raw):
             self.data[addr + offset] = byte
 
+    def read_uint32(self, addr: int) -> int:
+        return int.from_bytes(self.read_bytes(addr, 4), "little")
+
+    def write_uint32(self, addr: int, value: int) -> None:
+        raw = int(value).to_bytes(4, "little")
+        for offset, byte in enumerate(raw):
+            self.data[addr + offset] = byte
+
     def read_u64(self, addr: int) -> int:
         return int.from_bytes(self.read_bytes(addr, 8), "little")
+
+    def read_ascii(self, addr: int, max_chars: int) -> str:
+        raw = self.read_bytes(addr, max_chars)
+        return raw.split(b"\x00", 1)[0].decode("ascii", errors="ignore")
+
+    def write_ascii_fixed(self, addr: int, value: str, max_chars: int) -> None:
+        raw = str(value).encode("ascii", errors="ignore")[: max_chars - 1] + b"\x00"
+        for offset, byte in enumerate(raw.ljust(max_chars, b"\x00")):
+            self.data[addr + offset] = byte
+
+    def read_wstring(self, addr: int, max_chars: int) -> str:
+        raw = self.read_bytes(addr, max_chars * 2)
+        return raw.decode("utf-16le", errors="ignore").split("\x00", 1)[0]
+
+    def write_wstring_fixed(self, addr: int, value: str, max_chars: int) -> None:
+        raw = str(value)[: max_chars - 1].encode("utf-16le") + b"\x00\x00"
+        for offset, byte in enumerate(raw.ljust(max_chars * 2, b"\x00")):
+            self.data[addr + offset] = byte
 
 
 class FakeOffsets:
@@ -71,6 +108,13 @@ class FakeOffsets:
                         "selected_record_source": SEASON_ID_DETAIL_SOURCE,
                         "versions": {"2K26": {"address": 4, "type": "ushort"}},
                     },
+                    {
+                        "normalized_name": "BOX+-",
+                        "display_name": "Total +/-",
+                        "stat_role": "season_id_detail",
+                        "selected_record_source": SEASON_ID_DETAIL_SOURCE,
+                        "versions": {"2K26": {"address": 0x2D, "type": "int", "bit_offset": 6, "bit_length": 16}},
+                    },
                 ]
             }
         }
@@ -91,6 +135,22 @@ def test_selected_player_season_stat_id_routes_detail_reads_to_selected_stats_ro
     assert value["address"] == 5000 + 7 * 16 + 4
     assert value["raw_value"] == 1369
     assert value["display_value"] == 1369
+
+
+def test_selected_player_season_total_plus_minus_reads_negative_int() -> None:
+    memory = FakeMemory()
+    memory.write_u16(1002, 7)
+    memory.write_bytes(5000 + 7 * 16 + 0x2D, bytes.fromhex("c0fe3f"))
+
+    model = EditorDataModel(memory=memory, offsets_api=FakeOffsets(), target_executable="NBA2K26.exe")
+    entries = model.grouped_fields("Players")["Stats"]["Season IDs"]
+    plus_minus_entry = next(entry for entry in entries if entry.display_name == "Total +/-")
+
+    value = model.read_entry_value(plus_minus_entry, index=0, stat_selector="STATS_ID#1")
+
+    assert value["address"] == 5000 + 7 * 16 + 0x2D
+    assert value["raw_value"] == -5
+    assert value["display_value"] == -5
 
 
 def test_selected_player_season_stat_id_supports_chained_stats_table_pointer() -> None:

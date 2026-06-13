@@ -12,7 +12,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m nba2k_editor.entrypoints.gui")
     parser.add_argument("--target", default="auto")
     parser.add_argument("--verify-edits", action="store_true")
-    parser.add_argument("--close-after-frames", type=int, default=None)
     parser.add_argument("--load-on-start", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--no-load-on-start", action="store_true", help="open immediately without starting the background list scan")
     parser.add_argument("--attach-on-start", action="store_true", help=argparse.SUPPRESS)
@@ -24,10 +23,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.verify_edits:
         print(json.dumps(verify_edits(target_executable=args.target), sort_keys=True), flush=True)
         return 0
-    DpgEditorApp(EditorDataModel(target_executable=args.target)).run(
-        close_after_frames=args.close_after_frames,
-        load_on_start=not args.no_load_on_start,
-    )
+    DpgEditorApp(EditorDataModel(target_executable=args.target)).run(load_on_start=not args.no_load_on_start)
     return 0
 
 

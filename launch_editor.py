@@ -50,7 +50,6 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--target", default="auto", help="game executable to attach; default auto-detects the running NBA2K process")
     parser.add_argument("--verify-edits", action="store_true", help="perform the explicit live player/team/staff write proof")
-    parser.add_argument("--close-after-frames", type=int, default=None, help="test hook: close the UI after N frames")
     parser.add_argument("--no-load-on-start", action="store_true", help="test/debug hook: open the window without the default attach/list load")
     parser.add_argument("--attach-on-start", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
@@ -88,8 +87,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     ]
     if parsed.verify_edits:
         gui_args.append("--verify-edits")
-    if parsed.close_after_frames is not None:
-        gui_args.extend(["--close-after-frames", str(parsed.close_after_frames)])
     if parsed.no_load_on_start:
         gui_args.append("--no-load-on-start")
     return gui_main(gui_args)

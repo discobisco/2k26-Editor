@@ -101,9 +101,9 @@
             },
             "2K26": {
               "address": 788,
-              "length": 24,
+              "length": 18,
               "section": "Vitals",
-              "type": "WString"
+              "type": "wstring"
             }
           }
         },
@@ -685,9 +685,9 @@
           "versions": {
             "2K26": {
               "address": 838,
-              "length": 8,
+              "length": 7,
               "section": "Vitals",
-              "type": "String"
+              "type": "wstring"
             }
           }
         },
@@ -1061,10 +1061,10 @@
           "display_name": "Logo 1",
           "versions": {
             "2K26": {
-              "address": 406,
-              "length": 36,
+              "address": 482,
+              "length": 256,
               "section": "Vitals",
-              "type": "WString"
+              "type": "string"
             }
           }
         },
@@ -1074,9 +1074,9 @@
           "versions": {
             "2K26": {
               "address": 858,
-              "length": 36,
+              "length": 256,
               "section": "Vitals",
-              "type": "String"
+              "type": "string"
             }
           }
         },
@@ -1086,9 +1086,9 @@
           "versions": {
             "2K26": {
               "address": 1114,
-              "length": 36,
+              "length": 256,
               "section": "Vitals",
-              "type": "String"
+              "type": "string"
             }
           }
         },
@@ -1174,9 +1174,9 @@
             },
             "2K26": {
               "address": 2394,
-              "length": 36,
+              "length": 256,
               "section": "Vitals",
-              "type": "String"
+              "type": "string"
             }
           }
         },
@@ -2722,6 +2722,15 @@
         {
           "normalized_name": "CURRENTYEARSTATS",
           "display_name": "CURRENT_YEAR_STATS",
+          "selected_record_source": {
+            "role": "team_record_start",
+            "target_domain": "NBA Records",
+            "versions": ["2K26"],
+            "strategy": "team_records_start_plus_team_index_block",
+            "start_index": 3100,
+            "row_count": 510,
+            "source": "NBA2K26_history_record_routing_extract.json:team_record_embedded_records"
+          },
           "versions": {
             "2K22,2K23,2K24": {
               "address": 3712,

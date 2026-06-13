@@ -269,13 +269,6 @@ def _version_key_matches(raw_key: object, target_label: str | None) -> bool:
     return str(raw_key or "").strip().upper() == target
 
 
-def _select_version_entry(per_version: dict[str, object], target_label: str) -> dict[str, object]:
-    return cast(
-        dict[str, object],
-        next(payload for raw_key, payload in per_version.items() if _version_key_matches(raw_key, target_label)),
-    )
-
-
 def _select_active_version(
     versions_map: dict[str, object],
     target_executable: str | None,

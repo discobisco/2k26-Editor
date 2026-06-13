@@ -3,6 +3,12 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from nba2k_editor.core.conversions import parse_id_prefixed_option
+from nba2k_editor.models.team_record_routing import (
+    TEAM_RECORD_SECTION_STAT_TABS,
+    TEAM_RECORD_SIDE_NAV,
+    team_record_rows,
+)
 from nba2k_editor.models.data_model import (
     EDITOR_DOMAINS,
     EditorDataModel,
@@ -12,6 +18,12 @@ from nba2k_editor.models.data_model import (
     target_display_label,
     verify_edits,
 )
+from nba2k_editor.ui.multi_select_list import (
+    MultiSelectListState,
+    copy_multi_select_to_clipboard,
+    render_multi_select_list,
+)
+
 
 APP_TITLE = "Offline Player Data Editor"
 APP_VIEWPORT_WIDTH = 1600
@@ -69,7 +81,6 @@ RECORD_EXTENDED_STAT_TABS: tuple[str, ...] = (
     "60+ Point Games",
     "Triple Doubles",
 )
-RECORD_STAT_TABS: tuple[str, ...] = RECORD_EXTENDED_STAT_TABS
 RECORD_SECTION_STAT_TABS: dict[str, tuple[str, ...]] = {
     "Single Game (Regular)": RECORD_BASE_STAT_TABS,
     "Single Game (Playoffs)": RECORD_BASE_STAT_TABS,
@@ -78,6 +89,7 @@ RECORD_SECTION_STAT_TABS: dict[str, tuple[str, ...]] = {
 }
 RECORD_CARD_LABELS: tuple[str, ...] = ("First Name", "Last Name", "Signature ID", "Team Logo", "Year", "Data")
 RECORD_CAREER_TABLE_LABELS: tuple[str, ...] = ("Rank", "First Name", "Last Name", "Signature ID", "Team Logo", "Year", "Data")
+TEAM_RECORD_TABLE_LABELS: tuple[str, ...] = RECORD_CAREER_TABLE_LABELS
 HISTORY_SECTION_DEFAULT_TYPES: dict[str, int | None] = {
     "Season Awards": 8,
     "Past Champions": 1,
@@ -94,11 +106,11 @@ HISTORY_SECTION_TAB_TYPES: dict[str, dict[str, int | None]] = {
     "Past Champions": {"NBA Championship": 1, "FMVP": 1},
     "League Leaders": {
         "Points/Game": 2,
-        "Rebounds/Game": 2,
-        "Assists/Game": 2,
-        "Steals/Game": 2,
-        "Blocks/Game": 2,
-        "Minutes/Game": 2,
+        "Rebounds/Game": 3,
+        "Assists/Game": 4,
+        "Steals/Game": 5,
+        "Blocks/Game": 6,
+        "Minutes/Game": 7,
     },
     "Hall of Famers": {"All Hall of Famers": None},
 }
@@ -152,10 +164,6 @@ def _target_executable(label: str) -> str:
     return f"NBA2K{digits}.exe"
 
 
-def _parse_id_prefixed_option(value: object) -> int | None:
-    match = re.match(r"^\s*\[(\d+)\]", str(value or ""))
-    return int(match.group(1)) if match else None
-
 
 class DpgEditorApp:
     def __init__(self, model: EditorDataModel) -> None:
@@ -171,9 +179,13 @@ class DpgEditorApp:
         self.history_tabs: dict[str, str] = {section: tabs[0] for section, tabs in HISTORY_SECTION_TABS.items()}
         self.record_section = "Single Game (Regular)"
         self.record_stat = "Points"
+        self.team_record_section = "Single Game (Regular)"
+        self.team_record_stat = "Points"
         self.player_team_filter = PLAYER_TEAM_FILTER_ALL
         self.player_search_text = ""
         self.player_season_stat_id_selection: dict[tuple[int, str], str] = {}
+        self.multi_select_lists: dict[str, MultiSelectListState] = {domain: MultiSelectListState() for domain in EDITOR_DOMAINS}
+        self.visible_list_labels: dict[str, list[str]] = {domain: [] for domain in EDITOR_DOMAINS}
 
     def _screen_tag(self, domain: str) -> str:
         return _tag(domain, "screen")
@@ -196,6 +208,12 @@ class DpgEditorApp:
     def _list_tag(self, domain: str) -> str:
         return _tag(domain, "list")
 
+    def _list_row_tag(self, domain: str, index: int) -> str:
+        return _tag(domain, "list", "row", index)
+
+    def _list_selected_count_tag(self, domain: str) -> str:
+        return _tag(domain, "list", "selected_count")
+
     def _player_team_filter_tag(self) -> str:
         return _tag("Players", "team_filter")
 
@@ -206,12 +224,7 @@ class DpgEditorApp:
         return max(MIN_RECORD_LIST_ROWS, (viewport_height - RECORD_LIST_VERTICAL_MARGIN) // RECORD_LIST_ROW_HEIGHT)
 
     def _resize_record_lists(self, dpg: Any) -> None:
-        rows = self._record_list_rows_for_height(int(dpg.get_viewport_client_height()))
-        if rows == self._record_list_rows:
-            return
-        self._record_list_rows = rows
-        for domain in EDITOR_DOMAINS:
-            self._safe_configure(dpg, self._list_tag(domain), num_items=rows)
+        self._record_list_rows = self._record_list_rows_for_height(int(dpg.get_viewport_client_height()))
 
     def _detail_tag(self, domain: str, name: str) -> str:
         return _tag(domain, "detail", name)
@@ -275,6 +288,42 @@ class DpgEditorApp:
     def _safe_delete_children(self, dpg: Any, tag: str) -> None:
         if dpg.does_item_exist(tag):
             dpg.delete_item(tag, children_only=True)
+
+    def _sync_selectable_list(self, dpg: Any, domain: str, labels: list[str]) -> None:
+        self.visible_list_labels[domain] = list(labels)
+        state = self.multi_select_lists.setdefault(domain, MultiSelectListState())
+        state.prune(labels)
+        self._safe_set(dpg, self._list_selected_count_tag(domain), f"{len(state.selected_items(labels))} selected")
+        if not dpg.does_item_exist(self._list_tag(domain)):
+            return
+        render_multi_select_list(
+            dpg,
+            container_tag=self._list_tag(domain),
+            row_tag=lambda index, _label, d=domain: self._list_row_tag(d, index),
+            items=labels,
+            state=state,
+            on_select=lambda selected, d=domain: self._select_current(dpg, d, selected),
+        )
+
+    def _copy_selected_list_items(self, dpg: Any, domain: str) -> None:
+        labels = self.visible_list_labels.get(domain, [])
+        state = self.multi_select_lists.setdefault(domain, MultiSelectListState())
+        copied = copy_multi_select_to_clipboard(dpg, state, labels)
+        self._safe_set(dpg, self._list_selected_count_tag(domain), f"{copied} selected")
+        self._safe_set(dpg, self._status_tag(domain), f"copied {copied} selected {self._display_label(domain).lower()} item(s)")
+
+    def _clear_selected_list_items(self, dpg: Any, domain: str) -> None:
+        state = self.multi_select_lists.setdefault(domain, MultiSelectListState())
+        state.clear()
+        self._sync_selectable_list(dpg, domain, self.visible_list_labels.get(domain, []))
+        self._safe_set(dpg, self._status_tag(domain), f"cleared selected {self._display_label(domain).lower()} item(s)")
+
+    def _build_multi_select_list_controls(self, dpg: Any, domain: str) -> None:
+        with dpg.group(horizontal=True):
+            dpg.add_text("0 selected", tag=self._list_selected_count_tag(domain))
+            dpg.add_button(label="Copy Selected", width=115, callback=lambda *_args, d=domain: self._copy_selected_list_items(dpg, d))
+            dpg.add_button(label="Clear", width=65, callback=lambda *_args, d=domain: self._clear_selected_list_items(dpg, d))
+        dpg.add_spacer(height=6)
 
     def _bind_item_theme(self, dpg: Any, item: str, theme: str) -> None:
         if theme and dpg.does_item_exist(item) and dpg.does_item_exist(theme):
@@ -345,14 +394,11 @@ class DpgEditorApp:
             self._sync_player_list(dpg)
             return
         labels = self.model.domain_item_labels(domain)
-        self._safe_configure(dpg, self._list_tag(domain), items=labels)
+        self._sync_selectable_list(dpg, domain, labels)
         self._safe_set(dpg, self._count_tag(domain), f"{self._display_label(domain)}: {self.model.domain_item_count(domain)}")
-        selected = self.model.selected_item(domain)
-        if selected is not None and labels:
-            self._safe_set(dpg, self._list_tag(domain), selected.display_label)
         self._safe_set(dpg, self._status_tag(domain), self.model.domain_status(domain))
         if domain in {"NBA History", "NBA Records"}:
-            self._sync_record_preview(dpg, domain)
+            self._sync_record_screen_rows(dpg, domain)
         if domain == "Teams":
             self._sync_player_team_filter(dpg)
             self._sync_player_list(dpg)
@@ -369,7 +415,7 @@ class DpgEditorApp:
         domain = "Players"
         self._sync_player_team_filter(dpg)
         labels = self.model.player_item_labels_for_team_filter(self.player_team_filter, self.player_search_text)
-        self._safe_configure(dpg, self._list_tag(domain), items=labels)
+        self._sync_selectable_list(dpg, domain, labels)
         self._safe_set(dpg, self._player_search_tag(), self.player_search_text)
         total_count = self.model.domain_item_count(domain)
         visible_count = len(labels)
@@ -379,11 +425,9 @@ class DpgEditorApp:
         selected = self.model.selected_item(domain)
         selected_label = selected.display_label if selected is not None else ""
         if labels and selected_label not in labels:
-            selected = self.model.select_item_by_label(domain, labels[0])
+            self.model.select_item_by_label(domain, labels[0])
         elif not labels:
-            selected = self.model.select_item_by_label(domain, None)
-        if selected is not None and labels:
-            self._safe_set(dpg, self._list_tag(domain), selected.display_label)
+            self.model.select_item_by_label(domain, None)
         self._safe_set(dpg, self._status_tag(domain), self.model.domain_status(domain))
         self._update_detail_panel(dpg, domain)
 
@@ -395,45 +439,60 @@ class DpgEditorApp:
         self.player_search_text = str(search_text or "")
         self._sync_player_list(dpg)
 
-    def _sync_record_preview(self, dpg: Any, domain: str) -> None:
+    def _sync_record_screen_rows(self, dpg: Any, domain: str) -> None:
         if domain == "NBA Records":
+            self.model.clear_record_screen_rows()
             record_row_start, record_row_count = self._active_record_row_group()
-            rows = self.model.record_summary_rows(
-                domain,
-                limit=RECORD_PREVIEW_CARDS,
+            self.model.refresh_record_screen_rows(
+                self.record_section,
+                self.record_stat,
                 record_row_start=record_row_start,
                 record_row_count=record_row_count,
             )
-            visible_rows = min(len(rows), RECORD_PREVIEW_CARDS)
-            career_mode = self.record_section == "Career"
-            for section in RECORD_SIDE_NAV:
-                self._safe_configure(dpg, self._record_stat_group_tag(section), show=section == self.record_section)
-            self._safe_configure(dpg, self._record_cards_container_tag(), show=not career_mode)
-            self._safe_configure(dpg, self._record_career_table_tag(), show=career_mode)
-            if career_mode:
-                for row_index in range(RECORD_PREVIEW_CARDS):
-                    row_values = rows[row_index] if row_index < visible_rows else {}
-                    for label in RECORD_CAREER_TABLE_LABELS:
-                        value = str(row_index + 1) if label == "Rank" and row_values else row_values.get(label, "--")
-                        self._safe_set(dpg, self._record_career_cell_tag(row_index, label), value)
-                return
-
-            for row_index in range(RECORD_PREVIEW_CARDS):
-                row_values = rows[row_index] if row_index < visible_rows else {}
-                self._safe_configure(dpg, self._record_card_tag(row_index), show=row_index < visible_rows)
-                self._safe_set(dpg, self._record_card_title_tag(row_index), f"Record #{row_index + 1}" if row_values else f"Record #{row_index + 1}")
-                for label in RECORD_CARD_LABELS:
-                    self._safe_set(dpg, self._preview_tag(domain, row_index, label), row_values.get(label, "--"))
+            self._show_record_screen_rows(dpg)
             return
 
+        if domain == "NBA History":
+            self.model.clear_history_screen_rows()
+            selected_tab = self.history_tabs.get(self.history_section, self.history_award)
+            self.model.refresh_history_screen_rows(self.history_section, selected_tab, self._active_history_type())
+            self._show_history_screen_rows(dpg)
+
+    def _show_record_screen_rows(self, dpg: Any) -> None:
+        record_row_start, record_row_count = self._active_record_row_group()
+        rows = self.model.record_screen_rows(
+            self.record_section,
+            self.record_stat,
+            record_row_start=record_row_start,
+            record_row_count=record_row_count,
+        )
+        visible_rows = min(len(rows), RECORD_PREVIEW_CARDS)
+        career_mode = self.record_section == "Career"
+        for section in RECORD_SIDE_NAV:
+            self._safe_configure(dpg, self._record_stat_group_tag(section), show=section == self.record_section)
+        self._safe_configure(dpg, self._record_cards_container_tag(), show=not career_mode)
+        self._safe_configure(dpg, self._record_career_table_tag(), show=career_mode)
+        if career_mode:
+            for row_index in range(RECORD_PREVIEW_CARDS):
+                row_values = rows[row_index] if row_index < visible_rows else {}
+                for label in RECORD_CAREER_TABLE_LABELS:
+                    value = str(row_index + 1) if label == "Rank" and row_values else row_values.get(label, "--")
+                    self._safe_set(dpg, self._record_career_cell_tag(row_index, label), value)
+            return
+
+        for row_index in range(RECORD_PREVIEW_CARDS):
+            row_values = rows[row_index] if row_index < visible_rows else {}
+            self._safe_configure(dpg, self._record_card_tag(row_index), show=row_index < visible_rows)
+            self._safe_set(dpg, self._record_card_title_tag(row_index), f"Record #{row_index + 1}" if row_values else f"Record #{row_index + 1}")
+            for label in RECORD_CARD_LABELS:
+                self._safe_set(dpg, self._preview_tag("NBA Records", row_index, label), row_values.get(label, "--"))
+
+    def _show_history_screen_rows(self, dpg: Any) -> None:
         for section in HISTORY_SIDE_NAV:
             self._safe_configure(dpg, self._history_tab_group_tag(section), show=section == self.history_section)
             self._safe_configure(dpg, self._history_table_group_tag(section), show=section == self.history_section)
-        rows = self.model.record_summary_rows(
-            domain,
-            limit=None,
-            history_type=self._active_history_type() if domain == "NBA History" else None,
-        )
+        selected_tab = self.history_tabs.get(self.history_section, self.history_award)
+        rows = self.model.history_screen_rows(self.history_section, selected_tab, self._active_history_type())
         labels = HISTORY_TABLE_COLUMNS.get(self.history_section, HISTORY_TABLE_COLUMNS["Season Awards"])
         self._render_history_table(dpg, self.history_section, labels, rows)
 
@@ -456,33 +515,35 @@ class DpgEditorApp:
         }.get(label, label)
         return row_values.get(source_label, "--")
 
+    def _history_type_for_tab(self, section: str, tab: str) -> int | None:
+        if section == "Season Awards":
+            return HISTORY_AWARD_TYPES.get(tab)
+        section_map = HISTORY_SECTION_TAB_TYPES.get(section, {})
+        return section_map.get(tab, HISTORY_SECTION_DEFAULT_TYPES.get(section))
+
     def _active_history_type(self) -> int | None:
-        if self.history_section == "Season Awards":
-            return HISTORY_AWARD_TYPES.get(self.history_tabs.get("Season Awards", self.history_award))
-        selected_tab = self.history_tabs.get(self.history_section)
-        section_map = HISTORY_SECTION_TAB_TYPES.get(self.history_section, {})
-        return section_map.get(selected_tab, HISTORY_SECTION_DEFAULT_TYPES.get(self.history_section))
+        selected_tab = self.history_tabs.get(self.history_section, self.history_award)
+        return self._history_type_for_tab(self.history_section, selected_tab)
+
+    def _record_row_group(self, section: str, stat: str) -> tuple[int, int]:
+        section_start, row_count = RECORD_SECTION_ROW_LAYOUT.get(section, RECORD_SECTION_ROW_LAYOUT["Single Game (Regular)"])
+        tabs = RECORD_SECTION_STAT_TABS.get(section, RECORD_BASE_STAT_TABS)
+        stat_index = tabs.index(stat) if stat in tabs else 0
+        return section_start + stat_index * row_count, row_count
 
     def _active_record_row_group(self) -> tuple[int, int]:
-        section_start, row_count = RECORD_SECTION_ROW_LAYOUT.get(self.record_section, RECORD_SECTION_ROW_LAYOUT["Single Game (Regular)"])
-        tabs = RECORD_SECTION_STAT_TABS.get(self.record_section, RECORD_BASE_STAT_TABS)
-        stat_index = tabs.index(self.record_stat) if self.record_stat in tabs else 0
-        return section_start + stat_index * row_count, row_count
+        return self._record_row_group(self.record_section, self.record_stat)
 
     def _set_history_section(self, dpg: Any, label: str) -> None:
         self.history_section = label
         self._safe_set(dpg, self._heading_tag("NBA History"), label)
-        self._sync_record_preview(dpg, "NBA History")
+        self._show_history_screen_rows(dpg)
 
     def _set_history_tab(self, dpg: Any, label: str) -> None:
         self.history_tabs[self.history_section] = label
         if self.history_section == "Season Awards":
             self.history_award = label
-        self._sync_record_preview(dpg, "NBA History")
-
-    def _set_history_award(self, dpg: Any, label: str) -> None:
-        self.history_section = "Season Awards"
-        self._set_history_tab(dpg, label)
+        self._show_history_screen_rows(dpg)
 
     def _set_record_section(self, dpg: Any, label: str) -> None:
         self.record_section = label
@@ -490,15 +551,25 @@ class DpgEditorApp:
         if self.record_stat not in tabs:
             self.record_stat = tabs[0]
         self._safe_set(dpg, self._heading_tag("NBA Records"), self.record_section)
-        self._sync_record_preview(dpg, "NBA Records")
+        self._show_record_screen_rows(dpg)
 
     def _set_record_stat(self, dpg: Any, label: str) -> None:
         self.record_stat = label
         self._safe_set(dpg, self._heading_tag("NBA Records"), self.record_section)
-        self._sync_record_preview(dpg, "NBA Records")
+        self._show_record_screen_rows(dpg)
 
     def _select_current(self, dpg: Any, domain: str, selected_label: str | None = None) -> None:
-        selected = str(selected_label or dpg.get_value(self._list_tag(domain)) or "")
+        selected = str(selected_label or "")
+        if not selected:
+            selected = str(dpg.get_value(self._list_tag(domain)) or "")
+        if selected:
+            labels = self.visible_list_labels.get(domain, [])
+            state = self.multi_select_lists.setdefault(domain, MultiSelectListState())
+            is_selected = state.toggle(selected)
+            self._safe_set(dpg, self._list_selected_count_tag(domain), f"{len(state.selected_items(labels))} selected")
+            if selected in labels:
+                marker = "✓ " if is_selected else "  "
+                self._safe_configure(dpg, self._list_row_tag(domain, labels.index(selected)), label=f"{marker}{selected}")
         self.model.select_item_by_label(domain, selected)
         self._update_detail_panel(dpg, domain)
 
@@ -624,6 +695,7 @@ class DpgEditorApp:
     def _open_editor_window(self, dpg: Any, item: RecordListItem) -> None:
         win_tag = _tag("editor", item.domain, item.index, "window")
         if dpg.does_item_exist(win_tag):
+            dpg.configure_item(win_tag, show=True)
             dpg.focus_item(win_tag)
             return
 
@@ -649,6 +721,121 @@ class DpgEditorApp:
                             dpg.add_input_text(tag=self._row_new_tag(item, entry), width=-1)
                         dpg.add_text("", tag=self._row_status_tag(item, entry))
 
+        def render_team_records() -> None:
+            prefix = _tag("editor", item.domain, item.index, "team_records")
+
+            def local_tag(*parts: object) -> str:
+                return _tag(prefix, *parts)
+
+            def heading_tag() -> str:
+                return local_tag("heading")
+
+            def count_tag() -> str:
+                return local_tag("count")
+
+            def stat_group_tag(section: str) -> str:
+                return local_tag("stats", section)
+
+            def cards_container_tag() -> str:
+                return local_tag("cards")
+
+            def card_tag(row: int) -> str:
+                return local_tag("card", row)
+
+            def card_title_tag(row: int) -> str:
+                return local_tag("card", row, "title")
+
+            def preview_tag(row: int, label: str) -> str:
+                return local_tag("preview", row, label)
+
+            def career_table_tag() -> str:
+                return local_tag("career_table")
+
+            def career_cell_tag(row: int, label: str) -> str:
+                return local_tag("career", row, label)
+
+            def show_team_record_rows() -> None:
+                tabs = TEAM_RECORD_SECTION_STAT_TABS.get(self.team_record_section, ())
+                if tabs and self.team_record_stat not in tabs:
+                    self.team_record_stat = tabs[0]
+                try:
+                    rows = team_record_rows(self.model, item, self.team_record_section, self.team_record_stat)
+                except Exception:
+                    rows = []
+                visible_rows = min(len(rows), RECORD_PREVIEW_CARDS)
+                career_mode = self.team_record_section == "Career"
+                for section in TEAM_RECORD_SIDE_NAV:
+                    self._safe_configure(dpg, stat_group_tag(section), show=section == self.team_record_section)
+                self._safe_set(dpg, heading_tag(), self.team_record_section)
+                self._safe_set(dpg, count_tag(), f"Team Records: {len(rows)}")
+                self._safe_configure(dpg, cards_container_tag(), show=not career_mode)
+                self._safe_configure(dpg, career_table_tag(), show=career_mode)
+                if career_mode:
+                    for row_index in range(RECORD_PREVIEW_CARDS):
+                        row_values = rows[row_index] if row_index < visible_rows else {}
+                        for label in TEAM_RECORD_TABLE_LABELS:
+                            value = str(row_index + 1) if label == "Rank" and row_values else row_values.get(label, "--")
+                            self._safe_set(dpg, career_cell_tag(row_index, label), value)
+                    return
+                for row_index in range(RECORD_PREVIEW_CARDS):
+                    row_values = rows[row_index] if row_index < visible_rows else {}
+                    self._safe_configure(dpg, card_tag(row_index), show=row_index < visible_rows)
+                    self._safe_set(dpg, card_title_tag(row_index), f"Record #{row_index + 1}")
+                    for label in RECORD_CARD_LABELS:
+                        self._safe_set(dpg, preview_tag(row_index, label), row_values.get(label, "--"))
+
+            def set_team_record_section(label: str) -> None:
+                self.team_record_section = label
+                tabs = TEAM_RECORD_SECTION_STAT_TABS.get(label, ())
+                if tabs and self.team_record_stat not in tabs:
+                    self.team_record_stat = tabs[0]
+                elif not tabs:
+                    self.team_record_stat = ""
+                show_team_record_rows()
+
+            def set_team_record_stat(label: str) -> None:
+                self.team_record_stat = label
+                show_team_record_rows()
+
+            with dpg.group(horizontal=True):
+                with dpg.child_window(width=260, height=-1, border=False):
+                    for label in TEAM_RECORD_SIDE_NAV:
+                        dpg.add_button(label=label, width=-1, height=34, callback=lambda *_args, selected=label: set_team_record_section(selected))
+                        dpg.add_spacer(height=6)
+                with dpg.child_window(width=-1, height=-1, border=True):
+                    dpg.add_text(self.team_record_section, tag=heading_tag())
+                    dpg.add_spacer(height=14)
+                    for section, tabs in TEAM_RECORD_SECTION_STAT_TABS.items():
+                        with dpg.group(tag=stat_group_tag(section), show=section == self.team_record_section):
+                            self._add_button_strip(dpg, tabs, per_row=13, callback=set_team_record_stat)
+                    dpg.add_spacer(height=8)
+                    dpg.add_text("Team Records: 0", tag=count_tag())
+                    dpg.add_spacer(height=10)
+                    with dpg.child_window(width=-1, height=-1, border=True):
+                        with dpg.group(tag=cards_container_tag(), show=True):
+                            labels = RECORD_CARD_LABELS
+                            for row_index in range(RECORD_PREVIEW_CARDS):
+                                with dpg.group(tag=card_tag(row_index), show=False):
+                                    dpg.add_text(f"Record #{row_index + 1}", tag=card_title_tag(row_index))
+                                    dpg.add_spacer(height=8)
+                                    for start in range(0, len(labels), 3):
+                                        with dpg.group(horizontal=True):
+                                            for label in labels[start : start + 3]:
+                                                with dpg.group():
+                                                    dpg.add_text(f"{label}:")
+                                                    dpg.add_input_text(tag=preview_tag(row_index, label), readonly=True, width=280)
+                                        dpg.add_spacer(height=8)
+                                    dpg.add_spacer(height=18)
+                        with dpg.group(tag=career_table_tag(), show=False):
+                            with dpg.table(header_row=True, resizable=True, policy=dpg.mvTable_SizingStretchProp):
+                                for label in TEAM_RECORD_TABLE_LABELS:
+                                    dpg.add_table_column(label=label)
+                                for row_index in range(RECORD_PREVIEW_CARDS):
+                                    with dpg.table_row():
+                                        for label in TEAM_RECORD_TABLE_LABELS:
+                                            dpg.add_text("--", tag=career_cell_tag(row_index, label))
+            show_team_record_rows()
+
         with dpg.window(label=f"{item.domain} [{item.index}] {item.label}", tag=win_tag, width=1120, height=760):
             with dpg.group(horizontal=True):
                 dpg.add_button(label="Reload", callback=lambda *_args, i=item: self._load_item_editor(dpg, i))
@@ -666,7 +853,7 @@ class DpgEditorApp:
                                             key = self._season_stat_selector_key(item)
                                             selected = self.player_season_stat_id_selection.get(key)
                                             if selected not in options:
-                                                selected = next((option for option in options if _parse_id_prefixed_option(option) is not None), options[0])
+                                                selected = next((option for option in options if parse_id_prefixed_option(option) is not None), options[0])
                                                 self.player_season_stat_id_selection[key] = selected
                                             with dpg.group(horizontal=True):
                                                 dpg.add_text("Active Season Stat ID")
@@ -684,6 +871,9 @@ class DpgEditorApp:
                                     if item.domain == "Players" and section == "Stats" and group == "Season IDs":
                                         entries_list = [entry for entry in entries_list if not self.model.is_player_season_id_selector_entry(entry)]
                                     render_table(entries_list)
+                    if item.domain == "Teams":
+                        with dpg.tab(label="Team Records"):
+                            render_team_records()
         self._load_item_editor(dpg, item)
 
     def _add_nav_button(self, dpg: Any, screen: str, label: str) -> None:
@@ -745,8 +935,9 @@ class DpgEditorApp:
                 )
             dpg.add_spacer(height=14)
             with dpg.group(horizontal=True):
-                with dpg.child_window(width=420, height=-1, border=True, no_scrollbar=True):
-                    dpg.add_listbox([], tag=self._list_tag(domain), width=-1, num_items=self._record_list_rows_for_height(APP_VIEWPORT_HEIGHT), callback=lambda _s, app_data, _u=None, *_, d=domain: self._select_current(dpg, d, app_data))
+                with dpg.child_window(width=420, height=-1, border=True):
+                    self._build_multi_select_list_controls(dpg, domain)
+                    dpg.add_child_window(tag=self._list_tag(domain), width=-1, height=-1, border=False)
                 with dpg.child_window(width=-1, height=-1, border=True):
                     dpg.add_text("Select a player", tag=self._detail_tag(domain, "title"))
                     dpg.add_spacer(height=12)
@@ -767,8 +958,9 @@ class DpgEditorApp:
             dpg.add_text(self._game_status_text(), tag=self._status_tag(domain))
             dpg.add_spacer(height=18)
             with dpg.group(horizontal=True):
-                with dpg.child_window(width=340, height=-1, border=True, no_scrollbar=True):
-                    dpg.add_listbox([], tag=self._list_tag(domain), width=220, num_items=self._record_list_rows_for_height(APP_VIEWPORT_HEIGHT), callback=lambda _s, app_data, _u=None, *_, d=domain: self._select_current(dpg, d, app_data))
+                with dpg.child_window(width=340, height=-1, border=True):
+                    self._build_multi_select_list_controls(dpg, domain)
+                    dpg.add_child_window(tag=self._list_tag(domain), width=-1, height=-1, border=False)
                 with dpg.child_window(width=-1, height=-1, border=True):
                     dpg.add_text("Select a team", tag=self._detail_tag(domain, "title"))
                     dpg.add_spacer(height=8)
@@ -783,13 +975,6 @@ class DpgEditorApp:
                     with dpg.group(horizontal=True):
                         dpg.add_button(label="Save Fields", width=120, callback=lambda *_args: self._save_team_summary(dpg))
                         dpg.add_button(label="Edit Team", width=120, callback=lambda *_args: self._open_selected(dpg, domain))
-
-    def _record_screen_heading(self, domain: str) -> str:
-        if domain == "NBA History":
-            return "Season Awards"
-        if domain == "NBA Records":
-            return "Single Game (Regular)"
-        return self._display_label(domain)
 
     def _add_button_strip(self, dpg: Any, labels: tuple[str, ...], *, per_row: int, callback: Any | None = None) -> None:
         for start in range(0, len(labels), per_row):
@@ -822,7 +1007,7 @@ class DpgEditorApp:
                         for section in HISTORY_TABLE_COLUMNS:
                             with dpg.group(tag=self._history_table_group_tag(section), show=section == self.history_section):
                                 dpg.add_group(tag=self._history_table_content_tag(section))
-                    self._sync_record_preview(dpg, domain)
+                    self._sync_record_screen_rows(dpg, domain)
 
     def _build_records_screen(self, dpg: Any, *, show: bool = False) -> None:
         domain = "NBA Records"
@@ -894,8 +1079,9 @@ class DpgEditorApp:
             dpg.add_text(self._game_status_text(), tag=self._status_tag(domain))
             dpg.add_spacer(height=18)
             with dpg.group(horizontal=True):
-                with dpg.child_window(width=420, height=-1, border=True, no_scrollbar=True):
-                    dpg.add_listbox([], tag=self._list_tag(domain), width=-1, num_items=self._record_list_rows_for_height(APP_VIEWPORT_HEIGHT), callback=lambda _s, app_data, _u=None, *_, d=domain: self._select_current(dpg, d, app_data))
+                with dpg.child_window(width=420, height=-1, border=True):
+                    self._build_multi_select_list_controls(dpg, domain)
+                    dpg.add_child_window(tag=self._list_tag(domain), width=-1, height=-1, border=False)
                 with dpg.child_window(width=-1, height=-1, border=True):
                     dpg.add_text(f"Select a {label.lower()}", tag=self._detail_tag(domain, "title"))
                     dpg.add_spacer(height=12)
@@ -904,7 +1090,7 @@ class DpgEditorApp:
                     dpg.add_spacer(height=18)
                     dpg.add_button(label=f"Edit {label}", callback=lambda *_args, d=domain: self._open_selected(dpg, d))
 
-    def run(self, *, close_after_frames: int | None = None, load_on_start: bool = True) -> None:
+    def run(self, *, load_on_start: bool = True) -> None:
         import dearpygui.dearpygui as dpg
         from nba2k_editor.ui.theme import apply_base_theme, ensure_editor_themes
 
@@ -943,14 +1129,10 @@ class DpgEditorApp:
             print("DPG_OPENED NBA2K Editor", flush=True)
             if load_on_start:
                 self._attach_and_load_all(dpg)
-            frame = 0
             while dpg.is_dearpygui_running():
                 self._poll_background_scan(dpg)
                 self._resize_record_lists(dpg)
                 dpg.render_dearpygui_frame()
-                frame += 1
-                if close_after_frames is not None and frame >= close_after_frames:
-                    break
         finally:
             dpg.destroy_context()
 

@@ -6,7 +6,6 @@ utilities isolated from UI concerns.
 """
 from __future__ import annotations
 
-import struct
 import re
 from typing import Any
 
@@ -25,6 +24,11 @@ _YEAR_FIELD_ALLOWLIST = {"DRAFTEDYEAR", "HISTORICYEAR", "BIRTHYEAR"}
 
 def _normalize_year_key(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "", str(value or "")).upper()
+
+
+def parse_id_prefixed_option(value: Any) -> int | None:
+    match = re.match(r"^\s*\[(\d+)\]", str(value or ""))
+    return int(match.group(1)) if match else None
 
 
 def is_year_offset_field(field_name: str) -> bool:

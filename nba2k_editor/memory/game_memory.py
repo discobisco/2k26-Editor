@@ -183,13 +183,13 @@ class GameMemory:
     # ------------------------------------------------------------------
     # Memory access helpers
     # ------------------------------------------------------------------
-    def _check_open(self, op: str | None = None, addr: int | None = None, length: int | None = None) -> None:
+    def _check_open(self) -> None:
         if self.hproc is None or self.base_addr is None:
             raise RuntimeError("Game process not opened")
 
     def read_bytes(self, addr: int, length: int) -> bytes:
         """Read length bytes from absolute address addr."""
-        self._check_open("read", addr, length)
+        self._check_open()
         buf = (ctypes.c_ubyte * length)()
         read_count = ctypes.c_size_t()
         ok = ReadProcessMemory(self.hproc, ctypes.c_void_p(addr), buf, length, ctypes.byref(read_count))
@@ -203,7 +203,7 @@ class GameMemory:
     def write_bytes(self, addr: int, data: bytes) -> None:
         """Write data to absolute address addr."""
         length = len(data)
-        self._check_open("write", addr, length)
+        self._check_open()
         buf = (ctypes.c_ubyte * length).from_buffer_copy(data)
         written = ctypes.c_size_t()
         ok = WriteProcessMemory(self.hproc, ctypes.c_void_p(addr), buf, length, ctypes.byref(written))
@@ -212,15 +212,6 @@ class GameMemory:
             raise RuntimeError(f"Failed to write memory at 0x{addr:X} (error {winerr})")
         if written.value != length:
             raise RuntimeError(f"Partial write at 0x{addr:X}: {written.value}/{length} bytes")
-
-    def write_pointer(self, addr: int, value: int) -> None:
-        """Write a pointer-sized value to absolute address addr."""
-        size = self.pointer_size or ctypes.sizeof(ctypes.c_void_p)
-        if size <= 4:
-            data = struct.pack("<I", int(value) & 0xFFFFFFFF)
-        else:
-            data = struct.pack("<Q", int(value) & 0xFFFFFFFFFFFFFFFF)
-        self.write_bytes(addr, data)
 
     def read_uint32(self, addr: int) -> int:
         data = self.read_bytes(addr, 4)

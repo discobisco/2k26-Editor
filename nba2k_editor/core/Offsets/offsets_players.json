@@ -20475,10 +20475,9 @@
               "bit_length": 16,
               "bit_offset": 6,
               "hex": "0x2D",
-              "is_signed": true,
               "length": 16,
               "startBit": 6,
-              "type": "bitfield"
+              "type": "int"
             }
           },
           "stat_role": "season_id_detail",
