@@ -18,11 +18,6 @@ from nba2k_editor.models.data_model import (
     target_display_label,
     verify_edits,
 )
-from nba2k_editor.ui.multi_select_list import (
-    MultiSelectListState,
-    copy_multi_select_to_clipboard,
-    render_multi_select_list,
-)
 
 
 APP_TITLE = "Offline Player Data Editor"
@@ -184,8 +179,6 @@ class DpgEditorApp:
         self.player_team_filter = PLAYER_TEAM_FILTER_ALL
         self.player_search_text = ""
         self.player_season_stat_id_selection: dict[tuple[int, str], str] = {}
-        self.multi_select_lists: dict[str, MultiSelectListState] = {domain: MultiSelectListState() for domain in EDITOR_DOMAINS}
-        self.visible_list_labels: dict[str, list[str]] = {domain: [] for domain in EDITOR_DOMAINS}
 
     def _screen_tag(self, domain: str) -> str:
         return _tag(domain, "screen")
@@ -208,12 +201,6 @@ class DpgEditorApp:
     def _list_tag(self, domain: str) -> str:
         return _tag(domain, "list")
 
-    def _list_row_tag(self, domain: str, index: int) -> str:
-        return _tag(domain, "list", "row", index)
-
-    def _list_selected_count_tag(self, domain: str) -> str:
-        return _tag(domain, "list", "selected_count")
-
     def _player_team_filter_tag(self) -> str:
         return _tag("Players", "team_filter")
 
@@ -224,7 +211,12 @@ class DpgEditorApp:
         return max(MIN_RECORD_LIST_ROWS, (viewport_height - RECORD_LIST_VERTICAL_MARGIN) // RECORD_LIST_ROW_HEIGHT)
 
     def _resize_record_lists(self, dpg: Any) -> None:
-        self._record_list_rows = self._record_list_rows_for_height(int(dpg.get_viewport_client_height()))
+        rows = self._record_list_rows_for_height(int(dpg.get_viewport_client_height()))
+        if rows == self._record_list_rows:
+            return
+        self._record_list_rows = rows
+        for domain in EDITOR_DOMAINS:
+            self._safe_configure(dpg, self._list_tag(domain), num_items=rows)
 
     def _detail_tag(self, domain: str, name: str) -> str:
         return _tag(domain, "detail", name)
@@ -289,42 +281,6 @@ class DpgEditorApp:
         if dpg.does_item_exist(tag):
             dpg.delete_item(tag, children_only=True)
 
-    def _sync_selectable_list(self, dpg: Any, domain: str, labels: list[str]) -> None:
-        self.visible_list_labels[domain] = list(labels)
-        state = self.multi_select_lists.setdefault(domain, MultiSelectListState())
-        state.prune(labels)
-        self._safe_set(dpg, self._list_selected_count_tag(domain), f"{len(state.selected_items(labels))} selected")
-        if not dpg.does_item_exist(self._list_tag(domain)):
-            return
-        render_multi_select_list(
-            dpg,
-            container_tag=self._list_tag(domain),
-            row_tag=lambda index, _label, d=domain: self._list_row_tag(d, index),
-            items=labels,
-            state=state,
-            on_select=lambda selected, d=domain: self._select_current(dpg, d, selected),
-        )
-
-    def _copy_selected_list_items(self, dpg: Any, domain: str) -> None:
-        labels = self.visible_list_labels.get(domain, [])
-        state = self.multi_select_lists.setdefault(domain, MultiSelectListState())
-        copied = copy_multi_select_to_clipboard(dpg, state, labels)
-        self._safe_set(dpg, self._list_selected_count_tag(domain), f"{copied} selected")
-        self._safe_set(dpg, self._status_tag(domain), f"copied {copied} selected {self._display_label(domain).lower()} item(s)")
-
-    def _clear_selected_list_items(self, dpg: Any, domain: str) -> None:
-        state = self.multi_select_lists.setdefault(domain, MultiSelectListState())
-        state.clear()
-        self._sync_selectable_list(dpg, domain, self.visible_list_labels.get(domain, []))
-        self._safe_set(dpg, self._status_tag(domain), f"cleared selected {self._display_label(domain).lower()} item(s)")
-
-    def _build_multi_select_list_controls(self, dpg: Any, domain: str) -> None:
-        with dpg.group(horizontal=True):
-            dpg.add_text("0 selected", tag=self._list_selected_count_tag(domain))
-            dpg.add_button(label="Copy Selected", width=115, callback=lambda *_args, d=domain: self._copy_selected_list_items(dpg, d))
-            dpg.add_button(label="Clear", width=65, callback=lambda *_args, d=domain: self._clear_selected_list_items(dpg, d))
-        dpg.add_spacer(height=6)
-
     def _bind_item_theme(self, dpg: Any, item: str, theme: str) -> None:
         if theme and dpg.does_item_exist(item) and dpg.does_item_exist(theme):
             dpg.bind_item_theme(item, theme)
@@ -346,7 +302,11 @@ class DpgEditorApp:
         self.model.select_target_executable(_target_executable(str(selected)))
         self._refresh_status_labels(dpg)
         for domain in EDITOR_DOMAINS:
-            self._sync_domain_list(dpg, domain)
+            self._safe_configure(dpg, self._list_tag(domain), items=[])
+            self._safe_set(dpg, self._count_tag(domain), f"{self._display_label(domain)}: 0")
+        self._sync_player_team_filter(dpg)
+        self._sync_player_list(dpg)
+        self._update_detail_panel(dpg, "Teams")
 
     def _refresh_status_labels(self, dpg: Any) -> None:
         status = self._game_status_text()
@@ -394,8 +354,11 @@ class DpgEditorApp:
             self._sync_player_list(dpg)
             return
         labels = self.model.domain_item_labels(domain)
-        self._sync_selectable_list(dpg, domain, labels)
+        self._safe_configure(dpg, self._list_tag(domain), items=labels)
         self._safe_set(dpg, self._count_tag(domain), f"{self._display_label(domain)}: {self.model.domain_item_count(domain)}")
+        selected = self.model.selected_item(domain)
+        if selected is not None and labels:
+            self._safe_set(dpg, self._list_tag(domain), selected.display_label)
         self._safe_set(dpg, self._status_tag(domain), self.model.domain_status(domain))
         if domain in {"NBA History", "NBA Records"}:
             self._sync_record_screen_rows(dpg, domain)
@@ -415,7 +378,7 @@ class DpgEditorApp:
         domain = "Players"
         self._sync_player_team_filter(dpg)
         labels = self.model.player_item_labels_for_team_filter(self.player_team_filter, self.player_search_text)
-        self._sync_selectable_list(dpg, domain, labels)
+        self._safe_configure(dpg, self._list_tag(domain), items=labels)
         self._safe_set(dpg, self._player_search_tag(), self.player_search_text)
         total_count = self.model.domain_item_count(domain)
         visible_count = len(labels)
@@ -425,9 +388,11 @@ class DpgEditorApp:
         selected = self.model.selected_item(domain)
         selected_label = selected.display_label if selected is not None else ""
         if labels and selected_label not in labels:
-            self.model.select_item_by_label(domain, labels[0])
+            selected = self.model.select_item_by_label(domain, labels[0])
         elif not labels:
-            self.model.select_item_by_label(domain, None)
+            selected = self.model.select_item_by_label(domain, None)
+        if selected is not None and labels:
+            self._safe_set(dpg, self._list_tag(domain), selected.display_label)
         self._safe_set(dpg, self._status_tag(domain), self.model.domain_status(domain))
         self._update_detail_panel(dpg, domain)
 
@@ -559,17 +524,7 @@ class DpgEditorApp:
         self._show_record_screen_rows(dpg)
 
     def _select_current(self, dpg: Any, domain: str, selected_label: str | None = None) -> None:
-        selected = str(selected_label or "")
-        if not selected:
-            selected = str(dpg.get_value(self._list_tag(domain)) or "")
-        if selected:
-            labels = self.visible_list_labels.get(domain, [])
-            state = self.multi_select_lists.setdefault(domain, MultiSelectListState())
-            is_selected = state.toggle(selected)
-            self._safe_set(dpg, self._list_selected_count_tag(domain), f"{len(state.selected_items(labels))} selected")
-            if selected in labels:
-                marker = "✓ " if is_selected else "  "
-                self._safe_configure(dpg, self._list_row_tag(domain, labels.index(selected)), label=f"{marker}{selected}")
+        selected = str(selected_label or dpg.get_value(self._list_tag(domain)) or "")
         self.model.select_item_by_label(domain, selected)
         self._update_detail_panel(dpg, domain)
 
@@ -935,9 +890,8 @@ class DpgEditorApp:
                 )
             dpg.add_spacer(height=14)
             with dpg.group(horizontal=True):
-                with dpg.child_window(width=420, height=-1, border=True):
-                    self._build_multi_select_list_controls(dpg, domain)
-                    dpg.add_child_window(tag=self._list_tag(domain), width=-1, height=-1, border=False)
+                with dpg.child_window(width=420, height=-1, border=True, no_scrollbar=True):
+                    dpg.add_listbox([], tag=self._list_tag(domain), width=-1, num_items=self._record_list_rows_for_height(APP_VIEWPORT_HEIGHT), callback=lambda _s, app_data, _u=None, *_, d=domain: self._select_current(dpg, d, app_data))
                 with dpg.child_window(width=-1, height=-1, border=True):
                     dpg.add_text("Select a player", tag=self._detail_tag(domain, "title"))
                     dpg.add_spacer(height=12)
@@ -958,9 +912,8 @@ class DpgEditorApp:
             dpg.add_text(self._game_status_text(), tag=self._status_tag(domain))
             dpg.add_spacer(height=18)
             with dpg.group(horizontal=True):
-                with dpg.child_window(width=340, height=-1, border=True):
-                    self._build_multi_select_list_controls(dpg, domain)
-                    dpg.add_child_window(tag=self._list_tag(domain), width=-1, height=-1, border=False)
+                with dpg.child_window(width=340, height=-1, border=True, no_scrollbar=True):
+                    dpg.add_listbox([], tag=self._list_tag(domain), width=220, num_items=self._record_list_rows_for_height(APP_VIEWPORT_HEIGHT), callback=lambda _s, app_data, _u=None, *_, d=domain: self._select_current(dpg, d, app_data))
                 with dpg.child_window(width=-1, height=-1, border=True):
                     dpg.add_text("Select a team", tag=self._detail_tag(domain, "title"))
                     dpg.add_spacer(height=8)
@@ -1079,9 +1032,8 @@ class DpgEditorApp:
             dpg.add_text(self._game_status_text(), tag=self._status_tag(domain))
             dpg.add_spacer(height=18)
             with dpg.group(horizontal=True):
-                with dpg.child_window(width=420, height=-1, border=True):
-                    self._build_multi_select_list_controls(dpg, domain)
-                    dpg.add_child_window(tag=self._list_tag(domain), width=-1, height=-1, border=False)
+                with dpg.child_window(width=420, height=-1, border=True, no_scrollbar=True):
+                    dpg.add_listbox([], tag=self._list_tag(domain), width=-1, num_items=self._record_list_rows_for_height(APP_VIEWPORT_HEIGHT), callback=lambda _s, app_data, _u=None, *_, d=domain: self._select_current(dpg, d, app_data))
                 with dpg.child_window(width=-1, height=-1, border=True):
                     dpg.add_text(f"Select a {label.lower()}", tag=self._detail_tag(domain, "title"))
                     dpg.add_spacer(height=12)

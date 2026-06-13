@@ -46,9 +46,10 @@ def render_multi_select_list(
     dpg.delete_item(container_tag, children_only=True)
     for index, item in enumerate(items):
         marker = "✓ " if item in state.selected else "  "
-        dpg.add_button(
+        dpg.add_selectable(
             label=f"{marker}{item}",
             tag=row_tag(index, item),
+            default_value=item in state.selected,
             width=-1,
             callback=lambda *_args, selected=item: on_select(selected),
             parent=container_tag,
