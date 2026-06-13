@@ -27,6 +27,7 @@ Thumbs.db
 .vscode/
 .idea/
 .hermes/
+scripts/
 
 # Windows reserved/scratch artifact seen in this workspace
 NUL
