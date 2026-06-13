@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
 from contracts import GeneratorInputContract
-from workbook_reader import iter_sheet_rows
+from workbook_sqlite import ensure_workbook_sqlite_database, iter_workbook_sqlite_sheet_rows
 
 _PLAYER_IDENTITY_SHEET = "Player Info"
 _PLAYER_SEASON_INFO_SHEET = "Player Season Info"
@@ -52,10 +51,10 @@ def build_player_evidence(contract: GeneratorInputContract, *, player_id: str, t
     if not requested_team:
         raise ValueError("team is required")
 
-    workbook_path = Path(validated.source_root) / "NBA DATA Master.xlsx"
+    database_path = ensure_workbook_sqlite_database(validated.source_root)
     missing: list[str] = []
 
-    identity = _find_player_identity(workbook_path, requested_player_id)
+    identity = _find_player_identity(database_path, requested_player_id)
     season_info = _required_player_row(validated, _PLAYER_SEASON_INFO_SHEET, requested_player_id, requested_team)
     per_game = _required_player_row(validated, _PLAYER_PER_GAME_SHEET, requested_player_id, requested_team)
     per_100 = _optional_player_row(validated, _PLAYER_PER_100_SHEET, requested_player_id, requested_team, missing)
@@ -91,8 +90,8 @@ def build_player_evidence(contract: GeneratorInputContract, *, player_id: str, t
     )
 
 
-def _find_player_identity(workbook_path: Path, player_id: str) -> dict[str, Any]:
-    row = _identity_rows(str(workbook_path.resolve())).get(str(player_id).strip().upper())
+def _find_player_identity(database_path: str | object, player_id: str) -> dict[str, Any]:
+    row = _identity_rows(str(database_path)).get(str(player_id).strip().upper())
     if row:
         return row
     raise KeyError(f"missing player identity row: {player_id}")
@@ -120,14 +119,14 @@ def _optional_player_row(
 
 
 def _find_player_row(contract: GeneratorInputContract, sheet: str, player_id: str, team: str) -> dict[str, Any]:
-    workbook_path = Path(contract.source_root) / "NBA DATA Master.xlsx"
+    database_path = ensure_workbook_sqlite_database(contract.source_root)
     key = (str(player_id).strip().upper(), str(team).strip().upper())
-    return _player_rows_by_key(str(workbook_path.resolve()), int(contract.season), sheet).get(key, {})
+    return _player_rows_by_key(str(database_path), int(contract.season), sheet).get(key, {})
 
 
 def _team_roster(contract: GeneratorInputContract, team: str) -> tuple[dict[str, Any], ...]:
-    workbook_path = Path(contract.source_root) / "NBA DATA Master.xlsx"
-    rows = _team_rosters(str(workbook_path.resolve()), int(contract.season)).get(str(team).strip().upper(), ())
+    database_path = ensure_workbook_sqlite_database(contract.source_root)
+    rows = _team_rosters(str(database_path), int(contract.season)).get(str(team).strip().upper(), ())
     if not rows:
         raise KeyError(f"missing team roster rows for team={team} season={contract.season}")
     return rows
@@ -139,8 +138,8 @@ def _optional_team_row(
     team: str,
     missing_sources: list[str],
 ) -> dict[str, Any]:
-    workbook_path = Path(contract.source_root) / "NBA DATA Master.xlsx"
-    row = _team_rows_by_abbreviation(str(workbook_path.resolve()), int(contract.season), sheet).get(str(team).strip().upper())
+    database_path = ensure_workbook_sqlite_database(contract.source_root)
+    row = _team_rows_by_abbreviation(str(database_path), int(contract.season), sheet).get(str(team).strip().upper())
     if row:
         return row
     missing_sources.append(sheet)
@@ -148,14 +147,18 @@ def _optional_team_row(
 
 
 @lru_cache(maxsize=1)
-def _identity_rows(workbook_path: str) -> dict[str, dict[str, Any]]:
-    return {str(row.get("player_id") or "").strip().upper(): row for row in iter_sheet_rows(workbook_path, _PLAYER_IDENTITY_SHEET) if row.get("player_id")}
+def _identity_rows(database_path: str) -> dict[str, dict[str, Any]]:
+    return {
+        str(row.get("player_id") or "").strip().upper(): row
+        for row in iter_workbook_sqlite_sheet_rows(database_path, _PLAYER_IDENTITY_SHEET)
+        if row.get("player_id")
+    }
 
 
 @lru_cache(maxsize=None)
-def _player_rows_by_key(workbook_path: str, season: int, sheet: str) -> dict[tuple[str, str], dict[str, Any]]:
+def _player_rows_by_key(database_path: str, season: int, sheet: str) -> dict[tuple[str, str], dict[str, Any]]:
     rows: dict[tuple[str, str], dict[str, Any]] = {}
-    for row in iter_sheet_rows(workbook_path, sheet):
+    for row in iter_workbook_sqlite_sheet_rows(database_path, sheet):
         if row.get("season") != int(season):
             continue
         player_id = str(row.get("player_id") or "").strip().upper()
@@ -166,9 +169,9 @@ def _player_rows_by_key(workbook_path: str, season: int, sheet: str) -> dict[tup
 
 
 @lru_cache(maxsize=None)
-def _team_rosters(workbook_path: str, season: int) -> dict[str, tuple[dict[str, Any], ...]]:
+def _team_rosters(database_path: str, season: int) -> dict[str, tuple[dict[str, Any], ...]]:
     grouped: dict[str, list[dict[str, Any]]] = {}
-    for row in iter_sheet_rows(workbook_path, _PLAYER_SEASON_INFO_SHEET):
+    for row in iter_workbook_sqlite_sheet_rows(database_path, _PLAYER_SEASON_INFO_SHEET):
         if row.get("season") != int(season):
             continue
         team = str(row.get("team") or "").strip().upper()
@@ -178,9 +181,9 @@ def _team_rosters(workbook_path: str, season: int) -> dict[str, tuple[dict[str, 
 
 
 @lru_cache(maxsize=None)
-def _team_rows_by_abbreviation(workbook_path: str, season: int, sheet: str) -> dict[str, dict[str, Any]]:
+def _team_rows_by_abbreviation(database_path: str, season: int, sheet: str) -> dict[str, dict[str, Any]]:
     rows: dict[str, dict[str, Any]] = {}
-    for row in iter_sheet_rows(workbook_path, sheet):
+    for row in iter_workbook_sqlite_sheet_rows(database_path, sheet):
         if row.get("season") != int(season):
             continue
         abbreviation = str(row.get("abbreviation") or "").strip().upper()

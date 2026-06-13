@@ -14,19 +14,17 @@ from source_data import GeneratorSourceInventory
 
 
 class GeneratorSourceDataTests(unittest.TestCase):
-    def test_default_source_inventory_uses_current_player_generator_folder(self) -> None:
+    def test_default_source_inventory_requires_only_sqlite_database(self) -> None:
         inventory = GeneratorSourceInventory.from_default()
 
         self.assertEqual(inventory.root.name, "NBA Player Data")
         self.assertEqual(inventory.root.parent.name, "Player Generator")
-        self.assertTrue(inventory.workbook_path.is_file())
-        self.assertTrue(inventory.portraits_path.is_file())
-        self.assertTrue(inventory.logos_path.is_file())
-        self.assertEqual(inventory.workbook_path.name, "NBA DATA Master.xlsx")
-        self.assertEqual(inventory.portraits_path.name, "Player Portraits.txt")
-        self.assertEqual(inventory.logos_path.name, "Team Logos.txt")
+        self.assertTrue(inventory.database_path.is_file())
+        self.assertEqual(inventory.database_path.name, "NBA_DATA_Master.sqlite")
+        self.assertFalse(hasattr(inventory, "portraits_path"))
+        self.assertFalse(hasattr(inventory, "logos_path"))
 
-    def test_workbook_sheet_inventory_reads_xlsx_metadata_with_stdlib(self) -> None:
+    def test_sheet_inventory_reads_sqlite_metadata(self) -> None:
         inventory = GeneratorSourceInventory.from_default()
         sheets = inventory.workbook_sheets()
 
@@ -35,14 +33,7 @@ class GeneratorSourceDataTests(unittest.TestCase):
         self.assertIn("Advanced", sheets)
         self.assertIn("Team Summaries", sheets)
 
-    def test_sidecar_inventory_reads_portraits_and_logos(self) -> None:
-        inventory = GeneratorSourceInventory.from_default()
-        sidecars = inventory.sidecar_counts()
-
-        self.assertGreater(sidecars["portraits"], 1000)
-        self.assertGreater(sidecars["logos"], 30)
-
-    def test_phase_zero_required_sheets_are_present_in_current_workbook(self) -> None:
+    def test_phase_zero_required_sheets_are_present_in_current_sqlite_database(self) -> None:
         inventory = GeneratorSourceInventory.from_default()
 
         self.assertEqual(inventory.missing_required_sheets(), [])
@@ -70,10 +61,38 @@ class GeneratorSourceDataTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             GeneratorSourceInventory.from_root(missing_root)
 
-    def test_generator_source_data_has_no_excel_or_random_runtime_dependency(self) -> None:
+    def test_missing_sqlite_database_fails_loud_without_note_files_requirement(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "Player Portraits.txt").write_text("notes", encoding="utf-8")
+            (root / "Team Logos.txt").write_text("notes", encoding="utf-8")
+
+            with self.assertRaises(FileNotFoundError) as raised:
+                GeneratorSourceInventory.from_root(root)
+
+        self.assertIn("NBA_DATA_Master.sqlite", str(raised.exception))
+        self.assertNotIn("Player Portraits.txt", str(raised.exception))
+        self.assertNotIn("Team Logos.txt", str(raised.exception))
+
+    def test_generator_source_data_has_no_excel_notes_or_random_runtime_dependency(self) -> None:
         source = inspect.getsource(source_data)
 
-        for banned in ("import random", "openpyxl", "pandas", "xlrd", "xlsxwriter", "GameMemory"):
+        for banned in (
+            "import random",
+            "openpyxl",
+            "pandas",
+            "xlrd",
+            "xlsxwriter",
+            "GameMemory",
+            "zipfile",
+            "ElementTree",
+            "NBA DATA Master.xlsx",
+            "Player Portraits.txt",
+            "Team Logos.txt",
+            "sidecar_counts",
+        ):
             self.assertNotIn(banned, source)
 
 

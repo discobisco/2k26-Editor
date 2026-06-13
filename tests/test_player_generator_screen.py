@@ -83,16 +83,20 @@ class PlayerGeneratorScreenTests(unittest.TestCase):
         self.assertNotIn(PLAYER_GENERATOR_SCREEN, dpg_editor.EDITOR_DOMAINS)
         self.assertIn(PLAYER_GENERATOR_SCREEN, dpg_editor.APP_SCREENS)
 
-    def test_player_generator_button_label_and_nonblocking_worker_are_wired(self) -> None:
+    def test_team_generator_button_label_and_nonblocking_worker_are_wired(self) -> None:
         source = inspect.getsource(dpg_editor.DpgEditorApp)
         generator_source = source[source.find("def _build_player_generator_screen"): source.find("def _sync_player_generator_preview")]
-        self.assertIn('label="Generate Player"', generator_source)
-        self.assertIn('label="Apply To Selected Player"', generator_source)
+        self.assertIn('label="Generate Team"', generator_source)
         self.assertIn('label="Apply Team"', generator_source)
         self.assertIn('label="Apply Full Season"', generator_source)
+        self.assertIn('label="Apply Preview To Selected Player"', generator_source)
+        self.assertIn('dpg.add_text("Team")', generator_source)
+        self.assertIn('dpg.add_text("Preview Player")', generator_source)
+        self.assertNotIn('label="Generate Player"', generator_source)
+        self.assertNotIn('label="Apply To Selected Player"', generator_source)
         self.assertNotIn('label="Generate Preview"', generator_source)
         self.assertIn("threading.Thread", generator_source)
-        self.assertIn("player year", generator_source)
+        self.assertIn("Generate Team", generator_source)
         self.assertIn("apply_preview_to_game", generator_source)
         self.assertIn("apply_batch_to_game", generator_source)
 
@@ -147,7 +151,7 @@ class PlayerGeneratorScreenTests(unittest.TestCase):
         self.assertEqual(state.team, "NYK")
         self.assertEqual(preview.player_name, "Jalen Brunson")
 
-    def test_generate_year_into_state_generates_all_year_players_and_shows_selected(self) -> None:
+    def test_generate_year_into_state_generates_selected_team_and_shows_selected(self) -> None:
         state = PlayerGeneratorScreenState()
         brunson = next(option for option in generator_player_options(season=2025, team_filter="NYK") if option.player_id == "brunsja01")
         fake_batch = SimpleNamespace(
@@ -155,21 +159,19 @@ class PlayerGeneratorScreenTests(unittest.TestCase):
             proposals=(
                 _fake_proposal("brunsja01", "NYK", "Jalen Brunson"),
                 _fake_proposal("hartjo01", "NYK", "Josh Hart"),
-                _fake_proposal("jokicni01", "DEN", "Nikola Jokic"),
             ),
-            failures=(),
         )
 
         with patch("player_generator.generate_player_proposals_for_contract", return_value=fake_batch) as batch_call:
             batch = generate_year_into_state(state, season=2025, team_filter="NYK", player_option_label=brunson.label)
 
         self.assertIs(state.batch, batch)
-        self.assertEqual(state.generated_count, 3)
-        self.assertEqual(state.failed_count, 0)
+        self.assertEqual(state.generated_count, 2)
         self.assertIsNotNone(state.preview)
         self.assertEqual(state.preview.player_id, "brunsja01")
-        self.assertIn("Generated 3 players for 2025", state.status)
+        self.assertIn("Generated 2 players for 2025 NYK", state.status)
         batch_call.assert_called_once()
+        self.assertEqual(batch_call.call_args.kwargs["team_filter"], "NYK")
 
     def test_select_generated_preview_switches_display_without_regenerating(self) -> None:
         state = PlayerGeneratorScreenState(season=2025, team_filter="NYK")
@@ -181,7 +183,6 @@ class PlayerGeneratorScreenTests(unittest.TestCase):
                 _fake_proposal("brunsja01", "NYK", "Jalen Brunson"),
                 _fake_proposal("hartjo01", "NYK", "Josh Hart"),
             ),
-            failures=(),
         )
         with patch("player_generator.generate_player_proposals_for_contract", return_value=fake_batch):
             generate_year_into_state(state, season=2025, team_filter="NYK", player_option_label=brunson.label)
@@ -243,7 +244,7 @@ class PlayerGeneratorScreenTests(unittest.TestCase):
             rows=(PlayerGeneratorPreviewRow(field_key="Vitals/FIRSTNAME", section="Vitals", group="ID", field="First Name", value="Two", source_rule="test"),),
             warnings=(),
         )
-        state = PlayerGeneratorScreenState(batch=PlayerGeneratorBatchPreview(season=2025, previews=(first, second), failures=()))
+        state = PlayerGeneratorScreenState(batch=PlayerGeneratorBatchPreview(season=2025, previews=(first, second)))
         model = FakeGameModel()
 
         result = apply_batch_to_game(model, state, player_indices=(20, 21))

@@ -17,11 +17,10 @@ from player_rules import (
     derive_player_profile_values,
     derive_player_rule_values,
 )
-from workbook_reader import iter_sheet_rows, workbook_sheet_names
+from workbook_sqlite import ensure_workbook_sqlite_database, iter_workbook_sqlite_sheet_rows, workbook_sqlite_sheet_names
 
 _GENERATOR_DIR = Path(__file__).resolve().parent
 _DEFAULT_OFFSETS_PLAYERS_PATH = _GENERATOR_DIR.parent / "core" / "Offsets" / "offsets_players.json"
-_WORKBOOK_NAME = "NBA DATA Master.xlsx"
 _BASE_PLAYER_SEASON_SHEET = "Player Season Info"
 _PLAYER_IDENTITY_SHEET = "Player Info"
 _PLAYER_PER_GAME_SHEET = "Player Per Game"
@@ -99,7 +98,7 @@ class SeasonPlayerContextIndex:
     """
 
     season: int
-    workbook_path: Path
+    source_database_path: Path
     comparison_rows: tuple[dict[str, Any], ...]
     evidence_by_key: dict[tuple[str, str], PlayerEvidence]
     field_index: dict[str, FieldEntry]
@@ -237,15 +236,15 @@ def season_context_index(
     offsets_path: str | Path | None = None,
 ) -> SeasonPlayerContextIndex:
     validated = contract.validate()
-    workbook_path = (Path(validated.source_root) / _WORKBOOK_NAME).expanduser().resolve()
+    database_path = ensure_workbook_sqlite_database(validated.source_root)
     offset_path = Path(offsets_path).expanduser().resolve() if offsets_path is not None else _DEFAULT_OFFSETS_PLAYERS_PATH.resolve()
-    return _cached_season_context_index(str(workbook_path), int(validated.season), str(offset_path))
+    return _cached_season_context_index(str(database_path), int(validated.season), str(offset_path))
 
 
 @lru_cache(maxsize=None)
-def _cached_season_context_index(workbook_path: str, season: int, offsets_path: str) -> SeasonPlayerContextIndex:
-    workbook = Path(workbook_path)
-    sheet_names = workbook_sheet_names(workbook)
+def _cached_season_context_index(database_path: str, season: int, offsets_path: str) -> SeasonPlayerContextIndex:
+    database = Path(database_path)
+    sheet_names = workbook_sqlite_sheet_names(database)
     field_index = _cached_authored_player_field_index(offsets_path)
 
     rows_by_key: dict[tuple[str, str], dict[str, Any]] = {}
@@ -258,7 +257,7 @@ def _cached_season_context_index(workbook_path: str, season: int, offsets_path: 
 
     for sheet in sheet_names:
         prefix = _context_prefix(sheet)
-        for row in iter_sheet_rows(workbook, sheet):
+        for row in iter_workbook_sqlite_sheet_rows(database, sheet):
             player_id = str(row.get("player_id") or "").strip()
             team = _row_team(row)
             abbreviation = str(row.get("abbreviation") or "").strip()
@@ -314,7 +313,7 @@ def _cached_season_context_index(workbook_path: str, season: int, offsets_path: 
     )
     return SeasonPlayerContextIndex(
         season=season,
-        workbook_path=workbook,
+        source_database_path=database,
         comparison_rows=comparison_rows,
         evidence_by_key=evidence_by_key,
         field_index=dict(field_index),

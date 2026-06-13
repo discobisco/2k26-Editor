@@ -1038,9 +1038,9 @@ class DpgEditorApp:
         if self.player_generator_state.player_option not in player_labels and player_labels:
             self.player_generator_state.player_option = player_labels[0]
         with dpg.child_window(tag=self._screen_tag(PLAYER_GENERATOR_SCREEN), show=show, width=-1, height=-1, border=False):
-            dpg.add_text("Player Generator")
+            dpg.add_text("Team Generator")
             dpg.add_spacer(height=8)
-            dpg.add_text("Uses bundled NBA DATA Master.xlsx and authored player offsets. Generated proposal only; no roster write.")
+            dpg.add_text("Generate a team from NBA_DATA_Master.sqlite, review any player, then apply the team to loaded live players.")
             dpg.add_spacer(height=14)
             with dpg.group(horizontal=True):
                 dpg.add_text("Year")
@@ -1052,16 +1052,23 @@ class DpgEditorApp:
                     callback=lambda *_args: self._refresh_player_generator_dropdowns(dpg),
                 )
                 dpg.add_spacer(width=12)
-                dpg.add_text("Team Filter")
+                dpg.add_text("Team")
                 dpg.add_combo(
                     team_options,
                     tag=self._player_generator_tag("team_filter"),
                     default_value=self.player_generator_state.team_filter,
-                    width=160,
+                    width=140,
                     callback=lambda *_args: self._refresh_player_generator_dropdowns(dpg),
                 )
                 dpg.add_spacer(width=12)
-                dpg.add_text("Player")
+                dpg.add_button(label="Generate Team", width=150, callback=lambda *_args: self._generate_player_preview(dpg))
+                dpg.add_spacer(width=8)
+                dpg.add_button(label="Apply Team", width=120, callback=lambda *_args: self._apply_player_generator_batch(dpg, scope="team"))
+                dpg.add_spacer(width=8)
+                dpg.add_button(label="Apply Full Season", width=160, callback=lambda *_args: self._apply_player_generator_batch(dpg, scope="season"))
+            dpg.add_spacer(height=8)
+            with dpg.group(horizontal=True):
+                dpg.add_text("Preview Player")
                 dpg.add_combo(
                     player_labels,
                     tag=self._player_generator_tag("player"),
@@ -1070,13 +1077,7 @@ class DpgEditorApp:
                     callback=lambda *_args: self._select_player_generator_preview(dpg),
                 )
                 dpg.add_spacer(width=12)
-                dpg.add_button(label="Generate Player", width=150, callback=lambda *_args: self._generate_player_preview(dpg))
-                dpg.add_spacer(width=8)
-                dpg.add_button(label="Apply To Selected Player", width=190, callback=lambda *_args: self._apply_player_generator_preview(dpg))
-                dpg.add_spacer(width=8)
-                dpg.add_button(label="Apply Team", width=120, callback=lambda *_args: self._apply_player_generator_batch(dpg, scope="team"))
-                dpg.add_spacer(width=8)
-                dpg.add_button(label="Apply Full Season", width=160, callback=lambda *_args: self._apply_player_generator_batch(dpg, scope="season"))
+                dpg.add_button(label="Apply Preview To Selected Player", width=230, callback=lambda *_args: self._apply_player_generator_preview(dpg))
             dpg.add_spacer(height=10)
             dpg.add_text(self.player_generator_state.status, tag=self._player_generator_tag("status"))
             dpg.add_spacer(height=12)
@@ -1115,7 +1116,7 @@ class DpgEditorApp:
             else:
                 self.player_generator_state.batch = None
                 self.player_generator_state.preview = None
-                self.player_generator_state.status = "Choose year, team filter, and player, then generate player."
+                self.player_generator_state.status = "Choose year and team, then generate team."
                 self._sync_player_generator_preview(dpg)
 
     def _select_player_generator_preview(self, dpg: Any) -> None:
@@ -1123,12 +1124,12 @@ class DpgEditorApp:
         try:
             select_generated_preview_into_state(self.player_generator_state, player_option_label=selected_player)
         except Exception as exc:
-            self.player_generator_state.status = f"Select generated player failed: {exc}"
+            self.player_generator_state.status = str(exc)
         self._sync_player_generator_preview(dpg)
 
     def _generate_player_preview(self, dpg: Any) -> None:
         if self.player_generator_thread is not None and self.player_generator_thread.is_alive():
-            self.player_generator_state.status = "Generate Player already running..."
+            self.player_generator_state.status = "Generate Team already running..."
             self._safe_set(dpg, self._player_generator_tag("status"), self.player_generator_state.status)
             return
         try:
@@ -1137,7 +1138,7 @@ class DpgEditorApp:
             player_option = str(dpg.get_value(self._player_generator_tag("player")) or "")
         except Exception as exc:
             self.player_generator_state.preview = None
-            self.player_generator_state.status = f"Generate Player failed: {exc}"
+            self.player_generator_state.status = str(exc)
             self._sync_player_generator_preview(dpg)
             return
         self.player_generator_state.season = season
@@ -1145,7 +1146,8 @@ class DpgEditorApp:
         self.player_generator_state.player_option = player_option
         self.player_generator_state.preview = None
         self.player_generator_state.batch = None
-        self.player_generator_state.status = f"Generating {season} player year..."
+        scope_text = team_filter if team_filter and team_filter != ALL_TEAMS_FILTER else "full season"
+        self.player_generator_state.status = f"Generating {season} {scope_text}..."
         self._sync_player_generator_preview(dpg)
 
         def worker() -> None:
@@ -1158,7 +1160,7 @@ class DpgEditorApp:
                     player_option_label=player_option,
                 )
             except Exception as exc:  # Thread boundary: report to DPG loop.
-                self.player_generator_events.put(("error", f"Generate Player failed: {exc}"))
+                self.player_generator_events.put(("error", str(exc)))
                 return
             self.player_generator_events.put(("done", result_state))
 
@@ -1168,13 +1170,13 @@ class DpgEditorApp:
     def _apply_player_generator_preview(self, dpg: Any) -> None:
         item = self.model.selected_item("Players")
         if item is None:
-            self.player_generator_state.status = "Apply failed: select a live game player first."
+            self.player_generator_state.status = "Select a live game player first."
             self._sync_player_generator_preview(dpg)
             return
         try:
             apply_preview_to_game(self.model, self.player_generator_state, player_index=item.index)
         except Exception as exc:
-            self.player_generator_state.status = f"Apply failed: {exc}"
+            self.player_generator_state.status = str(exc)
         self._sync_player_generator_preview(dpg)
 
     def _player_generator_target_items(self, scope: str) -> list[RecordListItem]:
@@ -1190,17 +1192,15 @@ class DpgEditorApp:
     def _apply_player_generator_batch(self, dpg: Any, *, scope: str) -> None:
         target_items = self._player_generator_target_items(scope)
         if not target_items:
-            self.player_generator_state.status = f"Apply {scope} failed: load live Players first."
+            self.player_generator_state.status = "Load live Players first."
             self._sync_player_generator_preview(dpg)
             return
         try:
             result = apply_batch_to_game(self.model, self.player_generator_state, player_indices=tuple(item.index for item in target_items))
             scope_label = "full season" if scope == "season" else "team"
             self.player_generator_state.status = f"Applied {scope_label}: {self.player_generator_state.status}"
-            if result.unapplied_generated or result.unused_targets:
-                self.player_generator_state.status += " Check generated/player count before saving roster."
         except Exception as exc:
-            self.player_generator_state.status = f"Apply {scope} failed: {exc}"
+            self.player_generator_state.status = str(exc)
         self._sync_player_generator_preview(dpg)
 
     def _poll_player_generator(self, dpg: Any) -> None:

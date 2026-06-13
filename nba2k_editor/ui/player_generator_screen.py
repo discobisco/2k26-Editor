@@ -11,7 +11,6 @@ PLAYER_GENERATOR_SCREEN = "Player Generator"
 DEFAULT_GENERATOR_SEASON = 2025
 MAX_PREVIEW_ROWS = 240
 ALL_TEAMS_FILTER = "All Teams"
-_WORKBOOK_NAME = "NBA DATA Master.xlsx"
 _PLAYER_SEASON_INFO_SHEET = "Player Season Info"
 
 
@@ -39,7 +38,6 @@ class PlayerGeneratorPreview:
 class PlayerGeneratorBatchPreview:
     season: int
     previews: tuple[PlayerGeneratorPreview, ...]
-    failures: tuple[str, ...]
 
 
 @dataclass
@@ -50,8 +48,7 @@ class PlayerGeneratorScreenState:
     team_filter: str = ALL_TEAMS_FILTER
     player_option: str = ""
     generated_count: int = 0
-    failed_count: int = 0
-    status: str = "Choose year, team filter, and player, then generate player."
+    status: str = "Choose year and team, then generate team."
     preview: PlayerGeneratorPreview | None = None
     batch: PlayerGeneratorBatchPreview | None = None
 
@@ -102,8 +99,7 @@ def apply_preview_to_game(model: Any, state: PlayerGeneratorScreenState, *, play
     _ensure_import_path(generator_root)
     game_port = import_module("game_port")
     result = game_port.apply_generated_rows_to_game(model, state.preview.rows, player_index=int(player_index))
-    failed_text = f", {result.failed} failed" if result.failed else ""
-    state.status = f"Applied {result.succeeded}/{result.attempted} generated fields to game player index {player_index}{failed_text}."
+    state.status = f"Applied {result.succeeded}/{result.attempted} generated fields to game player index {player_index}."
     return result
 
 
@@ -114,11 +110,7 @@ def apply_batch_to_game(model: Any, state: PlayerGeneratorScreenState, *, player
     _ensure_import_path(generator_root)
     game_port = import_module("game_port")
     result = game_port.apply_generated_players_to_game(model, state.batch.previews, player_indices=player_indices)
-    mismatch_text = ""
-    if result.unapplied_generated or result.unused_targets:
-        mismatch_text = f" ({result.unapplied_generated} generated unapplied, {result.unused_targets} targets unused)"
-    failed_text = f", {result.failed} failed" if result.failed else ""
-    state.status = f"Applied {result.applied_players} generated players / {result.succeeded} fields to game{failed_text}{mismatch_text}."
+    state.status = f"Applied {result.applied_players} generated players / {result.succeeded} fields to game."
     return result
 
 
@@ -186,20 +178,28 @@ def generate_year_into_state(
     state.season = int(season)
     state.team_filter = str(team_filter or ALL_TEAMS_FILTER).strip() or ALL_TEAMS_FILTER
     state.player_option = str(player_option_label or "").strip()
-    state.status = f"Generating {state.season} player year..."
+    selected_team = _team_filter_for_generation(state.team_filter)
+    scope_text = selected_team or "full season"
+    state.status = f"Generating {state.season} {scope_text}..."
     source_root = source_data.GeneratorSourceInventory.from_default().root
     contract = contracts.GeneratorInputContract(
         season=state.season,
         source_root=source_root,
         output_target=contracts.OutputTarget.PROPOSAL,
     ).validate()
-    generated_batch = player_generator.generate_player_proposals_for_contract(contract)
+    generated_batch = player_generator.generate_player_proposals_for_contract(contract, team_filter=selected_team)
     previews = tuple(_preview_from_proposal(proposal) for proposal in generated_batch.proposals)
-    state.batch = PlayerGeneratorBatchPreview(season=generated_batch.season, previews=previews, failures=generated_batch.failures)
+    state.batch = PlayerGeneratorBatchPreview(season=generated_batch.season, previews=previews)
     state.generated_count = len(previews)
-    state.failed_count = len(generated_batch.failures)
     select_generated_preview_into_state(state, player_option_label=state.player_option)
     return state.batch
+
+
+def _team_filter_for_generation(team_filter: str | None) -> str | None:
+    selected = str(team_filter or "").strip().upper()
+    if not selected or selected == ALL_TEAMS_FILTER.upper():
+        return None
+    return selected
 
 
 def select_generated_preview_into_state(state: PlayerGeneratorScreenState, *, player_option_label: str) -> PlayerGeneratorPreview | None:
@@ -210,10 +210,10 @@ def select_generated_preview_into_state(state: PlayerGeneratorScreenState, *, pl
     state.preview = next((preview for preview in state.batch.previews if preview.player_id == option.player_id and preview.team.upper() == option.team.upper()), state.batch.previews[0] if state.batch.previews else None)
     if state.preview is None:
         raise ValueError(f"no generated players for {state.season}")
-    failure_text = f", {state.failed_count} failed" if state.failed_count else ""
     state.player_id = state.preview.player_id
     state.team = state.preview.team
-    state.status = f"Generated {state.generated_count} players for {state.season}{failure_text}; showing {state.preview.player_name} {state.preview.team}."
+    scope_text = _team_filter_for_generation(state.team_filter) or "full season"
+    state.status = f"Generated {state.generated_count} players for {state.season} {scope_text}; showing {state.preview.player_name} {state.preview.team}."
     return state.preview
 
 
@@ -250,10 +250,10 @@ def _all_player_season_rows() -> tuple[dict[str, Any], ...]:
     generator_root = _generator_root()
     _ensure_import_path(generator_root)
     source_data = import_module("source_data")
-    workbook_reader = import_module("workbook_reader")
+    workbook_sqlite = import_module("workbook_sqlite")
     source_root = source_data.GeneratorSourceInventory.from_default().root
-    workbook_path = Path(source_root) / _WORKBOOK_NAME
-    return tuple(workbook_reader.iter_sheet_rows(workbook_path, _PLAYER_SEASON_INFO_SHEET))
+    database_path = workbook_sqlite.ensure_workbook_sqlite_database(source_root)
+    return tuple(workbook_sqlite.iter_workbook_sqlite_sheet_rows(database_path, _PLAYER_SEASON_INFO_SHEET))
 
 
 @lru_cache(maxsize=None)

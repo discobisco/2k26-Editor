@@ -10,10 +10,10 @@ if str(GENERATOR_ROOT) not in sys.path:
 
 from contracts import GeneratorInputContract, OutputTarget
 from source_data import GeneratorSourceInventory
-from workbook_reader import read_sheet_rows_for_season
+from workbook_sqlite import read_sqlite_sheet_rows_for_season
 
 
-class GeneratorWorkbookReaderTests(unittest.TestCase):
+class GeneratorSqliteReaderTests(unittest.TestCase):
     def _contract(self) -> GeneratorInputContract:
         source_root = GeneratorSourceInventory.from_default().root
         return GeneratorInputContract(season=2025, source_root=source_root, output_target=OutputTarget.PROPOSAL).validate()
@@ -21,7 +21,7 @@ class GeneratorWorkbookReaderTests(unittest.TestCase):
     def test_reads_player_stat_rows_for_selected_season_only(self) -> None:
         contract = self._contract()
 
-        rows = read_sheet_rows_for_season(contract, "Player Per Game", limit=25)
+        rows = read_sqlite_sheet_rows_for_season(contract.source_root, "Player Per Game", int(contract.season), limit=25)
 
         self.assertGreater(len(rows), 0)
         self.assertTrue(all(row["season"] == 2025 for row in rows))
@@ -31,7 +31,7 @@ class GeneratorWorkbookReaderTests(unittest.TestCase):
     def test_reads_team_stat_rows_for_selected_season_only(self) -> None:
         contract = self._contract()
 
-        rows = read_sheet_rows_for_season(contract, "Team Stats Per Game", limit=25)
+        rows = read_sqlite_sheet_rows_for_season(contract.source_root, "Team Stats Per Game", int(contract.season), limit=25)
 
         self.assertGreater(len(rows), 0)
         self.assertTrue(all(row["season"] == 2025 for row in rows))
@@ -41,7 +41,7 @@ class GeneratorWorkbookReaderTests(unittest.TestCase):
     def test_blank_and_na_cells_are_normalized_to_none(self) -> None:
         contract = self._contract()
 
-        rows = read_sheet_rows_for_season(contract, "Player Shooting", limit=200)
+        rows = read_sqlite_sheet_rows_for_season(contract.source_root, "Player Shooting", int(contract.season), limit=200)
 
         self.assertGreater(len(rows), 0)
         self.assertTrue(any(value is None for row in rows for value in row.values()))
@@ -50,7 +50,7 @@ class GeneratorWorkbookReaderTests(unittest.TestCase):
         contract = self._contract()
 
         with self.assertRaises(KeyError):
-            read_sheet_rows_for_season(contract, "No Such Sheet")
+            read_sqlite_sheet_rows_for_season(contract.source_root, "No Such Sheet", int(contract.season))
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from contracts import GeneratorInputContract
-from workbook_reader import read_sheet_rows_for_season
+from workbook_sqlite import read_sqlite_sheet_rows_for_season
 
 _PLAYER_SEASON_INFO_SHEET = "Player Season Info"
 _OPTIONAL_PLAYER_SHEETS: tuple[str, ...] = (
@@ -38,7 +38,7 @@ def build_team_roster_evidence(contract: GeneratorInputContract, *, team: str) -
     if not selected_team:
         raise ValueError("team is required")
 
-    roster_rows = tuple(row for row in read_sheet_rows_for_season(validated, _PLAYER_SEASON_INFO_SHEET) if _same(row.get("team"), selected_team))
+    roster_rows = tuple(row for row in read_sqlite_sheet_rows_for_season(validated.source_root, _PLAYER_SEASON_INFO_SHEET, int(validated.season)) if _same(row.get("team"), selected_team))
     if not roster_rows:
         raise KeyError(f"missing roster rows for team={selected_team} season={validated.season}")
 
@@ -58,12 +58,12 @@ def build_team_roster_evidence(contract: GeneratorInputContract, *, team: str) -
 def _missing_sources_for_roster(contract: GeneratorInputContract, team: str, player_ids: set[str]) -> tuple[str, ...]:
     missing: list[str] = []
     for sheet in _OPTIONAL_PLAYER_SHEETS:
-        rows = tuple(row for row in read_sheet_rows_for_season(contract, sheet) if _same(row.get("team"), team))
+        rows = tuple(row for row in read_sqlite_sheet_rows_for_season(contract.source_root, sheet, int(contract.season)) if _same(row.get("team"), team))
         present_ids = {str(row.get("player_id") or "").strip() for row in rows if str(row.get("player_id") or "").strip()}
         if not rows or not player_ids.intersection(present_ids):
             missing.append(sheet)
     for sheet in _OPTIONAL_TEAM_CONTEXT_SHEETS:
-        rows = tuple(row for row in read_sheet_rows_for_season(contract, sheet) if _same(row.get("abbreviation"), team))
+        rows = tuple(row for row in read_sqlite_sheet_rows_for_season(contract.source_root, sheet, int(contract.season)) if _same(row.get("abbreviation"), team))
         if not rows:
             missing.append(sheet)
     return tuple(dict.fromkeys(missing))

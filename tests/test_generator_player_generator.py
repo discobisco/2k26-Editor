@@ -30,8 +30,8 @@ from player_rules import (
     TENDENCY_FIELDS,
 )
 from contracts import GeneratorInputContract, OutputTarget
-from source_data import GeneratorSourceInventory, read_workbook_sheets
-from workbook_reader import iter_sheet_rows
+from source_data import GeneratorSourceInventory
+from workbook_sqlite import ensure_workbook_sqlite_database, iter_workbook_sqlite_sheet_rows, workbook_sqlite_sheet_names
 
 OFFSETS_PLAYERS_PATH = Path(__file__).resolve().parents[1] / "nba2k_editor" / "core" / "Offsets" / "offsets_players.json"
 
@@ -224,12 +224,12 @@ class PlayerGeneratorProposalTests(unittest.TestCase):
         contract = self._contract(2025)
         rows = selected_year_player_comparison_rows(contract)
         row = next(row for row in rows if row["player_id"] == "brunsja01" and row["team"] == "NYK")
-        workbook_path = Path(contract.source_root) / "NBA DATA Master.xlsx"
+        database_path = ensure_workbook_sqlite_database(contract.source_root)
 
         missing: list[str] = []
-        for sheet in read_workbook_sheets(workbook_path):
+        for sheet in workbook_sqlite_sheet_names(database_path):
             prefix = sheet.lower().replace(" ", "_")
-            for source_row in iter_sheet_rows(workbook_path, sheet):
+            for source_row in iter_workbook_sqlite_sheet_rows(database_path, sheet):
                 if source_row.get("season") is not None and source_row.get("season") != 2025:
                     continue
                 player_id = str(source_row.get("player_id") or "").strip()
@@ -262,6 +262,20 @@ class PlayerGeneratorProposalTests(unittest.TestCase):
         source = inspect.getsource(player_generator)
         for banned in ("GameMemory", "write_value", "write_entry_value", "write_and_readback", "subprocess", "clipboard"):
             self.assertNotIn(banned, source)
+
+    def test_generator_runtime_uses_sqlite_database_not_workbook_reader(self) -> None:
+        import player_evidence
+        import player_generator
+        import roster_evidence
+
+        context = season_context_index(self._contract(2025))
+
+        self.assertEqual(context.source_database_path.name, "NBA_DATA_Master.sqlite")
+        self.assertTrue(context.source_database_path.is_file())
+        for module in (player_evidence, player_generator, roster_evidence):
+            module_source = inspect.getsource(module)
+            self.assertNotIn("from workbook_reader", module_source)
+            self.assertNotIn("NBA DATA Master.xlsx", module_source)
 
 
 if __name__ == "__main__":
