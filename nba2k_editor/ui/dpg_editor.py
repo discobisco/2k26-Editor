@@ -168,7 +168,6 @@ class DpgEditorApp:
         self.row_raw_values: dict[str, Any] = {}
         self.nav_button_tags: dict[str, str] = {}
         self.item_themes: dict[str, str] = {}
-        self._record_list_rows = 0
         self.history_section = "Season Awards"
         self.history_award = "Most Valuable Player"
         self.history_tabs: dict[str, str] = {section: tabs[0] for section, tabs in HISTORY_SECTION_TABS.items()}
@@ -178,6 +177,8 @@ class DpgEditorApp:
         self.team_record_stat = "Points"
         self.player_team_filter = PLAYER_TEAM_FILTER_ALL
         self.player_search_text = ""
+        self.selected_item_labels: dict[str, set[str]] = {}
+        self.selection_anchors: dict[str, str | None] = {}
         self.player_season_stat_id_selection: dict[tuple[int, str], str] = {}
 
     def _screen_tag(self, domain: str) -> str:
@@ -198,8 +199,11 @@ class DpgEditorApp:
     def _count_tag(self, domain: str) -> str:
         return _tag(domain, "count")
 
-    def _list_tag(self, domain: str) -> str:
-        return _tag(domain, "list")
+    def _list_content_tag(self, domain: str) -> str:
+        return _tag(domain, "list", "content")
+
+    def _list_row_tag(self, domain: str, label: str) -> str:
+        return _tag(domain, "row", label)
 
     def _player_team_filter_tag(self) -> str:
         return _tag("Players", "team_filter")
@@ -207,16 +211,6 @@ class DpgEditorApp:
     def _player_search_tag(self) -> str:
         return _tag("Players", "search")
 
-    def _record_list_rows_for_height(self, viewport_height: int) -> int:
-        return max(MIN_RECORD_LIST_ROWS, (viewport_height - RECORD_LIST_VERTICAL_MARGIN) // RECORD_LIST_ROW_HEIGHT)
-
-    def _resize_record_lists(self, dpg: Any) -> None:
-        rows = self._record_list_rows_for_height(int(dpg.get_viewport_client_height()))
-        if rows == self._record_list_rows:
-            return
-        self._record_list_rows = rows
-        for domain in EDITOR_DOMAINS:
-            self._safe_configure(dpg, self._list_tag(domain), num_items=rows)
 
     def _detail_tag(self, domain: str, name: str) -> str:
         return _tag(domain, "detail", name)
@@ -300,9 +294,11 @@ class DpgEditorApp:
 
     def _set_target(self, dpg: Any, selected: str) -> None:
         self.model.select_target_executable(_target_executable(str(selected)))
+        self.selected_item_labels.clear()
+        self.selection_anchors.clear()
         self._refresh_status_labels(dpg)
         for domain in EDITOR_DOMAINS:
-            self._safe_configure(dpg, self._list_tag(domain), items=[])
+            self._safe_delete_children(dpg, self._list_content_tag(domain))
             self._safe_set(dpg, self._count_tag(domain), f"{self._display_label(domain)}: 0")
         self._sync_player_team_filter(dpg)
         self._sync_player_list(dpg)
@@ -354,12 +350,11 @@ class DpgEditorApp:
             self._sync_player_list(dpg)
             return
         labels = self.model.domain_item_labels(domain)
-        self._safe_configure(dpg, self._list_tag(domain), items=labels)
         self._safe_set(dpg, self._count_tag(domain), f"{self._display_label(domain)}: {self.model.domain_item_count(domain)}")
         selected = self.model.selected_item(domain)
-        if selected is not None and labels:
-            self._safe_set(dpg, self._list_tag(domain), selected.display_label)
+        self._sync_selection_state(domain, labels, selected.display_label if selected is not None else "")
         self._safe_set(dpg, self._status_tag(domain), self.model.domain_status(domain))
+        self._render_selectable_list(dpg, domain, labels)
         if domain in {"NBA History", "NBA Records"}:
             self._sync_record_screen_rows(dpg, domain)
         if domain == "Teams":
@@ -378,7 +373,6 @@ class DpgEditorApp:
         domain = "Players"
         self._sync_player_team_filter(dpg)
         labels = self.model.player_item_labels_for_team_filter(self.player_team_filter, self.player_search_text)
-        self._safe_configure(dpg, self._list_tag(domain), items=labels)
         self._safe_set(dpg, self._player_search_tag(), self.player_search_text)
         total_count = self.model.domain_item_count(domain)
         visible_count = len(labels)
@@ -386,14 +380,75 @@ class DpgEditorApp:
         count_text = f"Players: {visible_count} / {total_count}" if has_filter else f"Players: {visible_count}"
         self._safe_set(dpg, self._count_tag(domain), count_text)
         selected = self.model.selected_item(domain)
-        selected_label = selected.display_label if selected is not None else ""
-        if labels and selected_label not in labels:
-            selected = self.model.select_item_by_label(domain, labels[0])
-        elif not labels:
-            selected = self.model.select_item_by_label(domain, None)
-        if selected is not None and labels:
-            self._safe_set(dpg, self._list_tag(domain), selected.display_label)
+        self._sync_selection_state(domain, labels, selected.display_label if selected is not None else "")
         self._safe_set(dpg, self._status_tag(domain), self.model.domain_status(domain))
+        self._render_selectable_list(dpg, domain, labels)
+        self._update_detail_panel(dpg, domain)
+
+    def _sync_selection_state(self, domain: str, labels: list[str], selected_label: str) -> None:
+        selected_labels = self.selected_item_labels.setdefault(domain, set())
+        selected_labels.intersection_update(set(labels))
+        if self.selection_anchors.get(domain) not in labels:
+            self.selection_anchors[domain] = None
+        if selected_label and labels and selected_label not in labels:
+            selected_item = self.model.select_item_by_label(domain, labels[0])
+            selected_label = selected_item.display_label if selected_item is not None else ""
+        elif not labels:
+            self.model.select_item_by_label(domain, None)
+            selected_label = ""
+        if selected_label and not selected_labels:
+            selected_labels.add(selected_label)
+            self.selection_anchors[domain] = selected_label
+
+    def _render_selectable_list(self, dpg: Any, domain: str, labels: list[str]) -> None:
+        content_tag = self._list_content_tag(domain)
+        if not dpg.does_item_exist(content_tag):
+            return
+        dpg.delete_item(content_tag, children_only=True)
+        selected_labels = self.selected_item_labels.setdefault(domain, set())
+        with dpg.table(parent=content_tag, header_row=False, resizable=False, policy=dpg.mvTable_SizingStretchProp):
+            dpg.add_table_column()
+            for label in labels:
+                with dpg.table_row():
+                    dpg.add_selectable(
+                        label=label,
+                        tag=self._list_row_tag(domain, label),
+                        default_value=label in selected_labels,
+                        span_columns=True,
+                        callback=lambda *_args, d=domain, selected=label: self._select_item_label(dpg, d, selected),
+                    )
+
+    def _modifier_down(self, dpg: Any, names: tuple[str, ...]) -> bool:
+        return any((key := getattr(dpg, name, None)) is not None and dpg.is_key_down(key) for name in names)
+
+    def _sync_selection_rows(self, dpg: Any, domain: str, labels: list[str]) -> None:
+        selected_labels = self.selected_item_labels.setdefault(domain, set())
+        for label in labels:
+            tag = self._list_row_tag(domain, label)
+            if dpg.does_item_exist(tag):
+                dpg.set_value(tag, label in selected_labels)
+
+    def _select_item_label(self, dpg: Any, domain: str, selected: str) -> None:
+        labels = self.model.player_item_labels_for_team_filter(self.player_team_filter, self.player_search_text) if domain == "Players" else self.model.domain_item_labels(domain)
+        if selected not in labels:
+            return
+        selected_labels = self.selected_item_labels.setdefault(domain, set())
+        ctrl = self._modifier_down(dpg, ("mvKey_LControl", "mvKey_RControl", "mvKey_Control"))
+        shift = self._modifier_down(dpg, ("mvKey_LShift", "mvKey_RShift", "mvKey_Shift"))
+        anchor = self.selection_anchors.get(domain)
+        if shift and anchor in labels:
+            start = labels.index(anchor)
+            end = labels.index(selected)
+            selected_range = set(labels[min(start, end) : max(start, end) + 1])
+            self.selected_item_labels[domain] = selected_labels | selected_range if ctrl else selected_range
+        elif ctrl:
+            selected_labels.symmetric_difference_update({selected})
+            self.selection_anchors[domain] = selected
+        else:
+            self.selected_item_labels[domain] = {selected}
+            self.selection_anchors[domain] = selected
+        self.model.select_item_by_label(domain, selected)
+        self._sync_selection_rows(dpg, domain, labels)
         self._update_detail_panel(dpg, domain)
 
     def _set_player_team_filter(self, dpg: Any, selected: str | None) -> None:
@@ -524,9 +579,7 @@ class DpgEditorApp:
         self._show_record_screen_rows(dpg)
 
     def _select_current(self, dpg: Any, domain: str, selected_label: str | None = None) -> None:
-        selected = str(selected_label or dpg.get_value(self._list_tag(domain)) or "")
-        self.model.select_item_by_label(domain, selected)
-        self._update_detail_panel(dpg, domain)
+        self._select_item_label(dpg, domain, str(selected_label or ""))
 
     def _open_selected(self, dpg: Any, domain: str) -> None:
         item = self.model.selected_item(domain)
@@ -890,8 +943,8 @@ class DpgEditorApp:
                 )
             dpg.add_spacer(height=14)
             with dpg.group(horizontal=True):
-                with dpg.child_window(width=420, height=-1, border=True, no_scrollbar=True):
-                    dpg.add_listbox([], tag=self._list_tag(domain), width=-1, num_items=self._record_list_rows_for_height(APP_VIEWPORT_HEIGHT), callback=lambda _s, app_data, _u=None, *_, d=domain: self._select_current(dpg, d, app_data))
+                with dpg.child_window(width=420, height=-1, border=True):
+                    dpg.add_group(tag=self._list_content_tag(domain))
                 with dpg.child_window(width=-1, height=-1, border=True):
                     dpg.add_text("Select a player", tag=self._detail_tag(domain, "title"))
                     dpg.add_spacer(height=12)
@@ -912,8 +965,8 @@ class DpgEditorApp:
             dpg.add_text(self._game_status_text(), tag=self._status_tag(domain))
             dpg.add_spacer(height=18)
             with dpg.group(horizontal=True):
-                with dpg.child_window(width=340, height=-1, border=True, no_scrollbar=True):
-                    dpg.add_listbox([], tag=self._list_tag(domain), width=220, num_items=self._record_list_rows_for_height(APP_VIEWPORT_HEIGHT), callback=lambda _s, app_data, _u=None, *_, d=domain: self._select_current(dpg, d, app_data))
+                with dpg.child_window(width=340, height=-1, border=True):
+                    dpg.add_group(tag=self._list_content_tag(domain))
                 with dpg.child_window(width=-1, height=-1, border=True):
                     dpg.add_text("Select a team", tag=self._detail_tag(domain, "title"))
                     dpg.add_spacer(height=8)
@@ -1032,8 +1085,8 @@ class DpgEditorApp:
             dpg.add_text(self._game_status_text(), tag=self._status_tag(domain))
             dpg.add_spacer(height=18)
             with dpg.group(horizontal=True):
-                with dpg.child_window(width=420, height=-1, border=True, no_scrollbar=True):
-                    dpg.add_listbox([], tag=self._list_tag(domain), width=-1, num_items=self._record_list_rows_for_height(APP_VIEWPORT_HEIGHT), callback=lambda _s, app_data, _u=None, *_, d=domain: self._select_current(dpg, d, app_data))
+                with dpg.child_window(width=420, height=-1, border=True):
+                    dpg.add_group(tag=self._list_content_tag(domain))
                 with dpg.child_window(width=-1, height=-1, border=True):
                     dpg.add_text(f"Select a {label.lower()}", tag=self._detail_tag(domain, "title"))
                     dpg.add_spacer(height=12)
@@ -1077,13 +1130,11 @@ class DpgEditorApp:
             dpg.setup_dearpygui()
             dpg.show_viewport()
             dpg.set_primary_window("main_window", True)
-            self._resize_record_lists(dpg)
             print("DPG_OPENED NBA2K Editor", flush=True)
             if load_on_start:
                 self._attach_and_load_all(dpg)
             while dpg.is_dearpygui_running():
                 self._poll_background_scan(dpg)
-                self._resize_record_lists(dpg)
                 dpg.render_dearpygui_frame()
         finally:
             dpg.destroy_context()
