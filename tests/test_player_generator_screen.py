@@ -83,21 +83,30 @@ class PlayerGeneratorScreenTests(unittest.TestCase):
         self.assertNotIn(PLAYER_GENERATOR_SCREEN, dpg_editor.EDITOR_DOMAINS)
         self.assertIn(PLAYER_GENERATOR_SCREEN, dpg_editor.APP_SCREENS)
 
-    def test_team_generator_button_label_and_nonblocking_worker_are_wired(self) -> None:
+    def test_import_generator_scope_controls_and_nonblocking_worker_are_wired(self) -> None:
+        module_source = inspect.getsource(dpg_editor)
         source = inspect.getsource(dpg_editor.DpgEditorApp)
-        generator_source = source[source.find("def _build_player_generator_screen"): source.find("def _sync_player_generator_preview")]
-        self.assertIn('label="Generate Team"', generator_source)
-        self.assertIn('label="Apply Team"', generator_source)
-        self.assertIn('label="Apply Full Season"', generator_source)
-        self.assertIn('label="Apply Preview To Selected Player"', generator_source)
-        self.assertIn('dpg.add_text("Team")', generator_source)
-        self.assertIn('dpg.add_text("Preview Player")', generator_source)
+        generator_source = source[source.find("def _build_player_generator_screen"): source.find("def _add_button_strip")]
+        self.assertIn('dpg.add_text("Import Generator")', generator_source)
+        self.assertIn('dpg.add_text("Import Scope")', generator_source)
+        self.assertIn('dpg.add_text("Roster")', generator_source)
+        self.assertIn('dpg.add_text("Player")', generator_source)
+        self.assertIn('tag=self._player_generator_scope_group_tag("roster"), show=False', generator_source)
+        self.assertIn('tag=self._player_generator_scope_group_tag("player"), show=False', generator_source)
+        self.assertIn('show=import_scope in {"Roster", "Player"}', generator_source)
+        self.assertIn('show=import_scope == "Player"', generator_source)
+        self.assertIn('label="Generate"', generator_source)
+        self.assertIn('label="Apply Generated"', generator_source)
+        self.assertIn('"Full Season", "Roster", "Player", "Draft Class"', module_source)
         self.assertNotIn('label="Generate Player"', generator_source)
         self.assertNotIn('label="Apply To Selected Player"', generator_source)
+        self.assertNotIn('label="Generate Team"', generator_source)
+        self.assertNotIn('label="Apply Team"', generator_source)
         self.assertNotIn('label="Generate Preview"', generator_source)
+        self.assertNotIn('dpg.add_text("Preview Player")', generator_source)
+        self.assertNotIn('with dpg.table', generator_source)
         self.assertIn("threading.Thread", generator_source)
-        self.assertIn("Generate Team", generator_source)
-        self.assertIn("apply_preview_to_game", generator_source)
+        self.assertIn("apply_selected_generated_player_to_game", source)
         self.assertIn("apply_batch_to_game", generator_source)
 
     def test_actual_player_preview_uses_generator_proposal_without_live_write(self) -> None:
@@ -129,9 +138,13 @@ class PlayerGeneratorScreenTests(unittest.TestCase):
         self.assertIn(2025, years)
         self.assertIn(ALL_TEAMS_FILTER, teams)
         self.assertIn("NYK", teams)
+        self.assertNotIn("2TM", teams)
+        self.assertNotIn("3TM", teams)
         brunson = next(option for option in nyk_players if option.player_id == "brunsja01")
         self.assertEqual(brunson.team, "NYK")
         self.assertIn("Jalen Brunson", brunson.label)
+        self.assertFalse(any(option.player_id == "beaucma01" for option in nyk_players))
+        self.assertTrue(any(option.player_id == "beaucma01" for option in generator_player_options(season=2025, team_filter="LAC")))
 
     def test_generate_preview_from_dropdown_option_updates_state(self) -> None:
         state = PlayerGeneratorScreenState()
@@ -169,7 +182,7 @@ class PlayerGeneratorScreenTests(unittest.TestCase):
         self.assertEqual(state.generated_count, 2)
         self.assertIsNotNone(state.preview)
         self.assertEqual(state.preview.player_id, "brunsja01")
-        self.assertIn("Generated 2 players for 2025 NYK", state.status)
+        self.assertIn("Generated 2 players for 2025 roster NYK", state.status)
         batch_call.assert_called_once()
         self.assertEqual(batch_call.call_args.kwargs["team_filter"], "NYK")
 
@@ -193,7 +206,7 @@ class PlayerGeneratorScreenTests(unittest.TestCase):
             self.fail("expected generated preview")
         self.assertEqual(preview.player_id, "hartjo01")
         self.assertEqual(preview.player_name, "Josh Hart")
-        self.assertIn("showing Josh Hart NYK", state.status)
+        self.assertIn("Generated 2 players for 2025 roster NYK", state.status)
 
     def test_generate_preview_updates_state(self) -> None:
         state = PlayerGeneratorScreenState()

@@ -167,6 +167,33 @@ class PlayerGeneratorProposalTests(unittest.TestCase):
         self.assertTrue(all(proposal.season == 2025 and proposal.team == "NYK" for proposal in batch.proposals))
         self.assertGreater(len(by_key[("brunsja01", "NYK")].field_candidates), 100)
 
+    def test_multi_team_players_generate_once_on_first_listed_roster_with_aggregate_stats(self) -> None:
+        context = season_context_index(self._contract(2025))
+
+        self.assertIn(("ANDERKY01", "GSW"), context.evidence_by_key)
+        self.assertNotIn(("ANDERKY01", "2TM"), context.evidence_by_key)
+        self.assertNotIn(("ANDERKY01", "MIA"), context.evidence_by_key)
+        evidence = context.evidence_for(player_id="anderky01", team="GSW")
+
+        self.assertEqual(evidence.team, "GSW")
+        self.assertEqual(evidence.season_info["team"], "GSW")
+        self.assertEqual(evidence.per_game["team"], "GSW")
+        self.assertEqual(evidence.per_game["source_team"], "2TM")
+        self.assertEqual(evidence.per_game["pts_per_game"], 5.9)
+        shares = evidence.per_game["multi_team_stat_shares"]
+        self.assertEqual(tuple(share["team"] for share in shares), ("GSW", "MIA"))
+        self.assertAlmostEqual(sum(float(share["stat_share"]) for share in shares), 1.0, places=5)
+        self.assertIn(("anderky01", "GSW"), generate_player_proposals_for_contract(self._contract(2025), team_filter="GSW").by_player_team())
+        self.assertNotIn(("anderky01", "MIA"), generate_player_proposals_for_contract(self._contract(2025), team_filter="MIA").by_player_team())
+
+    def test_1947_full_season_ignores_draft_only_players_without_player_evidence(self) -> None:
+        context = season_context_index(self._contract(1947))
+        batch = generate_player_proposals_from_index(context)
+
+        self.assertNotIn(("ALAMOBO01", "PIT"), context.evidence_by_key)
+        self.assertEqual(batch.failures, ())
+        self.assertGreater(len(batch.proposals), 150)
+
     def test_season_context_index_is_backend_cached_and_complete(self) -> None:
         contract = self._contract(2025)
 
@@ -176,8 +203,8 @@ class PlayerGeneratorProposalTests(unittest.TestCase):
         self.assertIsInstance(context, SeasonPlayerContextIndex)
         self.assertIs(context, same_context)
         self.assertIs(context.field_index["Attributes/3POINT"], same_context.field_index["Attributes/3POINT"])
-        self.assertGreater(len(context.comparison_rows), 700)
-        self.assertGreater(len(context.evidence_by_key), 700)
+        self.assertGreater(len(context.comparison_rows), 500)
+        self.assertGreater(len(context.evidence_by_key), 500)
         self.assertIn(("BRUNSJA01", "NYK"), context.evidence_by_key)
         self.assertEqual(context.evidence_for(player_id="brunsja01", team="NYK").identity["player"], "Jalen Brunson")
         self.assertEqual(context.comparison_row_for(player_id="brunsja01", team="NYK")["team_summaries.o_rtg"], 118.5)

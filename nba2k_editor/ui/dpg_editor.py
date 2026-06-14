@@ -21,17 +21,16 @@ from nba2k_editor.models.data_model import (
     verify_edits,
 )
 from nba2k_editor.ui.player_generator_screen import (
-    ALL_TEAMS_FILTER,
-    MAX_PREVIEW_ROWS,
+    ALL_TEAMS_FILTER as ALL_ROSTERS_FILTER,
     PLAYER_GENERATOR_SCREEN,
     PlayerGeneratorScreenState,
     apply_batch_to_game,
-    apply_preview_to_game,
+    apply_preview_to_game as apply_selected_generated_player_to_game,
     generate_year_into_state,
     generator_player_options,
-    generator_team_filter_options,
+    generator_team_filter_options as generator_roster_filter_options,
     generator_year_options,
-    select_generated_preview_into_state,
+    select_generated_preview_into_state as select_generated_player_into_state,
 )
 
 
@@ -41,6 +40,9 @@ APP_VIEWPORT_HEIGHT = 900
 RECORD_LIST_ROW_HEIGHT = 19
 RECORD_LIST_VERTICAL_MARGIN = 140
 MIN_RECORD_LIST_ROWS = 8
+GENERATOR_IMPORT_SCOPES: tuple[str, ...] = ("Full Season", "Roster", "Player", "Draft Class")
+DEFAULT_GENERATOR_IMPORT_SCOPE = "Full Season"
+ALL_ROSTERS_DISPLAY = "All Rosters"
 TARGET_CHOICES: tuple[str, ...] = ("NBA 2K22", "NBA 2K23", "NBA 2K24", "NBA 2K25", "NBA 2K26")
 RECORD_PREVIEW_CARDS = 100
 HISTORY_SIDE_NAV: tuple[str, ...] = ("Season Awards", "Past Champions", "League Leaders", "Hall of Famers")
@@ -278,8 +280,8 @@ class DpgEditorApp:
     def _player_generator_tag(self, *parts: object) -> str:
         return _tag(PLAYER_GENERATOR_SCREEN, *parts)
 
-    def _player_generator_preview_cell_tag(self, row: int, label: str) -> str:
-        return self._player_generator_tag("preview", row, label)
+    def _player_generator_scope_group_tag(self, group: str) -> str:
+        return self._player_generator_tag("scope", group)
 
     def _nav_tag(self, screen: str) -> str:
         return _tag("nav", screen)
@@ -1030,20 +1032,31 @@ class DpgEditorApp:
         if current_year not in year_options and year_options:
             current_year = year_options[0]
             self.player_generator_state.season = int(current_year)
-        team_options = generator_team_filter_options(season=self.player_generator_state.season)
-        if self.player_generator_state.team_filter not in team_options:
-            self.player_generator_state.team_filter = team_options[0]
+        roster_values = generator_roster_filter_options(season=self.player_generator_state.season)
+        if self.player_generator_state.team_filter not in roster_values:
+            self.player_generator_state.team_filter = roster_values[0]
+        roster_labels = tuple(self._generator_roster_label(value) for value in roster_values)
+        current_roster = self._generator_roster_label(self.player_generator_state.team_filter)
         player_options = generator_player_options(season=self.player_generator_state.season, team_filter=self.player_generator_state.team_filter)
         player_labels = tuple(option.label for option in player_options)
         if self.player_generator_state.player_option not in player_labels and player_labels:
             self.player_generator_state.player_option = player_labels[0]
         with dpg.child_window(tag=self._screen_tag(PLAYER_GENERATOR_SCREEN), show=show, width=-1, height=-1, border=False):
-            dpg.add_text("Team Generator")
+            dpg.add_text("Import Generator")
             dpg.add_spacer(height=8)
-            dpg.add_text("Generate a team from NBA_DATA_Master.sqlite, review any player, then apply the team to loaded live players.")
+            dpg.add_text("Choose what to import, generate it, then apply it to loaded live players.")
             dpg.add_spacer(height=14)
             with dpg.group(horizontal=True):
-                dpg.add_text("Year")
+                dpg.add_text("Import Scope")
+                dpg.add_combo(
+                    GENERATOR_IMPORT_SCOPES,
+                    tag=self._player_generator_tag("import_scope"),
+                    default_value=DEFAULT_GENERATOR_IMPORT_SCOPE,
+                    width=160,
+                    callback=lambda *_args: self._refresh_player_generator_dropdowns(dpg),
+                )
+                dpg.add_spacer(width=12)
+                dpg.add_text("Year / Class")
                 dpg.add_combo(
                     year_options,
                     tag=self._player_generator_tag("year"),
@@ -1051,112 +1064,121 @@ class DpgEditorApp:
                     width=110,
                     callback=lambda *_args: self._refresh_player_generator_dropdowns(dpg),
                 )
-                dpg.add_spacer(width=12)
-                dpg.add_text("Team")
+            dpg.add_spacer(height=8)
+            with dpg.group(horizontal=True, tag=self._player_generator_scope_group_tag("roster"), show=False):
+                dpg.add_text("Roster")
                 dpg.add_combo(
-                    team_options,
-                    tag=self._player_generator_tag("team_filter"),
-                    default_value=self.player_generator_state.team_filter,
+                    roster_labels,
+                    tag=self._player_generator_tag("roster_filter"),
+                    default_value=current_roster,
                     width=140,
                     callback=lambda *_args: self._refresh_player_generator_dropdowns(dpg),
                 )
-                dpg.add_spacer(width=12)
-                dpg.add_button(label="Generate Team", width=150, callback=lambda *_args: self._generate_player_preview(dpg))
-                dpg.add_spacer(width=8)
-                dpg.add_button(label="Apply Team", width=120, callback=lambda *_args: self._apply_player_generator_batch(dpg, scope="team"))
-                dpg.add_spacer(width=8)
-                dpg.add_button(label="Apply Full Season", width=160, callback=lambda *_args: self._apply_player_generator_batch(dpg, scope="season"))
-            dpg.add_spacer(height=8)
-            with dpg.group(horizontal=True):
-                dpg.add_text("Preview Player")
+            with dpg.group(horizontal=True, tag=self._player_generator_scope_group_tag("player"), show=False):
+                dpg.add_text("Player")
                 dpg.add_combo(
                     player_labels,
                     tag=self._player_generator_tag("player"),
                     default_value=self.player_generator_state.player_option,
                     width=430,
-                    callback=lambda *_args: self._select_player_generator_preview(dpg),
+                    callback=lambda *_args: self._refresh_player_generator_dropdowns(dpg),
                 )
-                dpg.add_spacer(width=12)
-                dpg.add_button(label="Apply Preview To Selected Player", width=230, callback=lambda *_args: self._apply_player_generator_preview(dpg))
+            dpg.add_spacer(height=12)
+            with dpg.group(horizontal=True):
+                dpg.add_button(label="Generate", width=150, callback=lambda *_args: self._generate_player_import(dpg))
+                dpg.add_spacer(width=8)
+                dpg.add_button(label="Apply Generated", width=170, callback=lambda *_args: self._apply_player_generator_import(dpg))
             dpg.add_spacer(height=10)
             dpg.add_text(self.player_generator_state.status, tag=self._player_generator_tag("status"))
-            dpg.add_spacer(height=12)
-            with dpg.child_window(width=-1, height=-1, border=True):
-                with dpg.table(header_row=True, resizable=True, policy=dpg.mvTable_SizingStretchProp):
-                    for label in ("Field", "Section", "Group", "Value", "Rule"):
-                        dpg.add_table_column(label=label)
-                    for row_index in range(MAX_PREVIEW_ROWS):
-                        with dpg.table_row():
-                            for label in ("Field", "Section", "Group", "Value", "Rule"):
-                                dpg.add_text("--", tag=self._player_generator_preview_cell_tag(row_index, label))
+
+    def _generator_roster_label(self, roster_value: str) -> str:
+        return ALL_ROSTERS_DISPLAY if roster_value == ALL_ROSTERS_FILTER else roster_value
+
+    def _generator_roster_value(self, roster_label: str) -> str:
+        return ALL_ROSTERS_FILTER if roster_label == ALL_ROSTERS_DISPLAY else str(roster_label or ALL_ROSTERS_FILTER)
+
+    def _selected_player_generator_scope(self, dpg: Any) -> str:
+        scope = str(dpg.get_value(self._player_generator_tag("import_scope")) or DEFAULT_GENERATOR_IMPORT_SCOPE)
+        return scope if scope in GENERATOR_IMPORT_SCOPES else DEFAULT_GENERATOR_IMPORT_SCOPE
+
+    def _sync_player_generator_scope_controls(self, dpg: Any, import_scope: str) -> None:
+        self._safe_configure(dpg, self._player_generator_scope_group_tag("roster"), show=import_scope in {"Roster", "Player"})
+        self._safe_configure(dpg, self._player_generator_scope_group_tag("player"), show=import_scope == "Player")
 
     def _refresh_player_generator_dropdowns(self, dpg: Any) -> None:
+        import_scope = self._selected_player_generator_scope(dpg)
+        self._sync_player_generator_scope_controls(dpg, import_scope)
         try:
             year = int(dpg.get_value(self._player_generator_tag("year")))
         except (TypeError, ValueError):
             year = self.player_generator_state.season
         self.player_generator_state.season = year
-        team_options = generator_team_filter_options(season=year)
-        team_filter = str(dpg.get_value(self._player_generator_tag("team_filter")) or self.player_generator_state.team_filter)
-        if team_filter not in team_options:
-            team_filter = team_options[0]
-        self.player_generator_state.team_filter = team_filter
-        self._safe_configure(dpg, self._player_generator_tag("team_filter"), items=team_options)
-        self._safe_set(dpg, self._player_generator_tag("team_filter"), team_filter)
-        player_labels = tuple(option.label for option in generator_player_options(season=year, team_filter=team_filter))
+        roster_values = generator_roster_filter_options(season=year)
+        roster_label = str(dpg.get_value(self._player_generator_tag("roster_filter")) or self._generator_roster_label(self.player_generator_state.team_filter))
+        roster_filter = self._generator_roster_value(roster_label)
+        if roster_filter not in roster_values:
+            roster_filter = roster_values[0]
+        self.player_generator_state.team_filter = roster_filter
+        roster_labels = tuple(self._generator_roster_label(value) for value in roster_values)
+        self._safe_configure(dpg, self._player_generator_tag("roster_filter"), items=roster_labels)
+        self._safe_set(dpg, self._player_generator_tag("roster_filter"), self._generator_roster_label(roster_filter))
+        player_labels = tuple(option.label for option in generator_player_options(season=year, team_filter=roster_filter))
         selected_player = str(dpg.get_value(self._player_generator_tag("player")) or self.player_generator_state.player_option)
         if selected_player not in player_labels:
             selected_player = player_labels[0] if player_labels else ""
         self.player_generator_state.player_option = selected_player
         self._safe_configure(dpg, self._player_generator_tag("player"), items=player_labels)
         self._safe_set(dpg, self._player_generator_tag("player"), selected_player)
-        if self.player_generator_state.batch is not None:
-            if self.player_generator_state.batch.season == year:
-                self._select_player_generator_preview(dpg)
-            else:
-                self.player_generator_state.batch = None
-                self.player_generator_state.preview = None
-                self.player_generator_state.status = "Choose year and team, then generate team."
-                self._sync_player_generator_preview(dpg)
+        if self.player_generator_state.batch is not None and self.player_generator_state.batch.season != year:
+            self.player_generator_state.batch = None
+            self.player_generator_state.preview = None
+            self.player_generator_state.status = "Choose import scope and source, then generate."
+            self._sync_player_generator_status(dpg)
 
-    def _select_player_generator_preview(self, dpg: Any) -> None:
+    def _select_generated_player_for_import(self, dpg: Any) -> None:
         selected_player = str(dpg.get_value(self._player_generator_tag("player")) or "")
         try:
-            select_generated_preview_into_state(self.player_generator_state, player_option_label=selected_player)
+            select_generated_player_into_state(self.player_generator_state, player_option_label=selected_player)
         except Exception as exc:
             self.player_generator_state.status = str(exc)
-        self._sync_player_generator_preview(dpg)
+        self._sync_player_generator_status(dpg)
 
-    def _generate_player_preview(self, dpg: Any) -> None:
+    def _generate_player_import(self, dpg: Any) -> None:
         if self.player_generator_thread is not None and self.player_generator_thread.is_alive():
-            self.player_generator_state.status = "Generate Team already running..."
+            self.player_generator_state.status = "Generate already running..."
             self._safe_set(dpg, self._player_generator_tag("status"), self.player_generator_state.status)
             return
         try:
+            import_scope = self._selected_player_generator_scope(dpg)
             season = int(dpg.get_value(self._player_generator_tag("year")))
-            team_filter = str(dpg.get_value(self._player_generator_tag("team_filter")) or "")
+            roster_filter = self._generator_roster_value(str(dpg.get_value(self._player_generator_tag("roster_filter")) or ""))
             player_option = str(dpg.get_value(self._player_generator_tag("player")) or "")
         except Exception as exc:
             self.player_generator_state.preview = None
             self.player_generator_state.status = str(exc)
-            self._sync_player_generator_preview(dpg)
+            self._sync_player_generator_status(dpg)
             return
+        if import_scope == "Draft Class":
+            self.player_generator_state.status = "Draft class import is not wired yet."
+            self._sync_player_generator_status(dpg)
+            return
+        generation_filter = roster_filter if import_scope in {"Roster", "Player"} else ALL_ROSTERS_FILTER
         self.player_generator_state.season = season
-        self.player_generator_state.team_filter = team_filter
+        self.player_generator_state.team_filter = generation_filter
         self.player_generator_state.player_option = player_option
         self.player_generator_state.preview = None
         self.player_generator_state.batch = None
-        scope_text = team_filter if team_filter and team_filter != ALL_TEAMS_FILTER else "full season"
+        scope_text = self._generator_import_status_label(import_scope, generation_filter)
         self.player_generator_state.status = f"Generating {season} {scope_text}..."
-        self._sync_player_generator_preview(dpg)
+        self._sync_player_generator_status(dpg)
 
         def worker() -> None:
-            result_state = PlayerGeneratorScreenState(season=season, team_filter=team_filter, player_option=player_option)
+            result_state = PlayerGeneratorScreenState(season=season, team_filter=generation_filter, player_option=player_option)
             try:
                 generate_year_into_state(
                     result_state,
                     season=season,
-                    team_filter=team_filter,
+                    team_filter=generation_filter,
                     player_option_label=player_option,
                 )
             except Exception as exc:  # Thread boundary: report to DPG loop.
@@ -1167,41 +1189,60 @@ class DpgEditorApp:
         self.player_generator_thread = threading.Thread(target=worker, name="player-generator", daemon=True)
         self.player_generator_thread.start()
 
-    def _apply_player_generator_preview(self, dpg: Any) -> None:
+    def _generator_import_status_label(self, import_scope: str, roster_filter: str) -> str:
+        if import_scope == "Full Season":
+            return "full season"
+        if import_scope == "Player":
+            return "selected player"
+        if roster_filter and roster_filter != ALL_ROSTERS_FILTER:
+            return f"roster {roster_filter}"
+        return "roster set"
+
+    def _apply_player_generator_player(self, dpg: Any) -> None:
         item = self.model.selected_item("Players")
         if item is None:
             self.player_generator_state.status = "Select a live game player first."
-            self._sync_player_generator_preview(dpg)
+            self._sync_player_generator_status(dpg)
             return
         try:
-            apply_preview_to_game(self.model, self.player_generator_state, player_index=item.index)
+            apply_selected_generated_player_to_game(self.model, self.player_generator_state, player_index=item.index)
         except Exception as exc:
             self.player_generator_state.status = str(exc)
-        self._sync_player_generator_preview(dpg)
+        self._sync_player_generator_status(dpg)
 
     def _player_generator_target_items(self, scope: str) -> list[RecordListItem]:
         loaded = self.model.loaded_items.get("Players", {})
         if scope == "season":
             return list(loaded.values())
-        team_filter = self.player_generator_state.team_filter
-        if not team_filter or team_filter == ALL_TEAMS_FILTER:
+        roster_filter = self.player_generator_state.team_filter
+        if not roster_filter or roster_filter == ALL_ROSTERS_FILTER:
             return list(loaded.values())
-        labels = self.model.player_item_labels_for_team_filter(team_filter, None)
+        labels = self.model.player_item_labels_for_team_filter(roster_filter, None)
         return [loaded[label] for label in labels if label in loaded]
 
-    def _apply_player_generator_batch(self, dpg: Any, *, scope: str) -> None:
-        target_items = self._player_generator_target_items(scope)
+    def _apply_player_generator_import(self, dpg: Any) -> None:
+        import_scope = self._selected_player_generator_scope(dpg)
+        if import_scope == "Draft Class":
+            self.player_generator_state.status = "Draft class import is not wired yet."
+            self._sync_player_generator_status(dpg)
+            return
+        if import_scope == "Player":
+            self._select_generated_player_for_import(dpg)
+            self._apply_player_generator_player(dpg)
+            return
+        target_scope = "season" if import_scope == "Full Season" else "roster"
+        target_items = self._player_generator_target_items(target_scope)
         if not target_items:
             self.player_generator_state.status = "Load live Players first."
-            self._sync_player_generator_preview(dpg)
+            self._sync_player_generator_status(dpg)
             return
         try:
-            result = apply_batch_to_game(self.model, self.player_generator_state, player_indices=tuple(item.index for item in target_items))
-            scope_label = "full season" if scope == "season" else "team"
+            apply_batch_to_game(self.model, self.player_generator_state, player_indices=tuple(item.index for item in target_items))
+            scope_label = "full season" if target_scope == "season" else "roster"
             self.player_generator_state.status = f"Applied {scope_label}: {self.player_generator_state.status}"
         except Exception as exc:
             self.player_generator_state.status = str(exc)
-        self._sync_player_generator_preview(dpg)
+        self._sync_player_generator_status(dpg)
 
     def _poll_player_generator(self, dpg: Any) -> None:
         while True:
@@ -1214,22 +1255,10 @@ class DpgEditorApp:
             elif event == "error":
                 self.player_generator_state.preview = None
                 self.player_generator_state.status = str(payload)
-            self._sync_player_generator_preview(dpg)
+            self._sync_player_generator_status(dpg)
 
-    def _sync_player_generator_preview(self, dpg: Any) -> None:
+    def _sync_player_generator_status(self, dpg: Any) -> None:
         self._safe_set(dpg, self._player_generator_tag("status"), self.player_generator_state.status)
-        rows = self.player_generator_state.preview.rows if self.player_generator_state.preview is not None else ()
-        for row_index in range(MAX_PREVIEW_ROWS):
-            row = rows[row_index] if row_index < len(rows) else None
-            values = {
-                "Field": row.field_key if row is not None else "--",
-                "Section": row.section if row is not None else "--",
-                "Group": row.group if row is not None else "--",
-                "Value": str(row.value) if row is not None else "--",
-                "Rule": row.source_rule if row is not None else "--",
-            }
-            for label, value in values.items():
-                self._safe_set(dpg, self._player_generator_preview_cell_tag(row_index, label), value)
 
     def _add_button_strip(self, dpg: Any, labels: tuple[str, ...], *, per_row: int, callback: Any | None = None) -> None:
         for start in range(0, len(labels), per_row):

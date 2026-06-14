@@ -28,6 +28,7 @@ _PLAYER_PER_100_SHEET = "Player Per 100 Poss"
 _PLAYER_ADVANCED_SHEET = "Advanced"
 _PLAYER_SHOOTING_SHEET = "Player Shooting"
 _PLAYER_PLAY_BY_PLAY_SHEET = "Player Play by Play"
+_PLAYER_TOTALS_SHEET = "Player Totals"
 _TEAM_STATS_PER_GAME_SHEET = "Team Stats Per Game"
 _TEAM_STATS_PER_100_SHEET = "Team Stats Per 100 Pos"
 _TEAM_SUMMARY_SHEET = "Team Summaries"
@@ -246,6 +247,8 @@ def _cached_season_context_index(database_path: str, season: int, offsets_path: 
     database = Path(database_path)
     sheet_names = workbook_sqlite_sheet_names(database)
     field_index = _cached_authored_player_field_index(offsets_path)
+    multi_team_primary = _multi_team_primary_teams(database, season)
+    multi_team_shares = _multi_team_stat_shares(database, season, multi_team_primary)
 
     rows_by_key: dict[tuple[str, str], dict[str, Any]] = {}
     player_static: dict[str, dict[str, Any]] = {}
@@ -268,25 +271,44 @@ def _cached_season_context_index(database_path: str, season: int, offsets_path: 
             if row.get("season") is not None and row.get("season") != season:
                 continue
 
-            if sheet in player_sheet_rows and player_id and team:
-                key = _player_team_key(player_id, team)
-                player_sheet_rows[sheet].setdefault(key, row)
+            canonical_team = _canonical_team_for_player(player_id, team, multi_team_primary) if player_id and team else ""
+
+            if sheet in player_sheet_rows and player_id and team and canonical_team:
+                key = _player_team_key(player_id, canonical_team)
                 if sheet == _BASE_PLAYER_SEASON_SHEET:
-                    team_rosters.setdefault(key[1], []).append(row)
+                    if not _is_multi_team_marker(team):
+                        canonical_row = _canonicalized_player_row(row, canonical_team, multi_team_shares.get(player_id.upper()))
+                        player_sheet_rows[sheet].setdefault(key, canonical_row)
+                        team_rosters.setdefault(key[1], []).append(canonical_row)
+                else:
+                    canonical_row = _canonicalized_player_row(row, canonical_team, multi_team_shares.get(player_id.upper()))
+                    if _is_multi_team_marker(team):
+                        player_sheet_rows[sheet][key] = canonical_row
+                    else:
+                        player_sheet_rows[sheet].setdefault(key, canonical_row)
 
             if sheet in team_sheet_rows and abbreviation:
                 team_sheet_rows[sheet].setdefault(abbreviation.upper(), row)
 
             if sheet == _BASE_PLAYER_SEASON_SHEET and player_id and team:
-                key = _player_team_key(player_id, team)
+                if not canonical_team or _is_multi_team_marker(team):
+                    continue
+                key = _player_team_key(player_id, canonical_team)
+                canonical_row = _canonicalized_player_row(row, canonical_team, multi_team_shares.get(player_id.upper()))
                 merged = rows_by_key.setdefault(key, {"player_id": player_id, "team": key[1], "season": season})
-                _merge_sheet_row(merged, prefix, row)
+                _merge_sheet_row(merged, prefix, canonical_row)
                 continue
 
             if player_id and team:
-                key = _player_team_key(player_id, team)
-                merged = rows_by_key.setdefault(key, {"player_id": player_id, "team": key[1], "season": season})
-                _merge_sheet_row(merged, prefix, row)
+                if not canonical_team:
+                    continue
+                key = _player_team_key(player_id, canonical_team)
+                canonical_row = _canonicalized_player_row(row, canonical_team, multi_team_shares.get(player_id.upper()))
+                if key in rows_by_key:
+                    _merge_sheet_row(rows_by_key[key], prefix, canonical_row)
+                else:
+                    static = player_static.setdefault(player_id.upper(), {})
+                    _merge_sheet_row(static, prefix, canonical_row, include_bare=False)
                 continue
 
             if player_id:
@@ -406,6 +428,98 @@ def _optional_indexed_team_row(
         return row
     missing_sources.append(sheet)
     return {}
+
+
+def _is_multi_team_marker(team: object) -> bool:
+    text = str(team or "").strip().upper()
+    return len(text) == 3 and text[0].isdigit() and text[1:] == "TM"
+
+
+def _canonical_team_for_player(player_id: str, team: str, primary_by_player_id: dict[str, str]) -> str:
+    selected_team = str(team or "").strip().upper()
+    primary = primary_by_player_id.get(str(player_id or "").strip().upper())
+    if not primary:
+        return selected_team
+    if _is_multi_team_marker(selected_team):
+        return primary
+    return selected_team if selected_team == primary else ""
+
+
+def _canonicalized_player_row(row: dict[str, Any], canonical_team: str, stat_shares: tuple[dict[str, Any], ...] | None = None) -> dict[str, Any]:
+    current_team = str(row.get("team") or "").strip().upper()
+    if current_team == canonical_team and not stat_shares:
+        return row
+    copied = dict(row)
+    if current_team and current_team != canonical_team:
+        copied.setdefault("source_team", current_team)
+    copied["team"] = canonical_team
+    if stat_shares:
+        copied["multi_team_stat_shares"] = stat_shares
+    return copied
+
+
+def _multi_team_primary_teams(database: Path, season: int) -> dict[str, str]:
+    saw_multi: set[str] = set()
+    primary: dict[str, str] = {}
+    for row in iter_workbook_sqlite_sheet_rows(database, _BASE_PLAYER_SEASON_SHEET):
+        if row.get("season") != int(season):
+            continue
+        player_id = str(row.get("player_id") or "").strip().upper()
+        team = str(row.get("team") or "").strip().upper()
+        if not player_id or not team:
+            continue
+        if _is_multi_team_marker(team):
+            saw_multi.add(player_id)
+            continue
+        if player_id in saw_multi:
+            primary.setdefault(player_id, team)
+    return primary
+
+
+def _multi_team_stat_shares(database: Path, season: int, primary_by_player_id: dict[str, str]) -> dict[str, tuple[dict[str, Any], ...]]:
+    aggregate_minutes: dict[str, float] = {}
+    aggregate_games: dict[str, float] = {}
+    actual_rows: dict[str, list[dict[str, Any]]] = {}
+    for row in iter_workbook_sqlite_sheet_rows(database, _PLAYER_TOTALS_SHEET):
+        if row.get("season") != int(season):
+            continue
+        player_id = str(row.get("player_id") or "").strip().upper()
+        team = str(row.get("team") or "").strip().upper()
+        if player_id not in primary_by_player_id or not team:
+            continue
+        if _is_multi_team_marker(team):
+            aggregate_minutes[player_id] = _float(row.get("mp")) or 0.0
+            aggregate_games[player_id] = _float(row.get("g")) or 0.0
+        else:
+            actual_rows.setdefault(player_id, []).append(row)
+
+    shares: dict[str, tuple[dict[str, Any], ...]] = {}
+    for player_id, rows in actual_rows.items():
+        total_minutes = aggregate_minutes.get(player_id) or sum((_float(row.get("mp")) or 0.0) for row in rows)
+        total_games = aggregate_games.get(player_id) or sum((_float(row.get("g")) or 0.0) for row in rows)
+        entries: list[dict[str, Any]] = []
+        for row in rows:
+            minutes = _float(row.get("mp")) or 0.0
+            games = _float(row.get("g")) or 0.0
+            basis = minutes if total_minutes else games
+            total = total_minutes if total_minutes else total_games
+            entries.append(
+                {
+                    "team": str(row.get("team") or "").strip().upper(),
+                    "games": games,
+                    "minutes": minutes,
+                    "stat_share": round(basis / total, 6) if total else 0.0,
+                }
+            )
+        shares[player_id] = tuple(entries)
+    return shares
+
+
+def _float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _player_team_key(player_id: object, team: object) -> tuple[str, str]:

@@ -48,7 +48,7 @@ class PlayerGeneratorScreenState:
     team_filter: str = ALL_TEAMS_FILTER
     player_option: str = ""
     generated_count: int = 0
-    status: str = "Choose year and team, then generate team."
+    status: str = "Choose import scope and source, then generate."
     preview: PlayerGeneratorPreview | None = None
     batch: PlayerGeneratorBatchPreview | None = None
 
@@ -94,7 +94,7 @@ def generate_preview_into_state(state: PlayerGeneratorScreenState, *, season: in
 
 def apply_preview_to_game(model: Any, state: PlayerGeneratorScreenState, *, player_index: int) -> Any:
     if state.preview is None:
-        raise ValueError("generate a player preview before applying to game")
+        raise ValueError("generate selected player before applying to game")
     generator_root = _generator_root()
     _ensure_import_path(generator_root)
     game_port = import_module("game_port")
@@ -105,7 +105,7 @@ def apply_preview_to_game(model: Any, state: PlayerGeneratorScreenState, *, play
 
 def apply_batch_to_game(model: Any, state: PlayerGeneratorScreenState, *, player_indices: tuple[int, ...]) -> Any:
     if state.batch is None:
-        raise ValueError("generate a player year before applying batch to game")
+        raise ValueError("generate import set before applying to game")
     generator_root = _generator_root()
     _ensure_import_path(generator_root)
     game_port = import_module("game_port")
@@ -179,7 +179,7 @@ def generate_year_into_state(
     state.team_filter = str(team_filter or ALL_TEAMS_FILTER).strip() or ALL_TEAMS_FILTER
     state.player_option = str(player_option_label or "").strip()
     selected_team = _team_filter_for_generation(state.team_filter)
-    scope_text = selected_team or "full season"
+    scope_text = f"roster {selected_team}" if selected_team else "full season"
     state.status = f"Generating {state.season} {scope_text}..."
     source_root = source_data.GeneratorSourceInventory.from_default().root
     contract = contracts.GeneratorInputContract(
@@ -212,8 +212,8 @@ def select_generated_preview_into_state(state: PlayerGeneratorScreenState, *, pl
         raise ValueError(f"no generated players for {state.season}")
     state.player_id = state.preview.player_id
     state.team = state.preview.team
-    scope_text = _team_filter_for_generation(state.team_filter) or "full season"
-    state.status = f"Generated {state.generated_count} players for {state.season} {scope_text}; showing {state.preview.player_name} {state.preview.team}."
+    scope_text = f"roster {_team_filter_for_generation(state.team_filter)}" if _team_filter_for_generation(state.team_filter) else "full season"
+    state.status = f"Generated {state.generated_count} players for {state.season} {scope_text}."
     return state.preview
 
 
@@ -258,7 +258,40 @@ def _all_player_season_rows() -> tuple[dict[str, Any], ...]:
 
 @lru_cache(maxsize=None)
 def _player_season_rows(*, season: int) -> tuple[dict[str, Any], ...]:
-    return tuple(row for row in _all_player_season_rows() if row.get("season") == int(season))
+    rows = tuple(row for row in _all_player_season_rows() if row.get("season") == int(season))
+    primary_by_player = _multi_team_primary_teams(rows)
+    filtered: list[dict[str, Any]] = []
+    for row in rows:
+        player_id = str(row.get("player_id") or "").strip().upper()
+        team = str(row.get("team") or "").strip().upper()
+        if _is_multi_team_marker(team):
+            continue
+        primary = primary_by_player.get(player_id)
+        if primary and team != primary:
+            continue
+        filtered.append(row)
+    return tuple(filtered)
+
+
+def _multi_team_primary_teams(rows: tuple[dict[str, Any], ...]) -> dict[str, str]:
+    saw_multi: set[str] = set()
+    primary: dict[str, str] = {}
+    for row in rows:
+        player_id = str(row.get("player_id") or "").strip().upper()
+        team = str(row.get("team") or "").strip().upper()
+        if not player_id or not team:
+            continue
+        if _is_multi_team_marker(team):
+            saw_multi.add(player_id)
+            continue
+        if player_id in saw_multi:
+            primary.setdefault(player_id, team)
+    return primary
+
+
+def _is_multi_team_marker(team: object) -> bool:
+    text = str(team or "").strip().upper()
+    return len(text) == 3 and text[0].isdigit() and text[1:] == "TM"
 
 
 def _generator_root() -> Path:

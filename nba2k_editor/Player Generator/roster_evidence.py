@@ -38,7 +38,8 @@ def build_team_roster_evidence(contract: GeneratorInputContract, *, team: str) -
     if not selected_team:
         raise ValueError("team is required")
 
-    roster_rows = tuple(row for row in read_sqlite_sheet_rows_for_season(validated.source_root, _PLAYER_SEASON_INFO_SHEET, int(validated.season)) if _same(row.get("team"), selected_team))
+    season_rows = tuple(read_sqlite_sheet_rows_for_season(validated.source_root, _PLAYER_SEASON_INFO_SHEET, int(validated.season)))
+    roster_rows = tuple(row for row in _canonical_roster_rows(season_rows) if _same(row.get("team"), selected_team))
     if not roster_rows:
         raise KeyError(f"missing roster rows for team={selected_team} season={validated.season}")
 
@@ -67,6 +68,42 @@ def _missing_sources_for_roster(contract: GeneratorInputContract, team: str, pla
         if not rows:
             missing.append(sheet)
     return tuple(dict.fromkeys(missing))
+
+
+def _canonical_roster_rows(rows: tuple[dict[str, Any], ...]) -> tuple[dict[str, Any], ...]:
+    primary_by_player = _multi_team_primary_teams(rows)
+    filtered: list[dict[str, Any]] = []
+    for row in rows:
+        player_id = str(row.get("player_id") or "").strip().upper()
+        team = str(row.get("team") or "").strip().upper()
+        if _is_multi_team_marker(team):
+            continue
+        primary = primary_by_player.get(player_id)
+        if primary and team != primary:
+            continue
+        filtered.append(row)
+    return tuple(filtered)
+
+
+def _multi_team_primary_teams(rows: tuple[dict[str, Any], ...]) -> dict[str, str]:
+    saw_multi: set[str] = set()
+    primary: dict[str, str] = {}
+    for row in rows:
+        player_id = str(row.get("player_id") or "").strip().upper()
+        team = str(row.get("team") or "").strip().upper()
+        if not player_id or not team:
+            continue
+        if _is_multi_team_marker(team):
+            saw_multi.add(player_id)
+            continue
+        if player_id in saw_multi:
+            primary.setdefault(player_id, team)
+    return primary
+
+
+def _is_multi_team_marker(team: object) -> bool:
+    text = str(team or "").strip().upper()
+    return len(text) == 3 and text[0].isdigit() and text[1:] == "TM"
 
 
 def _same(left: Any, right: str) -> bool:
