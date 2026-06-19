@@ -5,11 +5,13 @@ from functools import lru_cache
 from typing import Any
 
 from contracts import GeneratorInputContract
-from workbook_sqlite import ensure_workbook_sqlite_database, iter_workbook_sqlite_sheet_rows
+from workbook_sqlite import ensure_workbook_sqlite_database, iter_workbook_sqlite_sheet_rows, workbook_sqlite_sheet_names
 
 _PLAYER_IDENTITY_SHEET = "Player Info"
 _PLAYER_SEASON_INFO_SHEET = "Player Season Info"
 _PLAYER_PER_GAME_SHEET = "Player Per Game"
+_PLAYER_TOTALS_SHEET = "Player Totals"
+_PLAYER_PER_36_SHEET = "Player Per 36 min"
 _PLAYER_PER_100_SHEET = "Player Per 100 Poss"
 _PLAYER_ADVANCED_SHEET = "Advanced"
 _PLAYER_SHOOTING_SHEET = "Player Shooting"
@@ -19,6 +21,20 @@ _TEAM_STATS_PER_100_SHEET = "Team Stats Per 100 Pos"
 _TEAM_SUMMARY_SHEET = "Team Summaries"
 _OPPONENT_STATS_PER_GAME_SHEET = "Opponent Stats Per Game"
 _OPPONENT_STATS_PER_100_SHEET = "Opponent Stats Per 100 Poss"
+_PLAYER_CAREER_CONTEXT_SHEETS = {
+    "Draft Picks",
+    _PLAYER_IDENTITY_SHEET,
+    "All Star Selections",
+    "All Teams",
+    "Player Award Shares",
+    "All team Voting",
+}
+_SEASON_SCOPED_PLAYER_CONTEXT_SHEETS = {
+    "All Star Selections",
+    "All Teams",
+    "Player Award Shares",
+    "All team Voting",
+}
 
 
 @dataclass(frozen=True)
@@ -29,6 +45,8 @@ class PlayerEvidence:
     identity: dict[str, Any]
     season_info: dict[str, Any]
     per_game: dict[str, Any]
+    totals: dict[str, Any]
+    per_36: dict[str, Any]
     per_100: dict[str, Any]
     advanced: dict[str, Any]
     shooting: dict[str, Any]
@@ -39,6 +57,7 @@ class PlayerEvidence:
     team_summary: dict[str, Any]
     opponent_stats_per_game: dict[str, Any]
     opponent_stats_per_100: dict[str, Any]
+    source_context: dict[str, Any]
     missing_sources: tuple[str, ...]
 
 
@@ -57,6 +76,8 @@ def build_player_evidence(contract: GeneratorInputContract, *, player_id: str, t
     identity = _find_player_identity(database_path, requested_player_id)
     season_info = _required_player_row(validated, _PLAYER_SEASON_INFO_SHEET, requested_player_id, requested_team)
     per_game = _required_player_row(validated, _PLAYER_PER_GAME_SHEET, requested_player_id, requested_team)
+    totals = _optional_player_row(validated, _PLAYER_TOTALS_SHEET, requested_player_id, requested_team, missing)
+    per_36 = _optional_player_row(validated, _PLAYER_PER_36_SHEET, requested_player_id, requested_team, missing)
     per_100 = _optional_player_row(validated, _PLAYER_PER_100_SHEET, requested_player_id, requested_team, missing)
     advanced = _optional_player_row(validated, _PLAYER_ADVANCED_SHEET, requested_player_id, requested_team, missing)
     shooting = _optional_player_row(validated, _PLAYER_SHOOTING_SHEET, requested_player_id, requested_team, missing)
@@ -76,6 +97,8 @@ def build_player_evidence(contract: GeneratorInputContract, *, player_id: str, t
         identity=identity,
         season_info=season_info,
         per_game=per_game,
+        totals=totals,
+        per_36=per_36,
         per_100=per_100,
         advanced=advanced,
         shooting=shooting,
@@ -86,6 +109,7 @@ def build_player_evidence(contract: GeneratorInputContract, *, player_id: str, t
         team_summary=team_summary,
         opponent_stats_per_game=opponent_stats_per_game,
         opponent_stats_per_100=opponent_stats_per_100,
+        source_context=_source_context(validated, requested_player_id, requested_team),
         missing_sources=tuple(dict.fromkeys(missing)),
     )
 
@@ -193,7 +217,38 @@ def _team_rows_by_abbreviation(database_path: str, season: int, sheet: str) -> d
 
 
 def _same(left: Any, right: str) -> bool:
-    return str(left or "").strip().upper() == str(right or "").strip().upper()
+    return str(left or "").strip().upper() == str(right).strip().upper()
+
+
+def _source_context(contract: GeneratorInputContract, player_id: str, team: str) -> dict[str, Any]:
+    database_path = ensure_workbook_sqlite_database(contract.source_root)
+    selected_player = str(player_id).strip().upper()
+    selected_team = str(team).strip().upper()
+    context: dict[str, Any] = {"player_id": selected_player, "team": selected_team, "season": int(contract.season)}
+    for sheet in workbook_sqlite_sheet_names(database_path):
+        prefix = sheet.lower().replace(" ", "_")
+        for row in iter_workbook_sqlite_sheet_rows(database_path, sheet):
+            row_season = row.get("season")
+            if row_season is not None and row_season != int(contract.season):
+                if sheet not in _PLAYER_CAREER_CONTEXT_SHEETS or sheet in _SEASON_SCOPED_PLAYER_CONTEXT_SHEETS:
+                    continue
+            row_player = str(row.get("player_id") or "").strip().upper()
+            row_team = str(row.get("team") or row.get("tm") or "").strip().upper()
+            row_abbreviation = str(row.get("abbreviation") or "").strip().upper()
+            applies_to_player = row_player == selected_player and (sheet in _PLAYER_CAREER_CONTEXT_SHEETS or not row_team or row_team == selected_team)
+            applies_to_team = not row_player and row_abbreviation == selected_team
+            if applies_to_player or applies_to_team:
+                _merge_source_row(context, prefix, row, include_bare=applies_to_player)
+    return context
+
+
+def _merge_source_row(target: dict[str, Any], prefix: str, row: dict[str, Any], *, include_bare: bool) -> None:
+    for column, value in row.items():
+        if value is None:
+            continue
+        target.setdefault(f"{prefix}.{column}", value)
+        if include_bare and column not in target:
+            target[column] = value
 
 
 __all__ = ["PlayerEvidence", "build_player_evidence"]

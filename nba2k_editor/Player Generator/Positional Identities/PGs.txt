@@ -1,0 +1,1402 @@
+How to read this (so it can actually cover “all conceivable” PG types)
+
+A “point guard archetype” is not a single rigid bucket. In real basketball, a PG is a stack of roles:
+
+Primary job (how they generate advantages): PnR engine, drive‑and‑kick, set‑play conductor, etc.
+
+Threat profile (what the defense must respect): rim pressure, pull‑up 3, midrange, post‑up, none.
+
+Decision style (how they choose actions): low‑risk manager, high‑variance gambler, clock controller, etc.
+
+Off‑ball value (when not initiating): relocation shooter, screener, cutter, corner spacer.
+
+Defensive job (what they are on defense): POA stopper, screen navigator, ballhawk, liability.
+
+Physical / positional form (who “plays point”): tiny speed guard, jumbo guard, point forward, point center.
+
+Overlays (training/tech/culture): analytics‑optimized, AI‑assisted, biomechanics‑tuned, neuro‑trained (subset), etc.
+
+So the most honest way to “display every archetype” is:
+
+list the atomic PG roles (the building blocks), and
+
+list the stackable overlays,
+
+show how any “conceivable” PG is just a combination.
+
+Below is a large set of atomic roles (each usable in NBA, Euro/FIBA, WNBA, G‑League, pickup, playground), followed by overlays (including neuro‑training as a subset, not its own base archetype).
+
+Atomic PG archetypes (role building blocks)
+A) Orchestrators and managers (winning by organization, not chaos)
+1) Floor General Conductor
+
+Key characteristics: calls structure, manipulates tempo, prioritizes shot quality; high verbal/visual command.
+
+Strengths: stabilizes possessions; raises team shot diet and spacing discipline.
+
+Weaknesses: can become predictable; may under-pressure the rim if too conservative.
+
+Examples: Hypo: “coach-on-court” guard who always gets you into 2–3 pet actions.
+
+Thrives in: structured motion, continuity, read‑and‑react, veteran teams.
+
+Team dynamics: reduces randomness; teammates play faster because decisions are pre-solved.
+
+2) Set-Play Caller
+
+Key characteristics: memorizes and triggers a deep playbook; excels at alignment, timing, and counters.
+
+Strengths: consistently generates “clean looks” without needing elite shot creation.
+
+Weaknesses: if the set is blown up, may lack improvisation.
+
+Examples: Hypo: “clipboard PG” who wins by ATOs and quick-hitters.
+
+Thrives in: Euro-style sets, college-style structure, heavy ATO environments.
+
+Team dynamics: everyone has a job; reduces freelancing and ego possessions.
+
+3) Tempo Controller
+
+Key characteristics: changes pace possession-to-possession; knows when to run vs. bleed clock.
+
+Strengths: keeps stars fresh; avoids opponent momentum; forces matchup discomfort.
+
+Weaknesses: can suppress easy transition points if overly controlling.
+
+Examples: Hypo: “metronome PG” who never lets the game speed up unintentionally.
+
+Thrives in: teams with elite half-court execution or limited depth.
+
+Team dynamics: lowers variance; teammates feel “guided.”
+
+4) Low-Usage Game Manager
+
+Key characteristics: minimal dribble, low turnovers, advances the ball, enters offense early.
+
+Strengths: lets wings/bigs carry usage; keeps offense on schedule.
+
+Weaknesses: if creators are trapped/injured, can’t self-generate.
+
+Examples: Hypo: “bring-it-up, swing-it, defend” starter.
+
+Thrives in: star-driven teams; systems with multiple creators.
+
+Team dynamics: clear hierarchy; role players get predictable touches.
+
+5) Turnover-Minimizer “Security Guard”
+
+Key characteristics: risk-averse passing; values possession above highlight.
+
+Strengths: maximizes shot volume vs. opponent; best for close games.
+
+Weaknesses: may miss high-value risky windows; offense can stagnate.
+
+Examples: Hypo: “2:1 assist/turnover monk.”
+
+Thrives in: playoff-style half court, late-game lineups.
+
+Team dynamics: trust and calm; sometimes frustrates aggressive scorers.
+
+6) Late-Game Clock Surgeon
+
+Key characteristics: end-of-quarter math, two-for-one awareness, foul/timeout management instincts.
+
+Strengths: wins margins; turns messy endings into points.
+
+Weaknesses: may “save” too much for late, reducing early aggression.
+
+Examples: Hypo: “always gets the last good shot.”
+
+Thrives in: close-game teams, veteran cores.
+
+Team dynamics: teammates defer at crunch time; clear decision ownership.
+
+7) ATO and Special-Situations Quarterback
+
+Key characteristics: reads inbound coverages; executes scripted counters instantly.
+
+Strengths: steals points; punishes scouting mistakes.
+
+Weaknesses: in free-flow situations may be average.
+
+Examples: Hypo: “baseline out-of-bounds killer.”
+
+Thrives in: coaches who scheme; teams with set-play shooting.
+
+Team dynamics: builds confidence in late timeouts; reduces panic.
+
+8) Press-Break Captain
+
+Key characteristics: dribble safety, pivot passing, trap recognition, “get off it early.”
+
+Strengths: prevents live-ball turnovers; unlocks transition chances.
+
+Weaknesses: may be passive in half-court if identity is “survive pressure.”
+
+Examples: Hypo: “never gets sped up by full-court.”
+
+Thrives in: leagues/levels with frequent pressing; chaotic opponents.
+
+Team dynamics: teammates relax under pressure; bigs become outlets.
+
+9) Entry-Pass Quarterback (Post Feeder)
+
+Key characteristics: angle creation, timing, disguise; understands post seal windows.
+
+Strengths: makes bigs efficient; forces double teams to start offense.
+
+Weaknesses: if team can’t punish doubles, entry focus becomes wasted.
+
+Examples: Hypo: “feeds the post 12 times a night, all on time.”
+
+Thrives in: post-heavy, split-action, inside-out offenses.
+
+Team dynamics: empowers bigs; wings learn to cut and space for doubles.
+
+10) “Get Us Organized” Veteran Stabilizer
+
+Key characteristics: leadership, calming presence, knows opponent tendencies; not necessarily high-skill anymore.
+
+Strengths: stops runs; sets defensive matchups; keeps team connected.
+
+Weaknesses: athletic/shot creation limits; may be hunted.
+
+Examples: Hypo: “10-minute glue PG.”
+
+Thrives in: second units, young rosters, playoff series.
+
+Team dynamics: raises professionalism; reduces emotional spirals.
+
+B) Pick-and-roll engines (winning by two-man leverage)
+11) PnR Maestro (Read-First)
+
+Key characteristics: manipulates screen angle; reads tags, stunts, nail help; chooses pass vs. shot correctly.
+
+Strengths: generates layups/3s reliably; scalable to any personnel.
+
+Weaknesses: can be schemed with aggressive switching if no counters.
+
+Examples: Hypo: “controls the big like a joystick.”
+
+Thrives in: spread PnR, 4-out/5-out, strong rim-running bigs.
+
+Team dynamics: bigs get paid; shooters get predictable catch-and-shoot.
+
+12) PnR Scoring Threat (Pull-Up Midrange)
+
+Key characteristics: uses drop coverage as a green light; elite stop-on-a-dime.
+
+Strengths: punishes conservative defenses; stabilizes offense when rim is protected.
+
+Weaknesses: can over-invest in midrange; lower math efficiency if excessive.
+
+Examples: Hypo: “automatic from the elbow off one screen.”
+
+Thrives in: drop-heavy leagues, late-game half court.
+
+Team dynamics: spacing shifts to midrange; bigs focus on screening/re-screening.
+
+13) PnR Scoring Threat (Pull-Up Three)
+
+Key characteristics: forces high pickup; uses range to distort coverage.
+
+Strengths: creates 4-on-3 advantages; turns good defenses into rotations.
+
+Weaknesses: if cold, offense can die on variance; high difficulty shots.
+
+Examples: Hypo: “needs one screen to get a 28-foot pull-up.”
+
+Thrives in: 5-out, dribble-handoff ecosystems, transition drag screens.
+
+Team dynamics: everyone becomes a spacer/short-roll decision-maker.
+
+14) PnR Rim-Pressure Driver
+
+Key characteristics: turns the corner; lives in the paint; strong downhill finishing or dump-offs.
+
+Strengths: collapses help; generates corner threes and lobs.
+
+Weaknesses: if no jumper, defenses go under and load the paint.
+
+Examples: Hypo: “touches paint every trip.”
+
+Thrives in: spaced lineups, rim-running bigs, corner shooters.
+
+Team dynamics: wings feast on kickouts; bigs get dunker spot/lobs.
+
+15) Snake/Reject Manipulator
+
+Key characteristics: rejects screens, snakes back into lane, uses defender momentum against them.
+
+Strengths: beats scouting; forces miscommunication; creates odd-angle passes.
+
+Weaknesses: can over-dribble; timing-dependent with big.
+
+Examples: Hypo: “never takes the screen the same way twice.”
+
+Thrives in: teams with smart screeners and short-roll play.
+
+Team dynamics: requires high IQ; teammates must stay ready for late passes.
+
+16) Pocket-Pass Surgeon
+
+Key characteristics: tight-window bounce/pocket passing; reads the big’s defender’s hips.
+
+Strengths: unlocks rolling bigs vs. hedge; kills traps.
+
+Weaknesses: if big can’t finish or make the next pass, value drops.
+
+Examples: Hypo: “thread-the-needle passer.”
+
+Thrives in: PnR with strong finishers or short-roll creators.
+
+Team dynamics: big becomes primary beneficiary; offense becomes chain reactions.
+
+17) Spain/Stack-Action Specialist
+
+Key characteristics: masters back screens, “Spain” timing, re-screens, ghost actions.
+
+Strengths: produces confusion threes and lobs; high value in late clock.
+
+Weaknesses: complex; relies on teammates executing precisely.
+
+Examples: Hypo: “calls Spain twice, gets a layup both times.”
+
+Thrives in: teams that practice; Euro-style timing teams.
+
+Team dynamics: demands discipline; rewards cohesive rosters.
+
+18) Spread PnR “Spam Operator”
+
+Key characteristics: runs the same family repeatedly, adjusting reads; stamina for 40+ high ball screens.
+
+Strengths: simplifies offense; maximizes reps and chemistry.
+
+Weaknesses: predictable; can be scouted into diminishing returns.
+
+Examples: Hypo: “one-action engine with 7 counters.”
+
+Thrives in: heliocentric rosters, shooting-heavy lineups.
+
+Team dynamics: role clarity; non-handlers become finishers/spacers.
+
+19) Inverted PnR / Guard-Screener Instigator
+
+Key characteristics: uses guard-to-guard or guard-to-wing screens; hunts mismatches and confusion.
+
+Strengths: breaks switching rules; creates unexpected downhill lanes.
+
+Weaknesses: if small guard can’t screen physically, action can die.
+
+Examples: Hypo: “PG who screens like a wing.”
+
+Thrives in: positionless offenses, switching leagues.
+
+Team dynamics: everyone must screen; labels blur.
+
+C) Drive-and-kick and paint-touch engines (winning by collapse)
+20) Drive-and-Kick Engine
+
+Key characteristics: first step pressure; reads help; automatic corner/slot kickouts.
+
+Strengths: generates threes; forces rotations; raises teammates’ efficiency.
+
+Weaknesses: if finishing is weak, defenses stop helping.
+
+Examples: Hypo: “rim touch → corner 3 every other trip.”
+
+Thrives in: pace-and-space, 4-out/5-out, shooting rosters.
+
+Team dynamics: teammates must be ready shooters; bigs become lob/dunker options.
+
+21) Paint-Touch Merchant (Touch Count Creator)
+
+Key characteristics: obsession with getting two feet in the paint, even without a shot.
+
+Strengths: collapses defenses; creates scramble situations.
+
+Weaknesses: can be paint-clogging if spacing isn’t real.
+
+Examples: Hypo: “doesn’t shoot—just touches paint and sprays.”
+
+Thrives in: teams with elite catch-and-shoot and cutters.
+
+Team dynamics: forces off-ball discipline; rewards movement.
+
+22) Change-of-Pace Slasher
+
+Key characteristics: elite deceleration, hesitation, stop-start; wins without blazing speed.
+
+Strengths: beats aggressive defenders; draws help late.
+
+Weaknesses: can drift into midrange pull-ups without rim pressure.
+
+Examples: Hypo: “the defender is always half a beat wrong.”
+
+Thrives in: tight-spacing leagues, physical defenses, half-court games.
+
+Team dynamics: teammates learn to cut on pauses; timing-heavy offense.
+
+23) Foul-Pressure Driver
+
+Key characteristics: attacks contact; uses body positioning; lives at the line.
+
+Strengths: stabilizes scoring; puts opponents in foul trouble.
+
+Weaknesses: can become whistle-dependent; playoff/pickup variance.
+
+Examples: Hypo: “gets to the bonus by himself.”
+
+Thrives in: leagues with tight foul calls; teams needing free throws.
+
+Team dynamics: slows game; opponents play softer; teammates crash less.
+
+24) Acrobatic Finisher
+
+Key characteristics: angles, spin, reverse, float finishes; small guard rim craft.
+
+Strengths: converts in traffic; makes paint touches “real” even vs size.
+
+Weaknesses: high difficulty; injury risk; can avoid contact too much.
+
+Examples: Hypo: “undersized guard who finishes like a gymnast.”
+
+Thrives in: transition, spaced lanes, weak rim protection.
+
+Team dynamics: opens lob windows; bigs get dump-offs.
+
+25) Power-Contact Rim Attacker
+
+Key characteristics: strength-based downhill; seeks body-to-body finishes.
+
+Strengths: forces help; creates offensive rebounding chances.
+
+Weaknesses: can be inefficient without touch; turnover risk in crowds.
+
+Examples: Hypo: “linebacker guard.”
+
+Thrives in: physical leagues, small-ball lineups, switch-hunting.
+
+Team dynamics: teammates spot up and crash; defense collapses early.
+
+26) Non-Shooter Paint Bully
+
+Key characteristics: minimal perimeter threat; lives on drives, cuts, dump-offs.
+
+Strengths: if elite at rim + passing, can still warp defenses.
+
+Weaknesses: spacing taxes; easy to scheme in some environments.
+
+Examples: Hypo: “refuses jumpers; still creates chaos at rim.”
+
+Thrives in: teams with 4 shooters and a rim-running big.
+
+Team dynamics: teammates must shoot; offense becomes more binary.
+
+27) Transition Jet (End-to-End)
+
+Key characteristics: grabs outlet or receives and instantly pressures rim.
+
+Strengths: easy points; stresses conditioning; prevents set defenses.
+
+Weaknesses: half-court can be shallow if speed is the only edge.
+
+Examples: Hypo: “touches paint in 3 dribbles full court.”
+
+Thrives in: high-pace systems, deep benches, pressing defenses.
+
+Team dynamics: wings sprint lanes; bigs run rim; more possessions overall.
+
+D) Shooting and gravity guards (winning by spacing distortion)
+28) Deep-Range Gravity PG
+
+Key characteristics: defense must pick up far out; relocation instinct; off-ball stamina.
+
+Strengths: creates spacing without the ball; makes teammates’ drives easier.
+
+Weaknesses: if trapped/physically denied, can be neutralized.
+
+Examples: Prototype: “Curry-style gravity.” (Concept, not requirement.)
+
+Thrives in: motion, split actions, DHOs, 5-out.
+
+Team dynamics: everyone learns to screen and cut for the shooter; defense overreacts.
+
+29) Pull-Up Three Bomber (On-Ball)
+
+Key characteristics: quick-trigger off dribble; hunts pull-ups in PnR and transition.
+
+Strengths: high leverage shots; punishes drop/under instantly.
+
+Weaknesses: variance; can overtake shot diet.
+
+Examples: Hypo: “walk-up 3 in semi-transition.”
+
+Thrives in: spread PnR, early offense, drag screens.
+
+Team dynamics: teammates space wider; bigs set higher screens.
+
+30) Catch-and-Shoot Relocator
+
+Key characteristics: thrives after giving it up; sprints into re-space pockets.
+
+Strengths: makes “pass-and-move” offenses lethal.
+
+Weaknesses: if forced to create off dribble, limited.
+
+Examples: Hypo: “pass → relocate → dagger.”
+
+Thrives in: motion offenses, drive-and-kick ecosystems.
+
+Team dynamics: increases ball movement; discourages ball-watching.
+
+31) Off-Screen Shooter PG
+
+Key characteristics: uses pindowns, flares, staggers; reads screen angles like a WR route tree.
+
+Strengths: forces top-locking and chasing; opens slips for bigs.
+
+Weaknesses: can be denied by physical defenders; needs screeners.
+
+Examples: Hypo: “runs 2 miles a game on screens.”
+
+Thrives in: floppy/stagger actions, Euro motion, modern WNBA motion.
+
+Team dynamics: teammates become screeners; offense becomes movement-based.
+
+32) Midrange Artisan
+
+Key characteristics: elite pull-up at FT line extended, floaters, short middy; strong footwork.
+
+Strengths: punishes switching and drop; reliable late clock.
+
+Weaknesses: can lower team 3PA/rim rate if overused.
+
+Examples: Hypo: “two dribbles to a clean 15-footer.”
+
+Thrives in: tight playoff defenses, no-dunk big rim protectors.
+
+Team dynamics: stabilizes offense; sometimes reduces corner-3 volume.
+
+33) 3-and-D Point Guard
+
+Key characteristics: low-usage spacing + tough POA defense; simple reads.
+
+Strengths: fits anywhere; scales next to stars.
+
+Weaknesses: if asked to self-create, ceiling is low.
+
+Examples: Hypo: “defends, hits open 3s, never hijacks offense.”
+
+Thrives in: star-heavy rosters, switching defenses.
+
+Team dynamics: keeps hierarchy clean; raises defensive baseline.
+
+34) Shot-Profile Minimalist (Rim + 3 Only)
+
+Key characteristics: rejects midrange; always seeks layup/FT/3; efficient decision rules.
+
+Strengths: strong math; easy to build around.
+
+Weaknesses: if rim is walled and 3 is cold, lacks counter area.
+
+Examples: Hypo: “either dunk/layup or step-back 3.”
+
+Thrives in: modern spacing, 5-out, rim pressure + shooters.
+
+Team dynamics: simplifies shot diet; teammates know where rebounds come from.
+
+35) “Heave & Heat-Check” Trigger Guard
+
+Key characteristics: takes extreme difficulty shots early; confidence-based rhythm.
+
+Strengths: can blow open games; stretches defenses.
+
+Weaknesses: wildly volatile; can sink team shot quality.
+
+Examples: Hypo: “green light with no yellow.”
+
+Thrives in: underdog teams, high-pace shootouts, playground settings.
+
+Team dynamics: raises variance; teammates must rebound and stay mentally steady.
+
+E) Isolation, mismatch, and bailout creators (winning by “I can score anyway”)
+36) Isolation Bucket-Getter PG
+
+Key characteristics: 1v1 package, counters, footwork; creates without screens.
+
+Strengths: solves broken possessions; forces double teams.
+
+Weaknesses: can stall ball; teammates become spectators.
+
+Examples: Hypo: “always has a move for the last 6 seconds.”
+
+Thrives in: spread floors, late clock, switching defenses.
+
+Team dynamics: offense centralizes; role players become spacers.
+
+37) Separation Creator (Step-Back / Side-Step)
+
+Key characteristics: decel + step-back; manipulates defender’s balance.
+
+Strengths: manufactures shots vs elite defense; spacing weapon.
+
+Weaknesses: high difficulty; if whistles don’t come, efficiency drops.
+
+Examples: Hypo: “creates 3 feet of space on demand.”
+
+Thrives in: 5-out, switch-heavy environments.
+
+Team dynamics: forces defenders to play higher; opens driving lanes for others.
+
+38) Post-Up Bully PG
+
+Key characteristics: strong base; backs down smaller guards; passes out of doubles.
+
+Strengths: punishes switches; slows game on demand.
+
+Weaknesses: can clog spacing; pace slows; vulnerable to digs.
+
+Examples: Hypo: “6'4 guard who lives on the right block.”
+
+Thrives in: switch-hunting, inside-out systems, physical leagues.
+
+Team dynamics: wings cut and spot; bigs clear dunker/corners.
+
+39) Switch-Hunter Mismatch Optimizer
+
+Key characteristics: actively engineers matchups; calls screens to force desired defender.
+
+Strengths: weaponizes opponent weak links; consistent advantage creation.
+
+Weaknesses: can become predictable; may waste clock “hunting.”
+
+Examples: Hypo: “runs 3 screens to get the matchup he wants.”
+
+Thrives in: playoffs, scouting-heavy leagues, veteran teams.
+
+Team dynamics: teammates become screen tools; requires buy-in and patience.
+
+40) Late-Clock Bailout Artist
+
+Key characteristics: tough shot-making; comfort with bad spacing and collapsing defenses.
+
+Strengths: prevents empty possessions; high value in broken play.
+
+Weaknesses: can mask bad offense; teammates stop moving expecting bailout.
+
+Examples: Hypo: “saves 6 possessions a game with nonsense shots.”
+
+Thrives in: low-structure teams, end-of-shot-clock scenarios.
+
+Team dynamics: can create dependency; also increases confidence under pressure.
+
+41) Transition Leak-Out Scorer PG
+
+Key characteristics: cherry-pick timing (legal), quick outlet conversion, finishing.
+
+Strengths: easy points; pressures opponent offensive rebounding decisions.
+
+Weaknesses: hurts defensive rebounding/help responsibility.
+
+Examples: Hypo: “always the first guy down.”
+
+Thrives in: teams willing to trade some rebound coverage for speed.
+
+Team dynamics: forces teammates to cover back; increases pace.
+
+42) “Ball-Stopper Iso” (Dysfunctional but real)
+
+Key characteristics: over-dribbles, hunts own shot, ignores advantage passing.
+
+Strengths: occasionally creates a hard shot; can win pickup games alone.
+
+Weaknesses: kills team rhythm; lowers shot quality and morale.
+
+Examples: Hypo: “10-second dribble package every trip.”
+
+Thrives in: playground, talent-mismatch situations, last-resort lineups.
+
+Team dynamics: teammates disengage; offense becomes predictable and static.
+
+F) Passing specialists (creating points primarily with the pass)
+43) Pure Distributor (Pass-First Table Setter)
+
+Key characteristics: pass windows, timing, keeps dribble alive; values teammates’ shots over own.
+
+Strengths: raises team cohesion; maximizes shooters/cutters.
+
+Weaknesses: if not a scoring threat, defenses gap and dare.
+
+Examples: Hypo: “would rather assist than shoot a layup.”
+
+Thrives in: motion, cutting-heavy teams, strong finishers.
+
+Team dynamics: everyone stays involved; sometimes lacks late-clock scoring.
+
+44) High-Risk Gunslinger Passer
+
+Key characteristics: attempts tight windows; accepts turnovers as cost of creation.
+
+Strengths: creates elite shots others can’t; breaks zones/packed paints.
+
+Weaknesses: live-ball turnovers; can lose games quickly.
+
+Examples: Hypo: “will throw the pass even if it’s ‘not there’.”
+
+Thrives in: high-pace teams, athletic finishers, forgiving coaches.
+
+Team dynamics: raises ceiling and volatility; teammates must be alert.
+
+45) Manipulation Passer (Look-Off / No-Look / Freeze)
+
+Key characteristics: uses eyes and shoulders to move help; passes after shifting defenders.
+
+Strengths: creates “one-step late” rotations; easier finishes.
+
+Weaknesses: if over-flashy, can become sloppy.
+
+Examples: Hypo: “gets a defender to turn his head, then hits the corner.”
+
+Thrives in: spacing with cutters; teams with good hands and timing.
+
+Team dynamics: teammates cut harder because they trust the ball will arrive.
+
+46) Skip-Pass Sniper
+
+Key characteristics: cross-court velocity and accuracy; beats help stunts.
+
+Strengths: punishes loaded paint; creates open corner 3s.
+
+Weaknesses: turnovers if defenders anticipate; needs strong arm/technique.
+
+Examples: Hypo: “drives left, fires right-corner skip every time the tag comes.”
+
+Thrives in: drive-and-kick, zone-busting, corner-shooter rosters.
+
+Team dynamics: encourages corner spacing; reduces “help-and-recover” defenses.
+
+47) Touch-Pass / Hockey-Assist Mover
+
+Key characteristics: 0.5 decisions; keeps ball popping; passes to the pass.
+
+Strengths: increases pace without running; creates rotations with fewer dribbles.
+
+Weaknesses: if teammates can’t shoot/cut, movement is empty.
+
+Examples: Hypo: “rarely holds the ball more than one second.”
+
+Thrives in: motion offenses, high-IQ rosters.
+
+Team dynamics: everyone touches; stars get easier looks later.
+
+48) Lob Architect
+
+Key characteristics: timing to rim-runner; throws lobs from odd angles.
+
+Strengths: high-efficiency offense; forces weakside tags.
+
+Weaknesses: if no vertical threat, loses a major weapon.
+
+Examples: Hypo: “sees the lob window before it exists.”
+
+Thrives in: rim-run bigs, athletic wings, spread floors.
+
+Team dynamics: bigs sprint harder; weakside shooters get more open looks.
+
+49) Hit-Ahead / Outlet Maestro
+
+Key characteristics: advances the ball early; finds wings ahead; loves “ahead passes.”
+
+Strengths: creates transition without dribble; easy threes/layups.
+
+Weaknesses: if teammates don’t run lanes, turnovers rise.
+
+Examples: Hypo: “rebound outlet → hit-ahead → corner 3.”
+
+Thrives in: running teams, deep benches, transition-heavy leagues.
+
+Team dynamics: wings run harder; bigs rebound-and-outlet with purpose.
+
+G) Off-ball and connector guards (value without dominating the ball)
+50) Secondary Handler / Combo Connector
+
+Key characteristics: can initiate when needed, but often plays off another creator.
+
+Strengths: keeps offense functional vs traps; reduces predictability.
+
+Weaknesses: role confusion if both want the ball.
+
+Examples: Hypo: “2nd creator who attacks closeouts.”
+
+Thrives in: dual-initiator rosters, staggered lineups.
+
+Team dynamics: lowers load on star; requires clear pecking order.
+
+51) 0.5 Connector PG (Swing-Swing Engine)
+
+Key characteristics: fast decisions; doesn’t over-dribble; keeps actions chained.
+
+Strengths: enhances team flow; boosts shot quality for everyone.
+
+Weaknesses: may disappear if not assertive; low box-score impact.
+
+Examples: Hypo: “touches ball 80 times, dribbles 20 total.”
+
+Thrives in: motion, drive-and-kick, read-and-react.
+
+Team dynamics: increases trust; role players feel involved.
+
+52) Rebound-and-Go PG (Grab & Push)
+
+Key characteristics: defensive rebounding + immediate push; initiates before outlets.
+
+Strengths: increases pace; creates mismatch transition.
+
+Weaknesses: can abandon outlet structure; risky vs pressure.
+
+Examples: Hypo: “board → 3 dribbles → paint touch.”
+
+Thrives in: switchable lineups, long wings, small-ball.
+
+Team dynamics: wings leak wide; bigs run rim; outlet passes decline.
+
+53) Screening Guard (PG as Screener)
+
+Key characteristics: sets ball screens, ghost screens, pins; embraces contact.
+
+Strengths: creates confusion; unlocks stars; punishes switching.
+
+Weaknesses: if too small/unwilling, screens are ignored.
+
+Examples: Hypo: “PG who leads team in screens.”
+
+Thrives in: positionless offenses, motion, guard-guard actions.
+
+Team dynamics: forces shared sacrifice; everyone must screen.
+
+54) Cutting Guard (Backdoor and Slot Cuts)
+
+Key characteristics: reads overplays; times cuts; finishes or kicks.
+
+Strengths: punishes denial; keeps defenses honest vs shooters.
+
+Weaknesses: needs passers who see it; can be crowded in bad spacing.
+
+Examples: Hypo: “top-locked? automatic backdoor.”
+
+Thrives in: split action, Princeton-style, high-IQ teams.
+
+Team dynamics: increases movement; defenders can’t just press up.
+
+55) Corner-Spacer PG (Low-Usage Spacer)
+
+Key characteristics: accepts off-ball spacing role; ready catch-and-shoot.
+
+Strengths: fits with heliocentric stars; keeps lane open.
+
+Weaknesses: if not a shooter, becomes ignored.
+
+Examples: Hypo: “PG by label, but plays like a corner wing.”
+
+Thrives in: star-dominant offenses, drive-heavy stars.
+
+Team dynamics: clear hierarchy; can shrink PG’s creative identity.
+
+56) Decoy / “Ghost PG” (Initiate then Vacate)
+
+Key characteristics: brings ball up, triggers first pass, then becomes off-ball spacer/screener.
+
+Strengths: speeds up offense; avoids ball dominance; keeps structure.
+
+Weaknesses: if no off-ball value, becomes invisible.
+
+Examples: Hypo: “first pass then sprint into a flare screen.”
+
+Thrives in: motion systems, multi-creator lineups.
+
+Team dynamics: shared creation; reduces predictable “one guy dribbles” possessions.
+
+H) Defense-first PG roles (how they shape stops and matchups)
+57) Point-of-Attack Lockdown
+
+Key characteristics: chest defense, discipline, contests without fouling; accepts toughest matchup.
+
+Strengths: raises team defensive ceiling; disrupts initiators early.
+
+Weaknesses: offensive limitations can be exploited if spacing is weak.
+
+Examples: Hypo: “picks up at 94 feet, never dies on screens.”
+
+Thrives in: switch/contain schemes, teams with enough offense elsewhere.
+
+Team dynamics: teammates take defensive pride; offense must cover his gaps.
+
+58) Screen-Navigation Specialist
+
+Key characteristics: fights over/under with purpose; knows angles; elite recovery.
+
+Strengths: keeps bigs out of rotation; reduces breakdowns.
+
+Weaknesses: physical toll; can be worn down.
+
+Examples: Hypo: “never gives up clean pull-ups off screens.”
+
+Thrives in: drop coverage teams; PnR-heavy leagues.
+
+Team dynamics: bigs defend simpler; perimeter defense stays connected.
+
+59) Full-Court Pest
+
+Key characteristics: stamina, harassment, denial; forces ball handlers into time pressure.
+
+Strengths: steals possessions; speeds opponents up into mistakes.
+
+Weaknesses: foul trouble; can be neutralized by calm press-break.
+
+Examples: Hypo: “turns the game into cardio.”
+
+Thrives in: pressing teams, deep benches, chaos systems.
+
+Team dynamics: teammates must rotate behind; increases overall tempo.
+
+60) Ballhawk Gambler
+
+Key characteristics: jumps lanes, digs hard, swipe timing; hunts steals.
+
+Strengths: creates transition points; momentum swings.
+
+Weaknesses: gives up structure; can cause blow-bys and rotations.
+
+Examples: Hypo: “3 steals and 3 blown rotations per game.”
+
+Thrives in: teams that can cover mistakes with length/rim protection.
+
+Team dynamics: high variance; teammates learn to “cover for the gamble.”
+
+61) Rotations/Communication Defensive QB
+
+Key characteristics: calls coverages, tags, switches; points and talks constantly.
+
+Strengths: makes team smarter; reduces miscommunications.
+
+Weaknesses: if physically limited, talk can’t save blow-bys.
+
+Examples: Hypo: “knows opponent’s actions before they run them.”
+
+Thrives in: complex defensive schemes, zone principles, switching teams.
+
+Team dynamics: cohesion rises; younger players improve faster.
+
+62) Switchable Multi-Position Guard Defender
+
+Key characteristics: size/strength to guard 1–3/4; survives in the post.
+
+Strengths: enables switch-everything; simplifies help rules.
+
+Weaknesses: may sacrifice quickness vs tiny guards.
+
+Examples: Hypo: “6'6 PG who can guard wings.”
+
+Thrives in: small-ball, positionless defenses.
+
+Team dynamics: lineup flexibility; less need to hide defenders.
+
+63) Positional “Charge Taker” Guard
+
+Key characteristics: anticipates drives; sacrifices body; rotates early.
+
+Strengths: erases rim pressure without blocks; shifts opponent aggression.
+
+Weaknesses: foul risk; can be played off floor if hunted in space.
+
+Examples: Hypo: “wins with positioning, not speed.”
+
+Thrives in: help-heavy defenses, teams with rim deterrence schemes.
+
+Team dynamics: teammates trust help; encourages aggressive perimeter pressure.
+
+64) Physical Tone-Setter / Enforcer Guard
+
+Key characteristics: bumps cutters, fights, uses legal physicality; sets emotional edge.
+
+Strengths: disrupts finesse teams; changes comfort level.
+
+Weaknesses: foul prone; can hurt spacing if offense limited.
+
+Examples: Hypo: “makes every possession feel expensive.”
+
+Thrives in: physical leagues, rivalry games, grinder identities.
+
+Team dynamics: raises toughness; can also raise techs/foul volatility.
+
+65) Defensive Liability PG (Targeted)
+
+Key characteristics: poor containment, dies on screens, low effort or awareness.
+
+Strengths: might provide elite offense/shooting in trade.
+
+Weaknesses: opponents hunt relentlessly; forces constant help.
+
+Examples: Hypo: “automatic switch target.”
+
+Thrives in: teams with elite backline defense or zone hiding options.
+
+Team dynamics: teammates over-rotate, rebounding suffers, fatigue rises.
+
+I) Size/position hybrids (who can “run point”)
+66) Jumbo Playmaking Guard
+
+Key characteristics: tall handler, sees over defense, posts smalls, passes cross-court.
+
+Strengths: mismatch machine; rebounding + playmaking synergy.
+
+Weaknesses: may struggle vs quick POA pressure; turnover risk.
+
+Examples: Hypo: “6'8 primary handler.”
+
+Thrives in: positionless offenses, switch-hunting.
+
+Team dynamics: reshapes roster: more shooters around, fewer traditional PGs needed.
+
+67) Power Guard (Strength-Based)
+
+Key characteristics: strong frame, downhill force, post seals, absorbs contact.
+
+Strengths: punishes switches; draws help.
+
+Weaknesses: can be limited as shooter; pace may slow.
+
+Examples: Hypo: “bully-ball PG.”
+
+Thrives in: physical leagues, small-ball lineups.
+
+Team dynamics: teammates space and cut; bigs may play more as stretch/short roll.
+
+68) Speed-Dwarf Micro PG
+
+Key characteristics: tiny, lightning quick, low center of gravity, elite handle.
+
+Strengths: breaks pressure; collapses defense with speed; chaos creator.
+
+Weaknesses: size targets on defense; finishing over length.
+
+Examples: Hypo: “5'9 blur.”
+
+Thrives in: high pace, spread floors, pickup where switches are sloppy.
+
+Team dynamics: forces help rotations; team must protect him defensively.
+
+69) Point Forward (Wing Initiator)
+
+Key characteristics: wing-sized creator; runs offense from top/wing; posts mismatches.
+
+Strengths: lets a smaller guard become shooter/defender; matchup versatility.
+
+Weaknesses: if ball pressure disrupts handle, offense stalls.
+
+Examples: Hypo: “6'7 wing who is the main passer.”
+
+Thrives in: positionless systems, 5-out, transition-heavy teams.
+
+Team dynamics: reassigns roles; traditional PG becomes secondary/off-ball.
+
+70) Point Center (Big as Primary Hub)
+
+Key characteristics: offense runs through elbow/post; handoffs, backcuts, high-low reads.
+
+Strengths: creates from height; punishes doubles; stabilizes half-court.
+
+Weaknesses: if pressured far from rim, turnovers; requires cutters/shooters.
+
+Examples: Hypo: “center who leads team in assists.”
+
+Thrives in: split action, high-post hub systems, cutting-heavy rosters.
+
+Team dynamics: guards become cutters/shooters; pace can be controlled from the middle.
+
+71) Rebounding Triple-Double Engine
+
+Key characteristics: rebounds start offense; constant transition pushes; fills every stat.
+
+Strengths: creates extra possessions; tempo weapon.
+
+Weaknesses: can hunt rebounds; half-court efficiency depends on skill.
+
+Examples: Hypo: “PG who ends possessions with boards.”
+
+Thrives in: run-and-gun, switchable lineups.
+
+Team dynamics: wings leak out; bigs box out so PG can grab-and-go.
+
+72) Wing-Stopper PG (Defends Up a Position)
+
+Key characteristics: guards best wing; offensively still initiates some.
+
+Strengths: solves matchup problems; enables small-ball offense with bigger defense.
+
+Weaknesses: may sacrifice on-ball juice to spend energy on defense.
+
+Examples: Hypo: “PG who takes the star wing assignment.”
+
+Thrives in: playoff matchups, switch-heavy defenses.
+
+Team dynamics: frees other defenders; changes lineup construction.
+
+J) Context / culture styles (same PG role, different environment incentives)
+73) Euro/FIBA System Maestro
+
+Key characteristics: loves set sequences, re-screens, timing; values “good shot” over fast shot.
+
+Strengths: consistent execution; punishes mistakes with precision.
+
+Weaknesses: can be less explosive in open floor if athleticism gap exists.
+
+Examples: Hypo: “runs 6 actions into a layup without ever forcing.”
+
+Thrives in: structured offenses, heavy scouting, physical half-court.
+
+Team dynamics: high discipline; everyone moves with purpose.
+
+74) Craft PnR Guard (Angle + Deception)
+
+Key characteristics: snake dribbles, pocket angles, footwork, foul craft; wins with IQ not speed.
+
+Strengths: survives vs elite athletes; generates advantages in tight space.
+
+Weaknesses: if officials/defense remove craft windows, can be muted.
+
+Examples: Hypo: “slow-looking guard who always gets two feet in paint.”
+
+Thrives in: physical leagues, tight courts, half-court chess.
+
+Team dynamics: teammates must read subtle windows; timing is everything.
+
+75) WNBA-Style Fundamental Orchestrator
+
+Key characteristics: crisp passing, spacing discipline, strong midrange/finishing fundamentals.
+
+Strengths: low wasted possessions; creates good shots through execution.
+
+Weaknesses: may lack “warp-speed” isolation creation depending on roster.
+
+Examples: Hypo: “precision PG who never breaks spacing rules.”
+
+Thrives in: motion, split cuts, high-skill team basketball.
+
+Team dynamics: everyone touches; fewer possessions wasted on low-quality isolation.
+
+76) G-League / Experimental Pace-and-3 Operator
+
+Key characteristics: high tempo, early threes, aggressive PnR spam, high variance.
+
+Strengths: generates volume and rhythm; punishes slow teams.
+
+Weaknesses: turnover and shot quality volatility.
+
+Examples: Hypo: “takes a pull-up 3 at 19 seconds every other possession.”
+
+Thrives in: run-heavy teams, depth rosters, developmental contexts.
+
+Team dynamics: role players must run and shoot; coaches accept variance.
+
+77) Playground Iso Showman
+
+Key characteristics: handle artistry, ankle-break attempts, crowd reads; scoring-first entertainment.
+
+Strengths: can dominate mismatches; creates self-shot anywhere.
+
+Weaknesses: low team involvement; defense often optional.
+
+Examples: Hypo: “street legend guard.”
+
+Thrives in: pickup, 1s/2s, loose structure games.
+
+Team dynamics: teammates become spot-up watchers unless he chooses to pass.
+
+78) Playground Trick-Passer / Freestyle Creator
+
+Key characteristics: creative angles, behind-the-back feeds, improvisation.
+
+Strengths: creates shots from broken plays; energizes team.
+
+Weaknesses: turnovers; can confuse teammates who aren’t ready.
+
+Examples: Hypo: “flashy passer who sees weird windows.”
+
+Thrives in: athletic finishers, chaotic games, transition-heavy runs.
+
+Team dynamics: raises energy; demands constant readiness.
+
+79) “Everybody-Eats” Pickup Facilitator
+
+Key characteristics: prioritizes touches for all; calls simple actions; avoids hero ball.
+
+Strengths: keeps group cohesive; maximizes unknown teammates.
+
+Weaknesses: may lack takeover scoring when needed.
+
+Examples: Hypo: “organizes strangers into a functioning team.”
+
+Thrives in: pickup, rec leagues, mixed-skill runs.
+
+Team dynamics: boosts morale and effort; reduces ball-dominance conflicts.
+
+80) Old-School Set-Up Guard (Pre-Modern Spacing Mentality)
+
+Key characteristics: values safe passes, set offense, structured entry; less reliant on 3-point spacing.
+
+Strengths: works in cramped floors; good vs chaotic opponents.
+
+Weaknesses: may under-utilize modern spacing/value of threes.
+
+Examples: Hypo: “two-hand passer, conservative dribbler.”
+
+Thrives in: low-spacing environments, physical half-court, older-era style runs.
+
+Team dynamics: predictable roles; fewer wild possessions.
+
+K) Explicit “bad or useless” PG archetypes (still conceivable, still real)
+81) Pound-the-Rock Time-Killer
+
+Key characteristics: dribbles to feel in control; delays actions; kills early offense.
+
+Strengths: reduces pace (sometimes useful to protect a lead).
+
+Weaknesses: destroys shot quality; frustrates teammates; easy to guard.
+
+Examples: Hypo: “walks it up, pounds 12 dribbles, then passes.”
+
+Thrives in: only in deliberate slow games or when protecting weak teammates.
+
+Team dynamics: teammates stop cutting; offense becomes late-clock desperation.
+
+82) Shot-Chucker PG (Bad-Decision Gunner)
+
+Key characteristics: takes contested pull-ups; ignores open teammates.
+
+Strengths: sometimes provides volume when no one else will shoot.
+
+Weaknesses: tanks efficiency; kills trust; fuels opponent transition.
+
+Examples: Hypo: “0-8 from three but still shooting.”
+
+Thrives in: talent gaps, playground, broken rosters.
+
+Team dynamics: teammates disengage; locker room friction rises.
+
+83) Assist-Chaser (Passes for the Stat)
+
+Key characteristics: forces “assist passes,” holds ball to manufacture dimes.
+
+Strengths: can still create some shots if skilled.
+
+Weaknesses: stalls flow; passes late; misses better hockey-assist choices.
+
+Examples: Hypo: “won’t shoot an open layup because he wants a pass.”
+
+Thrives in: stat-incentive environments, low accountability teams.
+
+Team dynamics: teammates feel used; offense becomes artificial.
+
+84) Turnover Machine (Chaos Without Control)
+
+Key characteristics: reckless dribbles/passes; plays too fast mentally.
+
+Strengths: occasionally creates a spectacular look.
+
+Weaknesses: bleeds possessions; demoralizes defense with live-ball turnovers.
+
+Examples: Hypo: “highlight passes + 6 turnovers.”
+
+Thrives in: only when pace is valued over efficiency (or in development).
+
+Team dynamics: teammates become hesitant; transition defense collapses.
+
+85) No-Impact “Cardio PG”
+
+Key characteristics: runs around, brings ball up, but doesn’t pressure defense or create.
+
+Strengths: low mistakes; can be a placeholder.
+
+Weaknesses: offense plays 4v5 effectively; defense ignores him.
+
+Examples: Hypo: “always safe, never dangerous.”
+
+Thrives in: only if surrounded by multiple elite creators.
+
+Team dynamics: others carry creation burden; spacing shrinks if he can’t shoot.
+
+86) Fake-Tough Foul Magnet (Bad Defense Version)
+
+Key characteristics: reaches, bumps, complains; constant foul trouble.
+
+Strengths: sometimes disrupts rhythm briefly.
+
+Weaknesses: gives free throws; breaks rotations; loses minutes.
+
+Examples: Hypo: “aggressive but undisciplined.”
+
+Thrives in: nowhere long-term; occasionally in chaos systems.
+
+Team dynamics: teammates cover; bench units become unstable.
+
+87) Steals-Only Gambler (Defense That Hurts Defense)
+
+Key characteristics: hunts steals at expense of containment and scheme.
+
+Strengths: creates highlights and momentum sometimes.
+
+Weaknesses: gives up blow-bys, rotations, corner 3s.
+
+Examples: Hypo: “3 steals, 4 backdoor cuts allowed.”
+
+Thrives in: only if backline defenders erase mistakes.
+
+Team dynamics: forces constant help; increases fatigue and blame.
+
+Stackable overlays (subsets that modify ANY base archetype)
+
+These are not standalone “PG archetypes.” They are sub-archetypes you layer on top of any role above.
+
+Overlay 1) Neuro-Trained Processing (subset, not a base type)
+
+Key characteristics: faster pattern recognition, improved reaction inhibition, better scan habits under fatigue.
+
+Strengths: sharper reads, fewer late turnovers, better close-game decisions.
+
+Weaknesses: training may not transfer equally; can create overconfidence in “reads.”
+
+Examples: Hypo: “same skill set as before, but decisions arrive 0.2s earlier.”
+
+Thrives in: high-read systems (PnR, motion, zones), high-pressure games.
+
+Team dynamics: teammates trust timing; offense/defense rotates a beat earlier.
+
+Overlay 2) Analytics-Optimized Decision Rules
+
+Key characteristics: shot diet discipline, value-based pass selection, avoids low-value midrange unless situational.
+
+Strengths: improves efficiency; reduces emotional shot selection.
+
+Weaknesses: can become robotic/predictable; may pass up “feel” moments.
+
+Examples: Hypo: “auto-rejects bad midrange unless late clock.”
+
+Thrives in: spacing-based systems, teams chasing math edges.
+
+Team dynamics: clearer shot hierarchy; sometimes frustrates creative scorers.
+
+Overlay 3) AI-Assisted Scouting Translation
+
+Key characteristics: rapidly internalizes opponent tendencies; uses cue-based triggers (“when X stunts, slip Y”).
+
+Strengths: accelerates gameplan execution; quicker counter adjustments.
+
+Weaknesses: if cues are wrong, can misread; overfitting to scouting.
+
+Examples: Hypo: “calls counters in real time based on opponent coverage tells.”
+
+Thrives in: playoff-style series, high-scout leagues.
+
+Team dynamics: team adjusts faster; role players get more targeted looks.
+
+Overlay 4) Biomechanics-Tuned Deceleration/Acceleration
+
+Key characteristics: optimized footwork, braking mechanics, joint-safe change-of-direction.
+
+Strengths: better separation, fewer soft-tissue injuries, more consistent burst late-game.
+
+Weaknesses: requires constant maintenance; can reduce “natural” improvisation early.
+
+Examples: Hypo: “stop-start slasher who never looks off-balance.”
+
+Thrives in: high-usage creators, leagues with dense schedules.
+
+Team dynamics: more reliable availability; teammates trust late-game burst.
+
+Overlay 5) Extreme Stamina / High-Workrate Motor
+
+Key characteristics: endless relocation, full-court pressure, constant cutting/screening.
+
+Strengths: stresses defenses over time; wins by conditioning.
+
+Weaknesses: decision quality can dip if motor outruns IQ.
+
+Examples: Hypo: “permanent motion PG.”
+
+Thrives in: motion + press teams, high-possession games.
+
+Team dynamics: raises team pace; forces everyone to match effort.
+
+Overlay 6) Ambidextrous Handling/Finishing
+
+Key characteristics: equal threat both directions; can pass/finish with either hand.
+
+Strengths: harder to shade; beats scouting; reduces turnovers under pressure.
+
+Weaknesses: time investment; may lose specialization edge.
+
+Examples: Hypo: “finishes left/right equally through contact.”
+
+Thrives in: PnR, tight-space leagues, switch-hunting.
+
+Team dynamics: spacing improves because defender can’t force one side.
+
+Overlay 7) “Ref/Whistle Literacy” (ethical or unethical use)
+
+Key characteristics: understands what gets called; uses legal deception, timing, and body angles.
+
+Strengths: free throws, fouls on key defenders, momentum control.
+
+Weaknesses: variance by officiating crew/league; reputation risk.
+
+Examples: Hypo: “creates contact at the exact legal moment.”
+
+Thrives in: leagues with consistent foul calls; late-game situations.
+
+Team dynamics: slows pace; opponents defend cautiously.
+
+Overlay 8) Multi-Lingual / Cultural Bridge PG
+
+Key characteristics: communicates across backgrounds; translates coaching; resolves conflicts.
+
+Strengths: improves cohesion; speeds up adoption of complex systems.
+
+Weaknesses: not a skill substitute; can be overburdened emotionally.
+
+Examples: Hypo: “on-court translator + organizer.”
+
+Thrives in: international rosters, mid-season turnover teams.
+
+Team dynamics: fewer miscommunications; improved buy-in.
+
+Overlay 9) Defensive Scheme Polyglot
+
+Key characteristics: can run multiple coverages and switch rules; calls them live.
+
+Strengths: adaptability; hides weaknesses; confuses opponents.
+
+Weaknesses: teammates must also understand; overload risk.
+
+Examples: Hypo: “changes coverages 3 times in one quarter.”
+
+Thrives in: high-IQ teams, playoff environments.
+
+Team dynamics: raises collective IQ; demands practice and trust.
+
+Overlay 10) High-Variance “Chaos Preference”
+
+Key characteristics: embraces volatility (steals, fast threes, early attacks).
+
+Strengths: upset potential; momentum swings.
+
+Weaknesses: inconsistent; hard to trust late-game.
+
+Examples: Hypo: “wins 3 possessions in a row, then gives 2 away.”
+
+Thrives in: underdogs, press teams, playground.
+
+Team dynamics: emotional rollercoaster; teammates need mental steadiness.
+

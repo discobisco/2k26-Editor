@@ -76,6 +76,10 @@ def _plausible_record_name_part(value: object) -> bool:
     return any(char.isalpha() for char in text) and all(char.isalpha() or char in " .'-" for char in text)
 
 
+def _label_has_letter(labels: list[str]) -> bool:
+    return any(any(char.isalpha() for char in str(label)) for label in labels)
+
+
 def _valid_nba_record_label_values(values: list[Any]) -> bool:
     if len(values) < 3:
         return False
@@ -302,9 +306,6 @@ class EditorDataModel:
             self._player_team_pointer_cache[item.index] = self._read_player_current_team_pointer(item)
         return self._player_team_pointer_cache[item.index]
 
-    def _cache_player_team_pointers(self, items: list[RecordListItem]) -> None:
-        self._player_team_pointer_cache = {item.index: self._read_player_current_team_pointer(item) for item in items}
-
     def player_item_labels_for_team_filter(self, selected_team_label: str | None, search_text: str | None = None) -> list[str]:
         selected = str(selected_team_label or "").strip()
         query = str(search_text or "").strip().lower()
@@ -446,7 +447,7 @@ class EditorDataModel:
             by_label = {item.display_label: item for item in items}
             self.loaded_items[domain] = by_label
             if domain == "Players":
-                self._cache_player_team_pointers(items)
+                self._player_team_pointer_cache.clear()
             labels = list(by_label)
             if labels:
                 current = self.selected_items.get(domain)
@@ -830,6 +831,8 @@ class EditorDataModel:
         return " ".join(labels)
 
     def _valid_label_values(self, domain: str, record_addr: int, values: list[Any], labels: list[str]) -> bool:
+        if domain == "Players":
+            return bool(labels) and _label_has_letter(labels)
         if domain == "NBA Records":
             return _valid_nba_record_label_values(values)
         if domain == "NBA History":
@@ -886,12 +889,52 @@ class EditorDataModel:
             )
         return self.read_value(entry.domain, index=index, field=entry.field)
 
-    def write_entry_value(self, entry: FieldEntry, *, index: int, value: Any, stat_selector: object | None = None) -> dict[str, Any]:
+    def write_entry_value(self, entry: FieldEntry, *, index: int, value: Any, stat_selector: object | None = None) -> None:
         if stat_selector is not None and _is_player_selected_stat_detail_entry(entry):
             record_addr = self._player_season_stat_detail_base_address(entry, index, stat_selector)
             self._write_field_at_record_address(entry.domain, record_addr, entry.field, value)
-            return self._read_field_at_record_address(entry.domain, record_addr, entry.field)
-        return self.write_and_readback(entry.domain, index=index, field=entry.field, value=value)
+            return
+        self.write_value(entry.domain, index=index, field=entry.field, value=value)
+
+    def reset_player_editor_values(self, *, index: int, stat_selector: object | None = None) -> dict[str, int]:
+        attempted = 0
+        succeeded = 0
+        failed = 0
+        for groups in self.grouped_fields("Players").values():
+            for entries in groups.values():
+                for entry in entries:
+                    value = self._player_editor_reset_value(entry)
+                    if value is None:
+                        continue
+                    attempted += 1
+                    try:
+                        self.write_entry_value(entry, index=index, value=value, stat_selector=stat_selector)
+                        succeeded += 1
+                    except Exception:
+                        failed += 1
+        return {"attempted": attempted, "succeeded": succeeded, "failed": failed}
+
+    def _player_editor_reset_value(self, entry: FieldEntry) -> int | str | None:
+        if entry.domain != "Players":
+            return None
+        normalized = str(entry.normalized_name).upper()
+        if normalized == "FIRSTNAME":
+            return "A"
+        if normalized == "LASTNAME":
+            return "Z"
+        if normalized == "BIRTHYEAR":
+            return 2006
+        if normalized == "CUSTOMAGEATSETYEAR":
+            return 0
+        if entry.section == "Attributes":
+            return 25
+        if entry.section == "Tendencies":
+            return 0
+        if entry.section == "Badges":
+            return 0
+        if _is_player_season_id_selector_entry(entry):
+            return 65535
+        return None
 
     def domain_base(self, domain: str) -> int:
         base_key = self._domain_base_key(domain)
@@ -939,10 +982,6 @@ class EditorDataModel:
                 self._player_team_pointer_cache[index] = int(raw_value)
             except Exception:
                 self._player_team_pointer_cache.pop(index, None)
-
-    def write_and_readback(self, domain: str, *, index: int, field: dict[str, Any], value: Any) -> dict[str, Any]:
-        self.write_value(domain, index=index, field=field, value=value)
-        return self.read_value(domain, index=index, field=field)
 
 
 def verify_edits(*, target_executable: str | None = None) -> dict[str, Any]:

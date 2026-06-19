@@ -8,8 +8,8 @@ from pathlib import Path
 
 from source_data import GeneratorSourceInventory
 
-_ARCHIVE_SQL_RELATIVE_PATH = Path("check") / "archive" / "NBA_Database.sql"
-_ARCHIVE_SQLITE_RELATIVE_PATH = Path("check") / "archive (1)" / "nba.sqlite"
+_ARCHIVE_SQL_RELATIVE_PATH = Path("NBA_Database.sql")
+_ARCHIVE_SQLITE_RELATIVE_PATH = Path("nba.sqlite")
 _SQL_SERVER_CREATE_TABLE_RE = re.compile(r"CREATE\s+TABLE\s+\[dbo\]\.\[([^\]]+)\]", re.IGNORECASE)
 _SQL_SERVER_COLUMN_RE = re.compile(r"^\s*\[([^\]]+)\]\s+\[?([A-Za-z0-9_]+)\]?")
 
@@ -18,10 +18,11 @@ _SQL_SERVER_COLUMN_RE = re.compile(r"^\s*\[([^\]]+)\]\s+\[?([A-Za-z0-9_]+)\]?")
 class SqlSourceInventory:
     """Read-only SQL base sources selected for generator enrichment.
 
-    `archive/NBA_Database.sql` is a SQL Server dump. Treat it as canonical
+    `NBA_Database.sql` is an optional SQL Server dump. Treat it as canonical
     source evidence, not as directly sqlite-queryable text.
 
-    `archive (1)/nba.sqlite` is already queryable with Python stdlib sqlite3.
+    `nba.sqlite` is the queryable NBA SQL source shipped beside the workbook
+    database.
     """
 
     source_root: Path
@@ -45,7 +46,7 @@ class SqlSourceInventory:
         return inventory
 
     def _require_files(self) -> None:
-        missing = [path for path in (self.archive_sql_dump_path, self.archive_sqlite_path) if not path.is_file()]
+        missing = [path for path in (self.archive_sqlite_path,) if not path.is_file()]
         if missing:
             joined = ", ".join(str(path) for path in missing)
             raise FileNotFoundError(f"missing SQL source artifact(s): {joined}")
@@ -80,13 +81,6 @@ class SqlBaseTableRole:
 
 
 _SQL_BASE_TABLE_ROLES: tuple[SqlBaseTableRole, ...] = (
-    SqlBaseTableRole("archive_sql_dump", "Players", "current/recent player identity and roster source"),
-    SqlBaseTableRole("archive_sql_dump", "CommonPlayerInfo", "player bio/common information source"),
-    SqlBaseTableRole("archive_sql_dump", "PlayerStatistics", "large player game/stat source"),
-    SqlBaseTableRole("archive_sql_dump", "Teams", "team identity source"),
-    SqlBaseTableRole("archive_sql_dump", "TeamStatistics", "large team game/stat source"),
-    SqlBaseTableRole("archive_sql_dump", "Games", "game identity/schedule/result source"),
-    SqlBaseTableRole("archive_sql_dump", "LeagueSchedule24_25", "2024-25 schedule source"),
     SqlBaseTableRole("archive_sqlite", "common_player_info", "queryable player bio/common information"),
     SqlBaseTableRole("archive_sqlite", "draft_history", "queryable draft identity and pick metadata"),
     SqlBaseTableRole("archive_sqlite", "draft_combine_stats", "queryable combine measurements"),

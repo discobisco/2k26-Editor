@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import re
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from nba2k_editor.models.schema import FieldEntry
-from player_generator import GeneratedPlayerProposal, authored_player_field_index
-
+from contracts import GeneratorInputContract, OutputTarget
+from player_generator import (
+    GeneratedPlayerProposal,
+    authored_player_field_index,
+    generate_player_proposals_from_index,
+    season_context_index,
+)
 
 @dataclass(frozen=True)
 class GamePortFieldResult:
@@ -35,6 +42,19 @@ class GamePortResult:
 
 
 @dataclass(frozen=True)
+class _GeneratedFieldOverride:
+    field_key: str
+    display_value: int | str
+
+
+_MATCHED_NAME_CONTRACT_DEFAULTS: tuple[_GeneratedFieldOverride, ...] = (
+    _GeneratedFieldOverride("Contract/YEARSLEFT", 1),
+    _GeneratedFieldOverride("Contract/CONTRACTLENGTH", 1),
+    _GeneratedFieldOverride("Contract/SALARYYEAR1", 1_500_000),
+)
+
+
+@dataclass(frozen=True)
 class GamePortBatchResult:
     player_results: tuple[GamePortResult, ...]
     generated_count: int
@@ -58,15 +78,70 @@ class GamePortBatchResult:
 
     @property
     def unapplied_generated(self) -> int:
-        return max(0, self.generated_count - self.applied_players)
+        return self.generated_count - self.applied_players
 
     @property
     def unused_targets(self) -> int:
-        return max(0, self.target_count - self.applied_players)
+        return self.target_count - self.applied_players
 
     @property
     def ok(self) -> bool:
         return self.failed == 0 and self.unapplied_generated == 0
+
+
+@dataclass(frozen=True)
+class GeneratedPlayerGameImportResult:
+    season: int
+    roster_label: str
+    team_filter: str | None
+    apply_result: GamePortBatchResult
+
+    @property
+    def ok(self) -> bool:
+        return self.apply_result.ok
+
+
+def import_generated_players_to_game(
+    model: Any,
+    contract: GeneratorInputContract,
+    *,
+    team_filter: str | None = None,
+    player_indices: Iterable[int] | None = None,
+    match_existing_player_names: bool = False,
+    offsets_path: str | Path | None = None,
+    stop_on_error: bool = False,
+    progress_callback: Callable[[int, int, str], None] | None = None,
+) -> GeneratedPlayerGameImportResult:
+    validated = contract.validate()
+    if validated.output_target is not OutputTarget.OVERWRITE_CURRENT_ROSTER:
+        raise ValueError("import to game requires overwrite_current_roster output target")
+
+    context = season_context_index(validated, offsets_path=offsets_path)
+    batch = generate_player_proposals_from_index(context, team_filter=None if match_existing_player_names else team_filter)
+
+    validate_generated_player_names_match_offsets(batch.proposals, field_index=context.field_index)
+    generated_players = batch.proposals
+    if match_existing_player_names:
+        if player_indices is not None:
+            raise ValueError("match_existing_player_names cannot be combined with explicit player_indices")
+        matched = _generated_player_name_matches(model, batch.proposals)
+        generated_players = tuple(generated for generated, _index in matched)
+        player_indices = tuple(index for _generated, index in matched)
+    apply_result = apply_generated_players_to_game(
+        model,
+        generated_players,
+        player_indices=player_indices,
+        field_index=context.field_index,
+        extra_rows=_MATCHED_NAME_CONTRACT_DEFAULTS if match_existing_player_names else (),
+        stop_on_error=stop_on_error,
+        progress_callback=progress_callback,
+    )
+    return GeneratedPlayerGameImportResult(
+        season=int(validated.season),
+        roster_label=str(validated.roster_label or ""),
+        team_filter=team_filter,
+        apply_result=apply_result,
+    )
 
 
 def apply_generated_player_proposal_to_game(
@@ -92,30 +167,508 @@ def apply_generated_players_to_game(
     model: Any,
     generated_players: Iterable[Any],
     *,
-    player_indices: Iterable[int],
+    player_indices: Iterable[int] | None = None,
     field_index: dict[str, FieldEntry] | None = None,
     offsets_path: str | Path | None = None,
+    extra_rows: Iterable[Any] = (),
     stop_on_error: bool = False,
+    progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> GamePortBatchResult:
     generated_tuple = tuple(generated_players)
-    index_tuple = tuple(int(index) for index in player_indices)
+    if player_indices is None:
+        index_tuple, target_count = _player_team_slot_indices_for_generated(model, generated_tuple)
+    else:
+        index_tuple = tuple(int(index) for index in player_indices)
+        target_count = len(index_tuple)
     player_results: list[GamePortResult] = []
-    for generated, player_index in zip(generated_tuple, index_tuple):
+    extra_row_tuple = tuple(extra_rows)
+    total_players = len(generated_tuple)
+    if progress_callback is not None:
+        progress_callback(0, total_players, f"Preparing to import {total_players} generated players")
+    for imported_count, (generated, player_index) in enumerate(zip(generated_tuple, index_tuple), start=1):
         player_results.append(
             apply_generated_rows_to_game(
                 model,
-                _generated_rows(generated),
+                (*tuple(_generated_rows(generated)), *extra_row_tuple),
                 player_index=player_index,
                 field_index=field_index,
                 offsets_path=offsets_path,
                 stop_on_error=stop_on_error,
             )
         )
+        if progress_callback is not None:
+            progress_callback(imported_count, total_players, f"Imported {imported_count}/{total_players} generated players")
     return GamePortBatchResult(
         player_results=tuple(player_results),
         generated_count=len(generated_tuple),
-        target_count=len(index_tuple),
+        target_count=target_count,
     )
+
+
+def player_team_slot_indices_for_generated(model: Any, generated_players: Iterable[Any]) -> tuple[int, ...]:
+    indices, _target_count = _player_team_slot_indices_for_generated(model, tuple(generated_players))
+    return indices
+
+
+def _player_indices_by_generated_names(model: Any, generated_players: Iterable[Any]) -> tuple[int, ...]:
+    return tuple(index for _generated, index in _generated_player_name_matches(model, generated_players))
+
+
+def _generated_player_name_matches(model: Any, generated_players: Iterable[Any]) -> tuple[tuple[Any, int], ...]:
+    players_by_name = _loaded_players_by_name_key(model)
+    used_indices: set[int] = set()
+    matches: list[tuple[Any, int]] = []
+    for generated in generated_players:
+        for key in _generated_player_name_keys(generated):
+            for player in players_by_name.get(key, ()):
+                player_index = int(player.index)
+                if player_index in used_indices:
+                    continue
+                matches.append((generated, player_index))
+                used_indices.add(player_index)
+                break
+            else:
+                continue
+            break
+    return tuple(matches)
+
+
+_FIRST_NAME_ALIASES: dict[str, tuple[str, ...]] = {
+    "ALEX": ("ALEXANDER", "ALEXANDRE"),
+    "ALEXANDER": ("ALEX", "ALEXANDRE"),
+    "ALEXANDRE": ("ALEX", "ALEXANDER"),
+    "BUB": ("CARLTON",),
+    "CARLTON": ("BUB",),
+    "BONES": ("NAH", "NAHSHON"),
+    "MO": ("MOHAMED", "MOUHAMED"),
+    "MOHAMED": ("MO", "MOUHAMED"),
+    "MOUHAMED": ("MO", "MOHAMED"),
+    "NIC": ("NICK", "NICOLAS", "NICHOLAS"),
+    "NICK": ("NIC", "NICOLAS", "NICHOLAS"),
+    "NICOLAS": ("NIC", "NICK", "NICHOLAS"),
+    "NICHOLAS": ("NIC", "NICK", "NICOLAS"),
+    "ROB": ("ROBERT",),
+    "ROBERT": ("ROB",),
+    "SVI": ("SVIATOSLAV",),
+    "SVIATOSLAV": ("SVI",),
+}
+
+_NAME_SUFFIXES = {"JR", "SR", "II", "III", "IV", "V"}
+
+
+def _loaded_players_by_name_key(model: Any) -> dict[str, tuple[Any, ...]]:
+    raw: dict[str, list[Any]] = {}
+    for label, item in getattr(model, "loaded_items", {}).get("Players", {}).items():
+        for value in _loaded_player_name_values(label, item):
+            for key in _person_name_keys(value):
+                raw.setdefault(key, []).append(item)
+    return {key: _unique_items_by_index(items) for key, items in raw.items()}
+
+
+def _unique_items_by_index(items: Iterable[Any]) -> tuple[Any, ...]:
+    unique: list[Any] = []
+    seen: set[int] = set()
+    for item in items:
+        try:
+            index = int(item.index)
+        except Exception:
+            index = id(item)
+        if index in seen:
+            continue
+        seen.add(index)
+        unique.append(item)
+    return tuple(unique)
+
+
+def _loaded_player_name_values(label: object, item: Any) -> tuple[object, ...]:
+    return (
+        _strip_record_index_prefix(label),
+        getattr(item, "label", ""),
+        _strip_record_index_prefix(getattr(item, "display_label", "")),
+    )
+
+
+def _generated_player_name_keys(generated: Any) -> tuple[str, ...]:
+    identity = getattr(generated, "identity", None)
+    identity = identity if isinstance(identity, dict) else {}
+    values: list[object] = [identity.get("player"), getattr(generated, "player_id", "")]
+    by_field = getattr(generated, "by_field_key", None)
+    if callable(by_field):
+        fields = by_field()
+        if isinstance(fields, dict):
+            first = fields.get("Vitals/FIRSTNAME")
+            last = fields.get("Vitals/LASTNAME")
+            if first is not None or last is not None:
+                values.append(f"{getattr(first, 'display_value', '')} {getattr(last, 'display_value', '')}")
+    return _person_name_keys(*values)
+
+
+def _person_name_keys(*values: object) -> tuple[str, ...]:
+    keys: list[str] = []
+    for value in values:
+        exact = _identity(value)
+        if exact:
+            keys.append(exact)
+        tokens = _name_tokens(value)
+        if not tokens:
+            continue
+        without_suffix = tuple(token for token in tokens if token not in _NAME_SUFFIXES)
+        if without_suffix and without_suffix != tokens:
+            keys.append("".join(without_suffix))
+        if len(without_suffix) >= 2:
+            first = without_suffix[0]
+            last = without_suffix[-1]
+            keys.append(first + last)
+            for alias in _FIRST_NAME_ALIASES.get(first, ()):
+                keys.append(alias + last)
+    return tuple(dict.fromkeys(key for key in keys if key))
+
+
+def _name_tokens(value: object) -> tuple[str, ...]:
+    text = _ascii_name_text(value).upper()
+    return tuple(token for token in re.split(r"[^A-Z0-9]+", text) if token)
+
+
+def _strip_record_index_prefix(value: object) -> str:
+    return re.sub(r"^\s*\[\d+\]\s*", "", str(value or "")).strip()
+
+
+def validate_generated_player_names_match_offsets(
+    generated_players: Iterable[Any],
+    *,
+    field_index: dict[str, FieldEntry] | None = None,
+    offsets_path: str | Path | None = None,
+) -> None:
+    authored = field_index if field_index is not None else authored_player_field_index(offsets_path)
+    errors: list[str] = []
+    for generated in generated_players:
+        identity = getattr(generated, "identity", None)
+        player_label = str(identity.get("player") if isinstance(identity, dict) else getattr(generated, "player_id", "")).strip()
+        for row in _generated_rows(generated):
+            field_key = str(getattr(row, "field_key", "")).strip()
+            entry = authored.get(field_key)
+            if entry is None:
+                errors.append(f"{player_label}: generated field {field_key or '<empty>'} is not in offsets_players.json")
+                continue
+            row_section = str(getattr(row, "section", entry.section))
+            row_group = str(getattr(row, "group", entry.group))
+            row_name = str(getattr(row, "normalized_name", entry.normalized_name))
+            if row_section != entry.section or row_group != entry.group or row_name != entry.normalized_name:
+                errors.append(
+                    f"{player_label}: {field_key} metadata does not match offsets "
+                    f"({row_section}/{row_group}/{row_name} != {entry.section}/{entry.group}/{entry.normalized_name})"
+                )
+    if errors:
+        raise KeyError("; ".join(errors))
+
+
+def _player_team_slot_indices_for_generated(model: Any, generated_players: tuple[Any, ...]) -> tuple[tuple[int, ...], int]:
+    if not generated_players:
+        return (), 0
+    teams = _loaded_items(model, "Teams")
+    players = _loaded_items(model, "Players")
+    if not teams:
+        raise ValueError("load Teams before applying generated players by team slots")
+    if not players:
+        raise ValueError("load Players before applying generated players by team slots")
+
+    generated_team_order = _generated_team_order(generated_players)
+    team_by_generated_key = _assign_generated_teams_to_live_teams(model, generated_team_order, teams, generated_players)
+    player_indices_by_team_address = _player_indices_by_team_address(model, players)
+
+    assigned_addresses = {int(team.address) for team in team_by_generated_key.values()}
+    target_count = sum(len(player_indices_by_team_address.get(address, ())) for address in assigned_addresses)
+    used_offsets: dict[int, int] = {}
+    used_player_indices: set[int] = set()
+    indices: list[int] = []
+    for generated in generated_players:
+        generated_key = _generated_team_key(generated)
+        live_team = team_by_generated_key.get(generated_key)
+        if live_team is None:
+            continue
+        team_address = int(live_team.address)
+        team_player_indices = player_indices_by_team_address.get(team_address, ())
+        offset = used_offsets.get(team_address, 0)
+        while offset < len(team_player_indices) and team_player_indices[offset] in used_player_indices:
+            offset += 1
+        if offset >= len(team_player_indices):
+            continue
+        player_index = team_player_indices[offset]
+        indices.append(player_index)
+        used_player_indices.add(player_index)
+        used_offsets[team_address] = offset + 1
+    return tuple(indices), target_count
+
+
+
+def _loaded_items(model: Any, domain: str) -> tuple[Any, ...]:
+    loaded = getattr(model, "loaded_items", {})
+    if isinstance(loaded, dict):
+        domain_items = loaded.get(domain, {})
+        if isinstance(domain_items, dict):
+            return tuple(domain_items.values())
+        if isinstance(domain_items, (list, tuple)):
+            return tuple(domain_items)
+    return ()
+
+
+def _generated_team_order(generated_players: tuple[Any, ...]) -> tuple[str, ...]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for generated in generated_players:
+        key = _generated_team_key(generated)
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(key)
+    return tuple(ordered)
+
+
+@dataclass(frozen=True)
+class _TeamMatchProfile:
+    team: Any
+    address: int
+    city_key: str
+    name_key: str
+    full_keys: tuple[str, ...]
+
+
+def _team_match_profiles(model: Any, teams: tuple[Any, ...]) -> tuple[_TeamMatchProfile, ...]:
+    profiles: list[_TeamMatchProfile] = []
+    for team in teams:
+        city = _read_team_value(model, team, ("CITYNAME", "CITY NAME"))
+        name = _read_team_value(model, team, ("TEAMNAME", "TEAM NAME"))
+        full_values = (
+            getattr(team, "label", ""),
+            getattr(team, "display_label", ""),
+            f"{city} {name}",
+        )
+        profiles.append(
+            _TeamMatchProfile(
+                team=team,
+                address=int(team.address),
+                city_key=_identity(city),
+                name_key=_identity(name),
+                full_keys=tuple(dict.fromkeys(_identity(value) for value in full_values if _identity(value))),
+            )
+        )
+    return tuple(profiles)
+
+
+def _assign_generated_teams_to_live_teams(model: Any, generated_team_order: tuple[str, ...], teams: tuple[Any, ...], generated_players: tuple[Any, ...]) -> dict[str, Any]:
+    live_profiles = _team_match_profiles(model, teams)
+    generated_profiles = _generated_team_profiles(generated_players)
+
+    assigned: dict[str, Any] = {}
+    used_addresses: set[int] = set()
+    for generated_key in generated_team_order:
+        generated_profile = generated_profiles.get(generated_key)
+        if generated_profile is None:
+            continue
+        live_team = _match_live_team_by_city_then_name(generated_profile, live_profiles, used_addresses)
+        if live_team is None:
+            continue
+        assigned[generated_key] = live_team
+        used_addresses.add(int(live_team.address))
+    return assigned
+
+
+@dataclass(frozen=True)
+class _GeneratedTeamMatchProfile:
+    city_keys: tuple[str, ...]
+    name_keys: tuple[str, ...]
+    full_keys: tuple[str, ...]
+
+
+def _generated_team_profiles(generated_players: tuple[Any, ...]) -> dict[str, _GeneratedTeamMatchProfile]:
+    profiles: dict[str, _GeneratedTeamMatchProfile] = {}
+    for generated in generated_players:
+        generated_key = _generated_team_key(generated)
+        if generated_key in profiles:
+            continue
+        profiles[generated_key] = _generated_team_match_profile(generated)
+    return profiles
+
+
+def _generated_team_match_profile(generated: Any) -> _GeneratedTeamMatchProfile:
+    identity = getattr(generated, "identity", None)
+    identity = identity if isinstance(identity, dict) else {}
+    city_values = _generated_values(generated, identity, ("team_city", "city", "city_name"))
+    name_values = _generated_values(generated, identity, ("team_name_only", "name", "franchise_name"))
+    full_values = _generated_values(generated, identity, ("team_name", "team_full_name", "franchise", "team", "team_abbrev", "roster_team"))
+    full_values += tuple(getattr(generated, attr, "") for attr in ("team", "team_abbrev", "roster_team", "team_name"))
+    return _GeneratedTeamMatchProfile(
+        city_keys=_identity_tuple(city_values),
+        name_keys=_identity_tuple(name_values),
+        full_keys=_identity_tuple(full_values),
+    )
+
+
+def _generated_values(generated: Any, identity: dict[str, Any], keys: tuple[str, ...]) -> tuple[Any, ...]:
+    values: list[Any] = []
+    for key in keys:
+        value = identity.get(key)
+        if value not in (None, ""):
+            values.append(value)
+    for key in keys:
+        value = getattr(generated, key, None)
+        if value not in (None, ""):
+            values.append(value)
+    return tuple(values)
+
+
+def _identity_tuple(values: Iterable[Any]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(key for value in values if (key := _identity(value))))
+
+
+def _match_live_team_by_city_then_name(
+    generated: _GeneratedTeamMatchProfile,
+    live_profiles: tuple[_TeamMatchProfile, ...],
+    used_addresses: set[int],
+) -> Any | None:
+    available = tuple(profile for profile in live_profiles if profile.address not in used_addresses)
+    city_matches = tuple(profile for profile in available if _generated_matches_live_city(generated, profile))
+    if city_matches:
+        name_matches = tuple(profile for profile in city_matches if _generated_matches_live_name(generated, profile))
+        if name_matches:
+            return name_matches[0].team
+        if len(city_matches) == 1:
+            return city_matches[0].team
+
+    name_matches = tuple(profile for profile in available if _generated_matches_live_name(generated, profile))
+    if name_matches:
+        return name_matches[0].team
+    return None
+
+
+def _generated_matches_live_city(generated: _GeneratedTeamMatchProfile, live: _TeamMatchProfile) -> bool:
+    if not live.city_key:
+        return False
+    if live.city_key in generated.city_keys:
+        return True
+    return any(full_key.startswith(live.city_key) for full_key in generated.full_keys)
+
+
+def _generated_matches_live_name(generated: _GeneratedTeamMatchProfile, live: _TeamMatchProfile) -> bool:
+    if not live.name_key:
+        return False
+    if live.name_key in generated.name_keys:
+        return True
+    return any(full_key.endswith(live.name_key) or full_key in live.full_keys for full_key in generated.full_keys)
+
+
+def _live_team_keys(model: Any, team: Any) -> set[str]:
+    values: set[str] = set()
+    for value in (getattr(team, "label", ""), getattr(team, "display_label", "")):
+        _add_team_key(values, value)
+    for field_names in (
+        ("CITYABBREV", "CITY ABBREV", "ABBREVIATION"),
+        ("TEAMNAME", "TEAM NAME"),
+        ("CITYNAME", "CITY NAME"),
+    ):
+        _add_team_key(values, _read_team_value(model, team, field_names))
+    city = _read_team_value(model, team, ("CITYNAME", "CITY NAME"))
+    name = _read_team_value(model, team, ("TEAMNAME", "TEAM NAME"))
+    _add_team_key(values, f"{city} {name}")
+    return values
+
+
+def _read_team_value(model: Any, team: Any, field_names: tuple[str, ...]) -> str:
+    reader = getattr(model, "_read_named_value", None)
+    if callable(reader):
+        try:
+            return str(reader("Teams", team, field_names))
+        except Exception:
+            return ""
+    values = getattr(team, "values", None)
+    if isinstance(values, dict):
+        for name in field_names:
+            value = values.get(name) or values.get(_identity(name))
+            if value not in (None, ""):
+                return str(value)
+    return ""
+
+
+def _add_team_key(values: set[str], value: object) -> None:
+    key = _identity(value)
+    if key and key not in {"--", "NONE", "NULL"}:
+        values.add(key)
+
+
+def _player_indices_by_team_address(model: Any, players: tuple[Any, ...]) -> dict[int, tuple[int, ...]]:
+    grouped: dict[int, list[int]] = {}
+    for player in players:
+        team_address = _player_current_team_address(model, player)
+        if team_address is None:
+            continue
+        grouped.setdefault(team_address, []).append(int(player.index))
+    return {address: tuple(indices) for address, indices in grouped.items()}
+
+
+def _player_current_team_address(model: Any, player: Any) -> int | None:
+    pointer_reader = getattr(model, "_player_current_team_pointer", None)
+    if callable(pointer_reader):
+        try:
+            value = pointer_reader(player)
+            return int(str(value)) if value is not None else None
+        except Exception:
+            return None
+    team_address = getattr(player, "team_address", None)
+    if team_address is not None:
+        try:
+            return int(str(team_address))
+        except Exception:
+            return None
+    cache = getattr(model, "_player_team_pointer_cache", None)
+    if isinstance(cache, dict):
+        value = cache.get(getattr(player, "index", None))
+        try:
+            return int(str(value)) if value is not None else None
+        except Exception:
+            return None
+    return None
+
+
+def _generated_team_key(generated: Any) -> str:
+    for attr in ("team", "team_abbrev", "roster_team"):
+        value = getattr(generated, attr, None)
+        key = _identity(value)
+        if key:
+            return key
+    identity = getattr(generated, "identity", None)
+    if isinstance(identity, dict):
+        for key_name in ("team", "team_abbrev", "roster_team"):
+            key = _identity(identity.get(key_name))
+            if key:
+                return key
+    return ""
+
+
+def _identity(value: object) -> str:
+    return re.sub(r"[^A-Z0-9]+", "", _ascii_name_text(value).upper())
+
+
+def _ascii_name_text(value: object) -> str:
+    text = str(value or "")
+    # Some historic/current source rows contain UTF-8 names decoded as Windows
+    # text (DonÄ\x8diÄ‡, BogdanoviÄ‡, DiabatÃ©). Repair the common cases before
+    # stripping accents so generated names can match NBA 2K's plain-ASCII names.
+    for bad, good in (
+        ("\u00c4\u008d", "č"),
+        ("\u00c4\u008c", "Č"),
+        ("\u00c4i\u00c5\u00ab", "čiū"),
+        ("\u00c5\u00ab", "ū"),
+        ("\u00c4\u2021", "ć"),
+        ("\u00c4\u2020", "Ć"),
+        ("\u00c3\u00a9", "é"),
+    ):
+        text = text.replace(bad, good)
+    text = text.replace("ё", "e").replace("Ё", "E")
+    try:
+        text = text.encode("cp1252").decode("utf-8")
+    except Exception:
+        pass
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
 
 
 def apply_generated_rows_to_game(
@@ -136,7 +689,13 @@ def apply_generated_rows_to_game(
         attempted_value = _row_value(row)
         try:
             entry = authored[field_key]
-            readback = model.write_entry_value(entry, index=player_index, value=attempted_value)
+            write_no_readback = getattr(model, "write_entry_value_no_readback", None)
+            if callable(write_no_readback):
+                write_no_readback(entry, index=player_index, value=attempted_value)
+                readback_value = attempted_value
+            else:
+                readback = model.write_entry_value(entry, index=player_index, value=attempted_value)
+                readback_value = readback.get("display_value") if isinstance(readback, dict) else readback
             results.append(
                 GamePortFieldResult(
                     field_key=field_key,
@@ -145,19 +704,18 @@ def apply_generated_rows_to_game(
                     normalized_name=entry.normalized_name,
                     display_name=entry.display_name,
                     attempted_value=attempted_value,
-                    readback_value=readback.get("display_value") if isinstance(readback, dict) else readback,
+                    readback_value=readback_value,
                     ok=True,
                 )
             )
         except Exception as exc:
-            fallback_entry = authored.get(field_key)
             results.append(
                 GamePortFieldResult(
                     field_key=field_key,
-                    section=fallback_entry.section if fallback_entry is not None else str(getattr(row, "section", "")),
-                    group=fallback_entry.group if fallback_entry is not None else str(getattr(row, "group", "")),
-                    normalized_name=fallback_entry.normalized_name if fallback_entry is not None else _field_key_name(field_key),
-                    display_name=fallback_entry.display_name if fallback_entry is not None else str(getattr(row, "field", field_key)),
+                    section=str(getattr(row, "section", "")),
+                    group=str(getattr(row, "group", "")),
+                    normalized_name=str(getattr(row, "normalized_name", _field_key_name(field_key))),
+                    display_name=str(getattr(row, "field", field_key)),
                     attempted_value=attempted_value,
                     readback_value=None,
                     ok=False,
@@ -201,7 +759,11 @@ __all__ = [
     "GamePortBatchResult",
     "GamePortFieldResult",
     "GamePortResult",
+    "GeneratedPlayerGameImportResult",
     "apply_generated_player_proposal_to_game",
     "apply_generated_players_to_game",
     "apply_generated_rows_to_game",
+    "import_generated_players_to_game",
+    "player_team_slot_indices_for_generated",
+    "validate_generated_player_names_match_offsets",
 ]

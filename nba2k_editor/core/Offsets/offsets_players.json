@@ -11304,6 +11304,13 @@
               "length": 7,
               "startBit": 0,
               "type": "Integer"
+            },
+            "2K26": {
+              "address": 1047,
+              "hex": "0x417",
+              "length": 7,
+              "startBit": 0,
+              "type": "Integer"
             }
           }
         }
@@ -14147,15 +14154,6 @@
               "length": 24,
               "startBit": 4,
               "type": "slider"
-            },
-            "2K26": {
-              "address": 850,
-              "bit_length": 3,
-              "bit_offset": 4,
-              "hex": "0x352",
-              "length": 3,
-              "startBit": 4,
-              "type": "bitfield"
             }
           }
         },
@@ -14603,96 +14601,6 @@
               "note": "u31 LE at bytes 488-491. Annual salary in USD, season +5.",
               "startBit": 0,
               "type": "Integer"
-            }
-          }
-        },
-        {
-          "normalized_name": "YEAR1",
-          "display_name": "Year 1",
-          "versions": {
-            "2K26": {
-              "address": 468,
-              "bit_length": 31,
-              "bit_offset": 0,
-              "hex": "0x1D4",
-              "length": 31,
-              "startBit": 0,
-              "type": "bitfield"
-            }
-          }
-        },
-        {
-          "normalized_name": "YEAR2",
-          "display_name": "Year 2",
-          "versions": {
-            "2K26": {
-              "address": 472,
-              "bit_length": 31,
-              "bit_offset": 0,
-              "hex": "0x1D8",
-              "length": 31,
-              "startBit": 0,
-              "type": "bitfield"
-            }
-          }
-        },
-        {
-          "normalized_name": "YEAR3",
-          "display_name": "Year 3",
-          "versions": {
-            "2K26": {
-              "address": 476,
-              "bit_length": 31,
-              "bit_offset": 0,
-              "hex": "0x1DC",
-              "length": 31,
-              "startBit": 0,
-              "type": "bitfield"
-            }
-          }
-        },
-        {
-          "normalized_name": "YEAR4",
-          "display_name": "Year 4",
-          "versions": {
-            "2K26": {
-              "address": 480,
-              "bit_length": 31,
-              "bit_offset": 0,
-              "hex": "0x1E0",
-              "length": 31,
-              "startBit": 0,
-              "type": "bitfield"
-            }
-          }
-        },
-        {
-          "normalized_name": "YEAR5",
-          "display_name": "Year 5",
-          "versions": {
-            "2K26": {
-              "address": 484,
-              "bit_length": 31,
-              "bit_offset": 0,
-              "hex": "0x1E4",
-              "length": 31,
-              "startBit": 0,
-              "type": "bitfield"
-            }
-          }
-        },
-        {
-          "normalized_name": "YEAR6",
-          "display_name": "Year 6",
-          "versions": {
-            "2K26": {
-              "address": 488,
-              "bit_length": 31,
-              "bit_offset": 0,
-              "hex": "0x1E8",
-              "length": 31,
-              "startBit": 0,
-              "type": "bitfield"
             }
           }
         }

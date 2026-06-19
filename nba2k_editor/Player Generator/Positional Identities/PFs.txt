@@ -1,0 +1,1252 @@
+PF archetypes (Power Forward) — complete role library + stackable overlays
+
+Power forward is a hinge position between wing and center. Across eras and leagues, PF can be:
+
+a big wing (spacing, switching, driving),
+
+a small big (screening, rolling, rebounding, rim protection), or
+
+a hub (handoffs, elbow facilitation, delay offense).
+
+So the only way to cover all conceivable PF play types is:
+
+list atomic PF roles (building blocks), and
+
+list stackable overlays (neuro-trained subset, biomechanics, analytics-optimized, etc.), and
+
+treat any PF as a stack.
+
+A PF “build” can be described as:
+
+[Primary Offensive Job] + [Threat Profile] + [Screening Role] + [Playmaking Load] + [Defensive Job] + [Physical Form] + [Overlays]
+
+Atomic PF archetypes (building blocks)
+A) Spacing PFs (floor geometry providers)
+
+PF value here is: pulling rim protectors away, creating driving lanes, and punishing help.
+
+1) Corner Spacer 4
+
+Key characteristics: lives in corner; catch-and-shoot; low dribble; disciplined spacing.
+
+Strengths: maximizes lanes; high-value kickout threes.
+
+Weaknesses: can be ignored if not real shooter; limited creation.
+
+Example: Hypo: “PF who never leaves corners in 5-out.”
+
+Best systems: heliocentric drive teams, 5-out, drive-and-kick.
+
+Team dynamics: simplifies reads for handlers; weakside help becomes expensive.
+
+2) Above-the-Break Stretch 4
+
+Key characteristics: slot/wing shooting; fast prep feet; comfortable on kickouts.
+
+Strengths: spacing where most actions occur; punishes nail help.
+
+Weaknesses: if run off the line and can’t punish closeouts, value drops.
+
+Example: Hypo: “PF who shoots 3s from slots and swings instantly.”
+
+Best systems: spread PnR, modern motion.
+
+Team dynamics: stabilizes spacing for PnR and drives.
+
+3) Pick-and-Pop Specialist
+
+Key characteristics: sets firm screens; pops to space; reads switches.
+
+Strengths: drags bigs out; creates open threes/midrange pops.
+
+Weaknesses: if not respected, defense stays in paint; screen impact shrinks.
+
+Example: Hypo: “ball screen → pop to top every time.”
+
+Best systems: spread PnR, guard-driven offenses.
+
+Team dynamics: makes guards’ reads simple; reduces paint congestion.
+
+4) Trail 4 Shooter (Secondary-Break Popper)
+
+Key characteristics: sprints to top in transition; early trail 3 threat.
+
+Strengths: punishes slow matchups; creates instant spacing before defense sets.
+
+Weaknesses: long rebounds can fuel opponent transition; can ignore rim seals.
+
+Example: Hypo: “first 6 seconds = trail 3 or swing.”
+
+Best systems: fast pace, rebound-and-run.
+
+Team dynamics: speeds tempo; handlers push knowing the trailer is live.
+
+5) Deep-Range Stretch 4
+
+Key characteristics: credible beyond the line; forces high pickup on a big.
+
+Strengths: extreme spacing distortion; makes help defense risky.
+
+Weaknesses: denial/physicality can disrupt; variance.
+
+Example: Hypo: “big must be guarded at 28–30 feet.”
+
+Best systems: 5-out, motion, early offense.
+
+Team dynamics: lanes widen; rim protector gets “pulled out of the building.”
+
+6) Midrange Pop 4
+
+Key characteristics: screens then pops to elbows/short corners; automatic 15–18 footer.
+
+Strengths: punishes drop and conservative switches; reliable late-clock option.
+
+Weaknesses: can reduce rim/3 volume if it becomes default.
+
+Example: Hypo: “PnR pop to elbow jumper all day.”
+
+Best systems: half-court heavy, drop-heavy environments.
+
+Team dynamics: stabilizes offense; can slow pace.
+
+7) “Shoot-or-Swing” Quick-Decision Stretch 4
+
+Key characteristics: catches ready; shoots or instantly swings; minimal dribble.
+
+Strengths: keeps offense flowing; reduces turnovers.
+
+Weaknesses: if he can’t attack closeouts at all, defenses can hard run him off.
+
+Example: Hypo: “0–1 dribble rule big.”
+
+Best systems: motion, advantage basketball.
+
+Team dynamics: ball pops; fewer stalled possessions.
+
+8) Relocation / Lift-and-Replace 4
+
+Key characteristics: re-spaces behind drives (lift from corner, replace slot); reads rotations.
+
+Strengths: punishes help-and-recover; creates “second window” threes.
+
+Weaknesses: requires chemistry and timing; can crowd spacing.
+
+Example: Hypo: “always slides into the open seam.”
+
+Best systems: drive-and-kick, read-and-react.
+
+Team dynamics: increases team synergy; rewards penetration.
+
+9) Flare-Pop 4 (Screen to Space)
+
+Key characteristics: sets flares/pins then pops; creates shooting windows via screening.
+
+Strengths: creates threes without on-ball creation; punishes switching confusion.
+
+Weaknesses: needs coordinated teammates; can be neutral if defenders communicate well.
+
+Example: Hypo: “flare screen → pop behind it.”
+
+Best systems: motion, set-heavy teams.
+
+Team dynamics: raises screening culture; creates chain-reactions.
+
+10) DHO Pop Shooter 4
+
+Key characteristics: handoff hub but also a pop threat; can “fake handoff → pop.”
+
+Strengths: merges hub value and shooting; hard to guard with big defenders.
+
+Weaknesses: if not a real shooter, handoff defense sits and kills the action.
+
+Example: Hypo: “handoff threat that also spaces to arc.”
+
+Best systems: elbow hub / DHO ecosystems.
+
+Team dynamics: guards get cleaner entries; defense forced to chase.
+
+11) “Stretch Decoy” 4 (Gravity Without Touches)
+
+Key characteristics: stands as a spacer to pull rim help, even if low-volume shooter.
+
+Strengths: creates lanes and post seals indirectly.
+
+Weaknesses: if opponents don’t respect it, the decoy fails.
+
+Example: Hypo: “PF who exists to keep the big out of the paint.”
+
+Best systems: star drive/post teams.
+
+Team dynamics: improves star efficiency; PF box score can be low.
+
+B) Screening, rolling, and two-man-action PFs (advantage creators without isolations)
+
+PF value here is: screens, rolls, slips, and advantage conversion.
+
+12) Roll Man 4 (Traditional PnR Diver)
+
+Key characteristics: sets screens; hard roll to rim; finishes through contact.
+
+Strengths: rim pressure; creates tags → corner threes.
+
+Weaknesses: if hands/finishing are weak, value collapses; foul/turnover risk on catches.
+
+Example: Hypo: “screen → dive → dunk or foul.”
+
+Best systems: spread PnR, guard-driven offenses.
+
+Team dynamics: forces weakside tags; shooters get open looks.
+
+13) Vertical Spacer 4 (Lob Magnet)
+
+Key characteristics: elite lob finishing; sprint rolls; huge vertical threat.
+
+Strengths: turns small advantages into dunks; forces early help.
+
+Weaknesses: if not a shooter, can be sagged off; injury risk.
+
+Example: Hypo: “roll = lob threat every time.”
+
+Best systems: PnR-heavy, weakside shooters.
+
+Team dynamics: defenders tag earlier; spacing improves for shooters.
+
+14) Slip-Screener 4
+
+Key characteristics: slips before contact; reads hedges/traps; quick timing.
+
+Strengths: punishes aggressive coverages; generates layups.
+
+Weaknesses: if done mindlessly, offense loses screen impact; can cause confusion.
+
+Example: Hypo: “pretend screen → instant slip.”
+
+Best systems: vs blitz/hedge defenses; motion with counters.
+
+Team dynamics: forces communication; opens pocket passes.
+
+15) Ghost-Screen 4
+
+Key characteristics: fakes screen, pops to space; forces miscommunication.
+
+Strengths: creates open threes/lane drives; low-contact deception.
+
+Weaknesses: if defense doesn’t react, it’s neutral.
+
+Example: Hypo: “touch-and-go pop to top.”
+
+Best systems: 5-out, switch-heavy matchups.
+
+Team dynamics: adds tactical variety; demands timing.
+
+16) Re-Screen Bruiser 4 (Second-Contact Specialist)
+
+Key characteristics: loves re-screens; keeps contact; wears down defenders.
+
+Strengths: creates real separation for handlers; forces switches late.
+
+Weaknesses: can slow pace; foul risk on moving screens.
+
+Example: Hypo: “two screens per possession minimum.”
+
+Best systems: PnR spam, half-court heavy.
+
+Team dynamics: gives guards rhythm; can reduce ball movement if overused.
+
+17) Angle-Screen Technician 4
+
+Key characteristics: screen placement IQ (hip angle, timing); flips angles to change reads.
+
+Strengths: generates advantages without athleticism; makes PnR efficient.
+
+Weaknesses: needs a handler who reads well; can be wasted on low-IQ teams.
+
+Example: Hypo: “wins with screen geometry.”
+
+Best systems: structured PnR, Euro/FIBA style.
+
+Team dynamics: improves guard efficiency; creates consistent shot diet.
+
+18) Short-Roll Playmaking 4 (4v3 QB)
+
+Key characteristics: catches at foul line after trap/hedge; quick reads to corners/dunkers.
+
+Strengths: destroys blitzing; creates open threes and dunks.
+
+Weaknesses: turnovers if processing is slow; needs shooters/cutters.
+
+Example: Hypo: “short roll catch → instant skip pass.”
+
+Best systems: against aggressive PnR coverage; spacing lineups.
+
+Team dynamics: upgrades team offense vs traps; everyone must be ready.
+
+19) Short-Roll Scoring 4
+
+Key characteristics: catches short roll and scores (floater, push shot, power finish).
+
+Strengths: punishes traps even if passing is average; reliable pressure valve.
+
+Weaknesses: if defense collapses and he can’t pass, offense stalls.
+
+Example: Hypo: “short roll = automatic 8–12 foot touch.”
+
+Best systems: PnR vs blitz; teams needing interior scoring.
+
+Team dynamics: defenders hesitate to trap; opens handler pull-ups.
+
+20) Pocket-Catch Finisher 4
+
+Key characteristics: elite hands; catches in traffic; finishes quickly.
+
+Strengths: reduces turnovers; converts tight passing windows.
+
+Weaknesses: if he can’t pass out, becomes a cul-de-sac.
+
+Example: Hypo: “catches everything at full speed.”
+
+Best systems: PnR with tight windows; congested paints.
+
+Team dynamics: handlers pass earlier and more confidently.
+
+21) Screen-and-Seal 4 (Roll into Post Seal)
+
+Key characteristics: screens then pins defender for deep seal; scores or draws help.
+
+Strengths: punishes switches; creates easy paint touches.
+
+Weaknesses: can clog spacing; requires timing and strong base.
+
+Example: Hypo: “switch → immediate seal under rim.”
+
+Best systems: switch-hunting, mismatch-centric.
+
+Team dynamics: forces doubles/help; shooters get clean kickouts.
+
+22) Spain Action Back-Screen 4 (PnR + Backscreen Specialist)
+
+Key characteristics: sets/receives backscreens in Spain/stack actions; timing precision.
+
+Strengths: creates confusion threes and lobs; high-value late-clock.
+
+Weaknesses: complexity; needs practice and buy-in.
+
+Example: Hypo: “Spain = guaranteed rotation mistake.”
+
+Best systems: set-heavy teams, Euro actions, late-game packages.
+
+Team dynamics: increases cohesion; rewards disciplined execution.
+
+23) Hand-Off Hub 4 (DHO Quarterback)
+
+Key characteristics: initiates via dribble handoffs; reads defender chase; can fake handoff.
+
+Strengths: creates offense without a traditional PG; constant motion trigger.
+
+Weaknesses: if he can’t shoot/drive, defenders sit and blow it up.
+
+Example: Hypo: “offense runs through elbow DHOs.”
+
+Best systems: motion + DHOs, split actions, FIBA/Euro hubs.
+
+Team dynamics: guards become cutters/shooters; offense feels connected.
+
+24) “Delay Offense” Trigger 4
+
+Key characteristics: brings ball up or receives at top; calls entries; flows into actions.
+
+Strengths: organizes early offense; prevents wasted possessions.
+
+Weaknesses: if not a threat, defenders sag and clog.
+
+Example: Hypo: “PF at top calling the set.”
+
+Best systems: modern delay series, continuity, positionless.
+
+Team dynamics: spreads playmaking duties; increases early-clock efficiency.
+
+25) Screen-Assists Specialist 4 (Hidden-Value Big)
+
+Key characteristics: screens to free shooters/handlers; prioritizes contact + timing.
+
+Strengths: generates points without touches; makes stars better.
+
+Weaknesses: invisible box score; can be ignored by casual coaching.
+
+Example: Hypo: “creates shots by screening, not scoring.”
+
+Best systems: motion, off-screen packages, star-centric teams.
+
+Team dynamics: raises team cohesion; builds “unselfish” identity.
+
+C) Interior scoring PFs (post, seals, old-school + modern mismatch)
+
+PF value here is: paint scoring, foul pressure, and punishing switches.
+
+26) Low-Post Bruiser 4
+
+Key characteristics: back-to-basket; drop-steps, hooks; draws doubles.
+
+Strengths: reliable paint touches; foul pressure; forces help.
+
+Weaknesses: can slow pace; spacing taxes; vulnerable to digs/strips.
+
+Example: Hypo: “traditional block scorer.”
+
+Best systems: inside-out, post split actions.
+
+Team dynamics: shooters/cutters feast off doubles; tempo slows.
+
+27) Midpost Mismatch Scorer
+
+Key characteristics: catches at midpost vs switch; turnarounds, face-up drives.
+
+Strengths: punishes small defenders; late-clock option.
+
+Weaknesses: can become ball-sticky; midrange heavy.
+
+Example: Hypo: “switch target hunter from midpost.”
+
+Best systems: switch-hunting, playoff-style possessions.
+
+Team dynamics: offense becomes matchup-driven; others space and cut.
+
+28) Face-Up 4 (Triple-Threat Big Wing)
+
+Key characteristics: jab series, one-dribble pull-up, rip-through drives from elbow/wing.
+
+Strengths: attacks closeouts; blends wing and big skills.
+
+Weaknesses: if handle is loose, turnovers; can drift into long twos.
+
+Example: Hypo: “PF who plays like a big SF.”
+
+Best systems: 4-out spacing, elbow touches.
+
+Team dynamics: increases versatility; reduces need for guard creation.
+
+29) High-Post Jumper 4
+
+Key characteristics: elbow catch → immediate jumper; pick-and-pop midrange.
+
+Strengths: punishes drop coverage; stabilizes half-court.
+
+Weaknesses: can be low-math if it dominates; less rim pressure.
+
+Example: Hypo: “automatic from the elbows.”
+
+Best systems: half-court, late-clock packages.
+
+Team dynamics: gives reliable bailouts; can reduce threes.
+
+30) Duck-In / Seal Specialist 4
+
+Key characteristics: constant seals under rim; wins early position; quick finishes.
+
+Strengths: easy points; punishes small-ball; draws fouls.
+
+Weaknesses: needs passers who see it; can clog lane if overdone.
+
+Example: Hypo: “lives on quick duck-ins.”
+
+Best systems: transition-to-post, inside-out.
+
+Team dynamics: forces help; perimeter gets cleaner looks.
+
+31) Putback / Tip-In Specialist 4
+
+Key characteristics: timing, bounce, instincts; lives on misses.
+
+Strengths: extra possessions and “free” points.
+
+Weaknesses: can hurt transition defense; can chase rebounds from bad spots.
+
+Example: Hypo: “PF who scores on chaos.”
+
+Best systems: high-shot-volume teams, crash-heavy identities.
+
+Team dynamics: improves second-chance scoring; requires floor balance rules.
+
+32) Foul-Pressure Interior PF
+
+Key characteristics: attacks contact; uses body; seeks free throws.
+
+Strengths: stabilizes scoring; puts opponents in foul trouble.
+
+Weaknesses: can slow pace; effectiveness varies by environment.
+
+Example: Hypo: “gets to the line by sheer force.”
+
+Best systems: physical leagues, half-court.
+
+Team dynamics: opponents defend softer; team tempo slows.
+
+33) “Old-School Power” Midrange + Post Blend
+
+Key characteristics: elbows + short corners + post; classic PF scoring menu.
+
+Strengths: survives cramped spacing; reliable in slower games.
+
+Weaknesses: can conflict with modern shot-math; pace reduction.
+
+Example: Hypo: “PF who lives at 15–18 feet and block touches.”
+
+Best systems: structured half-court, inside-out.
+
+Team dynamics: offense flows through spots/entries; fewer threes.
+
+34) Cutter-Scorer 4 (No Touches Needed)
+
+Key characteristics: scores on dives, cuts, slips, baseline seals; minimal isolations.
+
+Strengths: efficient points; punishes ball-watching.
+
+Weaknesses: if teammates can’t pass, he disappears.
+
+Example: Hypo: “PF who scores without dribbling.”
+
+Best systems: motion, split cuts, drive-and-kick.
+
+Team dynamics: increases cutting culture; discourages ball-stopping.
+
+D) Playmaking PFs (hubs, initiators, connectors)
+
+PF value here is: creating advantages from the frontcourt (positionless evolution).
+
+35) Point Forward 4 (Primary Initiator PF)
+
+Key characteristics: handles at top; runs offense; reads like a guard.
+
+Strengths: mismatch creator; lets guards play off-ball.
+
+Weaknesses: pressure can force turnovers; can over-dribble.
+
+Example: Hypo: “PF brings it up and runs sets.”
+
+Best systems: positionless, 5-out, transition-heavy.
+
+Team dynamics: role inversion; roster becomes bigger without losing handling.
+
+36) Secondary Initiator 4
+
+Key characteristics: not full-time creator, but can run actions when needed.
+
+Strengths: reduces predictability; helps vs traps on guards.
+
+Weaknesses: can be “in-between” (not elite enough to carry).
+
+Example: Hypo: “PF runs 8–12 PnRs per game.”
+
+Best systems: dual-initiator lineups, staggered creators.
+
+Team dynamics: lowers guard workload; increases lineup flexibility.
+
+37) Elbow Hub 4 (High-Post Facilitator)
+
+Key characteristics: catches at elbow/nail; hits cutters; handoffs; quick reads.
+
+Strengths: zone-buster; stabilizes half-court without dribble spam.
+
+Weaknesses: if he can’t shoot/drive, defense sits on passing lanes.
+
+Example: Hypo: “PF at elbow directing traffic.”
+
+Best systems: split action, motion, Euro hub offenses.
+
+Team dynamics: guards cut more; offense becomes interconnected.
+
+38) High-Low Passer 4
+
+Key characteristics: throws entry lobs/bounces to centers; sees angles.
+
+Strengths: unlocks big lineups; punishes switches and fronts.
+
+Weaknesses: turnovers if reads are late; needs a real interior finisher.
+
+Example: Hypo: “PF feeds the center like a QB.”
+
+Best systems: twin-tower, inside-out, high-post series.
+
+Team dynamics: bigs get empowered; weakside shooters get doubles kickouts.
+
+39) Post-Passing 4 (Midpost Hub)
+
+Key characteristics: posts to pass; quick reads vs digs/doubles; skip passing.
+
+Strengths: creates open threes and cuts; punishes help.
+
+Weaknesses: if teammates don’t cut/space, hub stalls.
+
+Example: Hypo: “PF posts just to generate rotations.”
+
+Best systems: inside-out, split cuts, mismatch-centric.
+
+Team dynamics: increases cutting and relocation; more team touches.
+
+40) Short-Roll Decision Engine 4 (Advanced)
+
+Key characteristics: catches at FT line and plays point; hits corner, dunker, swing-swing.
+
+Strengths: destroys traps; creates elite shot quality.
+
+Weaknesses: demands high processing speed; turnovers if slow.
+
+Example: Hypo: “PF is the release valve that becomes the playmaker.”
+
+Best systems: vs blitzes, modern spacing offenses.
+
+Team dynamics: everyone must be ready to shoot/cut immediately.
+
+41) Grab-and-Go PF (Rebound → Push)
+
+Key characteristics: rebounds and pushes in transition; initiates early offense.
+
+Strengths: increases pace; creates cross-match advantages.
+
+Weaknesses: can lead to chaotic spacing; risky handle vs pressure.
+
+Example: Hypo: “board → 3 dribbles → paint touch.”
+
+Best systems: run-and-gun, switchable lineups.
+
+Team dynamics: wings run wide; bigs sprint rim; tempo spikes.
+
+42) Outlet / Advance-Pass PF
+
+Key characteristics: rebounds and throws hit-ahead; quarterbacks transition.
+
+Strengths: creates fast points without dribbling.
+
+Weaknesses: turnovers if lanes aren’t filled; needs runners.
+
+Example: Hypo: “rebound → instant hit-ahead to corner.”
+
+Best systems: fast pace teams, disciplined lane running.
+
+Team dynamics: encourages sprinting lanes; break becomes structured.
+
+43) Inverted PnR Handler 4 (Guard Screens for PF)
+
+Key characteristics: PF handles; guard screens; attacks bigs/switches.
+
+Strengths: breaks switch rules; creates downhill lanes.
+
+Weaknesses: if PF handle is shaky, turnovers; can be trapped.
+
+Example: Hypo: “PF uses guard screen to get a big in space.”
+
+Best systems: positionless, switch-hunting.
+
+Team dynamics: roles invert; increases tactical variety.
+
+44) DHO Hub 4 (Primary)
+
+Key characteristics: constant handoffs; reads chases; fakes into drives or flips.
+
+Strengths: creates movement offense; keeps ball alive.
+
+Weaknesses: if defenders go under and he can’t punish, action dies.
+
+Example: Hypo: “PF orchestrates with handoffs every possession.”
+
+Best systems: motion/DHO ecosystems, Euro-style.
+
+Team dynamics: guards become movers; team plays connected.
+
+45) “Delay + Pitch” Connector 4
+
+Key characteristics: receives at top, pitches to guards, then screens/cuts immediately.
+
+Strengths: creates flow from early offense to half-court with no dead time.
+
+Weaknesses: if he doesn’t screen well or isn’t a threat, it’s empty movement.
+
+Example: Hypo: “touch at top → pitch → screen-away.”
+
+Best systems: continuity, motion, positionless.
+
+Team dynamics: reduces stagnation; improves early-clock quality.
+
+E) Energy, transition, and dirty-work PFs
+
+PF value here is: effort possessions (screens, boards, runs, extra plays).
+
+46) Rim-Running PF (Sprint Big)
+
+Key characteristics: runs rim in transition; early seals; relentless dive.
+
+Strengths: easy points; collapses defense; creates foul pressure.
+
+Weaknesses: if half-court skill is weak, impact falls when pace slows.
+
+Example: Hypo: “every possession starts with a rim sprint.”
+
+Best systems: high pace, rebound-and-run.
+
+Team dynamics: increases tempo; guards push harder.
+
+47) Lane-Filler / Early-Post PF
+
+Key characteristics: sprints to deep position; seals for quick entries.
+
+Strengths: punishes cross-matches; creates paint touches without plays.
+
+Weaknesses: needs passers; can clog if entry isn’t there.
+
+Example: Hypo: “beats everyone down, seals under rim.”
+
+Best systems: transition-to-post, inside-out.
+
+Team dynamics: forces opponents to prioritize getting back.
+
+48) Offensive Rebound Crasher 4
+
+Key characteristics: relentless OREB; timing from dunker/slot; physical.
+
+Strengths: extra possessions; demoralizes defenses.
+
+Weaknesses: hurts transition defense; foul risk.
+
+Example: Hypo: “creates 6–10 points on second chances.”
+
+Best systems: crash-heavy identities, physical leagues.
+
+Team dynamics: others must cover back; raises effort culture.
+
+49) Screen-and-Sprint PF (Possession-to-Possession Motor)
+
+Key characteristics: sets screens then sprints to rebound or rim; never static.
+
+Strengths: stresses defense with constant actions; creates “accidental” advantages.
+
+Weaknesses: decision quality can dip if motor outruns IQ.
+
+Example: Hypo: “screen, roll, crash, repeat.”
+
+Best systems: motion, pace teams, second units.
+
+Team dynamics: lifts intensity; can raise variance.
+
+50) Cleanup Scorer PF (“Garbage Points”)
+
+Key characteristics: scores on cuts, dump-offs, putbacks; low dribble.
+
+Strengths: efficient scoring without plays; complements stars.
+
+Weaknesses: can disappear vs disciplined boxouts/no-help defenses.
+
+Example: Hypo: “12 points on cuts and putbacks.”
+
+Best systems: star-driven drive offenses.
+
+Team dynamics: keeps role clarity; reduces need for PF touches.
+
+51) Screen-Assist / “Unlocker” PF (Star-Enablement Role)
+
+Key characteristics: sets the right screens, flips, re-screens; creates separation for stars.
+
+Strengths: makes creators better; improves team shot diet.
+
+Weaknesses: invisible value; requires buy-in.
+
+Example: Hypo: “PF who exists to free the best scorer.”
+
+Best systems: star-centric offenses, off-screen packages.
+
+Team dynamics: culture of sacrifice; stars get cleaner touches.
+
+52) Physical Tone-Setter PF
+
+Key characteristics: contact screens, hard boxouts, aggressive contesting.
+
+Strengths: makes game uncomfortable; wins physical margins.
+
+Weaknesses: foul/tech risk; can be exploited by speed/spacing.
+
+Example: Hypo: “every possession is a collision.”
+
+Best systems: grinder teams, physical leagues.
+
+Team dynamics: toughness rises; foul volatility rises.
+
+F) Defensive PF archetypes (scheme enablers)
+
+PF value here is often what defense you can run.
+
+53) Switchable 1–4 PF
+
+Key characteristics: lateral quickness + strength; guards wings/guards; communicates.
+
+Strengths: enables switching; reduces help rotations.
+
+Weaknesses: can be punished by true centers inside.
+
+Example: Hypo: “PF who can guard perimeter actions all game.”
+
+Best systems: switch-heavy, small ball.
+
+Team dynamics: simplifies scheme; increases lineup flexibility.
+
+54) Switchable 1–5 PF (True “Everything” Defender)
+
+Key characteristics: can survive on guards and bigs; post defense + mobility.
+
+Strengths: unlocks switch-everything; neutralizes PnR.
+
+Weaknesses: rare; high fatigue role; foul risk.
+
+Example: Hypo: “PF who switches onto anyone without panic.”
+
+Best systems: elite switching defenses.
+
+Team dynamics: fewer weak links; opponents struggle to hunt.
+
+55) Weakside Rim Protector 4 (Help-Blocker)
+
+Key characteristics: timing, verticality, blocks/contests from help.
+
+Strengths: erases mistakes; allows aggressive perimeter pressure.
+
+Weaknesses: can over-help and give up corner 3s; foul risk.
+
+Example: Hypo: “PF who functions like a secondary center.”
+
+Best systems: aggressive POA pressure with rotations behind.
+
+Team dynamics: teammates pressure more; requires disciplined closeouts.
+
+56) Drop-Helper PF (Paint Wall Builder)
+
+Key characteristics: prioritizes clogging lanes, tagging rollers, shrinking gaps.
+
+Strengths: stops rim pressure; stabilizes rebounding.
+
+Weaknesses: can give up threes if slow closing; vulnerable to pick-and-pop.
+
+Example: Hypo: “PF whose job is to always be at the nail/paint.”
+
+Best systems: pack-the-paint, conservative help schemes.
+
+Team dynamics: forces opponents to shoot; offense must cover spacing issues.
+
+57) Hedge-and-Recover PF
+
+Key characteristics: shows high on PnR; recovers to his man; good footwork.
+
+Strengths: disrupts pull-ups; buys time for guard recovery.
+
+Weaknesses: vulnerable to slips/short roll if slow; stamina heavy.
+
+Example: Hypo: “PF who lives in ‘show and recover’ coverage.”
+
+Best systems: PnR-heavy leagues, non-switch teams.
+
+Team dynamics: requires communication; guard effort and timing matter.
+
+58) Blitz/Trap PF (Aggressive PnR Coverage Big)
+
+Key characteristics: hard traps; contains ball; rotates out after.
+
+Strengths: forces turnovers; kills elite guard rhythm.
+
+Weaknesses: behind-the-trap 4v3 vulnerability; needs fast rotations.
+
+Example: Hypo: “PF whose job is to trap every ball screen.”
+
+Best systems: aggressive defensive identities with speed behind.
+
+Team dynamics: demands synchronized rotations; high chaos potential.
+
+59) Zone Anchor PF (Middle/Backline Organizer)
+
+Key characteristics: understands zone angles; contests; communicates; rebounds.
+
+Strengths: makes zones work; reduces breakdowns.
+
+Weaknesses: can be stretched by shooting bigs; rebounding responsibility is heavy.
+
+Example: Hypo: “PF who quarterbacks a matchup zone.”
+
+Best systems: zone-heavy teams, hybrid defenses.
+
+Team dynamics: improves cohesion; teammates trust rotations.
+
+60) Scram-Switch Eraser PF
+
+Key characteristics: fixes mismatches (scram switches), rotates early, communicates.
+
+Strengths: protects small defenders; sustains switch systems.
+
+Weaknesses: requires high IQ; one mistake creates wide-open shots.
+
+Example: Hypo: “PF who constantly ‘un-hunts’ teammates.”
+
+Best systems: switching defenses, playoff matchups.
+
+Team dynamics: teammates play more aggressively knowing he’ll cover.
+
+61) Rebounding Anchor PF
+
+Key characteristics: ends possessions; boxes out centers; secures boards.
+
+Strengths: reduces second chances; allows guards to leak out.
+
+Weaknesses: can reduce transition opportunities if he always stays to rebound.
+
+Example: Hypo: “PF whose primary defense is finishing the stop.”
+
+Best systems: teams that struggle on the glass.
+
+Team dynamics: guards run more; defense becomes more reliable.
+
+62) Post-Defense Specialist PF
+
+Key characteristics: base strength, leverage, hands up; doesn’t foul.
+
+Strengths: allows single coverage; prevents double-team rotations.
+
+Weaknesses: may struggle vs speed on perimeter.
+
+Example: Hypo: “PF who can guard true bigs in the post.”
+
+Best systems: teams that don’t want to double.
+
+Team dynamics: shooters stay home; fewer scramble rotations.
+
+63) Perimeter Containment PF (Big-Wing Defender)
+
+Key characteristics: stays in front of wings; contests without fouling; good closeouts.
+
+Strengths: protects guards; enables cross-matching.
+
+Weaknesses: can be out-muscled inside.
+
+Example: Hypo: “PF assigned to a star wing.”
+
+Best systems: positionless defenses, matchup schemes.
+
+Team dynamics: allows hiding weaker defenders; matchup flexibility increases.
+
+64) Charge-Taker / Positioning PF
+
+Key characteristics: anticipates drives; rotates early; sacrifices body.
+
+Strengths: stops rim pressure without blocks; swing plays.
+
+Weaknesses: foul risk; can be played around by disciplined offenses.
+
+Example: Hypo: “PF who wins with anticipation.”
+
+Best systems: help-heavy defenses.
+
+Team dynamics: teammates pressure more; requires trust in rotations.
+
+65) Defensive Liability PF (Target)
+
+Key characteristics: slow closeouts, poor awareness, gets hunted in space.
+
+Strengths: usually paired with offense (shooting/scoring) to justify minutes.
+
+Weaknesses: breaks schemes; forces constant help.
+
+Example: Hypo: “PF you must hide in zone/help.”
+
+Best systems: masking schemes, strong backline protection.
+
+Team dynamics: teammates over-rotate; fatigue rises.
+
+G) PF physical-form / role hybrids (what “kind of 4” they are)
+
+These are structural identities that reshape roster construction.
+
+66) Traditional “Two-Big” PF
+
+Key characteristics: plays next to a center; rebounding + post defense; midrange or interior scoring.
+
+Strengths: size advantage; controls paint and glass.
+
+Weaknesses: spacing can be tight; vulnerable to 5-out spacing.
+
+Example: Hypo: “classic PF next to a rim-protecting C.”
+
+Best systems: inside-out, slower tempo, physical leagues.
+
+Team dynamics: guards operate in tighter windows; defense stronger inside.
+
+67) Small-Ball 5 PF (PF Who Functions as Center)
+
+Key characteristics: plays center on defense/offense in small lineups; screens, rolls, switches.
+
+Strengths: speed + switching + spacing; increases pace.
+
+Weaknesses: rebounding and size mismatches vs true bigs.
+
+Example: Hypo: “PF closes games as the 5.”
+
+Best systems: small ball, switch-everything, 5-out.
+
+Team dynamics: everyone must rebound; pace and spacing improve.
+
+68) Stretch-5 Playing PF Slot
+
+Key characteristics: actually a center skillset but deployed at 4; heavy pop spacing.
+
+Strengths: drags both big defenders out; creates extreme 5-out geometry.
+
+Weaknesses: can be soft on the glass; vulnerable vs strong interior teams.
+
+Example: Hypo: “two shooting bigs together.”
+
+Best systems: 5-out, high-volume threes.
+
+Team dynamics: opens lanes massively; may sacrifice rim protection.
+
+69) Big Wing PF (3/4 Hybrid)
+
+Key characteristics: SF skills at PF: shooting, driving, switching.
+
+Strengths: matchup advantage vs slower 4s; speeds up offense.
+
+Weaknesses: can be bullied inside by power bigs.
+
+Example: Hypo: “wing at the 4 for spacing + switching.”
+
+Best systems: positionless, pace-and-space.
+
+Team dynamics: increases lineup versatility; demands team rebounding.
+
+70) Power PF (Strength-First)
+
+Key characteristics: screens, seals, post defense, boards; physical identity.
+
+Strengths: controls glass; punishes small lineups; sets tone.
+
+Weaknesses: can be spacing-negative; can be attacked in space.
+
+Example: Hypo: “bruiser 4 who lives in contact.”
+
+Best systems: physical leagues, inside-out, grinding games.
+
+Team dynamics: slows game; raises toughness.
+
+71) Skilled “Connector Big” PF
+
+Key characteristics: passes, screens, handoffs, quick decisions; moderate scoring.
+
+Strengths: makes everyone better; keeps offense flowing.
+
+Weaknesses: may lack rim pressure or elite shooting; low takeover ability.
+
+Example: Hypo: “PF who lives on hockey assists.”
+
+Best systems: motion, read-and-react, split actions.
+
+Team dynamics: increases team touches; fewer dead possessions.
+
+72) Specialist PF (One-Skill Extreme)
+
+Key characteristics: one elite trait (shooting OR defense OR rebounding OR screening) with glaring holes elsewhere.
+
+Strengths: can be deployed surgically for matchups.
+
+Weaknesses: exploitable outside narrow role.
+
+Example: Hypo: “shoot-only stretch 4” or “defense-only switch 4.”
+
+Best systems: coaches who can manage lineups around weaknesses.
+
+Team dynamics: teammates cover gaps; role clarity is critical.
+
+H) Explicitly dysfunctional / “still conceivable” PF types
+
+These exist in real environments (including pickup), even if they hurt teams.
+
+73) Paint-Clogging Non-Shooter PF (No Cut, No Roll)
+
+Key characteristics: can’t shoot; doesn’t screen well; stands in the lane.
+
+Strengths: occasionally provides size.
+
+Weaknesses: destroys spacing; kills drives and post entries; easy to ignore.
+
+Example: Hypo: “big body that never creates advantage.”
+
+Best systems: only works if opponents are undersized and undisciplined.
+
+Team dynamics: offense becomes crowded; teammates stop driving.
+
+74) Screen-Shy PF
+
+Key characteristics: avoids contact; slips without purpose; refuses to screen.
+
+Strengths: may preserve energy; sometimes creates accidental spacing.
+
+Weaknesses: offense loses its engine; handlers get no separation.
+
+Example: Hypo: “never sets a real screen.”
+
+Best systems: almost none; maybe pure iso/5-out with elite creators.
+
+Team dynamics: guards get frustrated; possessions become harder.
+
+75) Midrange Zombie PF (Bad Shot Map)
+
+Key characteristics: lives on long twos early in clock; ignores threes/rim attacks.
+
+Strengths: occasional heater.
+
+Weaknesses: inefficient; easy to scheme; stalls modern offenses.
+
+Example: Hypo: “15-foot contested jumpers all night.”
+
+Best systems: none long-term; sometimes slower, low-skill contexts.
+
+Team dynamics: lowers team 3/rim volume; kills pace.
+
+76) Turnover-Prone “I’m a Point Forward” PF (Without the Processing)
+
+Key characteristics: tries to handle like a guard; loose handle; late reads.
+
+Strengths: occasional creation bursts.
+
+Weaknesses: live-ball turnovers; transition defense collapses.
+
+Example: Hypo: “PF who insists on bringing it up and gets picked.”
+
+Best systems: development contexts only.
+
+Team dynamics: teammates hesitate; defensive morale drops.
+
+77) Block-Chasing Roamer (Bad Help Defender)
+
+Key characteristics: hunts blocks; leaves shooters; late rotations.
+
+Strengths: highlight blocks sometimes.
+
+Weaknesses: gives up corner threes/layups via chain breakdowns.
+
+Example: Hypo: “flies at everything.”
+
+Best systems: only if team is built to cover constant mistakes (rare).
+
+Team dynamics: teammates blame rotations; cohesion drops.
+
+78) Foul Machine PF (Undisciplined Physicality)
+
+Key characteristics: constant reaches, bumps, moving screens; lives in foul trouble.
+
+Strengths: momentary disruption.
+
+Weaknesses: gives free points; kills lineups; breaks scheme.
+
+Example: Hypo: “plays angry, not smart.”
+
+Best systems: nowhere reliably.
+
+Team dynamics: unstable rotations; teammates cover constantly.
+
+79) Rebound-Avoidant PF
+
+Key characteristics: doesn’t box out; leaks early; watches shots.
+
+Strengths: may increase leak-out transition chances.
+
+Weaknesses: gives up second chances; undermines defense.
+
+Example: Hypo: “PF who never hits anybody on box outs.”
+
+Best systems: only if team is elite rebounding elsewhere.
+
+Team dynamics: centers get overtaxed; opponents get extra possessions.
+
+80) Slow-Footed Target PF (Can’t Close, Can’t Switch)
+
+Key characteristics: heavy feet; late closeouts; hunted in space.
+
+Strengths: might offer size/post scoring.
+
+Weaknesses: gets dragged into every action; defense collapses.
+
+Example: Hypo: “opponents spam pick-and-pop at him.”
+
+Best systems: deep drop/zone masking with strong rim protection.
+
+Team dynamics: teammates over-rotate; fatigue rises fast.
+
+81) No-Impact Cardio PF
+
+Key characteristics: runs around but provides no spacing, no rim pressure, no defense impact.
+
+Strengths: low mistakes.
+
+Weaknesses: effectively plays neutral-to-negative; easy to ignore.
+
+Example: Hypo: “does nothing wrong, also nothing useful.”
+
+Best systems: only as a placeholder next to multiple stars.
+
+Team dynamics: others carry all creation; spacing still tight.
+
+Stackable overlays (subsets that modify ANY PF archetype)
+
+These are not base PF types. They’re modifiers you can apply to any role above.
+
+Overlay 1) Neuro-Trained Processing Subset
+
+Faster reads under fatigue; better help timing; improved short-roll decision speed.
+
+Impact: same PF role, fewer late rotations/turnovers.
+
+Overlay 2) Biomechanics-Tuned Screening and Footwork
+
+Safer hips/knees; better screen base; cleaner pivots and decel.
+
+Impact: better screen quality + fewer moving screen/foul issues.
+
+Overlay 3) Analytics-Optimized Shot Map Discipline
+
+Rim/3 priority; pops vs rolls by efficiency; smarter OREB vs floor-balance rules.
+
+Impact: fewer empty long twos, fewer bad crashes, cleaner spacing.
+
+Overlay 4) AI-Assisted Scouting Translation
+
+Faster internalization of opponent coverages (when to slip, when to pop, who to roam off).
+
+Impact: faster counter selection, better matchup exploitation.
+
+Overlay 5) Strength / Contact Adaptation
+
+Better post defense, boxouts, seal strength, finishing through contact.
+
+Impact: upgrades bruiser roles and rebounding anchor roles.
+
+Overlay 6) Mobility / Lateral Speed Emphasis
+
+Better closeouts, switch survival, hedge recovery.
+
+Impact: upgrades switchable PFs and perimeter containment PFs.
+
+Overlay 7) Ambidextrous Passing/Finishing
+
+Can pass/finish with either hand in traffic and on short roll.
+
+Impact: reduces turnovers; expands playmaking windows.
+
+Overlay 8) Fatigue-Resistant Motor Conditioning
+
+Sustains screening, rolling, and rebounding effort late-game.
+
+Impact: makes “screen-and-sprint” roles viable for heavy minutes.
+
+Overlay 9) Defensive Scheme Polyglot
+
+Can communicate and execute multiple coverages (switch, drop, blitz, zone).
+
+Impact: increases lineup flexibility; reduces opponent gameplan certainty.
+
+Overlay 10) High-Variance Chaos Preference
+
+Embraces risky steals, aggressive traps, crash-heavy approach.
+
+Impact: raises upset potential; raises inconsistency and rotation stress.

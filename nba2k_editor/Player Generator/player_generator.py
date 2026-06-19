@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
+from nba2k_editor.core import offsets as offsets_mod
 from nba2k_editor.models.schema import FieldEntry
 from contracts import GeneratorInputContract
 from player_evidence import PlayerEvidence
@@ -17,6 +19,7 @@ from player_rules import (
     derive_player_profile_values,
     derive_player_rule_values,
 )
+from positional_identities import classify_positional_identities
 from workbook_sqlite import ensure_workbook_sqlite_database, iter_workbook_sqlite_sheet_rows, workbook_sqlite_sheet_names
 
 _GENERATOR_DIR = Path(__file__).resolve().parent
@@ -24,11 +27,12 @@ _DEFAULT_OFFSETS_PLAYERS_PATH = _GENERATOR_DIR.parent / "core" / "Offsets" / "of
 _BASE_PLAYER_SEASON_SHEET = "Player Season Info"
 _PLAYER_IDENTITY_SHEET = "Player Info"
 _PLAYER_PER_GAME_SHEET = "Player Per Game"
+_PLAYER_TOTALS_SHEET = "Player Totals"
+_PLAYER_PER_36_SHEET = "Player Per 36 min"
 _PLAYER_PER_100_SHEET = "Player Per 100 Poss"
 _PLAYER_ADVANCED_SHEET = "Advanced"
 _PLAYER_SHOOTING_SHEET = "Player Shooting"
 _PLAYER_PLAY_BY_PLAY_SHEET = "Player Play by Play"
-_PLAYER_TOTALS_SHEET = "Player Totals"
 _TEAM_STATS_PER_GAME_SHEET = "Team Stats Per Game"
 _TEAM_STATS_PER_100_SHEET = "Team Stats Per 100 Pos"
 _TEAM_SUMMARY_SHEET = "Team Summaries"
@@ -38,6 +42,8 @@ _OPPONENT_STATS_PER_100_SHEET = "Opponent Stats Per 100 Poss"
 _PLAYER_EVIDENCE_SHEETS = (
     _BASE_PLAYER_SEASON_SHEET,
     _PLAYER_PER_GAME_SHEET,
+    _PLAYER_TOTALS_SHEET,
+    _PLAYER_PER_36_SHEET,
     _PLAYER_PER_100_SHEET,
     _PLAYER_ADVANCED_SHEET,
     _PLAYER_SHOOTING_SHEET,
@@ -50,6 +56,15 @@ _TEAM_EVIDENCE_SHEETS = (
     _OPPONENT_STATS_PER_GAME_SHEET,
     _OPPONENT_STATS_PER_100_SHEET,
 )
+_PLAYER_CAREER_CONTEXT_SHEETS = {
+    "Draft Picks",
+    _PLAYER_IDENTITY_SHEET,
+    "All Star Selections",
+    "All Teams",
+    "Player Award Shares",
+    "All team Voting",
+}
+
 
 
 @dataclass(frozen=True)
@@ -73,7 +88,6 @@ class GeneratedPlayerProposal:
     team: str
     identity: dict[str, Any]
     field_candidates: tuple[GeneratedPlayerFieldCandidate, ...]
-    warnings: tuple[str, ...]
 
     def by_field_key(self) -> dict[str, GeneratedPlayerFieldCandidate]:
         return {candidate.field_key: candidate for candidate in self.field_candidates}
@@ -83,10 +97,22 @@ class GeneratedPlayerProposal:
 class GeneratedPlayerBatch:
     season: int
     proposals: tuple[GeneratedPlayerProposal, ...]
-    failures: tuple[str, ...]
 
     def by_player_team(self) -> dict[tuple[str, str], GeneratedPlayerProposal]:
         return {(proposal.player_id, proposal.team): proposal for proposal in self.proposals}
+
+
+class DraftClassMode(StrEnum):
+    DRAFT_PICKS = "draft_picks"
+    ROOKIE_YEAR = "rookie_year"
+
+
+@dataclass(frozen=True)
+class GeneratedDraftClass:
+    draft_year: int
+    rookie_season: int
+    mode: DraftClassMode
+    proposals: tuple[GeneratedPlayerProposal, ...]
 
 
 @dataclass(frozen=True)
@@ -134,10 +160,13 @@ def authored_player_field_index(offsets_path: str | Path | None = None) -> dict[
 @lru_cache(maxsize=None)
 def _cached_authored_player_field_index(offsets_path: str) -> dict[str, FieldEntry]:
     path = Path(offsets_path)
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    players = payload.get("Players")
-    if not isinstance(players, dict):
-        raise KeyError("offsets_players.json is missing Players")
+    if path.resolve() == _DEFAULT_OFFSETS_PLAYERS_PATH.resolve():
+        players = offsets_mod.get_editor_layout_for_super("Players")
+    else:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        players = payload.get("Players")
+        if not isinstance(players, dict):
+            raise KeyError("offsets_players.json is missing Players")
 
     index: dict[str, FieldEntry] = {}
     ordinal = 0
@@ -167,17 +196,26 @@ def generate_player_proposal(
     offsets_path: str | Path | None = None,
     field_index: dict[str, FieldEntry] | None = None,
 ) -> GeneratedPlayerProposal:
+    source_team = str(evidence.team or "").strip().upper()
     profile_result = derive_player_profile_values(evidence)
     rule_result = derive_player_rule_values(evidence, league_player_rows=league_player_rows)
     candidates = player_field_candidates_from_results(profile_result, rule_result, offsets_path=offsets_path, field_index=field_index)
-    warnings = _warnings_from_skips(profile_result.skipped, rule_result.skipped)
+    positional_identity_matches = classify_positional_identities(evidence)
     return GeneratedPlayerProposal(
         player_id=evidence.player_id,
         season=evidence.season,
-        team=evidence.team,
-        identity={"player": evidence.identity.get("player"), "player_id": evidence.player_id},
+        team=source_team,
+        identity={
+            "player": evidence.identity.get("player"),
+            "player_id": evidence.player_id,
+            "team": source_team,
+            "team_abbrev": source_team,
+            "team_name": _team_display_name(evidence),
+            "multi_team_stat_shares": evidence.source_context.get("multi_team_stat_shares"),
+            "positional_identity_role_keys": tuple(match.role_key for match in positional_identity_matches),
+            "positional_identities": tuple(match.as_dict() for match in positional_identity_matches),
+        },
         field_candidates=candidates,
-        warnings=warnings,
     )
 
 
@@ -217,14 +255,138 @@ def generate_player_proposals_from_index(
     *,
     team_filter: str | None = None,
 ) -> GeneratedPlayerBatch:
+    proposals = [generate_player_proposal_from_index(context, player_id=player_id, team=team) for player_id, team in context.player_keys(team_filter=team_filter)]
+    return GeneratedPlayerBatch(season=context.season, proposals=tuple(proposals))
+
+
+def generate_draft_class_proposals(
+    draft_year: int,
+    *,
+    mode: DraftClassMode | str = DraftClassMode.DRAFT_PICKS,
+    source_root: str | Path | None = None,
+    offsets_path: str | Path | None = None,
+) -> GeneratedDraftClass:
+    if isinstance(draft_year, bool) or not isinstance(draft_year, int):
+        raise ValueError("draft_year must be an int")
+    draft_mode = mode if isinstance(mode, DraftClassMode) else DraftClassMode(str(mode))
+    rookie_season = draft_year + 1
+    contract = GeneratorInputContract(
+        season=rookie_season,
+        source_root=Path(source_root) if source_root is not None else _GENERATOR_DIR / "NBA Player Data",
+        output_target="proposal",
+    )
+    context = season_context_index(contract, offsets_path=offsets_path)
+    if draft_mode is DraftClassMode.DRAFT_PICKS:
+        proposals = _draft_pick_mode_proposals(context, draft_year)
+    else:
+        proposals = _rookie_year_mode_proposals(context, draft_year)
+    return GeneratedDraftClass(
+        draft_year=draft_year,
+        rookie_season=rookie_season,
+        mode=draft_mode,
+        proposals=tuple(proposals),
+    )
+
+
+def _draft_pick_mode_proposals(context: SeasonPlayerContextIndex, draft_year: int) -> list[GeneratedPlayerProposal]:
     proposals: list[GeneratedPlayerProposal] = []
-    failures: list[str] = []
-    for player_id, team in context.player_keys(team_filter=team_filter):
-        try:
-            proposals.append(generate_player_proposal_from_index(context, player_id=player_id, team=team))
-        except Exception as exc:
-            failures.append(f"{player_id}/{team}: {exc}")
-    return GeneratedPlayerBatch(season=context.season, proposals=tuple(proposals), failures=tuple(failures))
+    by_player = _context_keys_by_player_id(context)
+    for draft_row in _draft_pick_rows(context.source_database_path, draft_year):
+        player_id = str(draft_row.get("player_id") or "").strip().upper()
+        if not player_id:
+            continue
+        keys = by_player.get(player_id, ())
+        if not keys:
+            continue
+        proposal = generate_player_proposal_from_index(context, player_id=keys[0][0], team=keys[0][1])
+        proposals.append(_proposal_with_draft_class_metadata(proposal, draft_row, DraftClassMode.DRAFT_PICKS, draft_year, context.season))
+    return proposals
+
+
+def _rookie_year_mode_proposals(context: SeasonPlayerContextIndex, draft_year: int) -> list[GeneratedPlayerProposal]:
+    draft_rows = {str(row.get("player_id") or "").strip().upper(): row for row in _draft_pick_rows(context.source_database_path, draft_year)}
+    rookie_keys: list[tuple[str, str]] = []
+    for player_id, team in context.player_keys():
+        evidence = context.evidence_for(player_id=player_id, team=team)
+        if _is_rookie_year_evidence(evidence, context.season):
+            rookie_keys.append((player_id, team))
+    rookie_keys.sort(key=lambda key: _rookie_year_sort_key(context, key, draft_rows))
+
+    proposals: list[GeneratedPlayerProposal] = []
+    for player_id, team in rookie_keys:
+        proposal = generate_player_proposal_from_index(context, player_id=player_id, team=team)
+        proposals.append(_proposal_with_draft_class_metadata(proposal, draft_rows.get(player_id), DraftClassMode.ROOKIE_YEAR, draft_year, context.season))
+    return proposals
+
+
+def _context_keys_by_player_id(context: SeasonPlayerContextIndex) -> dict[str, tuple[tuple[str, str], ...]]:
+    grouped: dict[str, list[tuple[str, str]]] = {}
+    for player_id, team in context.player_keys():
+        grouped.setdefault(str(player_id).strip().upper(), []).append((player_id, team))
+    return {player_id: tuple(sorted(keys)) for player_id, keys in grouped.items()}
+
+
+def _draft_pick_rows(database: Path, draft_year: int) -> tuple[dict[str, Any], ...]:
+    rows = [row for row in iter_workbook_sqlite_sheet_rows(database, "Draft Picks") if row.get("season") == int(draft_year)]
+    return tuple(sorted(rows, key=_draft_pick_sort_key))
+
+
+def _draft_pick_sort_key(row: dict[str, Any]) -> tuple[int, int, str]:
+    overall = _int_value(row.get("overall_pick"))
+    round_number = _int_value(row.get("round"))
+    name = str(row.get("player") or "").strip().upper()
+    if overall is None or round_number is None or not name:
+        raise ValueError("draft pick row is missing sort evidence")
+    return (overall, round_number, name)
+
+
+def _is_rookie_year_evidence(evidence: PlayerEvidence, rookie_season: int) -> bool:
+    experience = _int_value(evidence.season_info.get("experience"))
+    first_season = _int_value(evidence.identity.get("from"))
+    return experience == 1 or first_season == int(rookie_season)
+
+
+def _rookie_year_sort_key(
+    context: SeasonPlayerContextIndex,
+    key: tuple[str, str],
+    draft_rows: dict[str, dict[str, Any]],
+) -> tuple[int, int, int, str]:
+    player_id, team = key
+    draft_row = draft_rows.get(player_id)
+    evidence = context.evidence_for(player_id=player_id, team=team)
+    player_name = str(evidence.identity.get("player") or player_id).strip().upper()
+    if draft_row is None:
+        raise ValueError(f"rookie-year row has no draft pick evidence: {player_id}")
+    overall, round_number, _ = _draft_pick_sort_key(draft_row)
+    return (0, overall, round_number, player_name)
+
+
+def _proposal_with_draft_class_metadata(
+    proposal: GeneratedPlayerProposal,
+    draft_row: dict[str, Any] | None,
+    mode: DraftClassMode,
+    draft_year: int,
+    rookie_season: int,
+) -> GeneratedPlayerProposal:
+    identity = dict(proposal.identity)
+    identity["draft_class_mode"] = mode.value
+    identity["draft_year"] = draft_year
+    identity["rookie_season"] = rookie_season
+    if draft_row:
+        identity["draft_overall_pick"] = draft_row.get("overall_pick")
+        identity["draft_round"] = draft_row.get("round")
+        identity["draft_team"] = draft_row.get("tm")
+        identity["draft_college"] = draft_row.get("college")
+    return replace(proposal, identity=identity)
+
+
+def _int_value(value: Any) -> int | None:
+    try:
+        if value is None or value == "":
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def selected_year_player_comparison_rows(contract: GeneratorInputContract) -> tuple[dict[str, Any], ...]:
@@ -268,7 +430,7 @@ def _cached_season_context_index(database_path: str, season: int, offsets_path: 
             if sheet == _PLAYER_IDENTITY_SHEET and player_id:
                 identity_by_player_id.setdefault(player_id.upper(), row)
 
-            if row.get("season") is not None and row.get("season") != season:
+            if row.get("season") is not None and row.get("season") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:
                 continue
 
             canonical_team = _canonical_team_for_player(player_id, team, multi_team_primary) if player_id and team else ""
@@ -322,7 +484,7 @@ def _cached_season_context_index(database_path: str, season: int, offsets_path: 
 
     for (player_id, team), merged in rows_by_key.items():
         _merge_prefixed_context(merged, player_static.get(player_id, {}))
-        _merge_prefixed_context(merged, team_context.get(team, {}))
+        _merge_prefixed_context(merged, _team_context_for_player(team_context, team, multi_team_shares.get(player_id)))
 
     comparison_rows = tuple(rows_by_key[key] for key in sorted(rows_by_key))
     evidence_by_key = _build_evidence_index(
@@ -332,6 +494,7 @@ def _cached_season_context_index(database_path: str, season: int, offsets_path: 
         player_sheet_rows=player_sheet_rows,
         team_sheet_rows=team_sheet_rows,
         team_rosters=team_rosters,
+        source_context_by_key=rows_by_key,
     )
     return SeasonPlayerContextIndex(
         season=season,
@@ -350,6 +513,7 @@ def _build_evidence_index(
     player_sheet_rows: dict[str, dict[tuple[str, str], dict[str, Any]]],
     team_sheet_rows: dict[str, dict[str, dict[str, Any]]],
     team_rosters: dict[str, list[dict[str, Any]]],
+    source_context_by_key: dict[tuple[str, str], dict[str, Any]],
 ) -> dict[tuple[str, str], PlayerEvidence]:
     evidence_by_key: dict[tuple[str, str], PlayerEvidence] = {}
     for key in keys:
@@ -360,6 +524,8 @@ def _build_evidence_index(
             raise KeyError(f"missing player identity row: {player_id}")
         season_info = _required_indexed_player_row(player_sheet_rows, _BASE_PLAYER_SEASON_SHEET, key, season)
         per_game = _required_indexed_player_row(player_sheet_rows, _PLAYER_PER_GAME_SHEET, key, season)
+        totals = _optional_indexed_player_row(player_sheet_rows, _PLAYER_TOTALS_SHEET, key, missing)
+        per_36 = _optional_indexed_player_row(player_sheet_rows, _PLAYER_PER_36_SHEET, key, missing)
         per_100 = _optional_indexed_player_row(player_sheet_rows, _PLAYER_PER_100_SHEET, key, missing)
         advanced = _optional_indexed_player_row(player_sheet_rows, _PLAYER_ADVANCED_SHEET, key, missing)
         shooting = _optional_indexed_player_row(player_sheet_rows, _PLAYER_SHOOTING_SHEET, key, missing)
@@ -376,16 +542,19 @@ def _build_evidence_index(
             identity=identity,
             season_info=season_info,
             per_game=per_game,
+            totals=totals,
+            per_36=per_36,
             per_100=per_100,
             advanced=advanced,
             shooting=shooting,
             play_by_play=play_by_play,
             team_roster=roster_rows,
-            team_stats_per_game=_optional_indexed_team_row(team_sheet_rows, _TEAM_STATS_PER_GAME_SHEET, team, missing),
-            team_stats_per_100=_optional_indexed_team_row(team_sheet_rows, _TEAM_STATS_PER_100_SHEET, team, missing),
-            team_summary=_optional_indexed_team_row(team_sheet_rows, _TEAM_SUMMARY_SHEET, team, missing),
-            opponent_stats_per_game=_optional_indexed_team_row(team_sheet_rows, _OPPONENT_STATS_PER_GAME_SHEET, team, missing),
-            opponent_stats_per_100=_optional_indexed_team_row(team_sheet_rows, _OPPONENT_STATS_PER_100_SHEET, team, missing),
+            team_stats_per_game=_optional_indexed_team_row(team_sheet_rows, _TEAM_STATS_PER_GAME_SHEET, team, missing, multi_team_shares=season_info.get("multi_team_stat_shares")),
+            team_stats_per_100=_optional_indexed_team_row(team_sheet_rows, _TEAM_STATS_PER_100_SHEET, team, missing, multi_team_shares=season_info.get("multi_team_stat_shares")),
+            team_summary=_optional_indexed_team_row(team_sheet_rows, _TEAM_SUMMARY_SHEET, team, missing, multi_team_shares=season_info.get("multi_team_stat_shares")),
+            opponent_stats_per_game=_optional_indexed_team_row(team_sheet_rows, _OPPONENT_STATS_PER_GAME_SHEET, team, missing, multi_team_shares=season_info.get("multi_team_stat_shares")),
+            opponent_stats_per_100=_optional_indexed_team_row(team_sheet_rows, _OPPONENT_STATS_PER_100_SHEET, team, missing, multi_team_shares=season_info.get("multi_team_stat_shares")),
+            source_context=dict(source_context_by_key.get(key, {})),
             missing_sources=tuple(dict.fromkeys(missing)),
         )
     return evidence_by_key
@@ -422,12 +591,73 @@ def _optional_indexed_team_row(
     sheet: str,
     team: str,
     missing_sources: list[str],
+    *,
+    multi_team_shares: object = None,
 ) -> dict[str, Any]:
+    weighted = _weighted_team_row(rows_by_sheet.get(sheet, {}), team, multi_team_shares)
+    if weighted:
+        return weighted
     row = rows_by_sheet.get(sheet, {}).get(str(team).strip().upper(), {})
     if row:
         return row
     missing_sources.append(sheet)
     return {}
+
+
+def _team_context_for_player(team_context: dict[str, dict[str, Any]], team: str, multi_team_shares: object) -> dict[str, Any]:
+    weighted = _weighted_team_row(team_context, team, multi_team_shares)
+    if weighted:
+        return weighted
+    return team_context.get(str(team).strip().upper(), {})
+
+
+def _weighted_team_row(rows_by_team: dict[str, dict[str, Any]], primary_team: str, multi_team_shares: object) -> dict[str, Any]:
+    shares = _valid_multi_team_shares(multi_team_shares)
+    if len(shares) < 2:
+        return {}
+    weighted: dict[str, Any] = {}
+    total_weight = 0.0
+    for share in shares:
+        team = str(share.get("team") or "").strip().upper()
+        row = rows_by_team.get(team, {})
+        weight = _float(share.get("stat_share"))
+        if not row or weight is None or weight <= 0.0:
+            continue
+        total_weight += weight
+        for column, value in row.items():
+            number = _float(value)
+            if number is None:
+                continue
+            weighted[column] = weighted.get(column, 0.0) + number * weight
+
+    if not weighted or total_weight <= 0.0:
+        return {}
+    for column, value in tuple(weighted.items()):
+        weighted[column] = value / total_weight
+
+    primary_row = rows_by_team.get(str(primary_team).strip().upper(), {})
+    first_share_row = next((rows_by_team.get(str(share.get("team") or "").strip().upper(), {}) for share in shares if rows_by_team.get(str(share.get("team") or "").strip().upper(), {})), {})
+    for row in (primary_row, first_share_row):
+        for column, value in row.items():
+            if column not in weighted and value is not None:
+                weighted[column] = value
+    weighted["multi_team_weighted_context"] = True
+    weighted["multi_team_context_teams"] = tuple(str(share.get("team") or "").strip().upper() for share in shares if share.get("team"))
+    return weighted
+
+
+def _valid_multi_team_shares(multi_team_shares: object) -> tuple[dict[str, Any], ...]:
+    if not isinstance(multi_team_shares, (list, tuple)):
+        return ()
+    shares: list[dict[str, Any]] = []
+    for share in multi_team_shares:
+        if not isinstance(share, dict):
+            continue
+        team = str(share.get("team") or "").strip().upper()
+        weight = _float(share.get("stat_share"))
+        if team and weight is not None and weight > 0.0:
+            shares.append(share)
+    return tuple(shares)
 
 
 def _is_multi_team_marker(team: object) -> bool:
@@ -477,7 +707,6 @@ def _multi_team_primary_teams(database: Path, season: int) -> dict[str, str]:
 
 
 def _multi_team_stat_shares(database: Path, season: int, primary_by_player_id: dict[str, str]) -> dict[str, tuple[dict[str, Any], ...]]:
-    aggregate_minutes: dict[str, float] = {}
     aggregate_games: dict[str, float] = {}
     actual_rows: dict[str, list[dict[str, Any]]] = {}
     for row in iter_workbook_sqlite_sheet_rows(database, _PLAYER_TOTALS_SHEET):
@@ -488,30 +717,33 @@ def _multi_team_stat_shares(database: Path, season: int, primary_by_player_id: d
         if player_id not in primary_by_player_id or not team:
             continue
         if _is_multi_team_marker(team):
-            aggregate_minutes[player_id] = _float(row.get("mp")) or 0.0
-            aggregate_games[player_id] = _float(row.get("g")) or 0.0
+            games = _float(row.get("g"))
+            if games is not None:
+                aggregate_games[player_id] = games
         else:
             actual_rows.setdefault(player_id, []).append(row)
 
     shares: dict[str, tuple[dict[str, Any], ...]] = {}
     for player_id, rows in actual_rows.items():
-        total_minutes = aggregate_minutes.get(player_id) or sum((_float(row.get("mp")) or 0.0) for row in rows)
-        total_games = aggregate_games.get(player_id) or sum((_float(row.get("g")) or 0.0) for row in rows)
+        total_games = aggregate_games.get(player_id)
+        if total_games is None or total_games <= 0.0:
+            continue
         entries: list[dict[str, Any]] = []
         for row in rows:
-            minutes = _float(row.get("mp")) or 0.0
-            games = _float(row.get("g")) or 0.0
-            basis = minutes if total_minutes else games
-            total = total_minutes if total_minutes else total_games
+            games = _float(row.get("g"))
+            minutes = _float(row.get("mp"))
+            if games is None or minutes is None:
+                continue
             entries.append(
                 {
                     "team": str(row.get("team") or "").strip().upper(),
                     "games": games,
                     "minutes": minutes,
-                    "stat_share": round(basis / total, 6) if total else 0.0,
+                    "stat_share": round(games / total_games, 6),
                 }
             )
-        shares[player_id] = tuple(entries)
+        if entries:
+            shares[player_id] = tuple(entries)
     return shares
 
 
@@ -582,8 +814,6 @@ def _candidate_from_value(
     field_entry: FieldEntry,
 ) -> GeneratedPlayerFieldCandidate:
     section, normalized = key.split("/", 1)
-    if section != field_entry.section or normalized != field_entry.normalized_name:
-        raise KeyError(f"generated field key does not match authored field entry: {key}")
     return GeneratedPlayerFieldCandidate(
         domain="Players",
         section=field_entry.section,
@@ -598,18 +828,21 @@ def _candidate_from_value(
     )
 
 
-def _warnings_from_skips(profile_skipped: dict[str, str], rule_skipped: dict[str, str]) -> tuple[str, ...]:
-    warnings: list[str] = []
-    for skipped in (profile_skipped, rule_skipped):
-        for field_key in sorted(skipped):
-            warnings.append(f"{field_key}: {skipped[field_key]}")
-    return tuple(warnings)
+def _team_display_name(evidence: PlayerEvidence) -> str:
+    for row in (evidence.team_summary, evidence.team_stats_per_game, evidence.team_stats_per_100):
+        value = row.get("team") if isinstance(row, dict) else None
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
 
 
 __all__ = [
     "GeneratedPlayerFieldCandidate",
     "GeneratedPlayerProposal",
     "GeneratedPlayerBatch",
+    "GeneratedDraftClass",
+    "DraftClassMode",
     "SeasonPlayerContextIndex",
     "authored_player_field_index",
     "generate_player_proposal",
@@ -617,6 +850,7 @@ __all__ = [
     "generate_player_proposal_from_index",
     "generate_player_proposals_for_contract",
     "generate_player_proposals_from_index",
+    "generate_draft_class_proposals",
     "player_field_candidates_from_results",
     "season_context_index",
     "selected_year_player_comparison_rows",

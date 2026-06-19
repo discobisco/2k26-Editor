@@ -134,8 +134,8 @@
           }
         },
         {
-          "normalized_name": "ORIGINALCONTRACTYEARS",
-          "display_name": "Original Contract Length",
+          "normalized_name": "CONTRACTLENGTH",
+          "display_name": "Contract Length",
           "versions": {
             "2K26": {
               "dropdown": [
@@ -2913,7 +2913,7 @@
             "2K26": {
               "dropdown": [
                 "None",
-                "基础",
+                "\u57fa\u7840",
                 "Giannis Antetokounmpo",
                 "LaMelo Ball",
                 "Paolo Banchero",
@@ -6869,18 +6869,18 @@
           "versions": {
             "2K26": {
               "dropdown": [
-                "无",
-                "基础",
+                "\u65e0",
+                "\u57fa\u7840",
                 "Kevin Durant",
                 "Kawhi Leonard",
                 "Kobe Bryant",
                 "Jaylen Brown",
                 "Jimmy Butler",
                 "Jamal Murray",
-                "职业",
-                "职业2",
-                "普通",
-                "精英",
+                "\u804c\u4e1a",
+                "\u804c\u4e1a2",
+                "\u666e\u901a",
+                "\u7cbe\u82f1",
                 "Kareem Abdul-Jabbar",
                 "Carmelo Anthony",
                 "Jalen Brunson",
@@ -8503,6 +8503,231 @@
                 "BLACKLOW",
                 "WHITEHIGH",
                 "WHITELOW"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "Tendencies": {
+      "Hot Zones": [
+        {
+          "normalized_name": "CENTER3",
+          "display_name": "CENTER_3",
+          "versions": {
+            "2K22,2K23,2K24,2K25,2K26": {
+              "dropdown": [
+                "Cold",
+                "Neutral",
+                "Hot"
+              ]
+            }
+          }
+        },
+        {
+          "normalized_name": "CLOSELEFT",
+          "display_name": "Close Left",
+          "versions": {
+            "2K22,2K23,2K24,2K25,2K26": {
+              "dropdown": [
+                "Cold",
+                "Neutral",
+                "Hot"
+              ]
+            }
+          }
+        },
+        {
+          "normalized_name": "CLOSEMIDDLE",
+          "display_name": "Close Middle",
+          "versions": {
+            "2K22,2K23,2K24,2K25,2K26": {
+              "dropdown": [
+                "Cold",
+                "Neutral",
+                "Hot"
+              ]
+            }
+          }
+        },
+        {
+          "normalized_name": "CLOSERIGHT",
+          "display_name": "Close Right",
+          "versions": {
+            "2K22,2K23,2K24,2K25,2K26": {
+              "dropdown": [
+                "Cold",
+                "Neutral",
+                "Hot"
+              ]
+            }
+          }
+        },
+        {
+          "normalized_name": "LEFT3",
+          "display_name": "LEFT_3",
+          "versions": {
+            "2K22,2K23,2K24,2K25,2K26": {
+              "dropdown": [
+                "Cold",
+                "Neutral",
+                "Hot"
+              ]
+            }
+          }
+        },
+        {
+          "normalized_name": "MIDRANGECENTER",
+          "display_name": "Mid-Range Center",
+          "versions": {
+            "2K22,2K23,2K24,2K25,2K26": {
+              "dropdown": [
+                "Cold",
+                "Neutral",
+                "Hot"
+              ]
+            }
+          }
+        },
+        {
+          "normalized_name": "MIDRANGELEFT",
+          "display_name": "Mid-Range Left",
+          "versions": {
+            "2K22,2K23,2K24,2K25,2K26": {
+              "dropdown": [
+                "Cold",
+                "Neutral",
+                "Hot"
+              ]
+            }
+          }
+        },
+        {
+          "normalized_name": "MIDRANGELEFTCENTER",
+          "display_name": "Mid-Range Left-Center",
+          "versions": {
+            "2K22,2K23,2K24,2K25,2K26": {
+              "dropdown": [
+                "Cold",
+                "Neutral",
+                "Hot"
+              ]
+            }
+          }
+        },
+        {
+          "normalized_name": "MIDRANGERIGHT",
+          "display_name": "Mid-Range Right",
+          "versions": {
+            "2K22,2K23,2K24,2K25,2K26": {
+              "dropdown": [
+                "Cold",
+                "Neutral",
+                "Hot"
+              ]
+            }
+          }
+        },
+        {
+          "normalized_name": "MIDRANGERIGHTCENTER",
+          "display_name": "Mid-Range Right-Center",
+          "versions": {
+            "2K22,2K23,2K24,2K25,2K26": {
+              "dropdown": [
+                "Cold",
+                "Neutral",
+                "Hot"
+              ]
+            }
+          }
+        },
+        {
+          "normalized_name": "RIGHT3",
+          "display_name": "RIGHT_3",
+          "versions": {
+            "2K22,2K23,2K24,2K25,2K26": {
+              "dropdown": [
+                "Cold",
+                "Neutral",
+                "Hot"
+              ]
+            }
+          }
+        },
+        {
+          "normalized_name": "3CENTER",
+          "display_name": "Three Center",
+          "versions": {
+            "2K22,2K23,2K24,2K25,2K26": {
+              "dropdown": [
+                "Cold",
+                "Neutral",
+                "Hot"
+              ]
+            }
+          }
+        },
+        {
+          "normalized_name": "3LEFT",
+          "display_name": "Three Left",
+          "versions": {
+            "2K22,2K23,2K24,2K25,2K26": {
+              "dropdown": [
+                "Cold",
+                "Neutral",
+                "Hot"
+              ]
+            }
+          }
+        },
+        {
+          "normalized_name": "3LEFTCENTER",
+          "display_name": "Three Left-Center",
+          "versions": {
+            "2K22,2K23,2K24,2K25,2K26": {
+              "dropdown": [
+                "Cold",
+                "Neutral",
+                "Hot"
+              ]
+            }
+          }
+        },
+        {
+          "normalized_name": "3RIGHT",
+          "display_name": "Three Right",
+          "versions": {
+            "2K22,2K23,2K24,2K25,2K26": {
+              "dropdown": [
+                "Cold",
+                "Neutral",
+                "Hot"
+              ]
+            }
+          }
+        },
+        {
+          "normalized_name": "3RIGHTCENTER",
+          "display_name": "Three Right-Center",
+          "versions": {
+            "2K22,2K23,2K24,2K25,2K26": {
+              "dropdown": [
+                "Cold",
+                "Neutral",
+                "Hot"
+              ]
+            }
+          }
+        },
+        {
+          "normalized_name": "UNDERBASKET",
+          "display_name": "Under Basket",
+          "versions": {
+            "2K22,2K23,2K24,2K25,2K26": {
+              "dropdown": [
+                "Cold",
+                "Neutral",
+                "Hot"
               ]
             }
           }
