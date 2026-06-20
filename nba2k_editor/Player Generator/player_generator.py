@@ -19,7 +19,6 @@ from player_rules import (
     derive_player_profile_values,
     derive_player_rule_values,
 )
-from positional_identities import classify_positional_identities
 from workbook_sqlite import ensure_workbook_sqlite_database, iter_workbook_sqlite_sheet_rows, workbook_sqlite_sheet_names
 
 _GENERATOR_DIR = Path(__file__).resolve().parent
@@ -200,7 +199,6 @@ def generate_player_proposal(
     profile_result = derive_player_profile_values(evidence)
     rule_result = derive_player_rule_values(evidence, league_player_rows=league_player_rows)
     candidates = player_field_candidates_from_results(profile_result, rule_result, offsets_path=offsets_path, field_index=field_index)
-    positional_identity_matches = classify_positional_identities(evidence)
     return GeneratedPlayerProposal(
         player_id=evidence.player_id,
         season=evidence.season,
@@ -212,8 +210,6 @@ def generate_player_proposal(
             "team_abbrev": source_team,
             "team_name": _team_display_name(evidence),
             "multi_team_stat_shares": evidence.source_context.get("multi_team_stat_shares"),
-            "positional_identity_role_keys": tuple(match.role_key for match in positional_identity_matches),
-            "positional_identities": tuple(match.as_dict() for match in positional_identity_matches),
         },
         field_candidates=candidates,
     )

@@ -10,7 +10,6 @@ import player_rules_defense as defense
 import player_rules_mental as mental
 import player_rules_offense as offense
 import player_rules_rebounding as rebounding
-from positional_identities import classify_positional_identities
 
 
 @dataclass(frozen=True)
@@ -289,7 +288,7 @@ def derive_player_profile_values(evidence: Any) -> PlayerProfileResult:
     _add_profile(values, "BIRTHMONTH", birth.month, "profile_birth_month_v1", ("identity.birth_date",))
     _add_profile(values, "BIRTHYEAR", _birth_year_age_slot(evidence.season, birth), "profile_birth_year_current_age_value_v1", ("identity.birth_date", "season_info.season"))
     for index, play_type in enumerate(play_types, start=1):
-        _add_profile(values, f"PLAYTYPE{index}", play_type, "profile_player_play_types_v1", ("positional_identities.role_key",))
+        _add_profile(values, f"PLAYTYPE{index}", play_type, "profile_player_play_types_v1", ("season_info.pos", "player_shooting.percent_fga_from_x3p_range", "per_game.x3pa_per_game", "per_game.ast_per_game", "advanced.ast_percent", "shooting.percent_dunks_of_fga"))
     _add_profile(values, "COLLEGEFROM", _clean_text(evidence.identity.get("colleges")), "profile_college_from_v1", ("identity.colleges",))
     years_pro = _int_number(evidence.season_info, "experience")
     if years_pro == 0:
@@ -387,10 +386,15 @@ def _position_values(evidence: Any) -> tuple[str, str]:
     return parts[0], parts[1] if len(parts) > 1 else "None"
 
 
+def _number(row: dict[str, Any], key: str) -> float:
+    try:
+        return float(row.get(key) or 0)
+    except Exception:
+        return 0.0
+
+
 def _play_type_values(evidence: Any) -> tuple[str, str, str, str]:
-    role_keys = tuple(match.role_key for match in classify_positional_identities(evidence))
     position, _secondary = _position_values(evidence)
-    joined = " ".join(role_keys).lower()
     plays: list[str] = []
 
     def add(*items: str) -> None:
@@ -398,22 +402,37 @@ def _play_type_values(evidence: Any) -> tuple[str, str, str, str]:
             if item not in plays:
                 plays.append(item)
 
-    if "pnr" in joined or position == "PG":
+    three_attempts = _number(evidence.per_game, "x3pa_per_game") or _number(evidence.per_game, "fg3a_per_game")
+    three_share = _number(evidence.shooting, "percent_fga_from_x3p_range")
+    assists = _number(evidence.per_game, "ast_per_game")
+    assist_pct = _number(evidence.advanced, "ast_percent")
+    dunk_share = _number(evidence.shooting, "percent_dunks_of_fga")
+    dunks = _number(evidence.shooting, "num_of_dunks")
+    offensive_rebounds = _number(evidence.per_game, "orb_per_game")
+    two_point_attempts = _number(evidence.per_game, "x2pa_per_game")
+    height = _number(evidence.identity, "ht_in_in")
+    weight = _number(evidence.identity, "wt")
+
+    high_three_volume = three_attempts >= 3.0 or three_share >= 0.25
+    primary_handler = assists >= 4.0 or assist_pct >= 24.0
+    secondary_handler = assists >= 2.5 or assist_pct >= 16.0
+    roll_finish = dunk_share >= 0.08 or dunks >= 60 or offensive_rebounds >= 2.0
+    post_size = position in {"PF", "C"} and (height >= 80 or weight >= 235 or two_point_attempts >= 7.0)
+
+    if position == "PG" or (position in {"SG", "SF"} and primary_handler):
         add("P&R Ball Handler")
-    if any(token in joined for token in ("pull-up three", "above-the-break", "movement shooter", "stretch", "pick-and-pop")):
+    if high_three_volume:
         add("3 PT")
-    if "point forward" in joined:
-        add("P&R Wing", "Handoff Passer")
-    if "point center" in joined or "high-post" in joined:
-        add("Handoff Passer", "Post Up High")
-    if "vertical spacer" in joined or "rebounding-first" in joined:
-        add("P&R Roll Man", "Cutter")
-    if position in {"PF", "C"}:
-        add("Post Up Low")
-    if position in {"SG", "SF"} and "3 PT" in plays:
+    if position in {"SG", "SF"} and high_three_volume:
         add("Handoff Receiver")
-    if position == "PG" and "3 PT" in plays:
-        add("Handoff Receiver", "Isolation Point")
+    if position in {"SF", "PF"} and secondary_handler:
+        add("P&R Wing", "Handoff Passer")
+    if position == "C" and secondary_handler:
+        add("Handoff Passer", "Post Up High")
+    if position in {"PF", "C"} and roll_finish:
+        add("P&R Roll Man", "Cutter")
+    if post_size:
+        add("Post Up Low")
     if not plays:
         add({"PG": "P&R Ball Handler", "SG": "3 PT", "SF": "Cutter", "PF": "Post Up High", "C": "Post Up Low"}.get(position, "Cutter"))
     padded = plays + ["None", "None", "None", "None"]

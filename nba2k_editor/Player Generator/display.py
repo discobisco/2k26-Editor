@@ -69,7 +69,7 @@ def load_generator_display_state(*, selected_season: str | int | None = None) ->
     source_team_filters = (_SOURCE_TEAM_ALL, *_source_team_options(database, int(season)))
     selected_source_team = _SOURCE_TEAM_ALL
     players = _player_options(database, int(season), selected_source_team)
-    selected_player = ""
+    selected_player = players[0] if players else ""
     return GeneratorDisplayState(
         source_loaded=True,
         seasons=seasons,
@@ -96,7 +96,10 @@ def update_generator_display_selection(
     source_team_filters = (_SOURCE_TEAM_ALL, *_source_team_options(database, int(season)))
     source_team = state.selected_source_team if selected_source_team is None else _require_option(selected_source_team, source_team_filters, "source team")
     players = _player_options(database, int(season), source_team)
-    player = "" if selected_player is None else _require_option(selected_player, players, "player")
+    if selected_player is None:
+        player = state.selected_player if state.selected_player in players else (players[0] if players else "")
+    else:
+        player = _require_option(selected_player, players, "player")
     return replace(
         state,
         selected_season=season,
@@ -223,16 +226,24 @@ def _player_options(database: Path, season: int, source_team: str) -> tuple[str,
             params,
         ).fetchall()
     labels: list[str] = []
-    seen: set[tuple[str, str]] = set()
+    seen_player_ids: set[str] = set()
+    seen_team_rows: set[tuple[str, str]] = set()
+    all_source_teams = not source_team or source_team == _SOURCE_TEAM_ALL
     for player, team, player_id in rows:
         team_key = str(team or "").strip().upper()
-        if not team_key or team_key in _MULTI_TEAM_MARKERS:
+        player_id_key = str(player_id).strip()
+        if not team_key or team_key in _MULTI_TEAM_MARKERS or not player_id_key:
             continue
-        key = (str(player_id).strip(), team_key)
-        if key in seen:
-            continue
-        seen.add(key)
-        labels.append(_player_label(str(player).strip(), team_key, str(player_id).strip()))
+        if all_source_teams:
+            if player_id_key in seen_player_ids:
+                continue
+            seen_player_ids.add(player_id_key)
+        else:
+            key = (player_id_key, team_key)
+            if key in seen_team_rows:
+                continue
+            seen_team_rows.add(key)
+        labels.append(_player_label(str(player).strip(), team_key, player_id_key))
     return tuple(labels)
 
 

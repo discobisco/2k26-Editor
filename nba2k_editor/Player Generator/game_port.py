@@ -41,17 +41,7 @@ class GamePortResult:
         return self.failed == 0
 
 
-@dataclass(frozen=True)
-class _GeneratedFieldOverride:
-    field_key: str
-    display_value: int | str
-
-
-_MATCHED_NAME_CONTRACT_DEFAULTS: tuple[_GeneratedFieldOverride, ...] = (
-    _GeneratedFieldOverride("Contract/YEARSLEFT", 1),
-    _GeneratedFieldOverride("Contract/CONTRACTLENGTH", 1),
-    _GeneratedFieldOverride("Contract/SALARYYEAR1", 1_500_000),
-)
+_MATCHED_NAME_IMPORT_SECTIONS: frozenset[str] = frozenset({"Attributes", "Tendencies"})
 
 
 @dataclass(frozen=True)
@@ -132,7 +122,7 @@ def import_generated_players_to_game(
         generated_players,
         player_indices=player_indices,
         field_index=context.field_index,
-        extra_rows=_MATCHED_NAME_CONTRACT_DEFAULTS if match_existing_player_names else (),
+        include_sections=_MATCHED_NAME_IMPORT_SECTIONS if match_existing_player_names else None,
         stop_on_error=stop_on_error,
         progress_callback=progress_callback,
     )
@@ -171,6 +161,7 @@ def apply_generated_players_to_game(
     field_index: dict[str, FieldEntry] | None = None,
     offsets_path: str | Path | None = None,
     extra_rows: Iterable[Any] = (),
+    include_sections: Iterable[str] | None = None,
     stop_on_error: bool = False,
     progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> GamePortBatchResult:
@@ -182,6 +173,7 @@ def apply_generated_players_to_game(
         target_count = len(index_tuple)
     player_results: list[GamePortResult] = []
     extra_row_tuple = tuple(extra_rows)
+    allowed_sections = frozenset(str(section) for section in include_sections) if include_sections is not None else None
     total_players = len(generated_tuple)
     if progress_callback is not None:
         progress_callback(0, total_players, f"Preparing to import {total_players} generated players")
@@ -189,7 +181,7 @@ def apply_generated_players_to_game(
         player_results.append(
             apply_generated_rows_to_game(
                 model,
-                (*tuple(_generated_rows(generated)), *extra_row_tuple),
+                (*tuple(_generated_rows_for_import(generated, allowed_sections)), *extra_row_tuple),
                 player_index=player_index,
                 field_index=field_index,
                 offsets_path=offsets_path,
@@ -741,6 +733,19 @@ def _row_value(row: Any) -> int | str:
     if hasattr(row, "value"):
         return getattr(row, "value")
     raise AttributeError("generated row is missing display_value/value")
+
+
+def _generated_rows_for_import(generated: Any, allowed_sections: frozenset[str] | None) -> Iterable[Any]:
+    for row in _generated_rows(generated):
+        if allowed_sections is None:
+            yield row
+            continue
+        section = str(getattr(row, "section", ""))
+        if not section:
+            field_key = str(getattr(row, "field_key", ""))
+            section = field_key.split("/", 1)[0]
+        if section in allowed_sections:
+            yield row
 
 
 def _generated_rows(generated: Any) -> Iterable[Any]:

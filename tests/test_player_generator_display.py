@@ -20,7 +20,20 @@ class PlayerGeneratorDisplayTests(unittest.TestCase):
         self.assertEqual("2025", state.selected_season)
         self.assertIn("GSW", state.source_team_filters)
         self.assertTrue(any("Stephen Curry | GSW | curryst01" == player for player in state.players))
+        player_ids = [player.rsplit(" | ", 1)[-1] for player in state.players]
+        self.assertEqual(len(player_ids), len(set(player_ids)))
+        self.assertEqual(state.players[0], state.selected_player)
         self.assertEqual((), state.rows)
+
+    def test_display_selection_keeps_visible_player_value_after_team_change(self) -> None:
+        display = import_module("nba2k_editor.Player Generator.display")
+
+        state = display.load_generator_display_state(selected_season=2025)
+        state = display.update_generator_display_selection(state, selected_source_team="GSW")
+
+        self.assertGreater(len(state.players), 0)
+        self.assertEqual(state.players[0], state.selected_player)
+        self.assertIn(" | GSW | ", state.selected_player)
 
     def test_display_facade_generates_player_table_rows(self) -> None:
         display = import_module("nba2k_editor.Player Generator.display")

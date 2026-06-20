@@ -123,9 +123,6 @@ class PlayerGeneratorGamePortTests(unittest.TestCase):
             roster_label="test live roster",
         ).validate()
         context = season_context_index(contract)
-        self.assertEqual(439, context.field_index["Contract/YEARSLEFT"].field["versions"]["2K26"]["address"])
-        self.assertEqual(850, context.field_index["Contract/CONTRACTLENGTH"].field["versions"]["2K26"]["address"])
-        self.assertEqual(468, context.field_index["Contract/SALARYYEAR1"].field["versions"]["2K26"]["address"])
         batch = generate_player_proposals_from_index(context, team_filter="GSW")
         loaded_players = {
             f"[{100 + index}] {proposal.identity['player']}": SimpleNamespace(index=100 + index, label=str(proposal.identity["player"]))
@@ -140,15 +137,12 @@ class PlayerGeneratorGamePortTests(unittest.TestCase):
         self.assertGreater(result.apply_result.applied_players, 0)
         self.assertEqual(100, model.writes[0][0])
         self.assertEqual({100 + index for index in range(result.apply_result.applied_players)}, {write[0] for write in model.writes})
-        for player_index in range(100, 100 + result.apply_result.applied_players):
-            contract_writes = {
-                (section, group, normalized_name): value
-                for index, section, group, normalized_name, value in model.writes
-                if index == player_index and section == "Contract"
-            }
-            self.assertEqual(1, contract_writes[("Contract", "Contract Terms", "YEARSLEFT")])
-            self.assertEqual(1, contract_writes[("Contract", "Contract Terms", "CONTRACTLENGTH")])
-            self.assertEqual(1_500_000, contract_writes[("Contract", "Salary", "SALARYYEAR1")])
+        written_sections = {section for _index, section, _group, _name, _value in model.writes}
+        self.assertLessEqual(written_sections, {"Attributes", "Tendencies"})
+        self.assertIn("Attributes", written_sections)
+        self.assertIn("Tendencies", written_sections)
+        self.assertNotIn("Contract", written_sections)
+        self.assertNotIn("Vitals", written_sections)
 
     def test_generated_name_matching_uses_2k_plain_ascii_names(self) -> None:
         self.assertEqual(_identity("Luka Doncic"), _identity("Luka Dončić"))
@@ -359,15 +353,15 @@ class PlayerGeneratorGamePortTests(unittest.TestCase):
         play_fields = ("Vitals/PLAYTYPE1", "Vitals/PLAYTYPE2", "Vitals/PLAYTYPE3", "Vitals/PLAYTYPE4")
         play_options = set(context.field_index["Vitals/PLAYTYPE1"].field["versions"]["2K26"]["dropdown"])
         self.assertEqual(
-            ("P&R Ball Handler", "3 PT", "Handoff Receiver", "Isolation Point"),
+            ("P&R Ball Handler", "3 PT", "None", "None"),
             tuple(curry.by_field_key()[field].display_value for field in play_fields),
         )
         self.assertEqual(
-            ("Handoff Passer", "Post Up High", "3 PT", "Post Up Low"),
+            ("3 PT", "Handoff Passer", "Post Up High", "P&R Roll Man"),
             tuple(jokic.by_field_key()[field].display_value for field in play_fields),
         )
         self.assertEqual(
-            ("P&R Roll Man", "Cutter", "Post Up Low", "Handoff Passer"),
+            ("P&R Roll Man", "Cutter", "Post Up Low", "None"),
             tuple(gobert.by_field_key()[field].display_value for field in play_fields),
         )
         for proposal in (curry, jokic, gobert):
@@ -375,7 +369,7 @@ class PlayerGeneratorGamePortTests(unittest.TestCase):
                 candidate = proposal.by_field_key()[field]
                 self.assertIn(candidate.display_value, play_options)
                 self.assertEqual("profile_player_play_types_v1", candidate.source_rule)
-                self.assertIn("positional_identities.role_key", candidate.evidence_keys)
+                self.assertNotIn("positional", " ".join(candidate.evidence_keys).lower())
 
     def test_generated_player_play_types_cover_position_archetype_breakdowns(self) -> None:
         contract = GeneratorInputContract(
@@ -386,17 +380,17 @@ class PlayerGeneratorGamePortTests(unittest.TestCase):
         context = season_context_index(contract)
         play_fields = ("Vitals/PLAYTYPE1", "Vitals/PLAYTYPE2", "Vitals/PLAYTYPE3", "Vitals/PLAYTYPE4")
         cases = {
-            "PG/PnR Scoring Threat (Pull-Up Three)": ("curryst01", "GSW", {"P&R Ball Handler", "3 PT"}),
-            "SG/Above-the-Break Spot-Up Specialist": ("hieldbu01", "GSW", {"3 PT", "Handoff Receiver"}),
-            "SF/Point Forward Primary Initiator": ("butleji01", "GSW", {"P&R Wing", "Handoff Passer"}),
-            "PF/Point Forward 4 (Primary Initiator PF)": ("greendr01", "GSW", {"Handoff Passer", "Post Up High"}),
-            "C/Vertical Spacer (Lob Magnet)": ("goberru01", "MIN", {"P&R Roll Man", "Cutter"}),
+            "high-volume scoring PG": ("curryst01", "GSW", {"P&R Ball Handler", "3 PT"}),
+            "high-volume spot-up SG": ("hieldbu01", "GSW", {"3 PT", "Handoff Receiver"}),
+            "playmaking wing": ("butleji01", "GSW", {"P&R Ball Handler", "P&R Wing", "Handoff Passer"}),
+            "playmaking forward": ("greendr01", "GSW", {"P&R Wing", "Handoff Passer"}),
+            "rim-running center": ("goberru01", "MIN", {"P&R Roll Man", "Cutter"}),
         }
-        for expected_role, (player_id, team, required_plays) in cases.items():
+        for case_name, (player_id, team, required_plays) in cases.items():
             proposal = generate_player_proposal_from_index(context, player_id=player_id, team=team)
-            self.assertIn(expected_role, tuple(proposal.identity["positional_identity_role_keys"]))
+            self.assertTrue(all("role_key" not in key for key in proposal.identity))
             play_values = set(proposal.by_field_key()[field].display_value for field in play_fields)
-            self.assertTrue(required_plays.issubset(play_values), (expected_role, play_values))
+            self.assertTrue(required_plays.issubset(play_values), (case_name, play_values))
 
     def test_generated_low_role_players_leave_unused_play_types_as_none(self) -> None:
         contract = GeneratorInputContract(

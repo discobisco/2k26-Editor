@@ -184,9 +184,21 @@ class DpgEditorApp:
         self.player_search_text = ""
         self.selected_item_labels: dict[str, set[str]] = {}
         self.selection_anchors: dict[str, str | None] = {}
+        self.dirty_rows: set[str] = set()
         self.player_season_stat_id_selection: dict[tuple[int, str], str] = {}
         self.player_generator_display = import_module("nba2k_editor.Player Generator.display")
         self.player_generator_state = self.player_generator_display.empty_generator_display_state()
+
+    @property
+    def generator_display_state(self) -> Any:
+        return self.player_generator_state
+
+    @generator_display_state.setter
+    def generator_display_state(self, value: Any) -> None:
+        self.player_generator_state = value
+
+    def _generator_display_module(self) -> Any:
+        return self.player_generator_display
 
     def _screen_tag(self, domain: str) -> str:
         return _tag(domain, "screen")
@@ -267,6 +279,15 @@ class DpgEditorApp:
     def _generator_table_tag(self) -> str:
         return self._player_generator_tag("table")
 
+    def _operation_popup_tag(self) -> str:
+        return _tag("operation", "popup")
+
+    def _operation_message_tag(self) -> str:
+        return _tag("operation", "message")
+
+    def _operation_progress_tag(self) -> str:
+        return _tag("operation", "progress")
+
     def _nav_tag(self, screen: str) -> str:
         return _tag("nav", screen)
 
@@ -287,6 +308,33 @@ class DpgEditorApp:
     def _safe_delete_children(self, dpg: Any, tag: str) -> None:
         if dpg.does_item_exist(tag):
             dpg.delete_item(tag, children_only=True)
+
+    def _show_operation_popup(self, dpg: Any, message: str, *, progress: float = 0.0, overlay: str = "") -> None:
+        if not hasattr(dpg, "window") or not hasattr(dpg, "configure_item"):
+            return
+        popup = self._operation_popup_tag()
+        message_tag = self._operation_message_tag()
+        progress_tag = self._operation_progress_tag()
+        if not dpg.does_item_exist(popup):
+            with dpg.window(tag=popup, label="Operation Progress", modal=False, show=True, width=560, height=220, no_scrollbar=True):
+                dpg.add_text(message, tag=message_tag)
+                dpg.add_spacer(height=10)
+                dpg.add_progress_bar(tag=progress_tag, default_value=progress, overlay=overlay, width=-1)
+        else:
+            dpg.configure_item(popup, show=True, width=560, height=220, no_scrollbar=True)
+        self._safe_set(dpg, message_tag, message)
+        if dpg.does_item_exist(progress_tag):
+            dpg.set_value(progress_tag, progress)
+        self._safe_configure(dpg, progress_tag, overlay=overlay)
+        if hasattr(dpg, "focus_item"):
+            dpg.focus_item(popup)
+
+    def _update_operation_progress(self, dpg: Any, current: int, total: int, message: str) -> None:
+        progress = 1.0 if total <= 0 else max(0.0, min(1.0, current / total))
+        overlay = "complete" if total <= 0 or current >= total else f"{current}/{total}"
+        self._show_operation_popup(dpg, message, progress=progress, overlay=overlay)
+        if hasattr(dpg, "render_dearpygui_frame") and current < total:
+            dpg.render_dearpygui_frame()
 
     def _bind_item_theme(self, dpg: Any, item: str, theme: str) -> None:
         if theme and dpg.does_item_exist(item) and dpg.does_item_exist(theme):
@@ -667,6 +715,9 @@ class DpgEditorApp:
     def _write_editor_entry_value(self, dpg: Any, item: RecordListItem, entry: FieldEntry, value: str) -> dict[str, Any]:
         return self.model.write_entry_value(entry, index=item.index, value=value, stat_selector=self._selected_season_stat_selector(dpg, item, entry))
 
+    def _mark_row_dirty(self, row_key: str) -> None:
+        self.dirty_rows.add(row_key)
+
     def _selected_editor_items(self, domain: str, fallback_item: RecordListItem) -> list[RecordListItem]:
         selected_labels = self.selected_item_labels.get(domain, set())
         loaded_items = self.model.loaded_items.get(domain, {})
@@ -709,13 +760,13 @@ class DpgEditorApp:
                 continue
             old_text = str(dpg.get_value(self._row_current_tag(item, entry)) or "")
             new_text = str(dpg.get_value(self._row_new_tag(item, entry)) or "")
-            if new_text == old_text:
+            if new_text == old_text and row_key not in self.dirty_rows:
                 continue
             field_saved = 0
             source_readback: dict[str, Any] | None = None
             for target_item in target_items:
                 readback = self._write_editor_entry_value(dpg, target_item, entry, new_text)
-                if target_item == item:
+                if target_item == item and isinstance(readback, dict):
                     source_readback = readback
                 field_saved += 1
             saved += field_saved
@@ -725,8 +776,30 @@ class DpgEditorApp:
                 dpg.set_value(self._row_current_tag(item, entry), text)
                 dpg.set_value(self._row_new_tag(item, entry), text)
                 dpg.set_value(self._row_status_tag(item, entry), f"saved {field_saved} records @ 0x{source_readback['address']:X}")
+            else:
+                dpg.set_value(self._row_status_tag(item, entry), f"saved {field_saved} records")
+            self.dirty_rows.discard(row_key)
         record_text = "record" if len(target_items) == 1 else "records"
-        self._safe_set(dpg, self._editor_status_tag(item), f"saved {saved} field writes across {len(target_items)} {record_text}")
+        message = f"saved {saved} field writes across {len(target_items)} {record_text}"
+        self._safe_set(dpg, self._editor_status_tag(item), message)
+        if len(target_items) > 1 and saved:
+            self._show_operation_popup(dpg, message, progress=1.0, overlay="complete")
+
+    def _reset_item_editor(self, dpg: Any, item: RecordListItem) -> None:
+        target_items = self._selected_editor_items(item.domain, item)
+        total_succeeded = 0
+        total_failed = 0
+        for target_item in target_items:
+            result = self.model.reset_player_editor_values(
+                index=target_item.index,
+                stat_selector=self.player_season_stat_id_selection.get(self._season_stat_selector_key(item)),
+            )
+            total_succeeded += int(result.get("succeeded", 0))
+            total_failed += int(result.get("failed", 0))
+        message = f"reset {total_succeeded} fields across {len(target_items)} records, {total_failed} failed"
+        self._safe_set(dpg, self._editor_status_tag(item), message)
+        if len(target_items) > 1:
+            self._show_operation_popup(dpg, message, progress=1.0, overlay="complete")
 
     def _open_editor_window(self, dpg: Any, item: RecordListItem) -> None:
         win_tag = _tag("editor", item.domain, item.index, "window")
@@ -951,11 +1024,11 @@ class DpgEditorApp:
             dpg.add_spacer(height=10)
             with dpg.group(horizontal=True):
                 dpg.add_text("Season")
-                dpg.add_combo(list(state.seasons), tag=self._player_generator_tag("year"), default_value=state.selected_season, width=110, callback=lambda *_: self._refresh_player_generator_dropdowns(dpg))
+                dpg.add_combo(list(state.seasons), tag=self._player_generator_tag("year"), default_value=state.selected_season, width=110)
                 dpg.add_text("Source Team")
-                dpg.add_combo(list(state.source_team_filters), tag=self._player_generator_tag("source_team"), default_value=state.selected_source_team, width=180, callback=lambda *_: self._refresh_player_generator_dropdowns(dpg))
+                dpg.add_combo(list(state.source_team_filters), tag=self._player_generator_tag("source_team"), default_value=state.selected_source_team, width=180)
                 dpg.add_text("Player")
-                dpg.add_combo(list(state.players), tag=self._player_generator_tag("selected_player"), default_value=state.selected_player, width=420, callback=lambda *_: self._refresh_player_generator_dropdowns(dpg))
+                dpg.add_combo(list(state.players), tag=self._player_generator_tag("selected_player"), default_value=state.selected_player, width=420)
             dpg.add_spacer(height=10)
             with dpg.group(horizontal=True):
                 dpg.add_button(label="Load Source", width=130, callback=lambda *_: self._load_player_generator_source(dpg))
@@ -963,27 +1036,31 @@ class DpgEditorApp:
                 dpg.add_button(label="Import Generated Players", width=190, callback=lambda *_: self._import_generator_to_game_display(dpg))
                 dpg.add_button(label="Import Matched Names", width=180, callback=lambda *_: self._import_generator_to_game_display(dpg, match_existing_player_names=True))
             dpg.add_text(state.status, tag=self._player_generator_tag("status"))
-            dpg.add_input_text(tag=self._generator_table_tag(), default_value=self._generator_grid_text(state.field_columns, state.player_rows), multiline=True, readonly=True, width=-1, height=-1)
+            dpg.add_input_text(tag=self._generator_table_tag(), default_value=self._generator_display_text(state), multiline=True, readonly=True, width=-1, height=-1)
 
     def _load_player_generator_source(self, dpg: Any) -> None:
-        self.player_generator_state = self.player_generator_display.load_generator_display_state()
+        self.player_generator_state = self._generator_display_module().load_generator_display_state()
         self._sync_player_generator_status(dpg)
 
     def _refresh_player_generator_dropdowns(self, dpg: Any) -> None:
         if not getattr(self.player_generator_state, "source_loaded", False):
             return
-        display = self.player_generator_display
-        season = str(dpg.get_value(self._player_generator_tag("year")) or self.player_generator_state.selected_season)
-        source_team = str(dpg.get_value(self._player_generator_tag("source_team")) or self.player_generator_state.selected_source_team)
+        display = self._generator_display_module()
+        if not hasattr(display, "update_generator_display_selection"):
+            return
+        season = str(dpg.get_value(self._player_generator_tag("year")) or getattr(self.player_generator_state, "selected_season", ""))
+        source_team = str(dpg.get_value(self._player_generator_tag("source_team")) or getattr(self.player_generator_state, "selected_source_team", ""))
         selected_player = str(dpg.get_value(self._player_generator_tag("selected_player")) or "")
+        if not season or not source_team:
+            return
         state = display.update_generator_display_selection(self.player_generator_state, selected_season=season, selected_source_team=source_team)
-        if selected_player in state.players:
+        if selected_player in getattr(state, "players", ()):
             state = display.update_generator_display_selection(state, selected_player=selected_player)
         self.player_generator_state = state
         self._sync_player_generator_status(dpg)
 
     def _display_generator_preview(self, dpg: Any) -> None:
-        display = self.player_generator_display
+        display = self._generator_display_module()
         if not getattr(self.player_generator_state, "source_loaded", False):
             self.player_generator_state = display.load_generator_display_state()
             self._sync_player_generator_status(dpg)
@@ -992,12 +1069,20 @@ class DpgEditorApp:
         self._sync_player_generator_status(dpg)
 
     def _import_generator_to_game_display(self, dpg: Any, *, match_existing_player_names: bool = False) -> None:
-        display = self.player_generator_display
+        display = self._generator_display_module()
         if not getattr(self.player_generator_state, "source_loaded", False):
             self.player_generator_state = display.load_generator_display_state()
             self._sync_player_generator_status(dpg)
         self._refresh_player_generator_dropdowns(dpg)
-        self.player_generator_state = display.import_generator_to_game_display_state(self.model, self.player_generator_state, match_existing_player_names=match_existing_player_names)
+        self._show_operation_popup(dpg, "Importing generated players...", progress=0.0, overlay="0/0")
+        progress_callback = lambda current, total, message: self._update_operation_progress(dpg, current, total, message)
+        self.player_generator_state = display.import_generator_to_game_display_state(
+            self.model,
+            self.player_generator_state,
+            match_existing_player_names=match_existing_player_names,
+            progress_callback=progress_callback,
+        )
+        self._update_operation_progress(dpg, 1, 1, getattr(self.player_generator_state, "status", "Imported generated players."))
         self._sync_player_generator_status(dpg)
 
     def _generator_grid_text(self, columns: tuple[str, ...], rows: tuple[Any, ...]) -> str:
@@ -1010,6 +1095,27 @@ class DpgEditorApp:
 
         return "\n".join((render(headers), "-+-".join("-" * width for width in widths), *(render(record) for record in table[1:])))
 
+    def _generator_source_options_text(self, players: tuple[str, ...]) -> str:
+        headers = ("Player", "Team", "Player ID")
+        parsed_rows: list[tuple[str, str, str]] = []
+        for label in players:
+            parts = [part.strip() for part in str(label or "").split(" | ")]
+            if len(parts) == 3:
+                parsed_rows.append((parts[0], parts[1], parts[2]))
+        table = [headers, *parsed_rows]
+        widths = [max(len(record[index]) for record in table) for index in range(len(headers))]
+
+        def render(record: tuple[str, ...]) -> str:
+            return " | ".join(value.ljust(widths[index]) for index, value in enumerate(record))
+
+        return "\n".join((render(headers), "-+-".join("-" * width for width in widths), *(render(record) for record in table[1:])))
+
+    def _generator_display_text(self, state: Any) -> str:
+        player_rows = tuple(getattr(state, "player_rows", ()))
+        if player_rows:
+            return self._generator_grid_text(tuple(getattr(state, "field_columns", ())), player_rows)
+        return self._generator_source_options_text(tuple(getattr(state, "players", ())))
+
     def _sync_player_generator_status(self, dpg: Any) -> None:
         state = self.player_generator_state
         self._safe_configure(dpg, self._player_generator_tag("year"), items=list(getattr(state, "seasons", ())))
@@ -1019,7 +1125,7 @@ class DpgEditorApp:
         self._safe_configure(dpg, self._player_generator_tag("selected_player"), items=list(getattr(state, "players", ())))
         self._safe_set(dpg, self._player_generator_tag("selected_player"), getattr(state, "selected_player", ""))
         self._safe_set(dpg, self._player_generator_tag("status"), getattr(state, "status", ""))
-        self._safe_set(dpg, self._generator_table_tag(), self._generator_grid_text(getattr(state, "field_columns", ()), getattr(state, "player_rows", ())))
+        self._safe_set(dpg, self._generator_table_tag(), self._generator_display_text(state))
 
     def _build_players_screen(self, dpg: Any, *, show: bool = False) -> None:
         domain = "Players"
