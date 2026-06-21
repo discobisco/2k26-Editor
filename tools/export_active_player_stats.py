@@ -10,21 +10,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 from nba2k_editor.models.data_model import EditorDataModel  # noqa: E402
+from nba2k_editor.models.schema import RecordListItem  # noqa: E402
+
+from active_export_runs import active_export_paths, create_next_run_dir, parse_run_number  # noqa: E402
 
 TARGET = "NBA2K26.exe"
 TEAM_LIMIT = 30
-OUT_DIR = REPO_ROOT / "outputs"
-CSV_PATH = OUT_DIR / "current_active_player_stats.csv"
-JSON_PATH = OUT_DIR / "current_active_player_stats.json"
-ATTRIBUTES_CSV_PATH = OUT_DIR / "current_active_player_attributes.csv"
-ATTRIBUTES_JSON_PATH = OUT_DIR / "current_active_player_attributes.json"
-SEASON_HIGHS_CSV_PATH = OUT_DIR / "current_active_player_season_highs.csv"
-SEASON_HIGHS_JSON_PATH = OUT_DIR / "current_active_player_season_highs.json"
-AWARDS_CSV_PATH = OUT_DIR / "current_active_player_awards.csv"
-AWARDS_JSON_PATH = OUT_DIR / "current_active_player_awards.json"
-TEAMS_CSV_PATH = OUT_DIR / "current_active_team_fields.csv"
-TEAMS_JSON_PATH = OUT_DIR / "current_active_team_fields.json"
-SUMMARY_PATH = OUT_DIR / "current_active_player_stats_summary.md"
 
 
 def _display(value: dict[str, Any] | None) -> str:
@@ -45,33 +36,38 @@ def _raw_int(value: dict[str, Any] | None) -> int | None:
         return None
 
 
-def _norm_label(text: object) -> str:
-    return " ".join(str(text or "").strip().split()).upper()
-
-
 def main() -> int:
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
     model = EditorDataModel(target_executable=TARGET)
     if not model.attach():
         raise SystemExit(f"failed to attach: {model.last_status}")
 
     teams = model.scan_records("Teams", limit=TEAM_LIMIT)
-    players = model.scan_records("Players")
     model.loaded_items["Teams"] = {team.display_label: team for team in teams}
-    model.loaded_items["Players"] = {player.display_label: player for player in players}
 
-    player_groups = {int(team.address): [] for team in teams}
-    skipped_az = 0
-    skipped_no_team = 0
-    for player in players:
-        if _norm_label(player.label) == "A Z":
-            skipped_az += 1
-            continue
-        team_address = model._player_current_team_pointer(player)
-        if team_address not in player_groups:
-            skipped_no_team += 1
-            continue
-        player_groups[int(team_address)].append(player)
+    team_player_entries = sorted(
+        (
+            entry
+            for entry in model.grouped_fields("Teams").get("Team Players", {}).get("Team Players", ())
+            if str(entry.normalized_name).startswith("PLAYER")
+        ),
+        key=lambda entry: int(str(entry.normalized_name).replace("PLAYER", "")),
+    )
+    player_base = model.domain_base("Players")
+    player_stride = model.domain_stride("Players")
+    player_label_entries = model._label_entries("Players")
+    player_groups: dict[int, list[RecordListItem]] = {int(team.address): [] for team in teams}
+    for team in teams:
+        for roster_slot, entry in enumerate(team_player_entries, start=1):
+            player_pointer = _raw_int(model.read_entry_value(entry, index=team.index))
+            if not player_pointer:
+                continue
+            player_index = (int(player_pointer) - player_base) // player_stride
+            player_label = model._label_for_record_address("Players", player_index, int(player_pointer), player_label_entries)
+            player_groups[int(team.address)].append(
+                RecordListItem(domain="Players", index=int(player_index), address=int(player_pointer), label=str(player_label or f"Player {roster_slot}"))
+            )
+    players = [player for roster in player_groups.values() for player in roster]
+    model.loaded_items["Players"] = {player.display_label: player for player in players}
 
     grouped = model.grouped_fields("Players")
     season_id_entries = list(grouped.get("Stats", {}).get("Season IDs", ()))
@@ -200,73 +196,84 @@ def main() -> int:
                     award_row[entry.display_name] = f"ERR: {exc}"
             award_rows.append(award_row)
 
-    with CSV_PATH.open("w", newline="", encoding="utf-8") as fh:
+    run_dir = create_next_run_dir(REPO_ROOT)
+    paths = active_export_paths(run_dir)
+    run_number = parse_run_number(run_dir)
+
+    with paths["stats_csv"].open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
 
-    JSON_PATH.write_text(json.dumps(rows, indent=2, ensure_ascii=False), encoding="utf-8")
+    paths["stats_json"].write_text(json.dumps(rows, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    with ATTRIBUTES_CSV_PATH.open("w", newline="", encoding="utf-8") as fh:
+    with paths["attributes_csv"].open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=attribute_fieldnames)
         writer.writeheader()
         writer.writerows(attribute_rows)
 
-    ATTRIBUTES_JSON_PATH.write_text(json.dumps(attribute_rows, indent=2, ensure_ascii=False), encoding="utf-8")
+    paths["attributes_json"].write_text(json.dumps(attribute_rows, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    with SEASON_HIGHS_CSV_PATH.open("w", newline="", encoding="utf-8") as fh:
+    with paths["season_highs_csv"].open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=season_high_fieldnames)
         writer.writeheader()
         writer.writerows(season_high_rows)
 
-    SEASON_HIGHS_JSON_PATH.write_text(json.dumps(season_high_rows, indent=2, ensure_ascii=False), encoding="utf-8")
+    paths["season_highs_json"].write_text(json.dumps(season_high_rows, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    with AWARDS_CSV_PATH.open("w", newline="", encoding="utf-8") as fh:
+    with paths["awards_csv"].open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=award_fieldnames)
         writer.writeheader()
         writer.writerows(award_rows)
 
-    AWARDS_JSON_PATH.write_text(json.dumps(award_rows, indent=2, ensure_ascii=False), encoding="utf-8")
+    paths["awards_json"].write_text(json.dumps(award_rows, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    with TEAMS_CSV_PATH.open("w", newline="", encoding="utf-8") as fh:
+    with paths["teams_csv"].open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=team_fieldnames)
         writer.writeheader()
         writer.writerows(team_rows)
 
-    TEAMS_JSON_PATH.write_text(json.dumps(team_rows, indent=2, ensure_ascii=False), encoding="utf-8")
+    paths["teams_json"].write_text(json.dumps(team_rows, indent=2, ensure_ascii=False), encoding="utf-8")
 
     lines = [
         f"# Current active player stats export",
         "",
+        f"Run folder: `{run_dir}`",
+        f"Run number: {run_number}",
         f"Target: `{TARGET}`",
         f"Attach status: `{model.last_status}`",
         f"Teams scanned: {len(teams)} (limit {TEAM_LIMIT})",
-        f"Players scanned: {len(players)}",
+        f"Player discovery: Teams / Team Players / Player 1-15 pointers",
+        f"Roster player pointers read: {len(teams) * len(team_player_entries)}",
+        f"Rostered players found: {len(players)}",
         f"Active roster rows exported: {len(rows)}",
-        f"Ignored A Z players: {skipped_az}",
-        f"Ignored players outside first {TEAM_LIMIT} team slots: {skipped_no_team}",
-        f"CSV: `{CSV_PATH}`",
-        f"JSON: `{JSON_PATH}`",
-        f"Attributes CSV: `{ATTRIBUTES_CSV_PATH}`",
-        f"Attributes JSON: `{ATTRIBUTES_JSON_PATH}`",
-        f"Season highs CSV: `{SEASON_HIGHS_CSV_PATH}`",
-        f"Season highs JSON: `{SEASON_HIGHS_JSON_PATH}`",
-        f"Awards CSV: `{AWARDS_CSV_PATH}`",
-        f"Awards JSON: `{AWARDS_JSON_PATH}`",
-        f"Teams CSV: `{TEAMS_CSV_PATH}`",
-        f"Teams JSON: `{TEAMS_JSON_PATH}`",
+        f"CSV: `{paths['stats_csv']}`",
+        f"JSON: `{paths['stats_json']}`",
+        f"Attributes CSV: `{paths['attributes_csv']}`",
+        f"Attributes JSON: `{paths['attributes_json']}`",
+        f"Season highs CSV: `{paths['season_highs_csv']}`",
+        f"Season highs JSON: `{paths['season_highs_json']}`",
+        f"Awards CSV: `{paths['awards_csv']}`",
+        f"Awards JSON: `{paths['awards_json']}`",
+        f"Teams CSV: `{paths['teams_csv']}`",
+        f"Teams JSON: `{paths['teams_json']}`",
         "",
         "## Team counts",
     ]
     for team_slot, team in enumerate(teams):
         count = len(player_groups.get(int(team.address), ()))
         lines.append(f"- {team_slot:02d} {team.label}: {count}")
-    SUMMARY_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    paths["summary"].write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     print(json.dumps({
+        "run_dir": str(run_dir),
+        "run_number": run_number,
+        "player_discovery": "team_player_pointers",
         "status": model.last_status,
         "teams": len(teams),
+        "roster_player_pointers_read": len(teams) * len(team_player_entries),
         "players_scanned": len(players),
+        "rostered_players_found": len(players),
         "rows_exported": len(rows),
         "attribute_rows_exported": len(attribute_rows),
         "attribute_fields": len(attribute_entries),
@@ -276,19 +283,17 @@ def main() -> int:
         "award_fields": len(award_entries),
         "team_rows_exported": len(team_rows),
         "team_fields": len(team_entries),
-        "ignored_a_z": skipped_az,
-        "ignored_outside_team_slots": skipped_no_team,
-        "csv": str(CSV_PATH),
-        "json": str(JSON_PATH),
-        "attributes_csv": str(ATTRIBUTES_CSV_PATH),
-        "attributes_json": str(ATTRIBUTES_JSON_PATH),
-        "season_highs_csv": str(SEASON_HIGHS_CSV_PATH),
-        "season_highs_json": str(SEASON_HIGHS_JSON_PATH),
-        "awards_csv": str(AWARDS_CSV_PATH),
-        "awards_json": str(AWARDS_JSON_PATH),
-        "teams_csv": str(TEAMS_CSV_PATH),
-        "teams_json": str(TEAMS_JSON_PATH),
-        "summary": str(SUMMARY_PATH),
+        "csv": str(paths["stats_csv"]),
+        "json": str(paths["stats_json"]),
+        "attributes_csv": str(paths["attributes_csv"]),
+        "attributes_json": str(paths["attributes_json"]),
+        "season_highs_csv": str(paths["season_highs_csv"]),
+        "season_highs_json": str(paths["season_highs_json"]),
+        "awards_csv": str(paths["awards_csv"]),
+        "awards_json": str(paths["awards_json"]),
+        "teams_csv": str(paths["teams_csv"]),
+        "teams_json": str(paths["teams_json"]),
+        "summary": str(paths["summary"]),
     }, indent=2))
     return 0
 

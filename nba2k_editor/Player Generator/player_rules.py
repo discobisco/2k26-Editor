@@ -1,480 +1,315 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta
 from typing import Any, Callable
-import unicodedata
 
-import player_rules_athleticism as athleticism
-import player_rules_defense as defense
-import player_rules_mental as mental
-import player_rules_offense as offense
-import player_rules_rebounding as rebounding
-
-
-@dataclass(frozen=True)
-class ProfileValue:
-    field: str
-    domain: str
-    value: int | str
-    source_rule: str
-    evidence_keys: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class RuleValue:
-    field: str
-    domain: str
-    value: int | str
-    source_rule: str
-    evidence_keys: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class PlayerProfileResult:
-    values: dict[str, ProfileValue]
-
-
-@dataclass(frozen=True)
-class PlayerRuleResult:
-    values: dict[str, RuleValue]
-
-
-@dataclass(frozen=True)
-class PlayerRuleSpec:
-    field_key: str
-    section: str
-    group: str
-    normalized_name: str
-    module: str
-    function: str
-
-
-_ATTRIBUTE_RULE_ROWS: tuple[tuple[str, str, str, str], ...] = (
-    ('3POINT', 'Offense', 'offense', 'derive_attribute_field_3point'),
-    ('BALLCONTROL', 'Offense', 'offense', 'derive_attribute_ballcontrol'),
-    ('CLOSESHOT', 'Offense', 'offense', 'derive_attribute_closeshot'),
-    ('DRAWFOUL', 'Offense', 'offense', 'derive_attribute_drawfoul'),
-    ('DRIVINGDUNK', 'Offense', 'offense', 'derive_attribute_drivingdunk'),
-    ('DRIVINGLAYUP', 'Offense', 'offense', 'derive_attribute_drivinglayup'),
-    ('FREETHROW', 'Offense', 'offense', 'derive_attribute_freethrow'),
-    ('MIDRANGE', 'Offense', 'offense', 'derive_attribute_midrange'),
-    ('OFFENSIVECONSISTENCY', 'Offense', 'offense', 'derive_attribute_offensiveconsistency'),
-    ('PASSACCURACY', 'Offense', 'offense', 'derive_attribute_passaccuracy'),
-    ('PASSIQ', 'Offense', 'offense', 'derive_attribute_passiq'),
-    ('PASSVISION', 'Offense', 'offense', 'derive_attribute_passvision'),
-    ('POSTFADE', 'Offense', 'offense', 'derive_attribute_postfade'),
-    ('POSTHOOK', 'Offense', 'offense', 'derive_attribute_posthook'),
-    ('POSTCONTROL', 'Offense', 'offense', 'derive_attribute_postcontrol'),
-    ('IQSHOT', 'Offense', 'offense', 'derive_attribute_iqshot'),
-    ('STANDINGDUNK', 'Offense', 'offense', 'derive_attribute_standingdunk'),
-    ('BLOCK', 'Defense', 'defense', 'derive_attribute_block'),
-    ('DEFENSECONSISTENCY', 'Defense', 'defense', 'derive_attribute_defenseconsistency'),
-    ('HELPDEFENSE', 'Defense', 'defense', 'derive_attribute_helpdefense'),
-    ('INTERIORDEFENSE', 'Defense', 'defense', 'derive_attribute_interiordefense'),
-    ('PASSPERCEPTION', 'Defense', 'defense', 'derive_attribute_passperception'),
-    ('PERIMETERDEFENSE', 'Defense', 'defense', 'derive_attribute_perimeterdefense'),
-    ('STEAL', 'Defense', 'defense', 'derive_attribute_steal'),
-    ('ACCELERATION', 'Athleticism', 'athleticism', 'derive_attribute_acceleration'),
-    ('AGILITY', 'Athleticism', 'athleticism', 'derive_attribute_agility'),
-    ('SPEED', 'Athleticism', 'athleticism', 'derive_attribute_speed'),
-    ('SPEEDWITHBALL', 'Athleticism', 'athleticism', 'derive_attribute_speedwithball'),
-    ('STAMINA', 'Athleticism', 'athleticism', 'derive_attribute_stamina'),
-    ('STRENGTH', 'Athleticism', 'athleticism', 'derive_attribute_strength'),
-    ('VERTICAL', 'Athleticism', 'athleticism', 'derive_attribute_vertical'),
-    ('BACKDURABILITY', 'Durability', 'athleticism', 'derive_attribute_backdurability'),
-    ('HEADDURABILITY', 'Durability', 'athleticism', 'derive_attribute_headdurability'),
-    ('LEFTANKLEDURABILITY', 'Durability', 'athleticism', 'derive_attribute_leftankledurability'),
-    ('LEFTELBOWDURABILITY', 'Durability', 'athleticism', 'derive_attribute_leftelbowdurability'),
-    ('LEFTFOOTDURABILITY', 'Durability', 'athleticism', 'derive_attribute_leftfootdurability'),
-    ('LEFTHANDDURABILITY', 'Durability', 'athleticism', 'derive_attribute_lefthanddurability'),
-    ('LEFTHIPDURABILITY', 'Durability', 'athleticism', 'derive_attribute_lefthipdurability'),
-    ('LEFTKNEEDURABILITY', 'Durability', 'athleticism', 'derive_attribute_leftkneedurability'),
-    ('LEFTSHOULDERDURABILITY', 'Durability', 'athleticism', 'derive_attribute_leftshoulderdurability'),
-    ('MISCDURABILITY', 'Durability', 'athleticism', 'derive_attribute_miscdurability'),
-    ('NECKDURABILITY', 'Durability', 'athleticism', 'derive_attribute_neckdurability'),
-    ('RIGHTANKLEDURABILITY', 'Durability', 'athleticism', 'derive_attribute_rightankledurability'),
-    ('RIGHTELBOWDURABILITY', 'Durability', 'athleticism', 'derive_attribute_rightelbowdurability'),
-    ('RIGHTFOOTDURABILITY', 'Durability', 'athleticism', 'derive_attribute_rightfootdurability'),
-    ('RIGHTHANDDURABILITY', 'Durability', 'athleticism', 'derive_attribute_righthanddurability'),
-    ('RIGHTHIPDURABILITY', 'Durability', 'athleticism', 'derive_attribute_righthipdurability'),
-    ('RIGHTKNEEDURABILITY', 'Durability', 'athleticism', 'derive_attribute_rightkneedurability'),
-    ('RIGHTSHOULDERDURABILITY', 'Durability', 'athleticism', 'derive_attribute_rightshoulderdurability'),
-    ('HANDS', 'Mental', 'mental', 'derive_attribute_hands'),
-    ('HUSTLE', 'Mental', 'mental', 'derive_attribute_hustle'),
-    ('INTANGIBLES', 'Mental', 'mental', 'derive_attribute_intangibles'),
-    ('CACHCEDOVR', 'Misc', 'mental', 'derive_attribute_cachcedovr'),
-    ('LATERALQUICKNESS', 'Misc', 'defense', 'derive_attribute_lateralquickness'),
-    ('MAXOVR', 'Misc', 'mental', 'derive_attribute_maxovr'),
-    ('MINOVR', 'Misc', 'mental', 'derive_attribute_minovr'),
-    ('PICKANDROLLDEFENSEIQ', 'Misc', 'defense', 'derive_attribute_pickandrolldefenseiq'),
-    ('POSTFADEAWAY', 'Misc', 'mental', 'derive_attribute_postfadeaway'),
-    ('POTENTIAL', 'Misc', 'mental', 'derive_attribute_potential'),
-    ('CONTESTSHOT', 'Misc', 'defense', 'derive_attribute_contestshot'),
-    ('DEFENSEREBOUND', 'Rebounding', 'rebounding', 'derive_attribute_defenserebound'),
-    ('OFFENSIVEREBOUND', 'Rebounding', 'rebounding', 'derive_attribute_offensiverebound'),
+from player_rules_core import PlayerRuleResult, PlayerProfileResult, ProfileValue, RuleSpec, RuleValue, _number, _profile_value, _rule_value
+from player_rules_profile import derive_player_profile_values, _split_player_name
+from player_rules_offense import (
+    derive_attribute_ballcontrol,
+    derive_attribute_closeshot,
+    derive_attribute_drawfoul,
+    derive_attribute_drivingdunk,
+    derive_attribute_drivinglayup,
+    derive_attribute_field_3point,
+    derive_attribute_freethrow,
+    derive_attribute_iqshot,
+    derive_attribute_midrange,
+    derive_attribute_offensiveconsistency,
+    derive_attribute_passaccuracy,
+    derive_attribute_passiq,
+    derive_attribute_passvision,
+    derive_attribute_postcontrol,
+    derive_attribute_postfade,
+    derive_attribute_postfadeaway,
+    derive_attribute_posthook,
+    derive_attribute_standingdunk,
+    derive_tendency_3pointshot,
+    derive_tendency_3pointspotupshot,
+    derive_tendency_alleyoop,
+    derive_tendency_closeshot,
+    derive_tendency_drivepullup3point,
+    derive_tendency_drivingdunk,
+    derive_tendency_drivinglayup,
+    derive_tendency_eurosteplayup,
+    derive_tendency_flashydunk,
+    derive_tendency_hopsteplayup,
+    derive_tendency_midshot,
+    derive_tendency_postfadeleft,
+    derive_tendency_postfaderight,
+    derive_tendency_posthookleft,
+    derive_tendency_posthookright,
+    derive_tendency_postup,
+    derive_tendency_shot,
+    derive_tendency_spinlayup,
+    derive_tendency_standingdunk,
+    derive_tendency_stepbackjumper3point,
+)
+from player_rules_defense import (
+    derive_attribute_block,
+    derive_attribute_contestshot,
+    derive_attribute_defenseconsistency,
+    derive_attribute_helpdefense,
+    derive_attribute_interiordefense,
+    derive_attribute_passperception,
+    derive_attribute_perimeterdefense,
+    derive_attribute_pickandrolldefenseiq,
+    derive_attribute_steal,
+    derive_tendency_blockshot,
+    derive_tendency_contestshot,
+    derive_tendency_foul,
+    derive_tendency_hardfoul,
+    derive_tendency_onballsteal,
+    derive_tendency_passinterception,
+)
+from player_rules_athleticism import (
+    derive_attribute_agility,
+    derive_attribute_speed,
+    derive_attribute_speedwithball,
+    derive_attribute_stamina,
+    derive_attribute_strength,
+    derive_attribute_vertical,
+)
+from player_rules_rebounding import (
+    derive_attribute_defensiverebound,
+    derive_attribute_offensiverebound,
+    derive_tendency_crash,
+    derive_tendency_putback,
+    derive_tendency_putbackdunk,
+)
+from player_rules_mental import (
+    derive_attribute_hands,
+    derive_attribute_hustle,
+    derive_attribute_intangibles,
+    derive_attribute_potential,
+    derive_tendency_playdiscipline,
+    derive_tendency_touches,
 )
 
-_TENDENCY_RULE_ROWS: tuple[tuple[str, str, str, str], ...] = (
-    ('CONTESTEDJUMPER3POINT', 'Jump Shooting', 'offense', 'derive_tendency_contestedjumper3point'),
-    ('CONTESTEDJUMPERMID', 'Jump Shooting', 'offense', 'derive_tendency_contestedjumpermid'),
-    ('CONTESTEDJUMPERMIDRANGE', 'Jump Shooting', 'offense', 'derive_tendency_contestedjumpermidrange'),
-    ('DRIVEPULLUP3POINT', 'Jump Shooting', 'offense', 'derive_tendency_drivepullup3point'),
-    ('DRIVEPULLUPMIDRANGE', 'Jump Shooting', 'offense', 'derive_tendency_drivepullupmidrange'),
-    ('3POINTOFFSCREENSHOT', 'Jump Shooting', 'offense', 'derive_tendency_field_3pointoffscreenshot'),
-    ('MIDOFFSCREENSHOT', 'Jump Shooting', 'offense', 'derive_tendency_midoffscreenshot'),
-    ('3POINTSHOT', 'Jump Shooting', 'offense', 'derive_tendency_field_3pointshot'),
-    ('3POINTCENTERSHOT', 'Jump Shooting', 'offense', 'derive_tendency_field_3pointcentershot'),
-    ('3POINTLEFTSHOT', 'Jump Shooting', 'offense', 'derive_tendency_field_3pointleftshot'),
-    ('3POINTCENTERLEFTSHOT', 'Jump Shooting', 'offense', 'derive_tendency_field_3pointcenterleftshot'),
-    ('3POINTRIGHTSHOT', 'Jump Shooting', 'offense', 'derive_tendency_field_3pointrightshot'),
-    ('3POINTCENTERRIGHTSHOT', 'Jump Shooting', 'offense', 'derive_tendency_field_3pointcenterrightshot'),
-    ('CLOSESHOT', 'Jump Shooting', 'offense', 'derive_tendency_closeshot'),
-    ('CLOSELEFTSHOT', 'Jump Shooting', 'offense', 'derive_tendency_closeleftshot'),
-    ('CLOSEMIDDLESHOT', 'Jump Shooting', 'offense', 'derive_tendency_closemiddleshot'),
-    ('CLOSERIGHTSHOT', 'Jump Shooting', 'offense', 'derive_tendency_closerightshot'),
-    ('MIDSHOT', 'Jump Shooting', 'offense', 'derive_tendency_midshot'),
-    ('CENTERMIDSHOT', 'Jump Shooting', 'offense', 'derive_tendency_centermidshot'),
-    ('LEFTMIDSHOT', 'Jump Shooting', 'offense', 'derive_tendency_leftmidshot'),
-    ('CENTERLEFTMIDSHOT', 'Jump Shooting', 'offense', 'derive_tendency_centerleftmidshot'),
-    ('MIDRIGHTSHOT', 'Jump Shooting', 'offense', 'derive_tendency_midrightshot'),
-    ('CENTERMIDRIGHTSHOT', 'Jump Shooting', 'offense', 'derive_tendency_centermidrightshot'),
-    ('BASKETUNDERSHOT', 'Jump Shooting', 'offense', 'derive_tendency_basketundershot'),
-    ('SPINJUMPER', 'Jump Shooting', 'offense', 'derive_tendency_spinjumper'),
-    ('3POINTSPOTUPSHOT', 'Jump Shooting', 'offense', 'derive_tendency_field_3pointspotupshot'),
-    ('MIDSPOTUPSHOT', 'Jump Shooting', 'offense', 'derive_tendency_midspotupshot'),
-    ('STEPTHROUGH', 'Jump Shooting', 'offense', 'derive_tendency_stepthrough'),
-    ('STEPBACKJUMPER3POINT', 'Jump Shooting', 'offense', 'derive_tendency_stepbackjumper3point'),
-    ('STEPBACKJUMPERMIDRANGE', 'Jump Shooting', 'offense', 'derive_tendency_stepbackjumpermidrange'),
-    ('TRANSITIONPULLUP3POINT', 'Jump Shooting', 'offense', 'derive_tendency_transitionpullup3point'),
-    ('USEGLASS', 'Jump Shooting', 'offense', 'derive_tendency_useglass'),
-    ('ALLEYOOP', 'Layups And Dunks', 'offense', 'derive_tendency_alleyoop'),
-    ('CRASH', 'Layups And Dunks', 'rebounding', 'derive_tendency_crash'),
-    ('DRIVINGDUNK', 'Layups And Dunks', 'offense', 'derive_tendency_drivingdunk'),
-    ('DRIVINGLAYUP', 'Layups And Dunks', 'offense', 'derive_tendency_drivinglayup'),
-    ('EUROSTEPLAYUP', 'Layups And Dunks', 'offense', 'derive_tendency_eurosteplayup'),
-    ('FLASHYDUNK', 'Layups And Dunks', 'offense', 'derive_tendency_flashydunk'),
-    ('FLOATER', 'Layups And Dunks', 'offense', 'derive_tendency_floater'),
-    ('HOPSTEPLAYUP', 'Layups And Dunks', 'offense', 'derive_tendency_hopsteplayup'),
-    ('PUTBACK', 'Layups And Dunks', 'rebounding', 'derive_tendency_putback'),
-    ('PUTBACKDUNK', 'Layups And Dunks', 'rebounding', 'derive_tendency_putbackdunk'),
-    ('SPINLAYUP', 'Layups And Dunks', 'offense', 'derive_tendency_spinlayup'),
-    ('STANDINGDUNK', 'Layups And Dunks', 'offense', 'derive_tendency_standingdunk'),
-    ('NOSETUPDRIBBLE', 'Drive Setup', 'offense', 'derive_tendency_nosetupdribble'),
-    ('SETUPWITHHESITATION', 'Drive Setup', 'offense', 'derive_tendency_setupwithhesitation'),
-    ('SETUPWITHSIZEUP', 'Drive Setup', 'offense', 'derive_tendency_setupwithsizeup'),
-    ('STEPBACKJUMPERMID', 'Drive Setup', 'offense', 'derive_tendency_stepbackjumpermid'),
-    ('TRIPLETHREATIDLE', 'Drive Setup', 'offense', 'derive_tendency_triplethreatidle'),
-    ('TRIPLETHREATJABSTEP', 'Drive Setup', 'offense', 'derive_tendency_triplethreatjabstep'),
-    ('TRIPLETHREATPUMPFAKE', 'Drive Setup', 'offense', 'derive_tendency_triplethreatpumpfake'),
-    ('THREATTRIPLESHOT', 'Drive Setup', 'offense', 'derive_tendency_threattripleshot'),
-    ('ATTACKSTRONGONDRIVE', 'Driving', 'offense', 'derive_tendency_attackstrongondrive'),
-    ('DRIVE', 'Driving', 'offense', 'derive_tendency_drive'),
-    ('DRIVEPULLUPMID', 'Driving', 'offense', 'derive_tendency_drivepullupmid'),
-    ('DRIVERIGHT', 'Driving', 'offense', 'derive_tendency_driveright'),
-    ('DRIVINGBEHINDTHEBACK', 'Driving', 'offense', 'derive_tendency_drivingbehindtheback'),
-    ('DRIBBLECROSSOVER', 'Driving', 'offense', 'derive_tendency_dribblecrossover'),
-    ('DRIVINGDOUBLECROSSOVER', 'Driving', 'offense', 'derive_tendency_drivingdoublecrossover'),
-    ('DRIVINGDRIBBLEHESITATION', 'Driving', 'offense', 'derive_tendency_drivingdribblehesitation'),
-    ('DRIVINGHALFSPIN', 'Driving', 'offense', 'derive_tendency_drivinghalfspin'),
-    ('DRIVINGINANDOUT', 'Driving', 'offense', 'derive_tendency_drivinginandout'),
-    ('DRIBBLESPIN', 'Driving', 'offense', 'derive_tendency_dribblespin'),
-    ('DRIVINGSTEPBACK', 'Driving', 'offense', 'derive_tendency_drivingstepback'),
-    ('NODRIVINGDRIBBLEMOVE', 'Driving', 'offense', 'derive_tendency_nodrivingdribblemove'),
-    ('OFFSCREENDRIVE', 'Driving', 'offense', 'derive_tendency_offscreendrive'),
-    ('SPOTUPDRIVE', 'Driving', 'offense', 'derive_tendency_spotupdrive'),
-    ('ALLEYOOPPASS', 'Passing', 'offense', 'derive_tendency_alleyooppass'),
-    ('DISHTOOPENMAN', 'Passing', 'offense', 'derive_tendency_dishtoopenman'),
-    ('FLASHYPASS', 'Passing', 'offense', 'derive_tendency_flashypass'),
-    ('POSTAGGRESSIVEBACKDOWN', 'Post Game', 'offense', 'derive_tendency_postaggressivebackdown'),
-    ('POSTBACKDOWN', 'Post Game', 'offense', 'derive_tendency_postbackdown'),
-    ('POSTDRIVE', 'Post Game', 'offense', 'derive_tendency_postdrive'),
-    ('POSTDROPSTEP', 'Post Game', 'offense', 'derive_tendency_postdropstep'),
-    ('POSTFACEUP', 'Post Game', 'offense', 'derive_tendency_postfaceup'),
-    ('POSTFADELEFT', 'Post Game', 'offense', 'derive_tendency_postfadeleft'),
-    ('POSTFADERIGHT', 'Post Game', 'offense', 'derive_tendency_postfaderight'),
-    ('POSTHOOKLEFT', 'Post Game', 'offense', 'derive_tendency_posthookleft'),
-    ('POSTHOOKRIGHT', 'Post Game', 'offense', 'derive_tendency_posthookright'),
-    ('HOPPOSTSHOT', 'Post Game', 'offense', 'derive_tendency_hoppostshot'),
-    ('POSTHOPSTEP', 'Post Game', 'offense', 'derive_tendency_posthopstep'),
-    ('POSTSHIMMYSHOT', 'Post Game', 'offense', 'derive_tendency_postshimmyshot'),
-    ('POSTSPIN', 'Post Game', 'offense', 'derive_tendency_postspin'),
-    ('POSTSTEPBACKSHOT', 'Post Game', 'offense', 'derive_tendency_poststepbackshot'),
-    ('POSTUP', 'Post Game', 'offense', 'derive_tendency_postup'),
-    ('POSTUPANDUNDER', 'Post Game', 'offense', 'derive_tendency_postupandunder'),
-    ('FROMPOSTSHOT', 'Post Game', 'offense', 'derive_tendency_frompostshot'),
-    ('ISOVSAVERAGEDEFENDER', 'Freelance', 'mental', 'derive_tendency_isovsaveragedefender'),
-    ('ISOVSELITEDEFENDER', 'Freelance', 'mental', 'derive_tendency_isovselitedefender'),
-    ('ISOVSGOODDEFENDER', 'Freelance', 'mental', 'derive_tendency_isovsgooddefender'),
-    ('ISOVSPOORDEFENDER', 'Freelance', 'mental', 'derive_tendency_isovspoordefender'),
-    ('PLAYDISCIPLINE', 'Freelance', 'mental', 'derive_tendency_playdiscipline'),
-    ('ROLLVSPOP', 'Freelance', 'mental', 'derive_tendency_rollvspop'),
-    ('TOUCHES', 'Freelance', 'mental', 'derive_tendency_touches'),
-    ('TRANSITIONSPOTUP', 'Freelance', 'mental', 'derive_tendency_transitionspotup'),
-    ('BLOCKSHOT', 'Defense', 'defense', 'derive_tendency_blockshot'),
-    ('CONTESTSHOT', 'Defense', 'defense', 'derive_tendency_contestshot'),
-    ('FOUL', 'Defense', 'defense', 'derive_tendency_foul'),
-    ('HARDFOUL', 'Defense', 'defense', 'derive_tendency_hardfoul'),
-    ('ONBALLSTEAL', 'Defense', 'defense', 'derive_tendency_onballsteal'),
-    ('PASSINTERCEPTION', 'Defense', 'defense', 'derive_tendency_passinterception'),
-    ('TAKECHARGE', 'Defense', 'defense', 'derive_tendency_takecharge'),
-    ('CENTER3', 'Hot Zones', 'offense', 'derive_tendency_center3'),
-    ('CLOSELEFT', 'Hot Zones', 'offense', 'derive_tendency_closeleft'),
-    ('CLOSEMIDDLE', 'Hot Zones', 'offense', 'derive_tendency_closemiddle'),
-    ('CLOSERIGHT', 'Hot Zones', 'offense', 'derive_tendency_closeright'),
-    ('LEFT3', 'Hot Zones', 'offense', 'derive_tendency_left3'),
-    ('MIDRANGECENTER', 'Hot Zones', 'offense', 'derive_tendency_midrangecenter'),
-    ('MIDRANGELEFT', 'Hot Zones', 'offense', 'derive_tendency_midrangeleft'),
-    ('MIDRANGELEFTCENTER', 'Hot Zones', 'offense', 'derive_tendency_midrangeleftcenter'),
-    ('MIDRANGERIGHT', 'Hot Zones', 'offense', 'derive_tendency_midrangeright'),
-    ('MIDRANGERIGHTCENTER', 'Hot Zones', 'offense', 'derive_tendency_midrangerightcenter'),
-    ('RIGHT3', 'Hot Zones', 'offense', 'derive_tendency_right3'),
-    ('3CENTER', 'Hot Zones', 'offense', 'derive_tendency_field_3center'),
-    ('3LEFT', 'Hot Zones', 'offense', 'derive_tendency_field_3left'),
-    ('3LEFTCENTER', 'Hot Zones', 'offense', 'derive_tendency_field_3leftcenter'),
-    ('3RIGHT', 'Hot Zones', 'offense', 'derive_tendency_field_3right'),
-    ('3RIGHTCENTER', 'Hot Zones', 'offense', 'derive_tendency_field_3rightcenter'),
-    ('UNDERBASKET', 'Hot Zones', 'offense', 'derive_tendency_underbasket'),
-    ('SHOT', 'Tendencies', 'offense', 'derive_tendency_shot'),
+RuleFunction = Callable[..., dict[str, Any]]
+
+_RULE_FUNCTIONS: dict[str, RuleFunction] = {
+    name: value
+    for name, value in globals().items()
+    if name.startswith("derive_attribute_") or name.startswith("derive_tendency_")
+}
+
+PLAYER_RULE_SCHEME: dict[str, RuleSpec] = {
+    "Attributes/3POINT": RuleSpec("Attributes/3POINT", "offense", "derive_attribute_field_3point"),
+    "Attributes/CLOSESHOT": RuleSpec("Attributes/CLOSESHOT", "offense", "derive_attribute_closeshot"),
+    "Attributes/MIDRANGE": RuleSpec("Attributes/MIDRANGE", "offense", "derive_attribute_midrange"),
+    "Attributes/FREETHROW": RuleSpec("Attributes/FREETHROW", "offense", "derive_attribute_freethrow"),
+    "Attributes/DRAWFOUL": RuleSpec("Attributes/DRAWFOUL", "offense", "derive_attribute_drawfoul"),
+    "Attributes/DRIVINGLAYUP": RuleSpec("Attributes/DRIVINGLAYUP", "offense", "derive_attribute_drivinglayup"),
+    "Attributes/DRIVINGDUNK": RuleSpec("Attributes/DRIVINGDUNK", "offense", "derive_attribute_drivingdunk"),
+    "Attributes/STANDINGDUNK": RuleSpec("Attributes/STANDINGDUNK", "offense", "derive_attribute_standingdunk"),
+    "Attributes/PASSACCURACY": RuleSpec("Attributes/PASSACCURACY", "offense", "derive_attribute_passaccuracy"),
+    "Attributes/PASSVISION": RuleSpec("Attributes/PASSVISION", "offense", "derive_attribute_passvision"),
+    "Attributes/PASSIQ": RuleSpec("Attributes/PASSIQ", "offense", "derive_attribute_passiq"),
+    "Attributes/BALLCONTROL": RuleSpec("Attributes/BALLCONTROL", "offense", "derive_attribute_ballcontrol"),
+    "Attributes/POSTFADEAWAY": RuleSpec("Attributes/POSTFADEAWAY", "offense", "derive_attribute_postfadeaway"),
+    "Attributes/POSTFADE": RuleSpec("Attributes/POSTFADE", "offense", "derive_attribute_postfade"),
+    "Attributes/POSTHOOK": RuleSpec("Attributes/POSTHOOK", "offense", "derive_attribute_posthook"),
+    "Attributes/POSTCONTROL": RuleSpec("Attributes/POSTCONTROL", "offense", "derive_attribute_postcontrol"),
+    "Attributes/OFFENSIVECONSISTENCY": RuleSpec("Attributes/OFFENSIVECONSISTENCY", "offense", "derive_attribute_offensiveconsistency"),
+    "Attributes/IQSHOT": RuleSpec("Attributes/IQSHOT", "offense", "derive_attribute_iqshot"),
+    "Attributes/BLOCK": RuleSpec("Attributes/BLOCK", "defense", "derive_attribute_block"),
+    "Attributes/STEAL": RuleSpec("Attributes/STEAL", "defense", "derive_attribute_steal"),
+    "Attributes/PASSPERCEPTION": RuleSpec("Attributes/PASSPERCEPTION", "defense", "derive_attribute_passperception"),
+    "Attributes/PERIMETERDEFENSE": RuleSpec("Attributes/PERIMETERDEFENSE", "defense", "derive_attribute_perimeterdefense"),
+    "Attributes/INTERIORDEFENSE": RuleSpec("Attributes/INTERIORDEFENSE", "defense", "derive_attribute_interiordefense"),
+    "Attributes/HELPDEFENSE": RuleSpec("Attributes/HELPDEFENSE", "defense", "derive_attribute_helpdefense"),
+    "Attributes/DEFENSECONSISTENCY": RuleSpec("Attributes/DEFENSECONSISTENCY", "defense", "derive_attribute_defenseconsistency"),
+    "Attributes/PICKANDROLLDEFENSEIQ": RuleSpec("Attributes/PICKANDROLLDEFENSEIQ", "defense", "derive_attribute_pickandrolldefenseiq"),
+    "Attributes/CONTESTSHOT": RuleSpec("Attributes/CONTESTSHOT", "defense", "derive_attribute_contestshot"),
+    "Attributes/SPEED": RuleSpec("Attributes/SPEED", "athleticism", "derive_attribute_speed"),
+    "Attributes/SPEEDWITHBALL": RuleSpec("Attributes/SPEEDWITHBALL", "athleticism", "derive_attribute_speedwithball"),
+    "Attributes/AGILITY": RuleSpec("Attributes/AGILITY", "athleticism", "derive_attribute_agility"),
+    "Attributes/STAMINA": RuleSpec("Attributes/STAMINA", "athleticism", "derive_attribute_stamina"),
+    "Attributes/STRENGTH": RuleSpec("Attributes/STRENGTH", "athleticism", "derive_attribute_strength"),
+    "Attributes/VERTICAL": RuleSpec("Attributes/VERTICAL", "athleticism", "derive_attribute_vertical"),
+    "Attributes/OFFENSIVEREBOUND": RuleSpec("Attributes/OFFENSIVEREBOUND", "rebounding", "derive_attribute_offensiverebound"),
+    "Attributes/DEFENSEREBOUND": RuleSpec("Attributes/DEFENSEREBOUND", "rebounding", "derive_attribute_defensiverebound"),
+    "Attributes/HANDS": RuleSpec("Attributes/HANDS", "mental", "derive_attribute_hands"),
+    "Attributes/HUSTLE": RuleSpec("Attributes/HUSTLE", "mental", "derive_attribute_hustle"),
+    "Attributes/INTANGIBLES": RuleSpec("Attributes/INTANGIBLES", "mental", "derive_attribute_intangibles"),
+    "Attributes/POTENTIAL": RuleSpec("Attributes/POTENTIAL", "mental", "derive_attribute_potential"),
+    "Tendencies/SHOT": RuleSpec("Tendencies/SHOT", "offense", "derive_tendency_shot"),
+    "Tendencies/3POINTSHOT": RuleSpec("Tendencies/3POINTSHOT", "offense", "derive_tendency_3pointshot"),
+    "Tendencies/3POINTSPOTUPSHOT": RuleSpec("Tendencies/3POINTSPOTUPSHOT", "offense", "derive_tendency_3pointspotupshot"),
+    "Tendencies/DRIVEPULLUP3POINT": RuleSpec("Tendencies/DRIVEPULLUP3POINT", "offense", "derive_tendency_drivepullup3point"),
+    "Tendencies/STEPBACKJUMPER3POINT": RuleSpec("Tendencies/STEPBACKJUMPER3POINT", "offense", "derive_tendency_stepbackjumper3point"),
+    "Tendencies/MIDSHOT": RuleSpec("Tendencies/MIDSHOT", "offense", "derive_tendency_midshot"),
+    "Tendencies/CLOSESHOT": RuleSpec("Tendencies/CLOSESHOT", "offense", "derive_tendency_closeshot"),
+    "Tendencies/DRIVINGLAYUP": RuleSpec("Tendencies/DRIVINGLAYUP", "offense", "derive_tendency_drivinglayup"),
+    "Tendencies/EUROSTEPLAYUP": RuleSpec("Tendencies/EUROSTEPLAYUP", "offense", "derive_tendency_eurosteplayup"),
+    "Tendencies/HOPSTEPLAYUP": RuleSpec("Tendencies/HOPSTEPLAYUP", "offense", "derive_tendency_hopsteplayup"),
+    "Tendencies/SPINLAYUP": RuleSpec("Tendencies/SPINLAYUP", "offense", "derive_tendency_spinlayup"),
+    "Tendencies/DRIVINGDUNK": RuleSpec("Tendencies/DRIVINGDUNK", "offense", "derive_tendency_drivingdunk"),
+    "Tendencies/STANDINGDUNK": RuleSpec("Tendencies/STANDINGDUNK", "offense", "derive_tendency_standingdunk"),
+    "Tendencies/FLASHYDUNK": RuleSpec("Tendencies/FLASHYDUNK", "offense", "derive_tendency_flashydunk"),
+    "Tendencies/ALLEYOOP": RuleSpec("Tendencies/ALLEYOOP", "offense", "derive_tendency_alleyoop"),
+    "Tendencies/POSTUP": RuleSpec("Tendencies/POSTUP", "offense", "derive_tendency_postup"),
+    "Tendencies/POSTFADELEFT": RuleSpec("Tendencies/POSTFADELEFT", "offense", "derive_tendency_postfadeleft"),
+    "Tendencies/POSTFADERIGHT": RuleSpec("Tendencies/POSTFADERIGHT", "offense", "derive_tendency_postfaderight"),
+    "Tendencies/POSTHOOKLEFT": RuleSpec("Tendencies/POSTHOOKLEFT", "offense", "derive_tendency_posthookleft"),
+    "Tendencies/POSTHOOKRIGHT": RuleSpec("Tendencies/POSTHOOKRIGHT", "offense", "derive_tendency_posthookright"),
+    "Tendencies/FOUL": RuleSpec("Tendencies/FOUL", "defense", "derive_tendency_foul"),
+    "Tendencies/HARDFOUL": RuleSpec("Tendencies/HARDFOUL", "defense", "derive_tendency_hardfoul"),
+    "Tendencies/BLOCKSHOT": RuleSpec("Tendencies/BLOCKSHOT", "defense", "derive_tendency_blockshot"),
+    "Tendencies/ONBALLSTEAL": RuleSpec("Tendencies/ONBALLSTEAL", "defense", "derive_tendency_onballsteal"),
+    "Tendencies/PASSINTERCEPTION": RuleSpec("Tendencies/PASSINTERCEPTION", "defense", "derive_tendency_passinterception"),
+    "Tendencies/CONTESTSHOT": RuleSpec("Tendencies/CONTESTSHOT", "defense", "derive_tendency_contestshot"),
+    "Tendencies/CRASH": RuleSpec("Tendencies/CRASH", "rebounding", "derive_tendency_crash"),
+    "Tendencies/PUTBACK": RuleSpec("Tendencies/PUTBACK", "rebounding", "derive_tendency_putback"),
+    "Tendencies/PUTBACKDUNK": RuleSpec("Tendencies/PUTBACKDUNK", "rebounding", "derive_tendency_putbackdunk"),
+    "Tendencies/PLAYDISCIPLINE": RuleSpec("Tendencies/PLAYDISCIPLINE", "mental", "derive_tendency_playdiscipline"),
+    "Tendencies/TOUCHES": RuleSpec("Tendencies/TOUCHES", "mental", "derive_tendency_touches"),
+}
+
+_HOT_ZONE_KEYS = (
+    "Tendencies/UNDERBASKET",
+    "Tendencies/CLOSELEFT",
+    "Tendencies/CLOSEMIDDLE",
+    "Tendencies/CLOSERIGHT",
+    "Tendencies/MIDRANGECENTER",
+    "Tendencies/MIDRANGELEFT",
+    "Tendencies/MIDRANGELEFTCENTER",
+    "Tendencies/MIDRANGERIGHT",
+    "Tendencies/MIDRANGERIGHTCENTER",
+    "Tendencies/3CENTER",
+    "Tendencies/3LEFT",
+    "Tendencies/3LEFTCENTER",
+    "Tendencies/3RIGHT",
+    "Tendencies/3RIGHTCENTER",
 )
 
-_RULE_MODULES: dict[str, Any] = {
-    "offense": offense,
-    "defense": defense,
-    "rebounding": rebounding,
-    "athleticism": athleticism,
-    "mental": mental,
+_SCHEME_ONLY_FIELDS = {
+    "Attributes/PICKANDROLLDEFENSEIQ",
+    "Attributes/POSTFADEAWAY",
+    "Attributes/CONTESTSHOT",
 }
 
 
-def _make_specs(section: str, rows: tuple[tuple[str, str, str, str], ...]) -> dict[str, PlayerRuleSpec]:
-    return {
-        f"{section}/{name}": PlayerRuleSpec(
-            field_key=f"{section}/{name}",
-            section=section,
-            group=group,
-            normalized_name=name,
-            module=module,
-            function=function,
-        )
-        for name, group, module, function in rows
-    }
-
-
-ATTRIBUTE_RULE_SCHEME: dict[str, PlayerRuleSpec] = _make_specs("Attributes", _ATTRIBUTE_RULE_ROWS)
-TENDENCY_RULE_SCHEME: dict[str, PlayerRuleSpec] = _make_specs("Tendencies", _TENDENCY_RULE_ROWS)
-PLAYER_RULE_SCHEME: dict[str, PlayerRuleSpec] = {**ATTRIBUTE_RULE_SCHEME, **TENDENCY_RULE_SCHEME}
-
-
-def derive_player_profile_values(evidence: Any) -> PlayerProfileResult:
-    values: dict[str, ProfileValue] = {}
-    first_name, last_name = _split_player_name(_ascii_name_text(evidence.identity.get("player")))
-    height_in = _int_number(evidence.identity, "ht_in_in")
-    weight_lb = _int_number(evidence.identity, "wt")
-    birth = _birth_date(evidence.identity.get("birth_date"))
-    position, secondary_position = _position_values(evidence)
-    play_types = _play_type_values(evidence)
-
-    _add_profile(values, "FIRSTNAME", first_name, "profile_name_v1", ("identity.player",))
-    _add_profile(values, "LASTNAME", last_name, "profile_name_v1", ("identity.player",))
-    _add_profile(values, "HEIGHT", height_in, "profile_height_v1", ("identity.ht_in_in",))
-    _add_profile(values, "HEIGHTCM", _round_half_up(height_in * 2.54), "profile_height_metric_v1", ("identity.ht_in_in",))
-    _add_profile(values, "WINGSPANCM", _round_half_up((height_in - 2) * 2.54), "profile_wingspan_metric_height_minus_two_v1", ("identity.ht_in_in",))
-    _add_profile(values, "WEIGHT", weight_lb, "profile_weight_v1", ("identity.wt",))
-    _add_profile(values, "WEIGHTKG", round(weight_lb * 0.45359237), "profile_weight_metric_v1", ("identity.wt",))
-    _add_profile(values, "POSITION", position, "profile_position_v1", ("season_info.pos", "identity.pos"))
-    _add_profile(values, "SECONDARYPOSITION", secondary_position, "profile_secondary_position_v1", ("season_info.pos", "identity.pos"))
-    _add_profile(values, "BIRTHDAY", birth.day, "profile_birth_day_v1", ("identity.birth_date",))
-    _add_profile(values, "BIRTHMONTH", birth.month, "profile_birth_month_v1", ("identity.birth_date",))
-    _add_profile(values, "BIRTHYEAR", _birth_year_age_slot(evidence.season, birth), "profile_birth_year_current_age_value_v1", ("identity.birth_date", "season_info.season"))
-    for index, play_type in enumerate(play_types, start=1):
-        _add_profile(values, f"PLAYTYPE{index}", play_type, "profile_player_play_types_v1", ("season_info.pos", "player_shooting.percent_fga_from_x3p_range", "per_game.x3pa_per_game", "per_game.ast_per_game", "advanced.ast_percent", "shooting.percent_dunks_of_fga"))
-    _add_profile(values, "COLLEGEFROM", _clean_text(evidence.identity.get("colleges")), "profile_college_from_v1", ("identity.colleges",))
-    years_pro = _int_number(evidence.season_info, "experience")
-    if years_pro == 0:
-        start_year = _int_number(evidence.identity, "from")
-        years_pro = max(0, int(evidence.season) - start_year) if start_year else 0
-    _add_profile(values, "YEARSPRO", years_pro, "profile_years_pro_v1", ("season_info.experience", "identity.from"))
-    return PlayerProfileResult(values=values)
+def rule_spec_for(field_key: str) -> RuleSpec:
+    return PLAYER_RULE_SCHEME[field_key]
 
 
 def derive_player_rule_values(evidence: Any, *, league_player_rows: Any = ()) -> PlayerRuleResult:
     values: dict[str, RuleValue] = {}
     for field_key, spec in PLAYER_RULE_SCHEME.items():
-        module = _RULE_MODULES[spec.module]
-        rule = getattr(module, spec.function)
-        resolved = _call_rule(rule, evidence, league_player_rows=league_player_rows)
-        values[field_key] = _coerce_rule_value(spec, resolved)
+        if field_key in _SCHEME_ONLY_FIELDS:
+            continue
+        function = _RULE_FUNCTIONS[spec.function]
+        values[field_key] = _rule_value(function(evidence, league_player_rows=league_player_rows))
+    for field_key in _HOT_ZONE_KEYS:
+        values[field_key] = _rule_value(_derive_hot_zone(field_key, evidence))
+    for field_key in _EXTRA_TENDENCY_KEYS:
+        if field_key not in values:
+            values[field_key] = _rule_value(_derive_extra_tendency(field_key, evidence))
+    for field_key in _DURABILITY_KEYS:
+        values[field_key] = _rule_value({"value": 90, "source_rule": "durability_default_90_pending_injury_database", "evidence_keys": ("durability_default_90_pending_injury_database",)})
     return PlayerRuleResult(values=values)
 
 
-def rule_spec_for(field_key: str) -> PlayerRuleSpec:
-    return PLAYER_RULE_SCHEME[field_key]
+_DURABILITY_KEYS = (
+    "Attributes/BACKDURABILITY", "Attributes/HEADDURABILITY", "Attributes/LEFTANKLEDURABILITY", "Attributes/LEFTELBOWDURABILITY",
+    "Attributes/LEFTFOOTDURABILITY", "Attributes/LEFTHIPDURABILITY", "Attributes/LEFTKNEEDURABILITY", "Attributes/LEFTSHOULDERDURABILITY",
+    "Attributes/MISCDURABILITY", "Attributes/NECKDURABILITY", "Attributes/RIGHTANKLEDURABILITY", "Attributes/RIGHTELBOWDURABILITY",
+    "Attributes/RIGHTFOOTDURABILITY", "Attributes/RIGHTHIPDURABILITY", "Attributes/RIGHTKNEEDURABILITY", "Attributes/RIGHTSHOULDERDURABILITY",
+)
 
 
-def _call_rule(rule: Callable[..., Any], evidence: Any, *, league_player_rows: Any) -> Any:
-    try:
-        return rule(evidence, league_player_rows=league_player_rows)
-    except TypeError:
-        return rule(evidence)
+_EXTRA_TENDENCY_KEYS = (
+    "Tendencies/CONTESTEDJUMPER3POINT", "Tendencies/CONTESTEDJUMPERMID", "Tendencies/CONTESTEDJUMPERMIDRANGE",
+    "Tendencies/DRIVEPULLUPMIDRANGE", "Tendencies/3POINTOFFSCREENSHOT", "Tendencies/MIDOFFSCREENSHOT",
+    "Tendencies/3POINTCENTERSHOT", "Tendencies/3POINTLEFTSHOT", "Tendencies/3POINTCENTERLEFTSHOT", "Tendencies/3POINTRIGHTSHOT", "Tendencies/3POINTCENTERRIGHTSHOT",
+    "Tendencies/CLOSELEFTSHOT", "Tendencies/CLOSEMIDDLESHOT", "Tendencies/CLOSERIGHTSHOT", "Tendencies/CENTERMIDSHOT", "Tendencies/LEFTMIDSHOT", "Tendencies/CENTERLEFTMIDSHOT", "Tendencies/MIDRIGHTSHOT", "Tendencies/CENTERMIDRIGHTSHOT",
+    "Tendencies/BASKETUNDERSHOT", "Tendencies/SPINJUMPER", "Tendencies/MIDSPOTUPSHOT", "Tendencies/STEPTHROUGH", "Tendencies/STEPBACKJUMPERMIDRANGE", "Tendencies/TRANSITIONPULLUP3POINT", "Tendencies/USEGLASS",
+    "Tendencies/FLOATER", "Tendencies/NOSETUPDRIBBLE", "Tendencies/SETUPWITHHESITATION", "Tendencies/SETUPWITHSIZEUP", "Tendencies/STEPBACKJUMPERMID", "Tendencies/TRIPLETHREATIDLE", "Tendencies/TRIPLETHREATJABSTEP", "Tendencies/TRIPLETHREATPUMPFAKE", "Tendencies/THREATTRIPLESHOT",
+    "Tendencies/ATTACKSTRONGONDRIVE", "Tendencies/DRIVE", "Tendencies/DRIVEPULLUPMID", "Tendencies/DRIVERIGHT", "Tendencies/DRIVINGBEHINDTHEBACK", "Tendencies/DRIBBLECROSSOVER", "Tendencies/DRIVINGDOUBLECROSSOVER", "Tendencies/DRIVINGDRIBBLEHESITATION", "Tendencies/DRIVINGHALFSPIN", "Tendencies/DRIVINGINANDOUT", "Tendencies/DRIBBLESPIN", "Tendencies/DRIVINGSTEPBACK", "Tendencies/NODRIVINGDRIBBLEMOVE", "Tendencies/OFFSCREENDRIVE", "Tendencies/SPOTUPDRIVE",
+    "Tendencies/ALLEYOOPPASS", "Tendencies/DISHTOOPENMAN", "Tendencies/FLASHYPASS",
+    "Tendencies/POSTAGGRESSIVEBACKDOWN", "Tendencies/POSTBACKDOWN", "Tendencies/POSTDRIVE", "Tendencies/POSTDROPSTEP", "Tendencies/POSTFACEUP", "Tendencies/HOPPOSTSHOT", "Tendencies/POSTSHIMMYSHOT", "Tendencies/POSTSPIN", "Tendencies/POSTSTEPBACKSHOT", "Tendencies/POSTUPANDUNDER", "Tendencies/FROMPOSTSHOT",
+    "Tendencies/ISOVSAVERAGEDEFENDER", "Tendencies/ISOVSELITEDEFENDER", "Tendencies/ISOVSGOODDEFENDER", "Tendencies/ISOVSPOORDEFENDER", "Tendencies/ROLLVSPOP", "Tendencies/TRANSITIONSPOTUP", "Tendencies/TAKECHARGE",
+)
 
 
-def _add_profile(values: dict[str, ProfileValue], field: str, value: int | str, source_rule: str, evidence_keys: tuple[str, ...]) -> None:
-    values[f"Vitals/{field}"] = ProfileValue(field=field, domain="Vitals", value=value, source_rule=source_rule, evidence_keys=evidence_keys)
+def _derive_extra_tendency(field_key: str, evidence: Any) -> dict[str, Any]:
+    key = field_key.rsplit("/", 1)[1]
+    if "3POINT" in key or key.startswith("3") or key.endswith("3POINT"):
+        value = _scaled_tendency(evidence, "per_game", "x3pa_per_game", 12.0)
+        evidence_keys = ("per_game.x3pa_per_game",)
+    elif "MID" in key or "JUMPER" in key or "SPINJUMPER" in key:
+        value = _scaled_tendency(evidence, "shooting", "percent_fga_from_x16_3p_range", 0.35)
+        evidence_keys = ("shooting.percent_fga_from_x16_3p_range",)
+    elif "CLOSE" in key or "BASKET" in key or "FLOATER" in key or "USEGLASS" in key:
+        value = _scaled_tendency(evidence, "shooting", "percent_fga_from_x0_3_range", 0.45)
+        evidence_keys = ("shooting.percent_fga_from_x0_3_range",)
+    elif "POST" in key or key == "FROMPOSTSHOT":
+        value = _scaled_tendency(evidence, "shooting", "percent_fga_from_x3_10_range", 0.45)
+        evidence_keys = ("shooting.percent_fga_from_x3_10_range",)
+    elif "PASS" in key or key == "DISHTOOPENMAN":
+        value = _scaled_tendency(evidence, "per_game", "ast_per_game", 11.0)
+        evidence_keys = ("per_game.ast_per_game",)
+    elif "DRIVE" in key or "DRIBBLE" in key or "TRIPLE" in key or "SETUP" in key or key.startswith("ISO"):
+        value = _scaled_tendency(evidence, "advanced", "usg_percent", 35.0)
+        evidence_keys = ("advanced.usg_percent",)
+    elif key == "TAKECHARGE":
+        value = _scaled_tendency(evidence, "play_by_play", "offensive_foul_drawn", 35.0)
+        evidence_keys = ("play_by_play.offensive_foul_drawn",)
+    else:
+        value = _scaled_tendency(evidence, "per_game", "fga_per_game", 22.0)
+        evidence_keys = ("per_game.fga_per_game",)
+    return {"value": value, "source_rule": f"tendency_{key.lower()}_direct_2026_v1", "evidence_keys": evidence_keys}
 
 
-def _split_player_name(name: str) -> tuple[str, str]:
-    parts = str(name or "").strip().split()
-    if not parts:
-        return "", ""
-    if len(parts) == 1:
-        return parts[0], ""
-    return parts[0], " ".join(parts[1:])
+def _scaled_tendency(evidence: Any, source_name: str, column: str, max_value: float) -> int:
+    value = _number(getattr(evidence, source_name, {}), column) or 0.0
+    score = value / max_value if max_value > 0 else 0.0
+    if score < 0.0:
+        score = 0.0
+    if score > 1.0:
+        score = 1.0
+    return int(round(score * 100))
 
 
-def _ascii_name_text(value: object) -> str:
-    text = str(value or "")
-    fixes = {"Ä‡": "c", "Ä": "c", "Ä": "c", "Ä": "C", "Å«": "u", "ё": "e", "Ё": "E"}
-    for bad, good in fixes.items():
-        text = text.replace(bad, good)
-    try:
-        text = text.encode("cp1252").decode("utf-8")
-    except Exception:
-        pass
-    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii").strip()
-
-
-def _clean_text(value: object) -> str:
-    text = str(value or "").strip()
-    return "" if text.upper() in {"NA", "N/A", "NONE", "NULL"} else text
-
-
-def _int_number(row: dict[str, Any], key: str) -> int:
-    try:
-        return round(float(row.get(key) or 0))
-    except Exception:
-        return 0
-
-
-def _birth_date(raw: object) -> date:
-    if isinstance(raw, date):
-        return raw
-    text = str(raw or "").strip()
-    try:
-        return date(1899, 12, 30) + timedelta(days=int(float(text)))
-    except Exception:
-        pass
-    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%Y/%m/%d"):
-        try:
-            return datetime.strptime(text, fmt).date()
-        except Exception:
-            continue
-    return date(1900, 1, 1)
-
-
-def _birth_year_age_slot(season: int, born: date) -> int:
-    anchor = date(int(season) - 1, 10, 1)
-    age = anchor.year - born.year - ((anchor.month, anchor.day) < (born.month, born.day))
-    return 1900 + max(0, age)
-
-
-def _position_values(evidence: Any) -> tuple[str, str]:
-    raw = _clean_text(evidence.season_info.get("pos")) or _clean_text(evidence.identity.get("pos"))
-    parts = [part.strip().upper() for part in raw.replace("–", "-").replace("—", "-").replace("/", "-").split("-") if part.strip()]
-    if not parts:
-        return "PG", "None"
-    return parts[0], parts[1] if len(parts) > 1 else "None"
-
-
-def _number(row: dict[str, Any], key: str) -> float:
-    try:
-        return float(row.get(key) or 0)
-    except Exception:
-        return 0.0
-
-
-def _play_type_values(evidence: Any) -> tuple[str, str, str, str]:
-    position, _secondary = _position_values(evidence)
-    plays: list[str] = []
-
-    def add(*items: str) -> None:
-        for item in items:
-            if item not in plays:
-                plays.append(item)
-
-    three_attempts = _number(evidence.per_game, "x3pa_per_game") or _number(evidence.per_game, "fg3a_per_game")
-    three_share = _number(evidence.shooting, "percent_fga_from_x3p_range")
-    assists = _number(evidence.per_game, "ast_per_game")
-    assist_pct = _number(evidence.advanced, "ast_percent")
-    dunk_share = _number(evidence.shooting, "percent_dunks_of_fga")
-    dunks = _number(evidence.shooting, "num_of_dunks")
-    offensive_rebounds = _number(evidence.per_game, "orb_per_game")
-    two_point_attempts = _number(evidence.per_game, "x2pa_per_game")
-    height = _number(evidence.identity, "ht_in_in")
-    weight = _number(evidence.identity, "wt")
-
-    high_three_volume = three_attempts >= 3.0 or three_share >= 0.25
-    primary_handler = assists >= 4.0 or assist_pct >= 24.0
-    secondary_handler = assists >= 2.5 or assist_pct >= 16.0
-    roll_finish = dunk_share >= 0.08 or dunks >= 60 or offensive_rebounds >= 2.0
-    post_size = position in {"PF", "C"} and (height >= 80 or weight >= 235 or two_point_attempts >= 7.0)
-
-    if position == "PG" or (position in {"SG", "SF"} and primary_handler):
-        add("P&R Ball Handler")
-    if high_three_volume:
-        add("3 PT")
-    if position in {"SG", "SF"} and high_three_volume:
-        add("Handoff Receiver")
-    if position in {"SF", "PF"} and secondary_handler:
-        add("P&R Wing", "Handoff Passer")
-    if position == "C" and secondary_handler:
-        add("Handoff Passer", "Post Up High")
-    if position in {"PF", "C"} and roll_finish:
-        add("P&R Roll Man", "Cutter")
-    if post_size:
-        add("Post Up Low")
-    if not plays:
-        add({"PG": "P&R Ball Handler", "SG": "3 PT", "SF": "Cutter", "PF": "Post Up High", "C": "Post Up Low"}.get(position, "Cutter"))
-    padded = plays + ["None", "None", "None", "None"]
-    return padded[0], padded[1], padded[2], padded[3]
-
-
-def _round_half_up(value: float) -> int:
-    return int(value + 0.5)
-
-
-def _coerce_rule_value(spec: PlayerRuleSpec, resolved: Any) -> RuleValue:
-    if isinstance(resolved, RuleValue):
-        return resolved
-    source_rule = f"player_rules_{spec.module}.{spec.function}"
-    evidence_keys: tuple[str, ...] = ()
-    value = resolved
-    if isinstance(resolved, dict):
-        value = resolved.get("value")
-        source_rule = str(resolved.get("source_rule") or source_rule)
-        evidence_keys = tuple(str(key) for key in resolved.get("evidence_keys", ()))
-    elif isinstance(resolved, tuple) and len(resolved) == 2:
-        value, raw_keys = resolved
-        evidence_keys = tuple(str(key) for key in raw_keys)
-    return RuleValue(
-        field=spec.normalized_name,
-        domain=spec.section,
-        value=value,
-        source_rule=source_rule,
-        evidence_keys=evidence_keys,
-    )
+def _derive_hot_zone(field_key: str, evidence: Any) -> dict[str, Any]:
+    if "3" in field_key:
+        pct = _number(getattr(evidence, "shooting", {}), "fg_percent_from_x3p_range")
+        share = _number(getattr(evidence, "shooting", {}), "percent_fga_from_x3p_range") or 0.0
+        hot_cutoff = 0.38
+        cold_cutoff = 0.32
+        evidence_keys = ("shooting.fg_percent_from_x3p_range", "shooting.percent_fga_from_x3p_range")
+    elif "MIDRANGE" in field_key:
+        pct = _number(getattr(evidence, "shooting", {}), "fg_percent_from_x16_3p_range")
+        share = _number(getattr(evidence, "shooting", {}), "percent_fga_from_x16_3p_range") or 0.0
+        hot_cutoff = 0.45
+        cold_cutoff = 0.36
+        evidence_keys = ("shooting.fg_percent_from_x16_3p_range", "shooting.percent_fga_from_x16_3p_range")
+    else:
+        pct = _number(getattr(evidence, "shooting", {}), "fg_percent_from_x0_3_range")
+        share = _number(getattr(evidence, "shooting", {}), "percent_fga_from_x0_3_range") or 0.0
+        hot_cutoff = 0.68
+        cold_cutoff = 0.55
+        evidence_keys = ("shooting.fg_percent_from_x0_3_range", "shooting.percent_fga_from_x0_3_range")
+    if pct is None or share <= 0.01:
+        value = "Neutral"
+    elif pct >= hot_cutoff:
+        value = "Hot"
+    elif pct < cold_cutoff:
+        value = "Cold"
+    else:
+        value = "Neutral"
+    return {"value": value, "source_rule": "tendency_hot_zone_direct_2026_v1", "evidence_keys": evidence_keys}
 
 
 __all__ = [
-    "ATTRIBUTE_RULE_SCHEME",
-    "TENDENCY_RULE_SCHEME",
     "PLAYER_RULE_SCHEME",
     "PlayerProfileResult",
     "PlayerRuleResult",
-    "PlayerRuleSpec",
     "ProfileValue",
     "RuleValue",
     "derive_player_profile_values",
     "derive_player_rule_values",
     "rule_spec_for",
+    "_split_player_name",
 ]

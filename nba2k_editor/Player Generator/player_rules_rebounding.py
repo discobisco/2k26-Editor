@@ -2,95 +2,44 @@ from __future__ import annotations
 
 from typing import Any
 
-
-def _number(value: Any) -> float:
-    if isinstance(value, (int, float)):
-        return float(value)
-    try:
-        text = str(value).strip()
-        return float(text) if text and text.upper() not in {"NA", "N/A", "NONE", "NULL"} else 0.0
-    except Exception:
-        return 0.0
+from player_rules_core import _attribute, _tendency
 
 
-def _source(evidence: Any, namespace: str) -> dict[str, Any]:
-    return {
-        "identity": getattr(evidence, "identity", {}),
-        "season_info": getattr(evidence, "season_info", {}),
-        "per_game": getattr(evidence, "per_game", {}),
-        "totals": getattr(evidence, "totals", {}),
-        "per_36": getattr(evidence, "per_36", {}),
-        "per_100": getattr(evidence, "per_100", {}),
-        "advanced": getattr(evidence, "advanced", {}),
-        "shooting": getattr(evidence, "shooting", {}),
-        "play_by_play": getattr(evidence, "play_by_play", {}),
-        "team_stats_per_game": getattr(evidence, "team_stats_per_game", {}),
-        "team_summary": getattr(evidence, "team_summary", {}),
-        "opponent_stats_per_game": getattr(evidence, "opponent_stats_per_game", {}),
-    }.get(namespace, {})
+_OFFENSIVE_REBOUND_ORB36_RANGE = (
+    (0.000000, 0.035012, 0.029460, 0.122914, 25, 30),
+    (0.034833, 0.343286, 0.311050, 0.744304, 30, 40),
+    (0.534227, 0.942640, 0.945904, 1.317560, 40, 50),
+    (1.029437, 1.490630, 1.527934, 1.940120, 50, 60),
+    (1.477322, 2.111193, 2.294195, 2.492077, 60, 70),
+    (2.161880, 2.667591, 2.661583, 3.388422, 70, 80),
+    (2.676514, 3.395563, 3.471734, 3.917025, 80, 90),
+    (3.471037, 3.824710, 3.862517, 4.140575, 90, 99),
+)
+_DEFENSIVE_REBOUND_REB36_RANGE = (
+    (2.106383, 2.106383, 2.106383, 2.106383, 40, 50),
+    (2.621984, 3.231955, 3.224019, 4.442703, 50, 60),
+    (3.676596, 5.249960, 5.100152, 7.171026, 60, 70),
+    (5.593509, 6.986767, 6.666114, 9.341876, 70, 80),
+    (6.603329, 9.072485, 8.988614, 11.132701, 80, 90),
+    (9.062069, 10.756930, 10.694784, 12.177316, 90, 99),
+)
 
-
-def _read(evidence: Any, path: str) -> float:
-    namespace, _, key = path.partition(".")
-    return _number(_source(evidence, namespace).get(key))
-
-
-def _row_value(row: dict[str, Any], path: str) -> float:
-    namespace, _, key = path.partition(".")
-    for candidate in (path, key, f"player_{namespace}.{key}"):
-        if candidate in row:
-            return _number(row.get(candidate))
-    return 0.0
-
-
-def _rank(value: float, rows: Any, path: str) -> float:
-    population = [_row_value(row, path) for row in tuple(rows or ())]
-    population = [item for item in population if item != 0.0]
-    if not population:
-        return 0.0
-    return sum(1 for item in population if item <= value) / len(population)
-
-
-def _score(evidence: Any, rows: Any, parts: tuple[tuple[str, float], ...]) -> tuple[float, tuple[str, ...]]:
-    total = 0.0
-    weight_total = 0.0
-    keys: list[str] = []
-    for path, weight in parts:
-        invert = path.startswith("!")
-        clean = path[1:] if invert else path
-        ranked = _rank(_read(evidence, clean), rows, clean)
-        total += (1.0 - ranked if invert else ranked) * weight
-        weight_total += weight
-        keys.append(clean)
-    return (total / weight_total if weight_total else 0.0), tuple(dict.fromkeys(keys))
-
-
-def _attribute(rule_name: str, evidence: Any, rows: Any, parts: tuple[tuple[str, float], ...]) -> dict[str, Any]:
-    score, keys = _score(evidence, rows, parts)
-    return {"value": round(25 + score * 74), "source_rule": rule_name, "evidence_keys": keys}
-
-
-def _tendency(rule_name: str, evidence: Any, rows: Any, parts: tuple[tuple[str, float], ...]) -> dict[str, Any]:
-    score, keys = _score(evidence, rows, parts)
-    return {"value": round(score * 100), "source_rule": rule_name, "evidence_keys": keys}
-
-
-def _fixed(rule_name: str, value: int, keys: tuple[str, ...]) -> dict[str, Any]:
-    return {"value": value, "source_rule": rule_name, "evidence_keys": keys}
-
-def derive_attribute_defenserebound(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any]:
-    return _attribute('derive_attribute_defenserebound', evidence, league_player_rows, (('advanced.drb_percent', 0.55), ('per_game.drb_per_game', 0.3), ('per_game.trb_per_game', 0.15)))
 
 def derive_attribute_offensiverebound(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any]:
-    return _attribute('derive_attribute_offensiverebound', evidence, league_player_rows, (('advanced.orb_percent', 0.55), ('per_game.orb_per_game', 0.3), ('per_game.trb_per_game', 0.15)))
+    return _attribute(evidence, "Attributes/OFFENSIVEREBOUND", "attribute_offensiverebound_live_range_2026_v1", (("per_36.orb_per_36_min", 1.0),), league_player_rows=league_player_rows, range_path="per_36.orb_per_36_min", range_points=_OFFENSIVE_REBOUND_ORB36_RANGE)
+
+
+def derive_attribute_defensiverebound(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any]:
+    return _attribute(evidence, "Attributes/DEFENSEREBOUND", "attribute_defensiverebound_live_range_2026_v1", (("per_36.trb_per_36_min", 1.0),), league_player_rows=league_player_rows, range_path="per_36.trb_per_36_min", range_points=_DEFENSIVE_REBOUND_REB36_RANGE)
+
 
 def derive_tendency_crash(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any]:
-    return _tendency('derive_tendency_crash', evidence, league_player_rows, (('advanced.orb_percent', 0.45), ('per_game.orb_per_game', 0.35), ('per_game.trb_per_game', 0.2)))
+    return _tendency(evidence, "Tendencies/CRASH", "tendency_crash_direct_2026_v1", (("advanced.orb_percent", 0.50), ("per_game.orb_per_game", 0.50)), league_player_rows=league_player_rows)
+
 
 def derive_tendency_putback(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any]:
-    return _tendency('derive_tendency_putback', evidence, league_player_rows, (('advanced.orb_percent', 0.45), ('per_game.orb_per_game', 0.35), ('per_game.fg_percent', 0.2)))
+    return _tendency(evidence, "Tendencies/PUTBACK", "tendency_putback_direct_2026_v1", (("per_game.orb_per_game", 0.50), ("shooting.percent_fga_from_x0_3_range", 0.50)), league_player_rows=league_player_rows)
+
 
 def derive_tendency_putbackdunk(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any]:
-    return _tendency('derive_tendency_putbackdunk', evidence, league_player_rows, (('advanced.orb_percent', 0.35), ('per_game.orb_per_game', 0.25), ('identity.ht_in_in', 0.25), ('identity.wt', 0.15)))
-
-__all__ = ['derive_attribute_defenserebound', 'derive_attribute_offensiverebound', 'derive_tendency_crash', 'derive_tendency_putback', 'derive_tendency_putbackdunk']
+    return _tendency(evidence, "Tendencies/PUTBACKDUNK", "tendency_putbackdunk_direct_2026_v1", (("per_game.orb_per_game", 0.40), ("shooting.num_of_dunks", 0.35), ("shooting.percent_dunks_of_fga", 0.25)), league_player_rows=league_player_rows)

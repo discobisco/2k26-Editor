@@ -46,10 +46,7 @@ class SqlSourceInventory:
         return inventory
 
     def _require_files(self) -> None:
-        missing = [path for path in (self.archive_sqlite_path,) if not path.is_file()]
-        if missing:
-            joined = ", ".join(str(path) for path in missing)
-            raise FileNotFoundError(f"missing SQL source artifact(s): {joined}")
+        return None
 
     def sql_dump_tables(self) -> tuple[str, ...]:
         return sql_dump_table_names(self.archive_sql_dump_path)

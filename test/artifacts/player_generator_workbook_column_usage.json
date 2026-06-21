@@ -1,6 +1,6 @@
 [
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -14,7 +14,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -116,7 +118,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -130,7 +132,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -536,7 +540,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -550,7 +554,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -694,8 +700,10 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 1,
+    "ambiguous_literals": [
+      "ambiguous_literal:_derive_extra_tendency@nba2k_editor/Player Generator/player_rules.py:260: value = _scaled_tendency(evidence, \"per_game\", \"fga_per_game\", 22.0)"
+    ],
     "column_name": "fga_per_game",
     "declared_type": "REAL",
     "numeric": true,
@@ -733,8 +741,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_derive_extra_tendency@nba2k_editor/Player Generator/player_rules.py:239: value = _scaled_tendency(evidence, \"per_game\", \"x3pa_per_game\", 12.0)",
+      "ambiguous_literal:_play_types@nba2k_editor/Player Generator/player_rules_profile.py:156: x3pa = _number(getattr(evidence, \"per_game\", {}), \"x3pa_per_game\") or 0.0"
+    ],
     "column_name": "x3pa_per_game",
     "declared_type": "REAL",
     "numeric": true,
@@ -876,8 +887,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_derive_extra_tendency@nba2k_editor/Player Generator/player_rules.py:251: value = _scaled_tendency(evidence, \"per_game\", \"ast_per_game\", 11.0)",
+      "ambiguous_literal:_play_types@nba2k_editor/Player Generator/player_rules_profile.py:154: ast = _number(getattr(evidence, \"per_game\", {}), \"ast_per_game\") or 0.0"
+    ],
     "column_name": "ast_per_game",
     "declared_type": "REAL",
     "numeric": true,
@@ -954,7 +968,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -968,7 +982,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -1070,8 +1086,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:92: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 25)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:101: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 0)"
+    ],
     "column_name": "age",
     "declared_type": "REAL",
     "numeric": true,
@@ -1408,7 +1427,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -1422,7 +1441,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -1828,7 +1849,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -1842,7 +1863,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -2248,7 +2271,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -2262,7 +2285,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -2666,7 +2691,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -2680,7 +2705,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -3086,7 +3113,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -3100,7 +3127,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -3175,13 +3204,15 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 6,
+    "ambiguous_literal_count": 8,
     "ambiguous_literals": [
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:102: player = _require_option(selected_player, players, \"player\")",
       "ambiguous_literal:_generated_player_name_keys@nba2k_editor/Player Generator/game_port.py:286: values: list[object] = [identity.get(\"player\"), getattr(generated, \"player_id\", \"\")]",
       "ambiguous_literal:validate_generated_player_names_match_offsets@nba2k_editor/Player Generator/game_port.py:338: player_label = str(identity.get(\"player\") if isinstance(identity, dict) else getattr(generated, \"player_id\", \"\")).strip()",
       "ambiguous_literal:generate_player_proposal@nba2k_editor/Player Generator/player_generator.py:207: \"player\": evidence.identity.get(\"player\"),",
       "ambiguous_literal:_draft_pick_sort_key@nba2k_editor/Player Generator/player_generator.py:333: name = str(row.get(\"player\") or \"\").strip().upper()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
       "ambiguous_literal:<module>@nba2k_editor/Player Generator/sql_sources.py:87: SqlBaseTableRole(\"archive_sqlite\", \"player\", \"queryable player identity list\"),"
     ],
     "column_name": "player",
@@ -3247,7 +3278,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -3261,7 +3292,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -3287,13 +3320,15 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 6,
+    "ambiguous_literal_count": 8,
     "ambiguous_literals": [
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:102: player = _require_option(selected_player, players, \"player\")",
       "ambiguous_literal:_generated_player_name_keys@nba2k_editor/Player Generator/game_port.py:286: values: list[object] = [identity.get(\"player\"), getattr(generated, \"player_id\", \"\")]",
       "ambiguous_literal:validate_generated_player_names_match_offsets@nba2k_editor/Player Generator/game_port.py:338: player_label = str(identity.get(\"player\") if isinstance(identity, dict) else getattr(generated, \"player_id\", \"\")).strip()",
       "ambiguous_literal:generate_player_proposal@nba2k_editor/Player Generator/player_generator.py:207: \"player\": evidence.identity.get(\"player\"),",
       "ambiguous_literal:_draft_pick_sort_key@nba2k_editor/Player Generator/player_generator.py:333: name = str(row.get(\"player\") or \"\").strip().upper()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
       "ambiguous_literal:<module>@nba2k_editor/Player Generator/sql_sources.py:87: SqlBaseTableRole(\"archive_sqlite\", \"player\", \"queryable player identity list\"),"
     ],
     "column_name": "player",
@@ -3344,8 +3379,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:92: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 25)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:101: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 0)"
+    ],
     "column_name": "age",
     "declared_type": "INTEGER",
     "numeric": true,
@@ -3402,19 +3440,20 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:124: raw = str(getattr(evidence, \"season_info\", {}).get(\"pos\") or getattr(evidence, \"identity\", {}).get(\"pos\") or \"SF\")",
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:124: raw = str(getattr(evidence, \"season_info\", {}).get(\"pos\") or getattr(evidence, \"identity\", {}).get(\"pos\") or \"SF\")"
+    ],
     "column_name": "pos",
     "declared_type": "TEXT",
     "numeric": false,
     "ordinal": 6,
     "sheet_name": "Player Season Info",
     "table_name": "player_season_info",
-    "usage_count": 1,
-    "used": true,
-    "used_for": [
-      "evidence_accessor:_position_values@nba2k_editor/Player Generator/player_rules.py:382: raw = _clean_text(evidence.season_info.get(\"pos\")) or _clean_text(evidence.identity.get(\"pos\"))"
-    ]
+    "usage_count": 0,
+    "used": false,
+    "used_for": []
   },
   {
     "ambiguous_literal_count": 0,
@@ -3425,21 +3464,22 @@
     "ordinal": 7,
     "sheet_name": "Player Season Info",
     "table_name": "player_season_info",
-    "usage_count": 2,
+    "usage_count": 1,
     "used": true,
     "used_for": [
-      "evidence_accessor:_is_rookie_year_evidence@nba2k_editor/Player Generator/player_generator.py:340: experience = _int_value(evidence.season_info.get(\"experience\"))",
-      "evidence_accessor:derive_player_profile_values@nba2k_editor/Player Generator/player_rules.py:293: years_pro = _int_number(evidence.season_info, \"experience\")"
+      "evidence_accessor:_is_rookie_year_evidence@nba2k_editor/Player Generator/player_generator.py:340: experience = _int_value(evidence.season_info.get(\"experience\"))"
     ]
   },
   {
-    "ambiguous_literal_count": 6,
+    "ambiguous_literal_count": 8,
     "ambiguous_literals": [
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:102: player = _require_option(selected_player, players, \"player\")",
       "ambiguous_literal:_generated_player_name_keys@nba2k_editor/Player Generator/game_port.py:286: values: list[object] = [identity.get(\"player\"), getattr(generated, \"player_id\", \"\")]",
       "ambiguous_literal:validate_generated_player_names_match_offsets@nba2k_editor/Player Generator/game_port.py:338: player_label = str(identity.get(\"player\") if isinstance(identity, dict) else getattr(generated, \"player_id\", \"\")).strip()",
       "ambiguous_literal:generate_player_proposal@nba2k_editor/Player Generator/player_generator.py:207: \"player\": evidence.identity.get(\"player\"),",
       "ambiguous_literal:_draft_pick_sort_key@nba2k_editor/Player Generator/player_generator.py:333: name = str(row.get(\"player\") or \"\").strip().upper()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
       "ambiguous_literal:<module>@nba2k_editor/Player Generator/sql_sources.py:87: SqlBaseTableRole(\"archive_sqlite\", \"player\", \"queryable player identity list\"),"
     ],
     "column_name": "player",
@@ -3448,12 +3488,11 @@
     "ordinal": 0,
     "sheet_name": "Player Info",
     "table_name": "player_info",
-    "usage_count": 3,
+    "usage_count": 2,
     "used": true,
     "used_for": [
       "evidence_accessor:generate_player_proposal@nba2k_editor/Player Generator/player_generator.py:207: \"player\": evidence.identity.get(\"player\"),",
-      "evidence_accessor:_rookie_year_sort_key@nba2k_editor/Player Generator/player_generator.py:353: player_name = str(evidence.identity.get(\"player\") or player_id).strip().upper()",
-      "evidence_accessor:derive_player_profile_values@nba2k_editor/Player Generator/player_rules.py:271: first_name, last_name = _split_player_name(_ascii_name_text(evidence.identity.get(\"player\")))"
+      "evidence_accessor:_rookie_year_sort_key@nba2k_editor/Player Generator/player_generator.py:353: player_name = str(evidence.identity.get(\"player\") or player_id).strip().upper()"
     ]
   },
   {
@@ -3494,35 +3533,35 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:124: raw = str(getattr(evidence, \"season_info\", {}).get(\"pos\") or getattr(evidence, \"identity\", {}).get(\"pos\") or \"SF\")",
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:124: raw = str(getattr(evidence, \"season_info\", {}).get(\"pos\") or getattr(evidence, \"identity\", {}).get(\"pos\") or \"SF\")"
+    ],
     "column_name": "pos",
     "declared_type": "TEXT",
     "numeric": false,
     "ordinal": 2,
     "sheet_name": "Player Info",
     "table_name": "player_info",
-    "usage_count": 1,
-    "used": true,
-    "used_for": [
-      "evidence_accessor:_position_values@nba2k_editor/Player Generator/player_rules.py:382: raw = _clean_text(evidence.season_info.get(\"pos\")) or _clean_text(evidence.identity.get(\"pos\"))"
-    ]
+    "usage_count": 0,
+    "used": false,
+    "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 1,
+    "ambiguous_literals": [
+      "ambiguous_literal:_wingspan_cm@nba2k_editor/Player Generator/player_rules_profile.py:106: height = _number(getattr(evidence, \"identity\", {}), \"ht_in_in\") or 78.0"
+    ],
     "column_name": "ht_in_in",
     "declared_type": "INTEGER",
     "numeric": true,
     "ordinal": 3,
     "sheet_name": "Player Info",
     "table_name": "player_info",
-    "usage_count": 2,
-    "used": true,
-    "used_for": [
-      "evidence_accessor:derive_player_profile_values@nba2k_editor/Player Generator/player_rules.py:272: height_in = _int_number(evidence.identity, \"ht_in_in\")",
-      "evidence_accessor:_play_type_values@nba2k_editor/Player Generator/player_rules.py:413: height = _number(evidence.identity, \"ht_in_in\")"
-    ]
+    "usage_count": 0,
+    "used": false,
+    "used_for": []
   },
   {
     "ambiguous_literal_count": 0,
@@ -3533,27 +3572,26 @@
     "ordinal": 4,
     "sheet_name": "Player Info",
     "table_name": "player_info",
-    "usage_count": 2,
-    "used": true,
-    "used_for": [
-      "evidence_accessor:derive_player_profile_values@nba2k_editor/Player Generator/player_rules.py:273: weight_lb = _int_number(evidence.identity, \"wt\")",
-      "evidence_accessor:_play_type_values@nba2k_editor/Player Generator/player_rules.py:414: weight = _number(evidence.identity, \"wt\")"
-    ]
+    "usage_count": 0,
+    "used": false,
+    "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 3,
+    "ambiguous_literals": [
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:83: value = getattr(evidence, \"identity\", {}).get(\"birth_date\")",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:84: number = _number({\"birth_date\": value}, \"birth_date\")",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:84: number = _number({\"birth_date\": value}, \"birth_date\")"
+    ],
     "column_name": "birth_date",
     "declared_type": "INTEGER",
     "numeric": true,
     "ordinal": 5,
     "sheet_name": "Player Info",
     "table_name": "player_info",
-    "usage_count": 1,
-    "used": true,
-    "used_for": [
-      "evidence_accessor:derive_player_profile_values@nba2k_editor/Player Generator/player_rules.py:274: birth = _birth_date(evidence.identity.get(\"birth_date\"))"
-    ]
+    "usage_count": 0,
+    "used": false,
+    "used_for": []
   },
   {
     "ambiguous_literal_count": 0,
@@ -3564,11 +3602,9 @@
     "ordinal": 6,
     "sheet_name": "Player Info",
     "table_name": "player_info",
-    "usage_count": 1,
-    "used": true,
-    "used_for": [
-      "evidence_accessor:derive_player_profile_values@nba2k_editor/Player Generator/player_rules.py:292: _add_profile(values, \"COLLEGEFROM\", _clean_text(evidence.identity.get(\"colleges\")), \"profile_college_from_v1\", (\"identity.colleges\",))"
-    ]
+    "usage_count": 0,
+    "used": false,
+    "used_for": []
   },
   {
     "ambiguous_literal_count": 0,
@@ -3579,11 +3615,10 @@
     "ordinal": 7,
     "sheet_name": "Player Info",
     "table_name": "player_info",
-    "usage_count": 2,
+    "usage_count": 1,
     "used": true,
     "used_for": [
-      "evidence_accessor:_is_rookie_year_evidence@nba2k_editor/Player Generator/player_generator.py:341: first_season = _int_value(evidence.identity.get(\"from\"))",
-      "evidence_accessor:derive_player_profile_values@nba2k_editor/Player Generator/player_rules.py:295: start_year = _int_number(evidence.identity, \"from\")"
+      "evidence_accessor:_is_rookie_year_evidence@nba2k_editor/Player Generator/player_generator.py:341: first_season = _int_value(evidence.identity.get(\"from\"))"
     ]
   },
   {
@@ -3626,7 +3661,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -3640,7 +3675,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -3666,13 +3703,15 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 6,
+    "ambiguous_literal_count": 8,
     "ambiguous_literals": [
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:102: player = _require_option(selected_player, players, \"player\")",
       "ambiguous_literal:_generated_player_name_keys@nba2k_editor/Player Generator/game_port.py:286: values: list[object] = [identity.get(\"player\"), getattr(generated, \"player_id\", \"\")]",
       "ambiguous_literal:validate_generated_player_names_match_offsets@nba2k_editor/Player Generator/game_port.py:338: player_label = str(identity.get(\"player\") if isinstance(identity, dict) else getattr(generated, \"player_id\", \"\")).strip()",
       "ambiguous_literal:generate_player_proposal@nba2k_editor/Player Generator/player_generator.py:207: \"player\": evidence.identity.get(\"player\"),",
       "ambiguous_literal:_draft_pick_sort_key@nba2k_editor/Player Generator/player_generator.py:333: name = str(row.get(\"player\") or \"\").strip().upper()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
       "ambiguous_literal:<module>@nba2k_editor/Player Generator/sql_sources.py:87: SqlBaseTableRole(\"archive_sqlite\", \"player\", \"queryable player identity list\"),"
     ],
     "column_name": "player",
@@ -3723,8 +3762,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:92: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 25)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:101: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 0)"
+    ],
     "column_name": "age",
     "declared_type": "INTEGER",
     "numeric": true,
@@ -3781,8 +3823,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:124: raw = str(getattr(evidence, \"season_info\", {}).get(\"pos\") or getattr(evidence, \"identity\", {}).get(\"pos\") or \"SF\")",
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:124: raw = str(getattr(evidence, \"season_info\", {}).get(\"pos\") or getattr(evidence, \"identity\", {}).get(\"pos\") or \"SF\")"
+    ],
     "column_name": "pos",
     "declared_type": "TEXT",
     "numeric": false,
@@ -3849,8 +3894,10 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 1,
+    "ambiguous_literals": [
+      "ambiguous_literal:_derive_extra_tendency@nba2k_editor/Player Generator/player_rules.py:260: value = _scaled_tendency(evidence, \"per_game\", \"fga_per_game\", 22.0)"
+    ],
     "column_name": "fga_per_game",
     "declared_type": "REAL",
     "numeric": true,
@@ -3888,19 +3935,20 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_derive_extra_tendency@nba2k_editor/Player Generator/player_rules.py:239: value = _scaled_tendency(evidence, \"per_game\", \"x3pa_per_game\", 12.0)",
+      "ambiguous_literal:_play_types@nba2k_editor/Player Generator/player_rules_profile.py:156: x3pa = _number(getattr(evidence, \"per_game\", {}), \"x3pa_per_game\") or 0.0"
+    ],
     "column_name": "x3pa_per_game",
     "declared_type": "REAL",
     "numeric": true,
     "ordinal": 14,
     "sheet_name": "Player Per Game",
     "table_name": "player_per_game",
-    "usage_count": 1,
-    "used": true,
-    "used_for": [
-      "evidence_accessor:_play_type_values@nba2k_editor/Player Generator/player_rules.py:405: three_attempts = _number(evidence.per_game, \"x3pa_per_game\") or _number(evidence.per_game, \"fg3a_per_game\")"
-    ]
+    "usage_count": 0,
+    "used": false,
+    "used_for": []
   },
   {
     "ambiguous_literal_count": 0,
@@ -3937,11 +3985,9 @@
     "ordinal": 17,
     "sheet_name": "Player Per Game",
     "table_name": "player_per_game",
-    "usage_count": 1,
-    "used": true,
-    "used_for": [
-      "evidence_accessor:_play_type_values@nba2k_editor/Player Generator/player_rules.py:412: two_point_attempts = _number(evidence.per_game, \"x2pa_per_game\")"
-    ]
+    "usage_count": 0,
+    "used": false,
+    "used_for": []
   },
   {
     "ambiguous_literal_count": 0,
@@ -4017,11 +4063,9 @@
     "ordinal": 23,
     "sheet_name": "Player Per Game",
     "table_name": "player_per_game",
-    "usage_count": 1,
-    "used": true,
-    "used_for": [
-      "evidence_accessor:_play_type_values@nba2k_editor/Player Generator/player_rules.py:411: offensive_rebounds = _number(evidence.per_game, \"orb_per_game\")"
-    ]
+    "usage_count": 0,
+    "used": false,
+    "used_for": []
   },
   {
     "ambiguous_literal_count": 0,
@@ -4050,19 +4094,20 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_derive_extra_tendency@nba2k_editor/Player Generator/player_rules.py:251: value = _scaled_tendency(evidence, \"per_game\", \"ast_per_game\", 11.0)",
+      "ambiguous_literal:_play_types@nba2k_editor/Player Generator/player_rules_profile.py:154: ast = _number(getattr(evidence, \"per_game\", {}), \"ast_per_game\") or 0.0"
+    ],
     "column_name": "ast_per_game",
     "declared_type": "REAL",
     "numeric": true,
     "ordinal": 26,
     "sheet_name": "Player Per Game",
     "table_name": "player_per_game",
-    "usage_count": 1,
-    "used": true,
-    "used_for": [
-      "evidence_accessor:_play_type_values@nba2k_editor/Player Generator/player_rules.py:407: assists = _number(evidence.per_game, \"ast_per_game\")"
-    ]
+    "usage_count": 0,
+    "used": false,
+    "used_for": []
   },
   {
     "ambiguous_literal_count": 0,
@@ -4130,7 +4175,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -4144,7 +4189,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -4170,13 +4217,15 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 6,
+    "ambiguous_literal_count": 8,
     "ambiguous_literals": [
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:102: player = _require_option(selected_player, players, \"player\")",
       "ambiguous_literal:_generated_player_name_keys@nba2k_editor/Player Generator/game_port.py:286: values: list[object] = [identity.get(\"player\"), getattr(generated, \"player_id\", \"\")]",
       "ambiguous_literal:validate_generated_player_names_match_offsets@nba2k_editor/Player Generator/game_port.py:338: player_label = str(identity.get(\"player\") if isinstance(identity, dict) else getattr(generated, \"player_id\", \"\")).strip()",
       "ambiguous_literal:generate_player_proposal@nba2k_editor/Player Generator/player_generator.py:207: \"player\": evidence.identity.get(\"player\"),",
       "ambiguous_literal:_draft_pick_sort_key@nba2k_editor/Player Generator/player_generator.py:333: name = str(row.get(\"player\") or \"\").strip().upper()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
       "ambiguous_literal:<module>@nba2k_editor/Player Generator/sql_sources.py:87: SqlBaseTableRole(\"archive_sqlite\", \"player\", \"queryable player identity list\"),"
     ],
     "column_name": "player",
@@ -4227,8 +4276,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:92: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 25)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:101: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 0)"
+    ],
     "column_name": "age",
     "declared_type": "INTEGER",
     "numeric": true,
@@ -4285,8 +4337,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:124: raw = str(getattr(evidence, \"season_info\", {}).get(\"pos\") or getattr(evidence, \"identity\", {}).get(\"pos\") or \"SF\")",
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:124: raw = str(getattr(evidence, \"season_info\", {}).get(\"pos\") or getattr(evidence, \"identity\", {}).get(\"pos\") or \"SF\")"
+    ],
     "column_name": "pos",
     "declared_type": "TEXT",
     "numeric": false,
@@ -4628,7 +4683,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -4642,7 +4697,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -4668,13 +4725,15 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 6,
+    "ambiguous_literal_count": 8,
     "ambiguous_literals": [
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:102: player = _require_option(selected_player, players, \"player\")",
       "ambiguous_literal:_generated_player_name_keys@nba2k_editor/Player Generator/game_port.py:286: values: list[object] = [identity.get(\"player\"), getattr(generated, \"player_id\", \"\")]",
       "ambiguous_literal:validate_generated_player_names_match_offsets@nba2k_editor/Player Generator/game_port.py:338: player_label = str(identity.get(\"player\") if isinstance(identity, dict) else getattr(generated, \"player_id\", \"\")).strip()",
       "ambiguous_literal:generate_player_proposal@nba2k_editor/Player Generator/player_generator.py:207: \"player\": evidence.identity.get(\"player\"),",
       "ambiguous_literal:_draft_pick_sort_key@nba2k_editor/Player Generator/player_generator.py:333: name = str(row.get(\"player\") or \"\").strip().upper()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
       "ambiguous_literal:<module>@nba2k_editor/Player Generator/sql_sources.py:87: SqlBaseTableRole(\"archive_sqlite\", \"player\", \"queryable player identity list\"),"
     ],
     "column_name": "player",
@@ -4725,8 +4784,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:92: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 25)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:101: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 0)"
+    ],
     "column_name": "age",
     "declared_type": "INTEGER",
     "numeric": true,
@@ -4783,8 +4845,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:124: raw = str(getattr(evidence, \"season_info\", {}).get(\"pos\") or getattr(evidence, \"identity\", {}).get(\"pos\") or \"SF\")",
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:124: raw = str(getattr(evidence, \"season_info\", {}).get(\"pos\") or getattr(evidence, \"identity\", {}).get(\"pos\") or \"SF\")"
+    ],
     "column_name": "pos",
     "declared_type": "TEXT",
     "numeric": false,
@@ -5152,7 +5217,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -5166,7 +5231,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -5192,13 +5259,15 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 6,
+    "ambiguous_literal_count": 8,
     "ambiguous_literals": [
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:102: player = _require_option(selected_player, players, \"player\")",
       "ambiguous_literal:_generated_player_name_keys@nba2k_editor/Player Generator/game_port.py:286: values: list[object] = [identity.get(\"player\"), getattr(generated, \"player_id\", \"\")]",
       "ambiguous_literal:validate_generated_player_names_match_offsets@nba2k_editor/Player Generator/game_port.py:338: player_label = str(identity.get(\"player\") if isinstance(identity, dict) else getattr(generated, \"player_id\", \"\")).strip()",
       "ambiguous_literal:generate_player_proposal@nba2k_editor/Player Generator/player_generator.py:207: \"player\": evidence.identity.get(\"player\"),",
       "ambiguous_literal:_draft_pick_sort_key@nba2k_editor/Player Generator/player_generator.py:333: name = str(row.get(\"player\") or \"\").strip().upper()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
       "ambiguous_literal:<module>@nba2k_editor/Player Generator/sql_sources.py:87: SqlBaseTableRole(\"archive_sqlite\", \"player\", \"queryable player identity list\"),"
     ],
     "column_name": "player",
@@ -5249,8 +5318,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:92: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 25)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:101: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 0)"
+    ],
     "column_name": "age",
     "declared_type": "INTEGER",
     "numeric": true,
@@ -5307,8 +5379,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:124: raw = str(getattr(evidence, \"season_info\", {}).get(\"pos\") or getattr(evidence, \"identity\", {}).get(\"pos\") or \"SF\")",
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:124: raw = str(getattr(evidence, \"season_info\", {}).get(\"pos\") or getattr(evidence, \"identity\", {}).get(\"pos\") or \"SF\")"
+    ],
     "column_name": "pos",
     "declared_type": "TEXT",
     "numeric": false,
@@ -5663,7 +5738,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -5677,7 +5752,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -5703,13 +5780,15 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 6,
+    "ambiguous_literal_count": 8,
     "ambiguous_literals": [
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:102: player = _require_option(selected_player, players, \"player\")",
       "ambiguous_literal:_generated_player_name_keys@nba2k_editor/Player Generator/game_port.py:286: values: list[object] = [identity.get(\"player\"), getattr(generated, \"player_id\", \"\")]",
       "ambiguous_literal:validate_generated_player_names_match_offsets@nba2k_editor/Player Generator/game_port.py:338: player_label = str(identity.get(\"player\") if isinstance(identity, dict) else getattr(generated, \"player_id\", \"\")).strip()",
       "ambiguous_literal:generate_player_proposal@nba2k_editor/Player Generator/player_generator.py:207: \"player\": evidence.identity.get(\"player\"),",
       "ambiguous_literal:_draft_pick_sort_key@nba2k_editor/Player Generator/player_generator.py:333: name = str(row.get(\"player\") or \"\").strip().upper()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
       "ambiguous_literal:<module>@nba2k_editor/Player Generator/sql_sources.py:87: SqlBaseTableRole(\"archive_sqlite\", \"player\", \"queryable player identity list\"),"
     ],
     "column_name": "player",
@@ -5760,8 +5839,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:92: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 25)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:101: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 0)"
+    ],
     "column_name": "age",
     "declared_type": "INTEGER",
     "numeric": true,
@@ -5818,8 +5900,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:124: raw = str(getattr(evidence, \"season_info\", {}).get(\"pos\") or getattr(evidence, \"identity\", {}).get(\"pos\") or \"SF\")",
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:124: raw = str(getattr(evidence, \"season_info\", {}).get(\"pos\") or getattr(evidence, \"identity\", {}).get(\"pos\") or \"SF\")"
+    ],
     "column_name": "pos",
     "declared_type": "TEXT",
     "numeric": false,
@@ -5914,8 +5999,12 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 3,
+    "ambiguous_literals": [
+      "ambiguous_literal:_derive_extra_tendency@nba2k_editor/Player Generator/player_rules.py:245: value = _scaled_tendency(evidence, \"shooting\", \"percent_fga_from_x0_3_range\", 0.45)",
+      "ambiguous_literal:_derive_hot_zone@nba2k_editor/Player Generator/player_rules.py:290: share = _number(getattr(evidence, \"shooting\", {}), \"percent_fga_from_x0_3_range\") or 0.0",
+      "ambiguous_literal:_play_types@nba2k_editor/Player Generator/player_rules_profile.py:159: rim_share = _number(getattr(evidence, \"shooting\", {}), \"percent_fga_from_x0_3_range\") or 0.0"
+    ],
     "column_name": "percent_fga_from_x0_3_range",
     "declared_type": "REAL",
     "numeric": true,
@@ -5927,8 +6016,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_derive_extra_tendency@nba2k_editor/Player Generator/player_rules.py:248: value = _scaled_tendency(evidence, \"shooting\", \"percent_fga_from_x3_10_range\", 0.45)",
+      "ambiguous_literal:_play_types@nba2k_editor/Player Generator/player_rules_profile.py:160: short_share = _number(getattr(evidence, \"shooting\", {}), \"percent_fga_from_x3_10_range\") or 0.0"
+    ],
     "column_name": "percent_fga_from_x3_10_range",
     "declared_type": "REAL",
     "numeric": true,
@@ -5953,8 +6045,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_derive_extra_tendency@nba2k_editor/Player Generator/player_rules.py:242: value = _scaled_tendency(evidence, \"shooting\", \"percent_fga_from_x16_3p_range\", 0.35)",
+      "ambiguous_literal:_derive_hot_zone@nba2k_editor/Player Generator/player_rules.py:284: share = _number(getattr(evidence, \"shooting\", {}), \"percent_fga_from_x16_3p_range\") or 0.0"
+    ],
     "column_name": "percent_fga_from_x16_3p_range",
     "declared_type": "REAL",
     "numeric": true,
@@ -5966,19 +6061,20 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_derive_hot_zone@nba2k_editor/Player Generator/player_rules.py:278: share = _number(getattr(evidence, \"shooting\", {}), \"percent_fga_from_x3p_range\") or 0.0",
+      "ambiguous_literal:_play_types@nba2k_editor/Player Generator/player_rules_profile.py:157: x3_share = _number(getattr(evidence, \"shooting\", {}), \"percent_fga_from_x3p_range\") or 0.0"
+    ],
     "column_name": "percent_fga_from_x3p_range",
     "declared_type": "REAL",
     "numeric": true,
     "ordinal": 17,
     "sheet_name": "Player Shooting",
     "table_name": "player_shooting",
-    "usage_count": 1,
-    "used": true,
-    "used_for": [
-      "evidence_accessor:_play_type_values@nba2k_editor/Player Generator/player_rules.py:406: three_share = _number(evidence.shooting, \"percent_fga_from_x3p_range\")"
-    ]
+    "usage_count": 0,
+    "used": false,
+    "used_for": []
   },
   {
     "ambiguous_literal_count": 0,
@@ -5994,8 +6090,10 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 1,
+    "ambiguous_literals": [
+      "ambiguous_literal:_derive_hot_zone@nba2k_editor/Player Generator/player_rules.py:289: pct = _number(getattr(evidence, \"shooting\", {}), \"fg_percent_from_x0_3_range\")"
+    ],
     "column_name": "fg_percent_from_x0_3_range",
     "declared_type": "REAL",
     "numeric": true,
@@ -6033,8 +6131,10 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 1,
+    "ambiguous_literals": [
+      "ambiguous_literal:_derive_hot_zone@nba2k_editor/Player Generator/player_rules.py:283: pct = _number(getattr(evidence, \"shooting\", {}), \"fg_percent_from_x16_3p_range\")"
+    ],
     "column_name": "fg_percent_from_x16_3p_range",
     "declared_type": "REAL",
     "numeric": true,
@@ -6046,8 +6146,10 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 1,
+    "ambiguous_literals": [
+      "ambiguous_literal:_derive_hot_zone@nba2k_editor/Player Generator/player_rules.py:277: pct = _number(getattr(evidence, \"shooting\", {}), \"fg_percent_from_x3p_range\")"
+    ],
     "column_name": "fg_percent_from_x3p_range",
     "declared_type": "REAL",
     "numeric": true,
@@ -6085,19 +6187,19 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 1,
+    "ambiguous_literals": [
+      "ambiguous_literal:_play_types@nba2k_editor/Player Generator/player_rules_profile.py:158: dunk_share = _number(getattr(evidence, \"shooting\", {}), \"percent_dunks_of_fga\") or 0.0"
+    ],
     "column_name": "percent_dunks_of_fga",
     "declared_type": "REAL",
     "numeric": true,
     "ordinal": 26,
     "sheet_name": "Player Shooting",
     "table_name": "player_shooting",
-    "usage_count": 1,
-    "used": true,
-    "used_for": [
-      "evidence_accessor:_play_type_values@nba2k_editor/Player Generator/player_rules.py:409: dunk_share = _number(evidence.shooting, \"percent_dunks_of_fga\")"
-    ]
+    "usage_count": 0,
+    "used": false,
+    "used_for": []
   },
   {
     "ambiguous_literal_count": 0,
@@ -6108,11 +6210,9 @@
     "ordinal": 27,
     "sheet_name": "Player Shooting",
     "table_name": "player_shooting",
-    "usage_count": 1,
-    "used": true,
-    "used_for": [
-      "evidence_accessor:_play_type_values@nba2k_editor/Player Generator/player_rules.py:410: dunks = _number(evidence.shooting, \"num_of_dunks\")"
-    ]
+    "usage_count": 0,
+    "used": false,
+    "used_for": []
   },
   {
     "ambiguous_literal_count": 0,
@@ -6167,7 +6267,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -6181,7 +6281,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -6207,13 +6309,15 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 6,
+    "ambiguous_literal_count": 8,
     "ambiguous_literals": [
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:102: player = _require_option(selected_player, players, \"player\")",
       "ambiguous_literal:_generated_player_name_keys@nba2k_editor/Player Generator/game_port.py:286: values: list[object] = [identity.get(\"player\"), getattr(generated, \"player_id\", \"\")]",
       "ambiguous_literal:validate_generated_player_names_match_offsets@nba2k_editor/Player Generator/game_port.py:338: player_label = str(identity.get(\"player\") if isinstance(identity, dict) else getattr(generated, \"player_id\", \"\")).strip()",
       "ambiguous_literal:generate_player_proposal@nba2k_editor/Player Generator/player_generator.py:207: \"player\": evidence.identity.get(\"player\"),",
       "ambiguous_literal:_draft_pick_sort_key@nba2k_editor/Player Generator/player_generator.py:333: name = str(row.get(\"player\") or \"\").strip().upper()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
       "ambiguous_literal:<module>@nba2k_editor/Player Generator/sql_sources.py:87: SqlBaseTableRole(\"archive_sqlite\", \"player\", \"queryable player identity list\"),"
     ],
     "column_name": "player",
@@ -6264,8 +6368,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:92: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 25)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:101: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 0)"
+    ],
     "column_name": "age",
     "declared_type": "INTEGER",
     "numeric": true,
@@ -6322,8 +6429,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:124: raw = str(getattr(evidence, \"season_info\", {}).get(\"pos\") or getattr(evidence, \"identity\", {}).get(\"pos\") or \"SF\")",
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:124: raw = str(getattr(evidence, \"season_info\", {}).get(\"pos\") or getattr(evidence, \"identity\", {}).get(\"pos\") or \"SF\")"
+    ],
     "column_name": "pos",
     "declared_type": "TEXT",
     "numeric": false,
@@ -6470,19 +6580,19 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 1,
+    "ambiguous_literals": [
+      "ambiguous_literal:_play_types@nba2k_editor/Player Generator/player_rules_profile.py:155: ast_pct = _number(getattr(evidence, \"advanced\", {}), \"ast_percent\") or 0.0"
+    ],
     "column_name": "ast_percent",
     "declared_type": "REAL",
     "numeric": true,
     "ordinal": 17,
     "sheet_name": "Advanced",
     "table_name": "advanced",
-    "usage_count": 1,
-    "used": true,
-    "used_for": [
-      "evidence_accessor:_play_type_values@nba2k_editor/Player Generator/player_rules.py:408: assist_pct = _number(evidence.advanced, \"ast_percent\")"
-    ]
+    "usage_count": 0,
+    "used": false,
+    "used_for": []
   },
   {
     "ambiguous_literal_count": 0,
@@ -6524,8 +6634,10 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 1,
+    "ambiguous_literals": [
+      "ambiguous_literal:_derive_extra_tendency@nba2k_editor/Player Generator/player_rules.py:254: value = _scaled_tendency(evidence, \"advanced\", \"usg_percent\", 35.0)"
+    ],
     "column_name": "usg_percent",
     "declared_type": "REAL",
     "numeric": true,
@@ -6641,7 +6753,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -6655,7 +6767,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -6681,13 +6795,15 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 6,
+    "ambiguous_literal_count": 8,
     "ambiguous_literals": [
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:102: player = _require_option(selected_player, players, \"player\")",
       "ambiguous_literal:_generated_player_name_keys@nba2k_editor/Player Generator/game_port.py:286: values: list[object] = [identity.get(\"player\"), getattr(generated, \"player_id\", \"\")]",
       "ambiguous_literal:validate_generated_player_names_match_offsets@nba2k_editor/Player Generator/game_port.py:338: player_label = str(identity.get(\"player\") if isinstance(identity, dict) else getattr(generated, \"player_id\", \"\")).strip()",
       "ambiguous_literal:generate_player_proposal@nba2k_editor/Player Generator/player_generator.py:207: \"player\": evidence.identity.get(\"player\"),",
       "ambiguous_literal:_draft_pick_sort_key@nba2k_editor/Player Generator/player_generator.py:333: name = str(row.get(\"player\") or \"\").strip().upper()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
       "ambiguous_literal:<module>@nba2k_editor/Player Generator/sql_sources.py:87: SqlBaseTableRole(\"archive_sqlite\", \"player\", \"queryable player identity list\"),"
     ],
     "column_name": "player",
@@ -6738,8 +6854,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:92: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 25)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:101: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 0)"
+    ],
     "column_name": "age",
     "declared_type": "INTEGER",
     "numeric": true,
@@ -6796,8 +6915,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:124: raw = str(getattr(evidence, \"season_info\", {}).get(\"pos\") or getattr(evidence, \"identity\", {}).get(\"pos\") or \"SF\")",
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:124: raw = str(getattr(evidence, \"season_info\", {}).get(\"pos\") or getattr(evidence, \"identity\", {}).get(\"pos\") or \"SF\")"
+    ],
     "column_name": "pos",
     "declared_type": "TEXT",
     "numeric": false,
@@ -6853,8 +6975,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:113: (\"PG\", _number(play, \"pg_percent\") or 0.0),",
+      "ambiguous_literal:_play_types@nba2k_editor/Player Generator/player_rules_profile.py:149: pg = _number(getattr(evidence, \"play_by_play\", {}), \"pg_percent\") or 0.0"
+    ],
     "column_name": "pg_percent",
     "declared_type": "INTEGER",
     "numeric": true,
@@ -6866,8 +6991,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:114: (\"SG\", _number(play, \"sg_percent\") or 0.0),",
+      "ambiguous_literal:_play_types@nba2k_editor/Player Generator/player_rules_profile.py:150: sg = _number(getattr(evidence, \"play_by_play\", {}), \"sg_percent\") or 0.0"
+    ],
     "column_name": "sg_percent",
     "declared_type": "INTEGER",
     "numeric": true,
@@ -6879,8 +7007,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:115: (\"SF\", _number(play, \"sf_percent\") or 0.0),",
+      "ambiguous_literal:_play_types@nba2k_editor/Player Generator/player_rules_profile.py:151: sf = _number(getattr(evidence, \"play_by_play\", {}), \"sf_percent\") or 0.0"
+    ],
     "column_name": "sf_percent",
     "declared_type": "INTEGER",
     "numeric": true,
@@ -6892,8 +7023,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:116: (\"PF\", _number(play, \"pf_percent\") or 0.0),",
+      "ambiguous_literal:_play_types@nba2k_editor/Player Generator/player_rules_profile.py:152: pf = _number(getattr(evidence, \"play_by_play\", {}), \"pf_percent\") or 0.0"
+    ],
     "column_name": "pf_percent",
     "declared_type": "INTEGER",
     "numeric": true,
@@ -6905,8 +7039,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_positions@nba2k_editor/Player Generator/player_rules_profile.py:117: (\"C\", _number(play, \"c_percent\") or 0.0),",
+      "ambiguous_literal:_play_types@nba2k_editor/Player Generator/player_rules_profile.py:153: c = _number(getattr(evidence, \"play_by_play\", {}), \"c_percent\") or 0.0"
+    ],
     "column_name": "c_percent",
     "declared_type": "INTEGER",
     "numeric": true,
@@ -7009,8 +7146,10 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 1,
+    "ambiguous_literals": [
+      "ambiguous_literal:_derive_extra_tendency@nba2k_editor/Player Generator/player_rules.py:257: value = _scaled_tendency(evidence, \"play_by_play\", \"offensive_foul_drawn\", 35.0)"
+    ],
     "column_name": "offensive_foul_drawn",
     "declared_type": "INTEGER",
     "numeric": true,
@@ -7022,8 +7161,10 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 1,
+    "ambiguous_literals": [
+      "ambiguous_literal:_play_types@nba2k_editor/Player Generator/player_rules_profile.py:161: points_assist = _number(getattr(evidence, \"play_by_play\", {}), \"points_generated_by_assists\") or 0.0"
+    ],
     "column_name": "points_generated_by_assists",
     "declared_type": "INTEGER",
     "numeric": true,
@@ -7061,13 +7202,15 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 6,
+    "ambiguous_literal_count": 8,
     "ambiguous_literals": [
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:102: player = _require_option(selected_player, players, \"player\")",
       "ambiguous_literal:_generated_player_name_keys@nba2k_editor/Player Generator/game_port.py:286: values: list[object] = [identity.get(\"player\"), getattr(generated, \"player_id\", \"\")]",
       "ambiguous_literal:validate_generated_player_names_match_offsets@nba2k_editor/Player Generator/game_port.py:338: player_label = str(identity.get(\"player\") if isinstance(identity, dict) else getattr(generated, \"player_id\", \"\")).strip()",
       "ambiguous_literal:generate_player_proposal@nba2k_editor/Player Generator/player_generator.py:207: \"player\": evidence.identity.get(\"player\"),",
       "ambiguous_literal:_draft_pick_sort_key@nba2k_editor/Player Generator/player_generator.py:333: name = str(row.get(\"player\") or \"\").strip().upper()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
       "ambiguous_literal:<module>@nba2k_editor/Player Generator/sql_sources.py:87: SqlBaseTableRole(\"archive_sqlite\", \"player\", \"queryable player identity list\"),"
     ],
     "column_name": "player",
@@ -7163,7 +7306,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -7177,7 +7320,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -7216,7 +7361,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -7230,7 +7375,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -7282,13 +7429,15 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 6,
+    "ambiguous_literal_count": 8,
     "ambiguous_literals": [
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:102: player = _require_option(selected_player, players, \"player\")",
       "ambiguous_literal:_generated_player_name_keys@nba2k_editor/Player Generator/game_port.py:286: values: list[object] = [identity.get(\"player\"), getattr(generated, \"player_id\", \"\")]",
       "ambiguous_literal:validate_generated_player_names_match_offsets@nba2k_editor/Player Generator/game_port.py:338: player_label = str(identity.get(\"player\") if isinstance(identity, dict) else getattr(generated, \"player_id\", \"\")).strip()",
       "ambiguous_literal:generate_player_proposal@nba2k_editor/Player Generator/player_generator.py:207: \"player\": evidence.identity.get(\"player\"),",
       "ambiguous_literal:_draft_pick_sort_key@nba2k_editor/Player Generator/player_generator.py:333: name = str(row.get(\"player\") or \"\").strip().upper()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
       "ambiguous_literal:<module>@nba2k_editor/Player Generator/sql_sources.py:87: SqlBaseTableRole(\"archive_sqlite\", \"player\", \"queryable player identity list\"),"
     ],
     "column_name": "player",
@@ -7352,7 +7501,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -7366,7 +7515,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -7392,13 +7543,15 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 6,
+    "ambiguous_literal_count": 8,
     "ambiguous_literals": [
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:102: player = _require_option(selected_player, players, \"player\")",
       "ambiguous_literal:_generated_player_name_keys@nba2k_editor/Player Generator/game_port.py:286: values: list[object] = [identity.get(\"player\"), getattr(generated, \"player_id\", \"\")]",
       "ambiguous_literal:validate_generated_player_names_match_offsets@nba2k_editor/Player Generator/game_port.py:338: player_label = str(identity.get(\"player\") if isinstance(identity, dict) else getattr(generated, \"player_id\", \"\")).strip()",
       "ambiguous_literal:generate_player_proposal@nba2k_editor/Player Generator/player_generator.py:207: \"player\": evidence.identity.get(\"player\"),",
       "ambiguous_literal:_draft_pick_sort_key@nba2k_editor/Player Generator/player_generator.py:333: name = str(row.get(\"player\") or \"\").strip().upper()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
       "ambiguous_literal:<module>@nba2k_editor/Player Generator/sql_sources.py:87: SqlBaseTableRole(\"archive_sqlite\", \"player\", \"queryable player identity list\"),"
     ],
     "column_name": "player",
@@ -7449,8 +7602,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:92: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 25)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:101: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 0)"
+    ],
     "column_name": "age",
     "declared_type": "INTEGER",
     "numeric": true,
@@ -7527,7 +7683,7 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 13,
+    "ambiguous_literal_count": 15,
     "ambiguous_literals": [
       "ambiguous_literal:load_generator_display_state@nba2k_editor/Player Generator/display.py:68: season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, \"season\")",
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:95: season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, \"season\")",
@@ -7541,7 +7697,9 @@
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:429: if row.get(\"season\") is not None and row.get(\"season\") != season and sheet not in _PLAYER_CAREER_CONTEXT_SHEETS:",
       "ambiguous_literal:_cached_season_context_index@nba2k_editor/Player Generator/player_generator.py:456: merged = rows_by_key.setdefault(key, {\"player_id\": player_id, \"team\": key[1], \"season\": season})",
       "ambiguous_literal:_multi_team_primary_teams@nba2k_editor/Player Generator/player_generator.py:691: if row.get(\"season\") != int(season):",
-      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):"
+      "ambiguous_literal:_multi_team_stat_shares@nba2k_editor/Player Generator/player_generator.py:709: if row.get(\"season\") != int(season):",
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:93: return date(int(getattr(evidence, \"season\", 2026)) - age, 1, 1)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:97: season = int(getattr(evidence, \"season\", 2026))"
     ],
     "column_name": "season",
     "declared_type": "INTEGER",
@@ -7606,13 +7764,15 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 6,
+    "ambiguous_literal_count": 8,
     "ambiguous_literals": [
       "ambiguous_literal:update_generator_display_selection@nba2k_editor/Player Generator/display.py:102: player = _require_option(selected_player, players, \"player\")",
       "ambiguous_literal:_generated_player_name_keys@nba2k_editor/Player Generator/game_port.py:286: values: list[object] = [identity.get(\"player\"), getattr(generated, \"player_id\", \"\")]",
       "ambiguous_literal:validate_generated_player_names_match_offsets@nba2k_editor/Player Generator/game_port.py:338: player_label = str(identity.get(\"player\") if isinstance(identity, dict) else getattr(generated, \"player_id\", \"\")).strip()",
       "ambiguous_literal:generate_player_proposal@nba2k_editor/Player Generator/player_generator.py:207: \"player\": evidence.identity.get(\"player\"),",
       "ambiguous_literal:_draft_pick_sort_key@nba2k_editor/Player Generator/player_generator.py:333: name = str(row.get(\"player\") or \"\").strip().upper()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
+      "ambiguous_literal:_profile_results@nba2k_editor/Player Generator/player_rules_profile.py:20: player_name = str(getattr(evidence, \"identity\", {}).get(\"player\") or getattr(evidence, \"season_info\", {}).get(\"player\") or \"\").strip()",
       "ambiguous_literal:<module>@nba2k_editor/Player Generator/sql_sources.py:87: SqlBaseTableRole(\"archive_sqlite\", \"player\", \"queryable player identity list\"),"
     ],
     "column_name": "player",
@@ -7663,8 +7823,11 @@
     "used_for": []
   },
   {
-    "ambiguous_literal_count": 0,
-    "ambiguous_literals": [],
+    "ambiguous_literal_count": 2,
+    "ambiguous_literals": [
+      "ambiguous_literal:_birth_date@nba2k_editor/Player Generator/player_rules_profile.py:92: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 25)",
+      "ambiguous_literal:_birth_year_slot@nba2k_editor/Player Generator/player_rules_profile.py:101: age = int(_number(getattr(evidence, \"season_info\", {}), \"age\") or 0)"
+    ],
     "column_name": "age",
     "declared_type": "INTEGER",
     "numeric": true,
