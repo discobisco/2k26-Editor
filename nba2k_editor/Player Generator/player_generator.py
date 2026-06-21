@@ -19,6 +19,7 @@ from player_rules import (
     derive_player_profile_values,
     derive_player_rule_values,
 )
+from player_rules_core import MetricRankings
 from workbook_sqlite import ensure_workbook_sqlite_database, iter_workbook_sqlite_sheet_rows, workbook_sqlite_sheet_names
 
 _GENERATOR_DIR = Path(__file__).resolve().parent
@@ -126,6 +127,7 @@ class SeasonPlayerContextIndex:
     season: int
     source_database_path: Path
     comparison_rows: tuple[dict[str, Any], ...]
+    metric_rankings: MetricRankings
     evidence_by_key: dict[tuple[str, str], PlayerEvidence]
     field_index: dict[str, FieldEntry]
 
@@ -233,7 +235,7 @@ def generate_player_proposal_from_index(
     team: str,
 ) -> GeneratedPlayerProposal:
     evidence = context.evidence_for(player_id=player_id, team=team)
-    return generate_player_proposal(evidence, league_player_rows=context.comparison_rows, field_index=context.field_index)
+    return generate_player_proposal(evidence, league_player_rows=context.metric_rankings, field_index=context.field_index)
 
 
 def generate_player_proposals_for_contract(
@@ -433,28 +435,24 @@ def _cached_season_context_index(database_path: str, season: int, offsets_path: 
 
             if sheet in player_sheet_rows and player_id and team and canonical_team:
                 key = _player_team_key(player_id, canonical_team)
-                if sheet == _BASE_PLAYER_SEASON_SHEET:
-                    if not _is_multi_team_marker(team):
-                        canonical_row = _canonicalized_player_row(row, canonical_team, multi_team_shares.get(player_id.upper()))
-                        player_sheet_rows[sheet].setdefault(key, canonical_row)
-                        team_rosters.setdefault(key[1], []).append(canonical_row)
+                canonical_row = _canonicalized_player_row(row, canonical_team, multi_team_shares.get(player_id.upper()))
+                if _is_multi_team_marker(team):
+                    player_sheet_rows[sheet][key] = canonical_row
                 else:
-                    canonical_row = _canonicalized_player_row(row, canonical_team, multi_team_shares.get(player_id.upper()))
-                    if _is_multi_team_marker(team):
-                        player_sheet_rows[sheet][key] = canonical_row
-                    else:
-                        player_sheet_rows[sheet].setdefault(key, canonical_row)
+                    player_sheet_rows[sheet].setdefault(key, canonical_row)
+                    if sheet == _BASE_PLAYER_SEASON_SHEET:
+                        team_rosters.setdefault(key[1], []).append(canonical_row)
 
             if sheet in team_sheet_rows and abbreviation:
                 team_sheet_rows[sheet].setdefault(abbreviation.upper(), row)
 
             if sheet == _BASE_PLAYER_SEASON_SHEET and player_id and team:
-                if not canonical_team or _is_multi_team_marker(team):
+                if not canonical_team:
                     continue
                 key = _player_team_key(player_id, canonical_team)
                 canonical_row = _canonicalized_player_row(row, canonical_team, multi_team_shares.get(player_id.upper()))
                 merged = rows_by_key.setdefault(key, {"player_id": player_id, "team": key[1], "season": season})
-                _merge_sheet_row(merged, prefix, canonical_row)
+                _merge_sheet_row(merged, prefix, canonical_row, overwrite=_is_multi_team_marker(team))
                 continue
 
             if player_id and team:
@@ -496,6 +494,7 @@ def _cached_season_context_index(database_path: str, season: int, offsets_path: 
         season=season,
         source_database_path=database,
         comparison_rows=comparison_rows,
+        metric_rankings=MetricRankings(comparison_rows),
         evidence_by_key=evidence_by_key,
         field_index=dict(field_index),
     )
@@ -517,9 +516,14 @@ def _build_evidence_index(
         missing: list[str] = []
         identity = identity_by_player_id.get(player_id)
         if not identity:
-            raise KeyError(f"missing player identity row: {player_id}")
-        season_info = _required_indexed_player_row(player_sheet_rows, _BASE_PLAYER_SEASON_SHEET, key, season)
-        per_game = _required_indexed_player_row(player_sheet_rows, _PLAYER_PER_GAME_SHEET, key, season)
+            missing.append(_PLAYER_IDENTITY_SHEET)
+            context_row = source_context_by_key.get(key, {})
+            identity = {
+                "player_id": player_id,
+                "player": context_row.get("player") or player_id,
+            }
+        season_info = _required_indexed_player_row(player_sheet_rows, _BASE_PLAYER_SEASON_SHEET, key, season, missing)
+        per_game = _required_indexed_player_row(player_sheet_rows, _PLAYER_PER_GAME_SHEET, key, season, missing)
         totals = _optional_indexed_player_row(player_sheet_rows, _PLAYER_TOTALS_SHEET, key, missing)
         per_36 = _optional_indexed_player_row(player_sheet_rows, _PLAYER_PER_36_SHEET, key, missing)
         per_100 = _optional_indexed_player_row(player_sheet_rows, _PLAYER_PER_100_SHEET, key, missing)
@@ -528,7 +532,7 @@ def _build_evidence_index(
         play_by_play = _optional_indexed_player_row(player_sheet_rows, _PLAYER_PLAY_BY_PLAY_SHEET, key, missing)
         roster_rows = tuple(team_rosters.get(team, ()))
         if not roster_rows:
-            raise KeyError(f"missing team roster rows for team={team} season={season}")
+            missing.append("Team Roster")
         source_player_id = str(season_info.get("player_id") or identity.get("player_id") or player_id).strip() or player_id
         source_team = str(season_info.get("team") or team).strip().upper() or team
         evidence_by_key[key] = PlayerEvidence(
@@ -561,12 +565,13 @@ def _required_indexed_player_row(
     sheet: str,
     key: tuple[str, str],
     season: int,
+    missing_sources: list[str],
 ) -> dict[str, Any]:
     row = rows_by_sheet.get(sheet, {}).get(key, {})
     if row:
         return row
-    player_id, team = key
-    raise KeyError(f"missing required {sheet} row for player_id={player_id} team={team} season={season}")
+    missing_sources.append(sheet)
+    return {}
 
 
 def _optional_indexed_player_row(
@@ -760,11 +765,17 @@ def _row_team(row: dict[str, Any]) -> str:
     return str(row.get("tm") or "").strip()
 
 
-def _merge_sheet_row(target: dict[str, Any], prefix: str, row: dict[str, Any], *, include_bare: bool = True) -> None:
+def _merge_sheet_row(target: dict[str, Any], prefix: str, row: dict[str, Any], *, include_bare: bool = True, overwrite: bool = False) -> None:
     for column, value in row.items():
         if value is None:
             continue
-        target.setdefault(f"{prefix}.{column}", value)
+        prefixed_key = f"{prefix}.{column}"
+        if overwrite:
+            target[prefixed_key] = value
+            if include_bare:
+                target[column] = value
+            continue
+        target.setdefault(prefixed_key, value)
         if include_bare and column not in target:
             target[column] = value
 
@@ -851,3 +862,5 @@ __all__ = [
     "season_context_index",
     "selected_year_player_comparison_rows",
 ]
+
+

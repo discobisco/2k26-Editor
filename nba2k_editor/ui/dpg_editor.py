@@ -333,8 +333,6 @@ class DpgEditorApp:
         progress = 1.0 if total <= 0 else max(0.0, min(1.0, current / total))
         overlay = "complete" if total <= 0 or current >= total else f"{current}/{total}"
         self._show_operation_popup(dpg, message, progress=progress, overlay=overlay)
-        if hasattr(dpg, "render_dearpygui_frame") and current < total:
-            dpg.render_dearpygui_frame()
 
     def _bind_item_theme(self, dpg: Any, item: str, theme: str) -> None:
         if theme and dpg.does_item_exist(item) and dpg.does_item_exist(theme):
@@ -1039,7 +1037,11 @@ class DpgEditorApp:
             dpg.add_input_text(tag=self._generator_table_tag(), default_value=self._generator_display_text(state), multiline=True, readonly=True, width=-1, height=-1)
 
     def _load_player_generator_source(self, dpg: Any) -> None:
-        self.player_generator_state = self._generator_display_module().load_generator_display_state()
+        display = self._generator_display_module()
+        try:
+            self.player_generator_state = display.load_generator_display_state()
+        except Exception as exc:
+            self.player_generator_state = display.empty_generator_display_state(f"Load failed: {exc}")
         self._sync_player_generator_status(dpg)
 
     def _refresh_player_generator_dropdowns(self, dpg: Any) -> None:
@@ -1061,27 +1063,34 @@ class DpgEditorApp:
 
     def _display_generator_preview(self, dpg: Any) -> None:
         display = self._generator_display_module()
-        if not getattr(self.player_generator_state, "source_loaded", False):
-            self.player_generator_state = display.load_generator_display_state()
-            self._sync_player_generator_status(dpg)
-        self._refresh_player_generator_dropdowns(dpg)
-        self.player_generator_state = display.generate_generator_preview_display_state(self.player_generator_state)
+        try:
+            if not getattr(self.player_generator_state, "source_loaded", False):
+                self.player_generator_state = display.load_generator_display_state()
+                self._sync_player_generator_status(dpg)
+            self._refresh_player_generator_dropdowns(dpg)
+            self.player_generator_state = display.generate_generator_preview_display_state(self.player_generator_state)
+        except Exception as exc:
+            self.player_generator_state = display.empty_generator_display_state(f"Preview failed: {exc}")
         self._sync_player_generator_status(dpg)
 
     def _import_generator_to_game_display(self, dpg: Any, *, match_existing_player_names: bool = False) -> None:
         display = self._generator_display_module()
-        if not getattr(self.player_generator_state, "source_loaded", False):
-            self.player_generator_state = display.load_generator_display_state()
-            self._sync_player_generator_status(dpg)
-        self._refresh_player_generator_dropdowns(dpg)
         self._show_operation_popup(dpg, "Importing generated players...", progress=0.0, overlay="0/0")
         progress_callback = lambda current, total, message: self._update_operation_progress(dpg, current, total, message)
-        self.player_generator_state = display.import_generator_to_game_display_state(
-            self.model,
-            self.player_generator_state,
-            match_existing_player_names=match_existing_player_names,
-            progress_callback=progress_callback,
-        )
+        try:
+            self.player_generator_state = display.import_generator_to_game_display_state(
+                self.model,
+                self.player_generator_state,
+                match_existing_player_names=match_existing_player_names,
+                progress_callback=progress_callback,
+            )
+        except Exception as exc:
+            message = f"Import failed: {exc}"
+            self._update_operation_progress(dpg, 0, 1, message)
+            if hasattr(dpg, "configure_item") and dpg.does_item_exist(self._operation_progress_tag()):
+                dpg.configure_item(self._operation_progress_tag(), overlay="failed")
+            self._safe_set(dpg, self._player_generator_tag("status"), message)
+            return
         self._update_operation_progress(dpg, 1, 1, getattr(self.player_generator_state, "status", "Imported generated players."))
         self._sync_player_generator_status(dpg)
 
@@ -1314,44 +1323,45 @@ class DpgEditorApp:
         from nba2k_editor.ui.theme import apply_base_theme, ensure_editor_themes
 
         dpg.create_context()
-        try:
-            apply_base_theme()
-            self.item_themes = ensure_editor_themes()
-            with dpg.window(
-                label=APP_TITLE,
-                tag="main_window",
-                width=APP_VIEWPORT_WIDTH,
-                height=APP_VIEWPORT_HEIGHT,
-                no_title_bar=True,
-                no_resize=True,
-                no_move=True,
-                no_collapse=True,
-                no_scrollbar=True,
-            ):
-                with dpg.group(horizontal=True):
-                    with dpg.child_window(width=210, height=-1, border=False):
-                        self._add_nav_button(dpg, "Home", "Home")
-                        for domain in NAV_ORDER:
-                            if domain in APP_SCREENS:
-                                self._add_nav_button(dpg, domain, self._display_label(domain))
-                    with dpg.child_window(width=-1, height=-1, border=False):
-                        self._build_home_screen(dpg, show=True)
-                        for domain in (*EDITOR_DOMAINS, PLAYER_GENERATOR_SCREEN):
-                            self._build_domain_screen(dpg, domain, show=False)
-            self._refresh_nav_state(dpg)
+        apply_base_theme()
+        self.item_themes = ensure_editor_themes()
+        with dpg.window(
+            label=APP_TITLE,
+            tag="main_window",
+            width=APP_VIEWPORT_WIDTH,
+            height=APP_VIEWPORT_HEIGHT,
+            no_title_bar=True,
+            no_resize=True,
+            no_move=True,
+            no_collapse=True,
+            no_scrollbar=True,
+        ):
+            with dpg.group(horizontal=True):
+                with dpg.child_window(width=210, height=-1, border=False):
+                    self._add_nav_button(dpg, "Home", "Home")
+                    for domain in NAV_ORDER:
+                        if domain in APP_SCREENS:
+                            self._add_nav_button(dpg, domain, self._display_label(domain))
+                with dpg.child_window(width=-1, height=-1, border=False):
+                    self._build_home_screen(dpg, show=True)
+                    for domain in (*EDITOR_DOMAINS, PLAYER_GENERATOR_SCREEN):
+                        self._build_domain_screen(dpg, domain, show=False)
+        self._refresh_nav_state(dpg)
 
-            dpg.create_viewport(title=APP_TITLE, width=APP_VIEWPORT_WIDTH, height=APP_VIEWPORT_HEIGHT)
-            dpg.setup_dearpygui()
-            dpg.show_viewport()
-            dpg.set_primary_window("main_window", True)
-            print("DPG_OPENED NBA2K Editor", flush=True)
-            if load_on_start:
-                self._attach_and_load_all(dpg)
-            while dpg.is_dearpygui_running():
-                self._poll_background_scan(dpg)
-                dpg.render_dearpygui_frame()
-        finally:
-            dpg.destroy_context()
+        dpg.create_viewport(title=APP_TITLE, width=APP_VIEWPORT_WIDTH, height=APP_VIEWPORT_HEIGHT)
+        dpg.setup_dearpygui()
+        dpg.show_viewport()
+        dpg.set_primary_window("main_window", True)
+        print("DPG_OPENED NBA2K Editor", flush=True)
+        if load_on_start:
+            self._attach_and_load_all(dpg)
+        while dpg.is_dearpygui_running():
+            self._poll_background_scan(dpg)
+            dpg.render_dearpygui_frame()
 
 
 __all__ = ["DpgEditorApp", "EDITOR_DOMAINS", "FieldEntry", "RecordListItem", "verify_edits"]
+
+
+
+

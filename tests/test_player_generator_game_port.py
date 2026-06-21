@@ -10,8 +10,8 @@ GENERATOR_ROOT = REPO_ROOT / "nba2k_editor" / "Player Generator"
 sys.path.insert(0, str(GENERATOR_ROOT))
 
 from contracts import GeneratorInputContract, OutputTarget  # noqa: E402
-from game_port import _generated_player_name_matches, _identity, apply_generated_player_proposal_to_game, import_generated_players_to_game, player_team_slot_indices_for_generated, validate_generated_player_names_match_offsets  # noqa: E402
-from player_generator import generate_player_proposal_from_index, generate_player_proposals_from_index, season_context_index  # noqa: E402
+from game_port import _generated_player_name_matches, _identity, apply_generated_player_proposal_to_game, apply_generated_players_to_game, apply_generated_rows_to_game, import_generated_players_to_game, player_team_slot_indices_for_generated, validate_generated_player_names_match_offsets  # noqa: E402
+from player_generator import _build_evidence_index, generate_player_proposal_from_index, generate_player_proposals_from_index, season_context_index  # noqa: E402
 from player_rules import _split_player_name  # noqa: E402
 from source_data import GeneratorSourceInventory  # noqa: E402
 from nba2k_editor.core.field_io import _display_to_raw_value, _raw_to_display_value  # noqa: E402
@@ -98,6 +98,142 @@ class PlayerGeneratorGamePortTests(unittest.TestCase):
         self.assertIn("3POINT", {write[3] for write in model.writes})
         self.assertTrue(any(write[3] == "UNDERBASKET" and write[4] in {"Cold", "Neutral", "Hot"} for write in model.writes))
 
+    def test_match_existing_names_uses_displayed_proposals_and_matches_loaded_index_zero(self) -> None:
+        contract = GeneratorInputContract(
+            season=2025,
+            source_root=self.source_root,
+            output_target=OutputTarget.OVERWRITE_CURRENT_ROSTER,
+            roster_label="test live roster",
+        ).validate()
+        context = season_context_index(contract)
+        displayed_proposal = generate_player_proposal_from_index(context, player_id="curryst01", team="GSW")
+        model = RecordingModel()
+        setattr(model, "loaded_items", {"Players": {"[0] Stephen Curry": SimpleNamespace(index=0, label="[0] Stephen Curry", display_label="[0] Stephen Curry")}})
+
+        import game_port as game_port_module
+
+        original_generate = game_port_module.generate_player_proposals_from_index
+        try:
+            def fail_generate(*_args, **_kwargs):
+                raise AssertionError("matched-name import regenerated instead of using displayed proposals")
+
+            game_port_module.generate_player_proposals_from_index = fail_generate
+            result = import_generated_players_to_game(
+                model,
+                contract,
+                generated_players=(displayed_proposal,),
+                team_filter="GSW",
+                match_existing_player_names=True,
+            )
+        finally:
+            game_port_module.generate_player_proposals_from_index = original_generate
+
+        self.assertEqual(1, result.apply_result.generated_count)
+        self.assertGreater(result.apply_result.attempted, 0)
+        self.assertEqual({0}, {write[0] for write in model.writes})
+
+    def test_match_existing_names_skips_bad_displayed_proposal_name_extraction_before_writing_first_match(self) -> None:
+        class BadDisplayedProposal:
+            player_id = "bad00"
+            team = "GSW"
+            identity = {"player": "Bad Displayed"}
+
+            def by_field_key(self):
+                raise RuntimeError("bad displayed proposal name payload")
+
+            @property
+            def field_candidates(self):
+                raise RuntimeError("bad displayed proposal rows")
+
+        contract = GeneratorInputContract(
+            season=2025,
+            source_root=self.source_root,
+            output_target=OutputTarget.OVERWRITE_CURRENT_ROSTER,
+            roster_label="test live roster",
+        ).validate()
+        context = season_context_index(contract)
+        good = generate_player_proposal_from_index(context, player_id="curryst01", team="GSW")
+        model = RecordingModel()
+        setattr(model, "loaded_items", {"Players": {"[0] Stephen Curry": SimpleNamespace(index=0, label="[0] Stephen Curry", display_label="[0] Stephen Curry")}})
+
+        result = import_generated_players_to_game(
+            model,
+            contract,
+            generated_players=(BadDisplayedProposal(), good),
+            match_existing_player_names=True,
+        )
+
+        self.assertEqual(1, result.apply_result.generated_count)
+        self.assertEqual(0, result.apply_result.failed)
+        self.assertEqual({0}, {write[0] for write in model.writes})
+
+    def test_supplied_displayed_proposals_do_not_prefetch_authored_index_before_matching(self) -> None:
+        contract = GeneratorInputContract(
+            season=2025,
+            source_root=self.source_root,
+            output_target=OutputTarget.OVERWRITE_CURRENT_ROSTER,
+            roster_label="test live roster",
+        ).validate()
+        context = season_context_index(contract)
+        displayed = generate_player_proposal_from_index(context, player_id="curryst01", team="GSW")
+        model = RecordingModel()
+        setattr(model, "loaded_items", {"Players": {"[0] Stephen Curry": SimpleNamespace(index=0, label="[0] Stephen Curry", display_label="[0] Stephen Curry")}})
+
+        import game_port as game_port_module
+
+        original_authored = game_port_module.authored_player_field_index
+        try:
+            def fail_authored(*_args, **_kwargs):
+                raise RuntimeError("authored field index unavailable before write")
+
+            game_port_module.authored_player_field_index = fail_authored
+            result = import_generated_players_to_game(
+                model,
+                contract,
+                generated_players=(displayed,),
+                match_existing_player_names=True,
+            )
+        finally:
+            game_port_module.authored_player_field_index = original_authored
+
+        self.assertEqual(1, result.apply_result.generated_count)
+        self.assertEqual(1, result.apply_result.applied_players)
+        self.assertEqual(0, len(model.writes))
+        self.assertGreater(result.apply_result.failed, 0)
+
+    def test_import_generated_players_to_game_uses_supplied_generated_proposals_without_regenerating(self) -> None:
+        contract = GeneratorInputContract(
+            season=2025,
+            source_root=self.source_root,
+            output_target=OutputTarget.OVERWRITE_CURRENT_ROSTER,
+            roster_label="test live roster",
+        ).validate()
+        context = season_context_index(contract)
+        proposal = generate_player_proposal_from_index(context, player_id="curryst01", team="GSW")
+        model = RecordingModel()
+
+        import game_port as game_port_module
+
+        original_generate = game_port_module.generate_player_proposals_from_index
+        try:
+            def fail_generate(*_args, **_kwargs):
+                raise AssertionError("import regenerated instead of using supplied proposals")
+
+            game_port_module.generate_player_proposals_from_index = fail_generate
+            result = import_generated_players_to_game(
+                model,
+                contract,
+                generated_players=(proposal,),
+                player_indices=(12,),
+            )
+        finally:
+            game_port_module.generate_player_proposals_from_index = original_generate
+
+        self.assertTrue(result.ok)
+        self.assertEqual(1, result.apply_result.generated_count)
+        self.assertGreater(len(model.writes), 0)
+        self.assertEqual({12}, {write[0] for write in model.writes})
+
     def test_import_generated_players_to_game_uses_no_readback_writer_when_available(self) -> None:
         model = FastRecordingModel()
         contract = GeneratorInputContract(
@@ -114,6 +250,38 @@ class PlayerGeneratorGamePortTests(unittest.TestCase):
         self.assertEqual([], model.writes)
         self.assertEqual(result.apply_result.attempted, len(model.fast_writes))
         self.assertIn("FIRSTNAME", {write[3] for write in model.fast_writes})
+
+    def test_malformed_generated_row_records_failure_without_aborting_import(self) -> None:
+        model = RecordingModel()
+        result = apply_generated_rows_to_game(
+            model,
+            (SimpleNamespace(field_key="Attributes/3POINT"),),
+            player_index=0,
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(1, result.failed)
+        self.assertIn("display_value/value", str(result.fields[0].error))
+        self.assertEqual([], model.writes)
+
+    def test_missing_identity_or_roster_data_records_missing_sources_without_aborting_generation(self) -> None:
+        evidence = _build_evidence_index(
+            season=2025,
+            keys=(("missing01", "GSW"),),
+            identity_by_player_id={},
+            player_sheet_rows={
+                "Player Season Info": {("missing01", "GSW"): {"player_id": "missing01", "team": "GSW", "season": 2025, "player": "Missing Player"}},
+                "Player Per Game": {("missing01", "GSW"): {"player_id": "missing01", "team": "GSW", "season": 2025, "pts_per_game": 1.0}},
+            },
+            team_sheet_rows={},
+            team_rosters={},
+            source_context_by_key={("missing01", "GSW"): {"player_id": "missing01", "team": "GSW", "player": "Missing Player"}},
+        )[("missing01", "GSW")]
+
+        self.assertEqual("missing01", evidence.player_id)
+        self.assertEqual("GSW", evidence.team)
+        self.assertIn("Player Info", evidence.missing_sources)
+        self.assertIn("Team Roster", evidence.missing_sources)
 
     def test_import_generated_players_to_game_can_match_existing_loaded_player_names(self) -> None:
         contract = GeneratorInputContract(
@@ -257,6 +425,10 @@ class PlayerGeneratorGamePortTests(unittest.TestCase):
         shares = {share["team"]: share["stat_share"] for share in evidence.source_context["multi_team_stat_shares"]}
         self.assertAlmostEqual(43 / 60, shares["GSW"], places=6)
         self.assertAlmostEqual(17 / 60, shares["MIA"], places=6)
+        self.assertEqual("2TM", evidence.season_info["source_team"])
+        self.assertEqual("GSW", evidence.season_info["team"])
+        self.assertEqual("2TM", evidence.source_context["source_team"])
+        self.assertEqual("GSW", evidence.source_context["team"])
         self.assertEqual("2TM", evidence.totals["source_team"])
         self.assertEqual(60, evidence.totals["g"])
         expected_team_pts = ((113.8 * 43) + (110.6 * 17)) / 60
@@ -651,3 +823,12 @@ class PlayerGeneratorGamePortTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+
+
+
+
+
+

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -33,6 +34,31 @@ class PlayerRuleResult:
 @dataclass(frozen=True)
 class PlayerProfileResult:
     values: dict[str, ProfileValue]
+
+
+class MetricRankings:
+    def __init__(self, rows: Iterable[dict[str, Any]]) -> None:
+        self._rows = tuple(row for row in rows if isinstance(row, dict))
+        self._values_by_path: dict[str, tuple[float, ...]] = {}
+
+    def rank(self, value: float, path: str) -> float:
+        clean = str(path).removeprefix("!")
+        values = self._values_by_path.get(clean)
+        if values is None:
+            values = tuple(
+                sorted(
+                    candidate
+                    for row in self._rows
+                    for candidate in (_row_value(row, clean),)
+                    if candidate is not None
+                )
+            )
+            self._values_by_path[clean] = values
+        if len(values) > 1:
+            below = bisect_left(values, value)
+            equal = bisect_right(values, value) - below
+            return (below + (equal - 1) / 2) / (len(values) - 1)
+        return _score_unit(value)
 
 
 def _number(source: Any, key: str) -> float | None:
@@ -295,3 +321,4 @@ def _profile_value(result: dict[str, Any]) -> ProfileValue:
         source_rule=str(result["source_rule"]),
         evidence_keys=tuple(str(key) for key in result.get("evidence_keys", ())),
     )
+

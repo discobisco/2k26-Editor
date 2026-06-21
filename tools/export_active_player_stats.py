@@ -75,6 +75,13 @@ def main() -> int:
     stat_detail_entries = [entry for entry in season_id_entries if model.is_player_selected_stat_detail_entry(entry)]
     if not stat_detail_entries:
         raise SystemExit("no selected stat detail fields found in Players / Stats / Season IDs")
+    position_entries = {
+        str(entry.normalized_name).upper(): entry
+        for section_groups in grouped.values()
+        for group_entries in section_groups.values()
+        for entry in group_entries
+        if str(entry.normalized_name).upper() in {"POSITION", "SECONDARYPOSITION"}
+    }
     attribute_entries = [entry for group_entries in grouped.get("Attributes", {}).values() for entry in group_entries]
     if not attribute_entries:
         raise SystemExit("no Players / Attributes fields found")
@@ -103,6 +110,8 @@ def main() -> int:
     ]
     fieldnames = [
         *identity_fieldnames,
+        "primary_position",
+        "secondary_position",
         "current_year_stat_id",
     ] + [entry.display_name for entry in stat_detail_entries]
     attribute_fieldnames = [*identity_fieldnames, *[f"{entry.group} / {entry.display_name}" for entry in attribute_entries]]
@@ -134,6 +143,15 @@ def main() -> int:
                 "player_index": player.index,
                 "player_label": player.label,
             }
+            for column, normalized_name in (("primary_position", "POSITION"), ("secondary_position", "SECONDARYPOSITION")):
+                entry = position_entries.get(normalized_name)
+                if entry is None:
+                    row[column] = ""
+                    continue
+                try:
+                    row[column] = _display(model.read_entry_value(entry, index=player.index))
+                except Exception as exc:
+                    row[column] = f"ERR: {exc}"
             stat_id = None
             for entry in stat_id_entries:
                 if entry.display_name == selector or entry.normalized_name == "CURRENTYEARSTATID":

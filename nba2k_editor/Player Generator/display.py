@@ -45,6 +45,7 @@ class GeneratorDisplayState:
     rows: tuple[GeneratorFieldDisplayRow, ...] = ()
     field_columns: tuple[str, ...] = ()
     player_rows: tuple[GeneratorPlayerDisplayRow, ...] = ()
+    generated_proposals: tuple[Any, ...] = ()
 
 
 def empty_generator_display_state(status: str = "Load generator source data to display player options.") -> GeneratorDisplayState:
@@ -100,6 +101,12 @@ def update_generator_display_selection(
         player = state.selected_player if state.selected_player in players else (players[0] if players else "")
     else:
         player = _require_option(selected_player, players, "player")
+    selection_changed = (
+        season != state.selected_season
+        or source_team != state.selected_source_team
+        or player != state.selected_player
+        or players != state.players
+    )
     return replace(
         state,
         selected_season=season,
@@ -107,10 +114,11 @@ def update_generator_display_selection(
         selected_source_team=source_team,
         players=players,
         selected_player=player,
-        rows=(),
-        field_columns=(),
-        player_rows=(),
-        status=_option_status(season, source_team, players),
+        rows=() if selection_changed else state.rows,
+        field_columns=() if selection_changed else state.field_columns,
+        player_rows=() if selection_changed else state.player_rows,
+        generated_proposals=() if selection_changed else state.generated_proposals,
+        status=_option_status(season, source_team, players) if selection_changed else state.status,
     )
 
 
@@ -154,6 +162,7 @@ def generate_generator_preview_display_state(state: GeneratorDisplayState) -> Ge
         rows=(),
         field_columns=tuple(columns),
         player_rows=tuple(rows),
+        generated_proposals=batch.proposals,
         status=f"Displaying {len(rows)} generated players and {len(columns)} data columns for {selected.selected_season} / {selected.selected_source_team}.",
     )
 
@@ -165,20 +174,24 @@ def import_generator_to_game_display_state(model: Any, state: GeneratorDisplaySt
     from contracts import GeneratorInputContract, OutputTarget
     from game_port import import_generated_players_to_game
 
+    import_state = state
+    if not import_state.generated_proposals:
+        return replace(import_state, status="Display preview before importing generated players.")
     import_kwargs: dict[str, Any] = {
-        "team_filter": None if state.selected_source_team == _SOURCE_TEAM_ALL else state.selected_source_team,
+        "generated_players": import_state.generated_proposals,
+        "team_filter": None if import_state.selected_source_team == _SOURCE_TEAM_ALL else import_state.selected_source_team,
         "match_existing_player_names": match_existing_player_names,
     }
     if progress_callback is not None:
         import_kwargs["progress_callback"] = progress_callback
     result = import_generated_players_to_game(
         model,
-        GeneratorInputContract(int(state.selected_season), _SOURCE_ROOT, OutputTarget.OVERWRITE_CURRENT_ROSTER, f"Player Generator {state.selected_season}"),
+        GeneratorInputContract(int(import_state.selected_season), _SOURCE_ROOT, OutputTarget.OVERWRITE_CURRENT_ROSTER, f"Player Generator {import_state.selected_season}"),
         **import_kwargs,
     )
     applied = result.apply_result
     mode = " by matching loaded Players names" if match_existing_player_names else ""
-    return replace(state, status=f"Imported {applied.applied_players}/{applied.generated_count} generated players{mode}. Fields: {applied.succeeded} ok, {applied.failed} failed.")
+    return replace(import_state, status=f"Imported {applied.applied_players}/{applied.generated_count} generated players{mode}. Fields: {applied.succeeded} ok, {applied.failed} failed.")
 
 
 def _field_column(candidate: Any) -> str:
@@ -204,47 +217,34 @@ def _season_options(database: Path) -> tuple[str, ...]:
 
 
 def _source_team_options(database: Path, season: int) -> tuple[str, ...]:
-    table = _table_name(database, _BASE_PLAYER_SEASON_SHEET)
-    with sqlite3.connect(database) as connection:
-        rows = connection.execute(
-            f'SELECT DISTINCT team FROM "{table}" WHERE season = ? AND team IS NOT NULL AND TRIM(team) != "" ORDER BY team',
-            (int(season),),
-        ).fetchall()
-    return tuple(str(row[0]).strip().upper() for row in rows if str(row[0]).strip().upper() not in _MULTI_TEAM_MARKERS)
+    context = _generator_context_for_season(season)
+    return tuple(sorted({team for _player_id, team in context.player_keys()}))
 
 
 def _player_options(database: Path, season: int, source_team: str) -> tuple[str, ...]:
-    table = _table_name(database, _BASE_PLAYER_SEASON_SHEET)
-    params: list[Any] = [int(season)]
-    where = 'season = ? AND player_id IS NOT NULL AND TRIM(player_id) != "" AND player IS NOT NULL AND TRIM(player) != ""'
-    if source_team and source_team != _SOURCE_TEAM_ALL:
-        where += " AND UPPER(team) = ?"
-        params.append(source_team.upper())
-    with sqlite3.connect(database) as connection:
-        rows = connection.execute(
-            f'SELECT player, team, player_id FROM "{table}" WHERE {where} ORDER BY player COLLATE NOCASE, team COLLATE NOCASE',
-            params,
-        ).fetchall()
+    context = _generator_context_for_season(season)
+    team_filter = None if not source_team or source_team == _SOURCE_TEAM_ALL else source_team
     labels: list[str] = []
-    seen_player_ids: set[str] = set()
-    seen_team_rows: set[tuple[str, str]] = set()
-    all_source_teams = not source_team or source_team == _SOURCE_TEAM_ALL
-    for player, team, player_id in rows:
-        team_key = str(team or "").strip().upper()
-        player_id_key = str(player_id).strip()
-        if not team_key or team_key in _MULTI_TEAM_MARKERS or not player_id_key:
-            continue
-        if all_source_teams:
-            if player_id_key in seen_player_ids:
-                continue
-            seen_player_ids.add(player_id_key)
-        else:
-            key = (player_id_key, team_key)
-            if key in seen_team_rows:
-                continue
-            seen_team_rows.add(key)
-        labels.append(_player_label(str(player).strip(), team_key, player_id_key))
-    return tuple(labels)
+    for player_id, team in context.player_keys(team_filter=team_filter):
+        evidence = context.evidence_for(player_id=player_id, team=team)
+        source_player_id = str(evidence.player_id or player_id).strip()
+        source_team = str(evidence.team or team).strip().upper()
+        player_name = str(evidence.identity.get("player") or evidence.season_info.get("player") or source_player_id).strip()
+        labels.append(_player_label(player_name, source_team, source_player_id))
+    return tuple(sorted(labels, key=str.casefold))
+
+
+def _generator_context_for_season(season: int) -> Any:
+    _ensure_generator_import_path()
+    from contracts import GeneratorInputContract, OutputTarget
+    from player_generator import season_context_index
+
+    contract = GeneratorInputContract(
+        season=int(season),
+        source_root=_SOURCE_ROOT,
+        output_target=OutputTarget.PREVIEW,
+    )
+    return season_context_index(contract)
 
 
 def _table_name(database: Path, sheet_name: str) -> str:
@@ -294,3 +294,4 @@ __all__ = [
     "load_generator_display_state",
     "update_generator_display_selection",
 ]
+

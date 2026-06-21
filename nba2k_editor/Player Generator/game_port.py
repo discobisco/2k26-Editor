@@ -22,7 +22,7 @@ class GamePortFieldResult:
     group: str
     normalized_name: str
     display_name: str
-    attempted_value: int | str
+    attempted_value: int | str | None
     readback_value: Any
     ok: bool
     error: str | None = None
@@ -95,6 +95,7 @@ def import_generated_players_to_game(
     model: Any,
     contract: GeneratorInputContract,
     *,
+    generated_players: Iterable[Any] | None = None,
     team_filter: str | None = None,
     player_indices: Iterable[int] | None = None,
     match_existing_player_names: bool = False,
@@ -106,22 +107,27 @@ def import_generated_players_to_game(
     if validated.output_target is not OutputTarget.OVERWRITE_CURRENT_ROSTER:
         raise ValueError("import to game requires overwrite_current_roster output target")
 
-    context = season_context_index(validated, offsets_path=offsets_path)
-    batch = generate_player_proposals_from_index(context, team_filter=None if match_existing_player_names else team_filter)
+    if generated_players is None:
+        context = season_context_index(validated, offsets_path=offsets_path)
+        batch = generate_player_proposals_from_index(context, team_filter=team_filter)
+        generated_tuple = batch.proposals
+        field_index = context.field_index
+    else:
+        generated_tuple = tuple(generated_players)
+        field_index = None
 
-    validate_generated_player_names_match_offsets(batch.proposals, field_index=context.field_index)
-    generated_players = batch.proposals
+    if stop_on_error:
+        validate_generated_player_names_match_offsets(generated_tuple, field_index=field_index)
     if match_existing_player_names:
-        if player_indices is not None:
-            raise ValueError("match_existing_player_names cannot be combined with explicit player_indices")
-        matched = _generated_player_name_matches(model, batch.proposals)
-        generated_players = tuple(generated for generated, _index in matched)
+        player_indices = None
+        matched = _generated_player_name_matches(model, generated_tuple)
+        generated_tuple = tuple(generated for generated, _index in matched)
         player_indices = tuple(index for _generated, index in matched)
     apply_result = apply_generated_players_to_game(
         model,
-        generated_players,
+        generated_tuple,
         player_indices=player_indices,
-        field_index=context.field_index,
+        field_index=field_index,
         include_sections=_MATCHED_NAME_IMPORT_SECTIONS if match_existing_player_names else None,
         stop_on_error=stop_on_error,
         progress_callback=progress_callback,
@@ -211,9 +217,16 @@ def _generated_player_name_matches(model: Any, generated_players: Iterable[Any])
     used_indices: set[int] = set()
     matches: list[tuple[Any, int]] = []
     for generated in generated_players:
-        for key in _generated_player_name_keys(generated):
+        try:
+            keys = _generated_player_name_keys(generated)
+        except Exception:
+            continue
+        for key in keys:
             for player in players_by_name.get(key, ()):
-                player_index = int(player.index)
+                try:
+                    player_index = int(getattr(player, "index"))
+                except Exception:
+                    continue
                 if player_index in used_indices:
                     continue
                 matches.append((generated, player_index))
@@ -250,9 +263,21 @@ _NAME_SUFFIXES = {"JR", "SR", "II", "III", "IV", "V"}
 
 def _loaded_players_by_name_key(model: Any) -> dict[str, tuple[Any, ...]]:
     raw: dict[str, list[Any]] = {}
-    for label, item in getattr(model, "loaded_items", {}).get("Players", {}).items():
+    loaded = getattr(model, "loaded_items", {})
+    players = loaded.get("Players", {}) if isinstance(loaded, dict) else {}
+    if isinstance(players, dict):
+        iterable = players.items()
+    elif isinstance(players, (list, tuple)):
+        iterable = ((_safe_label(item), item) for item in players)
+    else:
+        iterable = ()
+    for label, item in iterable:
         for value in _loaded_player_name_values(label, item):
-            for key in _person_name_keys(value):
+            try:
+                keys = _person_name_keys(value)
+            except Exception:
+                keys = ()
+            for key in keys:
                 raw.setdefault(key, []).append(item)
     return {key: _unique_items_by_index(items) for key, items in raw.items()}
 
@@ -275,23 +300,37 @@ def _unique_items_by_index(items: Iterable[Any]) -> tuple[Any, ...]:
 def _loaded_player_name_values(label: object, item: Any) -> tuple[object, ...]:
     return (
         _strip_record_index_prefix(label),
-        getattr(item, "label", ""),
-        _strip_record_index_prefix(getattr(item, "display_label", "")),
+        _safe_getattr(item, "label"),
+        _strip_record_index_prefix(_safe_getattr(item, "display_label")),
     )
 
 
+def _safe_label(item: Any) -> str:
+    return _strip_record_index_prefix(_safe_getattr(item, "display_label") or _safe_getattr(item, "label"))
+
+
+def _safe_getattr(item: Any, name: str) -> object:
+    try:
+        return getattr(item, name, "")
+    except Exception:
+        return ""
+
+
 def _generated_player_name_keys(generated: Any) -> tuple[str, ...]:
-    identity = getattr(generated, "identity", None)
+    identity = _safe_getattr(generated, "identity")
     identity = identity if isinstance(identity, dict) else {}
-    values: list[object] = [identity.get("player"), getattr(generated, "player_id", "")]
-    by_field = getattr(generated, "by_field_key", None)
+    values: list[object] = [identity.get("player"), _safe_getattr(generated, "player_id")]
+    by_field = _safe_getattr(generated, "by_field_key")
     if callable(by_field):
-        fields = by_field()
+        try:
+            fields = by_field()
+        except Exception:
+            fields = {}
         if isinstance(fields, dict):
             first = fields.get("Vitals/FIRSTNAME")
             last = fields.get("Vitals/LASTNAME")
             if first is not None or last is not None:
-                values.append(f"{getattr(first, 'display_value', '')} {getattr(last, 'display_value', '')}")
+                values.append(f"{_safe_getattr(first, 'display_value')} {_safe_getattr(last, 'display_value')}")
     return _person_name_keys(*values)
 
 
@@ -674,12 +713,15 @@ def apply_generated_rows_to_game(
 ) -> GamePortResult:
     if player_index < 0:
         raise ValueError("player_index must be >= 0")
-    authored = field_index if field_index is not None else authored_player_field_index(offsets_path)
+    authored = field_index
     results: list[GamePortFieldResult] = []
     for row in rows:
         field_key = str(getattr(row, "field_key", "")).strip()
-        attempted_value = _row_value(row)
+        attempted_value: int | str | None = None
         try:
+            attempted_value = _row_value(row)
+            if authored is None:
+                authored = authored_player_field_index(offsets_path)
             entry = authored[field_key]
             write_no_readback = getattr(model, "write_entry_value_no_readback", None)
             if callable(write_no_readback):
@@ -772,3 +814,10 @@ __all__ = [
     "player_team_slot_indices_for_generated",
     "validate_generated_player_names_match_offsets",
 ]
+
+
+
+
+
+
+

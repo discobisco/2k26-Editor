@@ -165,28 +165,77 @@ class DpgEditorBatchSelectionTests(unittest.TestCase):
         self.assertEqual(app._operation_popup_tag(), dpg.focused[-1])
         self.assertEqual(0, dpg.frames)
 
-    def test_generator_import_status_popup_uses_progress_callback(self) -> None:
+    def test_generator_import_failure_stays_in_status_without_escaping(self) -> None:
         model = FakeModel()
         app = DpgEditorApp(model)  # type: ignore[arg-type]
         dpg = FakePopupDpg()
-        app.generator_display_state = SimpleNamespace(source_loaded=True, player_rows=(object(), object()), status="ready")
+        app.generator_display_state = SimpleNamespace(source_loaded=True, player_rows=(object(),), status="ready")
+        dpg.items.add(app._player_generator_tag("status"))
 
         class FakeGeneratorModule:
             def empty_generator_display_state(self, status: str) -> object:
                 return SimpleNamespace(status=status, seasons=(), source_team_filters=(), player_rows=())
 
-            def import_generator_to_game_display_state(self, *_args, **kwargs):
-                progress = kwargs["progress_callback"]
-                progress(1, 2, "Imported 1/2 generated players")
-                progress(2, 2, "Imported 2/2 generated players")
-                return SimpleNamespace(status="Imported 2/2 generated players.", seasons=(), source_team_filters=(), player_rows=())
+            def import_generator_to_game_display_state(self, *_args, **_kwargs):
+                raise RuntimeError("missing source data")
 
         app._generator_display_module = lambda: FakeGeneratorModule()  # type: ignore[method-assign]
         app._import_generator_to_game_display(dpg)
 
-        self.assertEqual(1.0, dpg.values[app._operation_progress_tag()])
-        self.assertEqual("complete", dpg.configs[app._operation_progress_tag()]["overlay"])
-        self.assertIn("Imported 2/2 generated players", str(dpg.values[app._operation_message_tag()]))
+        self.assertIn("Import failed: missing source data", str(dpg.values[app._player_generator_tag("status")]))
+        app = DpgEditorApp(FakeModel())  # type: ignore[arg-type]
+        dpg = FakePopupDpg()
+        dpg.items.add(app._player_generator_tag("status"))
+
+        class FakeGeneratorModule:
+            def empty_generator_display_state(self, status: str) -> object:
+                return SimpleNamespace(status=status, seasons=(), source_team_filters=(), player_rows=())
+
+            def load_generator_display_state(self):
+                raise RuntimeError("missing source data")
+
+        app._generator_display_module = lambda: FakeGeneratorModule()  # type: ignore[method-assign]
+        app._load_player_generator_source(dpg)
+
+        self.assertIn("Load failed: missing source data", str(dpg.values[app._player_generator_tag("status")]))
+
+    def test_generator_preview_failure_stays_in_status_without_escaping(self) -> None:
+        app = DpgEditorApp(FakeModel())  # type: ignore[arg-type]
+        dpg = FakePopupDpg()
+        dpg.items.add(app._player_generator_tag("status"))
+
+        class FakeGeneratorModule:
+            def empty_generator_display_state(self, status: str) -> object:
+                return SimpleNamespace(status=status, seasons=(), source_team_filters=(), player_rows=())
+
+            def load_generator_display_state(self):
+                return SimpleNamespace(source_loaded=True, status="loaded", seasons=("2025",), source_team_filters=("All source teams",), player_rows=())
+
+            def generate_generator_preview_display_state(self, _state):
+                raise RuntimeError("missing source row")
+
+        app._generator_display_module = lambda: FakeGeneratorModule()  # type: ignore[method-assign]
+        app._display_generator_preview(dpg)
+
+        self.assertIn("Preview failed: missing source row", str(dpg.values[app._player_generator_tag("status")]))
+
+    def test_generator_import_failure_stays_in_popup_without_escaping(self) -> None:
+        model = FakeModel()
+        app = DpgEditorApp(model)  # type: ignore[arg-type]
+        dpg = FakePopupDpg()
+        app.generator_display_state = SimpleNamespace(source_loaded=True, player_rows=(object(),), status="ready")
+        dpg.items.add(app._player_generator_tag("status"))
+
+        class FakeGeneratorModule:
+            def import_generator_to_game_display_state(self, *_args, **_kwargs):
+                raise RuntimeError("missing source data")
+
+        app._generator_display_module = lambda: FakeGeneratorModule()  # type: ignore[method-assign]
+        app._import_generator_to_game_display(dpg)
+
+        self.assertEqual("failed", dpg.configs[app._operation_progress_tag()]["overlay"])
+        self.assertIn("Import failed: missing source data", str(dpg.values[app._operation_message_tag()]))
+        self.assertIn("Import failed: missing source data", str(dpg.values[app._player_generator_tag("status")]))
 
     def test_untouched_equal_source_field_does_not_batch_write(self) -> None:
         model = FakeModel()
@@ -260,3 +309,6 @@ class DpgEditorBatchSelectionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
