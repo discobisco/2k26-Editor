@@ -245,6 +245,8 @@ _FIRST_NAME_ALIASES: dict[str, tuple[str, ...]] = {
     "BUB": ("CARLTON",),
     "CARLTON": ("BUB",),
     "BONES": ("NAH", "NAHSHON"),
+    "CAM": ("CAMERON",),
+    "CAMERON": ("CAM",),
     "MO": ("MOHAMED", "MOUHAMED"),
     "MOHAMED": ("MO", "MOUHAMED"),
     "MOUHAMED": ("MO", "MOHAMED"),
@@ -393,6 +395,10 @@ def validate_generated_player_names_match_offsets(
         raise KeyError("; ".join(errors))
 
 
+_BASE_TEAM_COUNT = 30
+_TEAM_SLOT_LIMIT = 15
+
+
 def _player_team_slot_indices_for_generated(model: Any, generated_players: tuple[Any, ...]) -> tuple[tuple[int, ...], int]:
     if not generated_players:
         return (), 0
@@ -408,26 +414,57 @@ def _player_team_slot_indices_for_generated(model: Any, generated_players: tuple
     player_indices_by_team_address = _player_indices_by_team_address(model, players)
 
     assigned_addresses = {int(team.address) for team in team_by_generated_key.values()}
-    target_count = sum(len(player_indices_by_team_address.get(address, ())) for address in assigned_addresses)
+    target_count = sum(min(len(player_indices_by_team_address.get(address, ())), _TEAM_SLOT_LIMIT) for address in assigned_addresses)
     used_offsets: dict[int, int] = {}
     used_player_indices: set[int] = set()
     indices: list[int] = []
+
+    def take_slot(address: int, *, assigned: bool) -> int | None:
+        team_player_indices = player_indices_by_team_address.get(address, ())
+        limit = min(len(team_player_indices), _TEAM_SLOT_LIMIT) if assigned else len(team_player_indices)
+        offset = used_offsets.get(address, 0)
+        while offset < limit and team_player_indices[offset] in used_player_indices:
+            offset += 1
+        used_offsets[address] = offset
+        if offset >= limit:
+            return None
+        player_index = team_player_indices[offset]
+        used_offsets[address] = offset + 1
+        used_player_indices.add(player_index)
+        return player_index
+
+    def take_spill_slot() -> int | None:
+        for team in teams:
+            address = int(team.address)
+            if address in assigned_addresses:
+                continue
+            player_index = take_slot(address, assigned=False)
+            if player_index is not None:
+                return player_index
+        return None
+
     for generated in generated_players:
         generated_key = _generated_team_key(generated)
         live_team = team_by_generated_key.get(generated_key)
-        if live_team is None:
-            continue
-        team_address = int(live_team.address)
-        team_player_indices = player_indices_by_team_address.get(team_address, ())
-        offset = used_offsets.get(team_address, 0)
-        while offset < len(team_player_indices) and team_player_indices[offset] in used_player_indices:
-            offset += 1
-        if offset >= len(team_player_indices):
-            continue
-        player_index = team_player_indices[offset]
-        indices.append(player_index)
-        used_player_indices.add(player_index)
-        used_offsets[team_address] = offset + 1
+        player_index: int | None = None
+
+        for alternate_key in _generated_alternate_team_keys(generated):
+            alternate_team = team_by_generated_key.get(alternate_key)
+            if alternate_team is None:
+                continue
+            alternate_address = int(alternate_team.address)
+            if alternate_address == int(getattr(live_team, "address", -1)):
+                continue
+            player_index = take_slot(alternate_address, assigned=True)
+            if player_index is not None:
+                break
+
+        if player_index is None and live_team is not None:
+            player_index = take_slot(int(live_team.address), assigned=True)
+        if player_index is None:
+            player_index = take_spill_slot()
+        if player_index is not None:
+            indices.append(player_index)
     return tuple(indices), target_count
 
 
@@ -487,7 +524,8 @@ def _team_match_profiles(model: Any, teams: tuple[Any, ...]) -> tuple[_TeamMatch
 
 
 def _assign_generated_teams_to_live_teams(model: Any, generated_team_order: tuple[str, ...], teams: tuple[Any, ...], generated_players: tuple[Any, ...]) -> dict[str, Any]:
-    live_profiles = _team_match_profiles(model, teams)
+    base_teams = tuple(teams[:_BASE_TEAM_COUNT])
+    live_profiles = _team_match_profiles(model, base_teams)
     generated_profiles = _generated_team_profiles(generated_players)
 
     assigned: dict[str, Any] = {}
@@ -673,6 +711,22 @@ def _generated_team_key(generated: Any) -> str:
             if key:
                 return key
     return ""
+
+
+def _generated_alternate_team_keys(generated: Any) -> tuple[str, ...]:
+    primary = _generated_team_key(generated)
+    identity = getattr(generated, "identity", None)
+    shares = identity.get("multi_team_stat_shares") if isinstance(identity, dict) else None
+    if not isinstance(shares, (list, tuple)):
+        return ()
+    keys: list[str] = []
+    for share in shares:
+        if not isinstance(share, dict):
+            continue
+        key = _identity(share.get("team"))
+        if key and key != primary and key not in keys:
+            keys.append(key)
+    return tuple(keys)
 
 
 def _identity(value: object) -> str:

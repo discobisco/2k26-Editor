@@ -19,7 +19,7 @@ from player_rules import (
     derive_player_profile_values,
     derive_player_rule_values,
 )
-from player_rules_core import MetricRankings
+from player_rules import MetricRankings
 from workbook_sqlite import ensure_workbook_sqlite_database, iter_workbook_sqlite_sheet_rows, workbook_sqlite_sheet_names
 
 _GENERATOR_DIR = Path(__file__).resolve().parent

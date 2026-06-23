@@ -7353,25 +7353,6 @@
           }
         },
         {
-          "normalized_name": "CONTESTEDJUMPERMID",
-          "display_name": "Contested Jumper Mid",
-          "versions": {
-            "2K25": {
-              "address": 1002,
-              "length": 7,
-              "startBit": 5,
-              "type": "Integer"
-            },
-            "2K26": {
-              "address": 1081,
-              "hex": "0x439",
-              "length": 7,
-              "startBit": 6,
-              "type": "Integer"
-            }
-          }
-        },
-        {
           "normalized_name": "CONTESTEDJUMPERMIDRANGE",
           "display_name": "Contested Jumper Mid-Range",
           "versions": {
@@ -7764,10 +7745,10 @@
             },
             "2K26": {
               "address": 1060,
-              "bit_length": 6,
+              "bit_length": 7,
               "bit_offset": 7,
               "hex": "0x424",
-              "length": 6,
+              "length": 7,
               "startBit": 7,
               "type": "bitfield"
             }
@@ -7799,10 +7780,10 @@
             },
             "2K26": {
               "address": 1061,
-              "bit_length": 6,
+              "bit_length": 7,
               "bit_offset": 6,
               "hex": "0x425",
-              "length": 6,
+              "length": 7,
               "startBit": 6,
               "type": "bitfield"
             }
@@ -7834,10 +7815,10 @@
             },
             "2K26": {
               "address": 1062,
-              "bit_length": 6,
+              "bit_length": 7,
               "bit_offset": 5,
               "hex": "0x426",
-              "length": 6,
+              "length": 7,
               "startBit": 5,
               "type": "bitfield"
             }
@@ -7904,10 +7885,10 @@
             },
             "2K26": {
               "address": 1064,
-              "bit_length": 6,
+              "bit_length": 7,
               "bit_offset": 7,
               "hex": "0x428",
-              "length": 6,
+              "length": 7,
               "startBit": 7,
               "type": "bitfield"
             }
@@ -7939,10 +7920,10 @@
             },
             "2K26": {
               "address": 1069,
-              "bit_length": 6,
+              "bit_length": 7,
               "bit_offset": 6,
               "hex": "0x42D",
-              "length": 6,
+              "length": 7,
               "startBit": 6,
               "type": "bitfield"
             }
@@ -8079,10 +8060,10 @@
             },
             "2K26": {
               "address": 1070,
-              "bit_length": 6,
+              "bit_length": 7,
               "bit_offset": 5,
               "hex": "0x42E",
-              "length": 6,
+              "length": 7,
               "startBit": 5,
               "type": "bitfield"
             }
@@ -8219,10 +8200,10 @@
             },
             "2K26": {
               "address": 1065,
-              "bit_length": 6,
+              "bit_length": 7,
               "bit_offset": 6,
               "hex": "0x429",
-              "length": 6,
+              "length": 7,
               "startBit": 6,
               "type": "bitfield"
             }
@@ -8707,25 +8688,6 @@
           }
         },
         {
-          "normalized_name": "PUTBACKDUNK",
-          "display_name": "Putback Dunk",
-          "versions": {
-            "2K25": {
-              "address": 973,
-              "length": 7,
-              "startBit": 6,
-              "type": "Integer"
-            },
-            "2K26": {
-              "address": 1052,
-              "hex": "0x41C",
-              "length": 7,
-              "startBit": 7,
-              "type": "Integer"
-            }
-          }
-        },
-        {
           "normalized_name": "SPINLAYUP",
           "display_name": "Spin Layup",
           "versions": {
@@ -8897,25 +8859,6 @@
               "length": 7,
               "startBit": 6,
               "type": "bitfield"
-            }
-          }
-        },
-        {
-          "normalized_name": "STEPBACKJUMPERMID",
-          "display_name": "Stepback Jumper Mid",
-          "versions": {
-            "2K25": {
-              "address": 1004,
-              "length": 7,
-              "startBit": 7,
-              "type": "Integer"
-            },
-            "2K26": {
-              "address": 1084,
-              "hex": "0x43C",
-              "length": 7,
-              "startBit": 0,
-              "type": "Integer"
             }
           }
         },
@@ -9128,25 +9071,6 @@
               "length": 7,
               "startBit": 6,
               "type": "bitfield"
-            }
-          }
-        },
-        {
-          "normalized_name": "DRIVEPULLUPMID",
-          "display_name": "Drive Pull Up Mid",
-          "versions": {
-            "2K25": {
-              "address": 1008,
-              "length": 7,
-              "startBit": 7,
-              "type": "Integer"
-            },
-            "2K26": {
-              "address": 1088,
-              "hex": "0x440",
-              "length": 7,
-              "startBit": 0,
-              "type": "Integer"
             }
           }
         },
@@ -12222,18 +12146,18 @@
               "address": 992,
               "hex": "0x3e0",
               "options": [
-                "无",
-                "基础",
+                "\u65e0",
+                "\u57fa\u7840",
                 "Kevin Durant",
                 "Kawhi Leonard",
                 "Kobe Bryant",
                 "Jaylen Brown",
                 "Jimmy Butler",
                 "Jamal Murray",
-                "职业",
-                "职业2",
-                "普通",
-                "精英",
+                "\u804c\u4e1a",
+                "\u804c\u4e1a2",
+                "\u666e\u901a",
+                "\u7cbe\u82f1",
                 "Kareem Abdul-Jabbar",
                 "Carmelo Anthony",
                 "Jalen Brunson",
@@ -13624,7 +13548,7 @@
               "hex": "0x2C6",
               "length": 8,
               "options": [
-                "无",
+                "\u65e0",
                 "Inspect Ball 1",
                 "Inspect Ball 2",
                 "Inspect Ball 3",
@@ -13791,7 +13715,7 @@
               "hex": "0x31D",
               "length": 8,
               "options": [
-                "无",
+                "\u65e0",
                 "Inspect Ball 1",
                 "Inspect Ball 2",
                 "Inspect Ball 3",

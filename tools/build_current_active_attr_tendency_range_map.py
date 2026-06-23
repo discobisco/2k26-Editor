@@ -245,16 +245,34 @@ def main() -> int:
             bin_out.extend(bin_rows(field, kind, best, rows, feature_by_player, q))
 
     best_rows.sort(key=lambda r: (r["kind"], str(r["field"])))
-    write_csv(DERIVED_DIR / "current_active_attr_tendency_best_stat_ranges_min25_starts.csv", best_rows, ["kind", "field", "best_stat", "r", "abs_r", "n"])
-    write_csv(DERIVED_DIR / "current_active_attr_tendency_best_stat_range_bins_min25_starts.csv", bin_out, ["kind", "field", "best_stat", "r", "n", "value_range", "players", "stat_mean", "stat_median", "stat_min", "stat_max"])
-    (DERIVED_DIR / "current_active_attr_tendency_best_stat_ranges_min25_starts.json").write_text(json.dumps({"qualified_players": len(q), "best": best_rows, "bins": bin_out}, indent=2), encoding="utf-8")
+    public_best_rows = [
+        {"kind": r["kind"], "field": r["field"], "selected_stat": r["best_stat"], "players": r["n"]}
+        for r in best_rows
+    ]
+    public_bin_rows = [
+        {
+            "kind": r["kind"],
+            "field": r["field"],
+            "selected_stat": r["best_stat"],
+            "value_range": r["value_range"],
+            "players": r["players"],
+            "stat_mean": r["stat_mean"],
+            "stat_median": r["stat_median"],
+            "stat_min": r["stat_min"],
+            "stat_max": r["stat_max"],
+        }
+        for r in bin_out
+    ]
+    write_csv(DERIVED_DIR / "current_active_attr_tendency_best_stat_ranges_min25_starts.csv", public_best_rows, ["kind", "field", "selected_stat", "players"])
+    write_csv(DERIVED_DIR / "current_active_attr_tendency_best_stat_range_bins_min25_starts.csv", public_bin_rows, ["kind", "field", "selected_stat", "value_range", "players", "stat_mean", "stat_median", "stat_min", "stat_max"])
+    (DERIVED_DIR / "current_active_attr_tendency_best_stat_ranges_min25_starts.json").write_text(json.dumps({"qualified_players": len(q), "selected_stats": public_best_rows, "stat_value_bins": public_bin_rows}, indent=2), encoding="utf-8")
 
     md = [
-        "# Current active attribute/tendency best stat ranges",
+        "# Current active attribute/tendency stat-value ranges",
         "",
         f"Filter: {len(q)} qualified players, 25+ starts, minutes > 0.",
         f"Source rows: stats={len(stats)}, attributes={len(attrs)}, tendencies={len(tends)}.",
-        "Each field is paired with its strongest absolute Pearson correlation against derived live stats.",
+        "Each field shows the selected stat's actual values beside each game-value range.",
         "",
     ]
     for kind in ("attribute", "tendency"):
@@ -263,7 +281,7 @@ def main() -> int:
         for best in [r for r in best_rows if r["kind"] == kind]:
             md.append(f"### {best['field']}")
             md.append("")
-            md.append(f"Best correlated stat: `{best['best_stat']}`  |  r={best['r']:.3f}  |  n={best['n']}")
+            md.append(f"Selected stat: `{best['best_stat']}`  |  players={best['n']}")
             md.append("")
             md.append("| Value range | Players | Stat mean | Stat median | Stat min | Stat max |")
             md.append("|---|---:|---:|---:|---:|---:|")
@@ -273,11 +291,11 @@ def main() -> int:
     md_path = DERIVED_DIR / "current_active_attr_tendency_best_stat_ranges_WITH_STATS_min25_starts.md"
     md_path.write_text("\n".join(md), encoding="utf-8")
 
-    # Compatibility copies matching prior artifact split names.
-    write_csv(DERIVED_DIR / "current_active_attribute_best_stat_ranges_min25_starts.csv", [r for r in best_rows if r["kind"] == "attribute"], ["kind", "field", "best_stat", "r", "abs_r", "n"])
-    write_csv(DERIVED_DIR / "current_active_tendency_best_stat_ranges_min25_starts.csv", [r for r in best_rows if r["kind"] == "tendency"], ["kind", "field", "best_stat", "r", "abs_r", "n"])
-    write_csv(DERIVED_DIR / "current_active_attribute_best_stat_range_bins_min25_starts.csv", [r for r in bin_out if r["kind"] == "attribute"], ["kind", "field", "best_stat", "r", "n", "value_range", "players", "stat_mean", "stat_median", "stat_min", "stat_max"])
-    write_csv(DERIVED_DIR / "current_active_tendency_best_stat_range_bins_min25_starts.csv", [r for r in bin_out if r["kind"] == "tendency"], ["kind", "field", "best_stat", "r", "n", "value_range", "players", "stat_mean", "stat_median", "stat_min", "stat_max"])
+    # Compatibility copies matching prior artifact split names, with stat values as the visible data.
+    write_csv(DERIVED_DIR / "current_active_attribute_best_stat_ranges_min25_starts.csv", [r for r in public_best_rows if r["kind"] == "attribute"], ["kind", "field", "selected_stat", "players"])
+    write_csv(DERIVED_DIR / "current_active_tendency_best_stat_ranges_min25_starts.csv", [r for r in public_best_rows if r["kind"] == "tendency"], ["kind", "field", "selected_stat", "players"])
+    write_csv(DERIVED_DIR / "current_active_attribute_best_stat_range_bins_min25_starts.csv", [r for r in public_bin_rows if r["kind"] == "attribute"], ["kind", "field", "selected_stat", "value_range", "players", "stat_mean", "stat_median", "stat_min", "stat_max"])
+    write_csv(DERIVED_DIR / "current_active_tendency_best_stat_range_bins_min25_starts.csv", [r for r in public_bin_rows if r["kind"] == "tendency"], ["kind", "field", "selected_stat", "value_range", "players", "stat_mean", "stat_median", "stat_min", "stat_max"])
 
     print(json.dumps({
         "source_run_dir": str(SOURCE_RUN_DIR),

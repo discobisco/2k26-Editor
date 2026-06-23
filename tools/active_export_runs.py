@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-RUNS_DIR_NAME = "current_active_stat_extractor_runs"
+RUNS_DIR_NAME = "current_active_stat_extractor_runs/Pull from DATA runs"
 RUN_PREFIX = "run_"
 RUN_DIGITS = 3
 
