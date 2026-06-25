@@ -57,11 +57,17 @@ def recommend_team_transactions(context: TeamContext, direction: TeamDirection |
     young_underplayed = [player for player in context.roster.players if (player.age or 99) <= 24 and (player.potential or 0) >= 80 and (player.minutes or 0) < 22]
     if young_underplayed:
         names = ", ".join(player.name or player.player_id for player in young_underplayed[:3])
-        recommendations.append(TransactionRecommendation("rotation", 80, f"Open rotation minutes for development candidates: {names}.", {"players": [player.player_id for player in young_underplayed]}))
+        rotation_evidence_data = {"players": [player.player_id for player in young_underplayed]}
+        _add_rotation_evidence(context, direction, rotation_evidence_data)
+        recommendations.append(TransactionRecommendation("rotation", 80, f"Open rotation minutes for development candidates: {names}.", rotation_evidence_data))
     elif context.injuries.active_count:
-        recommendations.append(TransactionRecommendation("rotation", 75, "Rebalance minutes around active injuries before applying progression/regression.", {"active_injuries": context.injuries.active_count}))
+        rotation_evidence_data = {"active_injuries": context.injuries.active_count}
+        _add_rotation_evidence(context, direction, rotation_evidence_data)
+        recommendations.append(TransactionRecommendation("rotation", 75, "Rebalance minutes around active injuries before applying progression/regression.", rotation_evidence_data))
     else:
-        recommendations.append(TransactionRecommendation("rotation", 50, "Maintain current rotation but monitor morale and role/minutes alignment.", {"average_morale": context.roster.average_morale}))
+        rotation_evidence_data = {"average_morale": context.roster.average_morale}
+        _add_rotation_evidence(context, direction, rotation_evidence_data)
+        recommendations.append(TransactionRecommendation("rotation", 50, "Maintain current rotation but monitor morale and role/minutes alignment.", rotation_evidence_data))
 
     if context.draft_assets.future_firsts >= 2:
         draft_message = "Use surplus firsts as trade optionality or build a draft board around team needs."
@@ -105,6 +111,12 @@ def _add_free_agency_evidence(context: TeamContext, direction: TeamDirection, ev
             "free_agency_warnings": plan.warnings,
         }
     )
+
+
+def _add_rotation_evidence(context: TeamContext, direction: TeamDirection, evidence: dict[str, Any]) -> None:
+    from .rotation import rotation_evidence
+
+    evidence.update(rotation_evidence(context, direction))
 
 
 def infer_transaction_direction(context: TeamContext) -> TeamDirection:

@@ -137,6 +137,7 @@ class TeamContext:
     recent_transactions: RecentTransactionSummary
     contracts: tuple[PlayerContract, ...] = ()
     draft_picks: tuple[DraftPickAsset, ...] = ()
+    injury_statuses: tuple[InjuryStatus, ...] = ()
 
 
 def build_team_context(*, season: int, team: FranchiseTeam, snapshots: tuple[ImportedSnapshot, ...]) -> TeamContext:
@@ -164,6 +165,7 @@ def build_team_context(*, season: int, team: FranchiseTeam, snapshots: tuple[Imp
         recent_transactions=RecentTransactionSummary(len(transactions), tuple(transactions[-5:])),
         contracts=contracts,
         draft_picks=draft_picks,
+        injury_statuses=injuries,
     )
 
 
