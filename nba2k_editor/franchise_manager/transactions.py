@@ -30,11 +30,17 @@ def recommend_team_transactions(context: TeamContext, direction: TeamDirection |
             trade_message = "Explore veteran injury insurance before the next playoff push."
         if finance.status == "tax":
             trade_message += " Keep luxury tax and owner approval attached to every offer."
-        recommendations.append(TransactionRecommendation("trade", 90, trade_message, {"needs": needs, "asset_score": assets.total, "luxury_tax_overage": finance.luxury_tax_overage}))
+        trade_evidence = {"needs": needs, "asset_score": assets.total, "luxury_tax_overage": finance.luxury_tax_overage}
+        _add_trade_score_evidence(context, direction, trade_evidence)
+        recommendations.append(TransactionRecommendation("trade", 90, trade_message, trade_evidence))
     elif direction in {TeamDirection.REBUILD, TeamDirection.TANK}:
-        recommendations.append(TransactionRecommendation("trade", 95, "Shop veterans and expensive non-core contracts for picks or younger players.", {"future_firsts": context.draft_assets.future_firsts, "veteran_core_count": context.roster.veteran_core_count, "asset_score": assets.total}))
+        trade_evidence = {"future_firsts": context.draft_assets.future_firsts, "veteran_core_count": context.roster.veteran_core_count, "asset_score": assets.total}
+        _add_trade_score_evidence(context, direction, trade_evidence)
+        recommendations.append(TransactionRecommendation("trade", 95, "Shop veterans and expensive non-core contracts for picks or younger players.", trade_evidence))
     else:
-        recommendations.append(TransactionRecommendation("trade", 65, "Scan trade market for positional weaknesses before committing assets.", {"needs": needs, "asset_score": assets.total}))
+        trade_evidence = {"needs": needs, "asset_score": assets.total}
+        _add_trade_score_evidence(context, direction, trade_evidence)
+        recommendations.append(TransactionRecommendation("trade", 65, "Scan trade market for positional weaknesses before committing assets.", trade_evidence))
 
     if finance.status == "cap_space":
         fa_message = "Rank free agents who fit the team timeline; cap room can be used aggressively."
@@ -64,6 +70,24 @@ def recommend_team_transactions(context: TeamContext, direction: TeamDirection |
     recommendations.append(TransactionRecommendation("draft", 60, draft_message, {"future_firsts": context.draft_assets.future_firsts, "pick_value": context.draft_assets.pick_value}))
 
     return tuple(sorted(recommendations, key=lambda item: item.priority, reverse=True))
+
+
+def _add_trade_score_evidence(context: TeamContext, direction: TeamDirection, evidence: dict[str, Any]) -> None:
+    from .trades import rank_trade_proposals
+
+    ranked = rank_trade_proposals(context, direction=direction)
+    if not ranked:
+        return
+    top = ranked[0]
+    evidence.update(
+        {
+            "top_trade_label": top.package.label,
+            "top_trade_score": top.acceptance_score,
+            "top_trade_decision": top.decision,
+            "top_trade_cap_legal": top.cap_legal,
+            "top_trade_value_margin": top.evidence.get("value_margin", 0),
+        }
+    )
 
 
 def infer_transaction_direction(context: TeamContext) -> TeamDirection:
