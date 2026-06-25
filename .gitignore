@@ -19,6 +19,7 @@ env/
 build/
 dist/
 *.egg-info/
+outputs/
 
 # Local/editor/agent state
 .env
