@@ -1,8 +1,10 @@
-# Python bytecode/cache
+# Python bytecode/cache folders anywhere in the repo
 __pycache__/
+**/__pycache__/
+.pytest_cache/
+**/.pytest_cache/
 *.py[cod]
 *$py.class
-.pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
@@ -27,6 +29,7 @@ Thumbs.db
 .vscode/
 .idea/
 .hermes/
+**/.hermes/
 scripts/
 
 # Windows reserved/scratch artifact seen in this workspace
