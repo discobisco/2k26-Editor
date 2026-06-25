@@ -50,7 +50,9 @@ def recommend_team_transactions(context: TeamContext, direction: TeamDirection |
         fa_message = "Avoid long veteran deals; use short contracts to preserve flexibility."
     else:
         fa_message = "Build a free-agent shortlist for depth and expiring-value contracts."
-    recommendations.append(TransactionRecommendation("free_agency", 70, fa_message, {"cap_space": finance.cap_space, "finance_status": finance.status}))
+    fa_evidence = {"cap_space": finance.cap_space, "finance_status": finance.status}
+    _add_free_agency_evidence(context, direction, fa_evidence)
+    recommendations.append(TransactionRecommendation("free_agency", 70, fa_message, fa_evidence))
 
     young_underplayed = [player for player in context.roster.players if (player.age or 99) <= 24 and (player.potential or 0) >= 80 and (player.minutes or 0) < 22]
     if young_underplayed:
@@ -86,6 +88,21 @@ def _add_trade_score_evidence(context: TeamContext, direction: TeamDirection, ev
             "top_trade_decision": top.decision,
             "top_trade_cap_legal": top.cap_legal,
             "top_trade_value_margin": top.evidence.get("value_margin", 0),
+        }
+    )
+
+
+def _add_free_agency_evidence(context: TeamContext, direction: TeamDirection, evidence: dict[str, Any]) -> None:
+    from .free_agency import free_agency_plan
+
+    plan = free_agency_plan(context, direction=direction)
+    evidence.update(
+        {
+            "free_agency_strategy": plan.strategy,
+            "estimated_cap_space_after_top_offer": plan.cap_space_after_top_offer,
+            "top_free_agent_target": plan.ranked_targets[0].target.player.name if plan.ranked_targets else "",
+            "top_free_agent_fit_score": plan.ranked_targets[0].fit_score if plan.ranked_targets else 0,
+            "free_agency_warnings": plan.warnings,
         }
     )
 
