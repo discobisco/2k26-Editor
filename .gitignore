@@ -32,13 +32,10 @@ Thumbs.db
 **/.hermes/
 scripts/
 
-# Explicit cache/local-state ignores inside app-owned generator/franchise folders
-nba2k_editor/Player Generator/**/__pycache__/
-nba2k_editor/Player Generator/**/.pytest_cache/
-nba2k_editor/Player Generator/**/.hermes/
-nba2k_editor/franchise_manager/**/__pycache__/
-nba2k_editor/franchise_manager/**/.pytest_cache/
-nba2k_editor/franchise_manager/**/.hermes/
+# Large data/local folders inside app-owned generator/franchise folders
+# Keep root source files tracked, but ignore every subfolder under these roots.
+nba2k_editor/Player Generator/*/
+nba2k_editor/franchise_manager/*/
 
 # Windows reserved/scratch artifact seen in this workspace
 NUL
