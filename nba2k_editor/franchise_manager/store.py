@@ -114,6 +114,102 @@ CREATE TABLE IF NOT EXISTS player_progression_reports (
     report_json TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS franchise_players (
+    season INTEGER NOT NULL,
+    player_id TEXT NOT NULL,
+    team_id TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (season, player_id)
+);
+CREATE TABLE IF NOT EXISTS franchise_contracts (
+    season INTEGER NOT NULL,
+    player_id TEXT NOT NULL,
+    team_id TEXT NOT NULL,
+    salary INTEGER NOT NULL DEFAULT 0,
+    years_remaining INTEGER NOT NULL DEFAULT 0,
+    payload_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (season, player_id)
+);
+CREATE TABLE IF NOT EXISTS franchise_draft_picks (
+    season INTEGER NOT NULL,
+    team_id TEXT NOT NULL,
+    draft_year INTEGER NOT NULL,
+    draft_round INTEGER NOT NULL,
+    payload_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (season, team_id, draft_year, draft_round, payload_json)
+);
+CREATE TABLE IF NOT EXISTS franchise_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    season INTEGER NOT NULL,
+    team_id TEXT NOT NULL,
+    transaction_type TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS franchise_injuries (
+    season INTEGER NOT NULL,
+    player_id TEXT NOT NULL,
+    team_id TEXT NOT NULL,
+    severity INTEGER NOT NULL DEFAULT 0,
+    games_remaining INTEGER NOT NULL DEFAULT 0,
+    payload_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (season, player_id)
+);
+CREATE TABLE IF NOT EXISTS team_finances (
+    season INTEGER NOT NULL,
+    team_id TEXT NOT NULL,
+    payroll INTEGER NOT NULL DEFAULT 0,
+    salary_cap INTEGER NOT NULL DEFAULT 0,
+    luxury_tax_line INTEGER NOT NULL DEFAULT 0,
+    payload_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (season, team_id)
+);
+CREATE TABLE IF NOT EXISTS staff_profiles (
+    season INTEGER NOT NULL,
+    team_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (season, team_id, role)
+);
+CREATE TABLE IF NOT EXISTS facility_profiles (
+    season INTEGER NOT NULL,
+    team_id TEXT NOT NULL,
+    facility_type TEXT NOT NULL,
+    level INTEGER NOT NULL DEFAULT 0,
+    payload_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (season, team_id, facility_type)
+);
+CREATE TABLE IF NOT EXISTS franchise_objectives (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    season INTEGER NOT NULL,
+    team_id TEXT NOT NULL,
+    objective_type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS franchise_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    season INTEGER NOT NULL,
+    team_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS playoff_brackets (
+    season INTEGER NOT NULL,
+    bracket_id TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (season, bracket_id)
+);
 """
 
 
