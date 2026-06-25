@@ -1165,17 +1165,17 @@
           "normalized_name": "MURALLOGO",
           "display_name": "Mural Logo",
           "versions": {
+            "2K26": {
+              "address": 2394,
+              "length": 256,
+              "section": "Vitals",
+              "type": "string"
+            },
             "2K22,2K23,2K24": {
               "address": 2092,
               "hex": "0x82C",
               "length": 2048,
               "startBit": 0,
-              "type": "string"
-            },
-            "2K26": {
-              "address": 2394,
-              "length": 256,
-              "section": "Vitals",
               "type": "string"
             }
           }
@@ -2367,6 +2367,464 @@
         }
       ]
     },
+    "Team Lineups": {
+      "3PT": [
+        {
+          "normalized_name": "3POINTPLAYER1",
+          "display_name": "3PT Player 1",
+          "versions": {
+            "2K26": {
+              "address": 4640,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "3POINTPLAYER2",
+          "display_name": "3PT Player 2",
+          "versions": {
+            "2K26": {
+              "address": 4648,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "3POINTPLAYER3",
+          "display_name": "3PT Player 3",
+          "versions": {
+            "2K26": {
+              "address": 4656,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "3POINTPLAYER4",
+          "display_name": "3PT Player 4",
+          "versions": {
+            "2K26": {
+              "address": 4664,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "3POINTPLAYER5",
+          "display_name": "3PT Player 5",
+          "versions": {
+            "2K26": {
+              "address": 4672,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        }
+      ],
+      "Bench": [
+        {
+          "normalized_name": "BENCHPLAYER1",
+          "display_name": "Bench Player 1",
+          "versions": {
+            "2K26": {
+              "address": 4480,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "BENCHPLAYER2",
+          "display_name": "Bench Player 2",
+          "versions": {
+            "2K26": {
+              "address": 4488,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "BENCHPLAYER3",
+          "display_name": "Bench Player 3",
+          "versions": {
+            "2K26": {
+              "address": 4496,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "BENCHPLAYER4",
+          "display_name": "Bench Player 4",
+          "versions": {
+            "2K26": {
+              "address": 4504,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "BENCHPLAYER5",
+          "display_name": "Bench Player 5",
+          "versions": {
+            "2K26": {
+              "address": 4512,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        }
+      ],
+      "Custom": [
+        {
+          "normalized_name": "CUSTOMPLAYER1",
+          "display_name": "Custom Player 1",
+          "versions": {
+            "2K26": {
+              "address": 4720,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "CUSTOMPLAYER2",
+          "display_name": "Custom Player 2",
+          "versions": {
+            "2K26": {
+              "address": 4728,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "CUSTOMPLAYER3",
+          "display_name": "Custom Player 3",
+          "versions": {
+            "2K26": {
+              "address": 4736,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "CUSTOMPLAYER4",
+          "display_name": "Custom Player 4",
+          "versions": {
+            "2K26": {
+              "address": 4744,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "CUSTOMPLAYER5",
+          "display_name": "Custom Player 5",
+          "versions": {
+            "2K26": {
+              "address": 4752,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        }
+      ],
+      "Defense": [
+        {
+          "normalized_name": "DEFENSEPLAYER1",
+          "display_name": "Defense Player 1",
+          "versions": {
+            "2K26": {
+              "address": 4600,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENSEPLAYER2",
+          "display_name": "Defense Player 2",
+          "versions": {
+            "2K26": {
+              "address": 4608,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENSEPLAYER3",
+          "display_name": "Defense Player 3",
+          "versions": {
+            "2K26": {
+              "address": 4616,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENSEPLAYER4",
+          "display_name": "Defense Player 4",
+          "versions": {
+            "2K26": {
+              "address": 4624,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENSEPLAYER5",
+          "display_name": "Defense Player 5",
+          "versions": {
+            "2K26": {
+              "address": 4632,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        }
+      ],
+      "Free Throw": [
+        {
+          "normalized_name": "FREETHROWPLAYER1",
+          "display_name": "Free Throw Player 1",
+          "versions": {
+            "2K26": {
+              "address": 4680,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREETHROWPLAYER2",
+          "display_name": "Free Throw Player 2",
+          "versions": {
+            "2K26": {
+              "address": 4688,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREETHROWPLAYER3",
+          "display_name": "Free Throw Player 3",
+          "versions": {
+            "2K26": {
+              "address": 4696,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREETHROWPLAYER4",
+          "display_name": "Free Throw Player 4",
+          "versions": {
+            "2K26": {
+              "address": 4704,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREETHROWPLAYER5",
+          "display_name": "Free Throw Player 5",
+          "versions": {
+            "2K26": {
+              "address": 4712,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        }
+      ],
+      "Quick": [
+        {
+          "normalized_name": "QUICKPLAYER1",
+          "display_name": "Quick Player 1",
+          "versions": {
+            "2K26": {
+              "address": 4560,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "QUICKPLAYER2",
+          "display_name": "Quick Player 2",
+          "versions": {
+            "2K26": {
+              "address": 4568,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "QUICKPLAYER3",
+          "display_name": "Quick Player 3",
+          "versions": {
+            "2K26": {
+              "address": 4576,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "QUICKPLAYER4",
+          "display_name": "Quick Player 4",
+          "versions": {
+            "2K26": {
+              "address": 4584,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "QUICKPLAYER5",
+          "display_name": "Quick Player 5",
+          "versions": {
+            "2K26": {
+              "address": 4592,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        }
+      ],
+      "Starters": [
+        {
+          "normalized_name": "STARTERSPLAYER1",
+          "display_name": "Starters Player 1",
+          "versions": {
+            "2K26": {
+              "address": 4440,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "STARTERSPLAYER2",
+          "display_name": "Starters Player 2",
+          "versions": {
+            "2K26": {
+              "address": 4448,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "STARTERSPLAYER3",
+          "display_name": "Starters Player 3",
+          "versions": {
+            "2K26": {
+              "address": 4456,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "STARTERSPLAYER4",
+          "display_name": "Starters Player 4",
+          "versions": {
+            "2K26": {
+              "address": 4464,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "STARTERSPLAYER5",
+          "display_name": "Starters Player 5",
+          "versions": {
+            "2K26": {
+              "address": 4472,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        }
+      ],
+      "Tall": [
+        {
+          "normalized_name": "TALLPLAYER1",
+          "display_name": "Tall Player 1",
+          "versions": {
+            "2K26": {
+              "address": 4520,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "TALLPLAYER2",
+          "display_name": "Tall Player 2",
+          "versions": {
+            "2K26": {
+              "address": 4528,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "TALLPLAYER3",
+          "display_name": "Tall Player 3",
+          "versions": {
+            "2K26": {
+              "address": 4536,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "TALLPLAYER4",
+          "display_name": "Tall Player 4",
+          "versions": {
+            "2K26": {
+              "address": 4544,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        },
+        {
+          "normalized_name": "TALLPLAYER5",
+          "display_name": "Tall Player 5",
+          "versions": {
+            "2K26": {
+              "address": 4552,
+              "length": 0,
+              "type": "Pointer"
+            }
+          }
+        }
+      ]
+    },
     "Team Players": {
       "Team Players": [
         {
@@ -2569,464 +3027,6 @@
         }
       ]
     },
-    "Team Lineups": {
-      "Starters": [
-        {
-          "normalized_name": "STARTERSPLAYER1",
-          "display_name": "Starters Player 1",
-          "versions": {
-            "2K26": {
-              "address": 4440,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "STARTERSPLAYER2",
-          "display_name": "Starters Player 2",
-          "versions": {
-            "2K26": {
-              "address": 4448,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "STARTERSPLAYER3",
-          "display_name": "Starters Player 3",
-          "versions": {
-            "2K26": {
-              "address": 4456,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "STARTERSPLAYER4",
-          "display_name": "Starters Player 4",
-          "versions": {
-            "2K26": {
-              "address": 4464,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "STARTERSPLAYER5",
-          "display_name": "Starters Player 5",
-          "versions": {
-            "2K26": {
-              "address": 4472,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        }
-      ],
-      "Bench": [
-        {
-          "normalized_name": "BENCHPLAYER1",
-          "display_name": "Bench Player 1",
-          "versions": {
-            "2K26": {
-              "address": 4480,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "BENCHPLAYER2",
-          "display_name": "Bench Player 2",
-          "versions": {
-            "2K26": {
-              "address": 4488,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "BENCHPLAYER3",
-          "display_name": "Bench Player 3",
-          "versions": {
-            "2K26": {
-              "address": 4496,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "BENCHPLAYER4",
-          "display_name": "Bench Player 4",
-          "versions": {
-            "2K26": {
-              "address": 4504,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "BENCHPLAYER5",
-          "display_name": "Bench Player 5",
-          "versions": {
-            "2K26": {
-              "address": 4512,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        }
-      ],
-      "Tall": [
-        {
-          "normalized_name": "TALLPLAYER1",
-          "display_name": "Tall Player 1",
-          "versions": {
-            "2K26": {
-              "address": 4520,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "TALLPLAYER2",
-          "display_name": "Tall Player 2",
-          "versions": {
-            "2K26": {
-              "address": 4528,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "TALLPLAYER3",
-          "display_name": "Tall Player 3",
-          "versions": {
-            "2K26": {
-              "address": 4536,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "TALLPLAYER4",
-          "display_name": "Tall Player 4",
-          "versions": {
-            "2K26": {
-              "address": 4544,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "TALLPLAYER5",
-          "display_name": "Tall Player 5",
-          "versions": {
-            "2K26": {
-              "address": 4552,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        }
-      ],
-      "Quick": [
-        {
-          "normalized_name": "QUICKPLAYER1",
-          "display_name": "Quick Player 1",
-          "versions": {
-            "2K26": {
-              "address": 4560,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "QUICKPLAYER2",
-          "display_name": "Quick Player 2",
-          "versions": {
-            "2K26": {
-              "address": 4568,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "QUICKPLAYER3",
-          "display_name": "Quick Player 3",
-          "versions": {
-            "2K26": {
-              "address": 4576,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "QUICKPLAYER4",
-          "display_name": "Quick Player 4",
-          "versions": {
-            "2K26": {
-              "address": 4584,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "QUICKPLAYER5",
-          "display_name": "Quick Player 5",
-          "versions": {
-            "2K26": {
-              "address": 4592,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        }
-      ],
-      "Defense": [
-        {
-          "normalized_name": "DEFENSEPLAYER1",
-          "display_name": "Defense Player 1",
-          "versions": {
-            "2K26": {
-              "address": 4600,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "DEFENSEPLAYER2",
-          "display_name": "Defense Player 2",
-          "versions": {
-            "2K26": {
-              "address": 4608,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "DEFENSEPLAYER3",
-          "display_name": "Defense Player 3",
-          "versions": {
-            "2K26": {
-              "address": 4616,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "DEFENSEPLAYER4",
-          "display_name": "Defense Player 4",
-          "versions": {
-            "2K26": {
-              "address": 4624,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "DEFENSEPLAYER5",
-          "display_name": "Defense Player 5",
-          "versions": {
-            "2K26": {
-              "address": 4632,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        }
-      ],
-      "3PT": [
-        {
-          "normalized_name": "3PTPLAYER1",
-          "display_name": "3PT Player 1",
-          "versions": {
-            "2K26": {
-              "address": 4640,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "3PTPLAYER2",
-          "display_name": "3PT Player 2",
-          "versions": {
-            "2K26": {
-              "address": 4648,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "3PTPLAYER3",
-          "display_name": "3PT Player 3",
-          "versions": {
-            "2K26": {
-              "address": 4656,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "3PTPLAYER4",
-          "display_name": "3PT Player 4",
-          "versions": {
-            "2K26": {
-              "address": 4664,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "3PTPLAYER5",
-          "display_name": "3PT Player 5",
-          "versions": {
-            "2K26": {
-              "address": 4672,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        }
-      ],
-      "Free Throw": [
-        {
-          "normalized_name": "FREETHROWPLAYER1",
-          "display_name": "Free Throw Player 1",
-          "versions": {
-            "2K26": {
-              "address": 4680,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "FREETHROWPLAYER2",
-          "display_name": "Free Throw Player 2",
-          "versions": {
-            "2K26": {
-              "address": 4688,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "FREETHROWPLAYER3",
-          "display_name": "Free Throw Player 3",
-          "versions": {
-            "2K26": {
-              "address": 4696,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "FREETHROWPLAYER4",
-          "display_name": "Free Throw Player 4",
-          "versions": {
-            "2K26": {
-              "address": 4704,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "FREETHROWPLAYER5",
-          "display_name": "Free Throw Player 5",
-          "versions": {
-            "2K26": {
-              "address": 4712,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        }
-      ],
-      "Custom": [
-        {
-          "normalized_name": "CUSTOMPLAYER1",
-          "display_name": "Custom Player 1",
-          "versions": {
-            "2K26": {
-              "address": 4720,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "CUSTOMPLAYER2",
-          "display_name": "Custom Player 2",
-          "versions": {
-            "2K26": {
-              "address": 4728,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "CUSTOMPLAYER3",
-          "display_name": "Custom Player 3",
-          "versions": {
-            "2K26": {
-              "address": 4736,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "CUSTOMPLAYER4",
-          "display_name": "Custom Player 4",
-          "versions": {
-            "2K26": {
-              "address": 4744,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        },
-        {
-          "normalized_name": "CUSTOMPLAYER5",
-          "display_name": "Custom Player 5",
-          "versions": {
-            "2K26": {
-              "address": 4752,
-              "length": 0,
-              "type": "Pointer"
-            }
-          }
-        }
-      ]
-    },
     "Team Stadium": {
       "Team Stadium": [
         {
@@ -3180,15 +3180,6 @@
         {
           "normalized_name": "CURRENTYEARSTATS",
           "display_name": "CURRENT_YEAR_STATS",
-          "selected_record_source": {
-            "role": "team_record_start",
-            "target_domain": "NBA Records",
-            "versions": ["2K26"],
-            "strategy": "team_records_start_plus_team_index_block",
-            "start_index": 3100,
-            "row_count": 510,
-            "source": "NBA2K26_history_record_routing_extract.json:team_record_embedded_records"
-          },
           "versions": {
             "2K22,2K23,2K24": {
               "address": 3712,

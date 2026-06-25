@@ -8,9 +8,7 @@ from nba2k_editor.core import offsets as offsets_mod
 from nba2k_editor.core.conversions import (
     convert_body_scale_display_to_raw,
     convert_injury_duration_days_to_raw,
-    convert_kilograms_to_pounds,
     convert_potential_to_raw,
-    convert_pounds_to_kilograms,
     convert_rating_to_raw,
     convert_rating_to_tendency_raw,
     convert_raw_to_body_scale_display,
@@ -290,12 +288,10 @@ def _raw_to_display_value(section: str, field: dict[str, Any], payload: dict[str
         return start_year
     if "year_map_base" in payload or is_year_offset_field(field_name):
         return convert_raw_to_year(int(raw_value), to_int(payload.get("year_map_base")) or 1900)
-    if field_id == "HEIGHT":
+    if field_id in {"HEIGHT", "WINGSPAN"}:
         return raw_height_to_inches(int(raw_value))
     if bool(payload.get("div100")):
         return int(raw_value) / 100
-    if bool(payload.get("from_pounds")):
-        return convert_pounds_to_kilograms(raw_value)
     if bool(payload.get("body_scale_0_100")) or bool(payload.get("body_scale_25_75")):
         return convert_raw_to_body_scale_display(raw_value, length_bits)
     if "scale" in payload:
@@ -331,15 +327,13 @@ def _display_to_raw_value(section: str, field: dict[str, Any], payload: dict[str
         return int(start_text) - to_int(payload.get("season_year_base"))
     if "year_map_base" in payload or is_year_offset_field(field_name):
         return convert_year_to_raw(int(value), to_int(payload.get("year_map_base")) or 1900)
-    if field_id == "HEIGHT":
+    if field_id in {"HEIGHT", "WINGSPAN"}:
         return height_inches_to_raw(int(value))
+    if bool(payload.get("div100")):
+        return int(round(float(value) * 100))
     if field_id == "WEIGHT":
         normalized_weight = normalize_weight_value(value)
         return normalized_weight if normalized_weight is not None else value
-    if bool(payload.get("div100")):
-        return int(round(float(value) * 100))
-    if bool(payload.get("from_pounds")):
-        return convert_kilograms_to_pounds(value)
     if bool(payload.get("body_scale_0_100")) or bool(payload.get("body_scale_25_75")):
         return convert_body_scale_display_to_raw(value, length_bits)
     if "scale" in payload:

@@ -122,6 +122,50 @@ def update_generator_display_selection(
     )
 
 
+def add_current_roster_to_pool_display_state(model: Any, state: GeneratorDisplayState, *, progress_callback: Any | None = None) -> GeneratorDisplayState:
+    if not state.source_loaded:
+        state = load_generator_display_state()
+    _ensure_generator_import_path()
+    from player_generation_pool import add_current_roster_to_player_generation_pool
+
+    pool_manifest = add_current_roster_to_player_generation_pool(model, progress_callback=progress_callback)
+    return replace(
+        state,
+        status=(
+            f"Added current roster to player pool SQL as {pool_manifest.get('added_snapshot_id')}: "
+            f"{pool_manifest.get('added_stats_rows', 0)} stats rows, "
+            f"{pool_manifest.get('added_attribute_rows', 0)} attribute rows, "
+            f"{pool_manifest.get('added_tendency_rows', 0)} tendency rows. "
+            "Use Sync Player Pool SQL to rebuild the neighbor model."
+        ),
+    )
+
+
+def sync_generator_pool_display_state(state: GeneratorDisplayState, *, progress_callback: Any | None = None) -> GeneratorDisplayState:
+    if not state.source_loaded:
+        state = load_generator_display_state()
+    _ensure_generator_import_path()
+    from player_generation_pool import ensure_player_generation_pool_current
+    from stat_neighbor_framework import load_latest_stat_neighbor_model
+
+    pool_manifest = ensure_player_generation_pool_current(root=_GENERATOR_DIR.parents[1], progress_callback=progress_callback)
+    load_latest_stat_neighbor_model.cache_clear()
+    return replace(
+        state,
+        rows=(),
+        field_columns=(),
+        player_rows=(),
+        generated_proposals=(),
+        status=(
+            f"Player pool SQL current: "
+            f"{pool_manifest.get('candidate_rows', 0)} players, "
+            f"{pool_manifest.get('candidate_position_rows', 0)} position rows, "
+            f"model {pool_manifest.get('model_sqlite') or pool_manifest.get('output_dir')}. "
+            "Preview cleared; run Display Preview again before importing."
+        ),
+    )
+
+
 def generate_generator_preview_display_state(state: GeneratorDisplayState) -> GeneratorDisplayState:
     if not state.source_loaded:
         return empty_generator_display_state("Load generator source data before generating a display preview.")
@@ -288,10 +332,12 @@ __all__ = [
     "GeneratorDisplayState",
     "GeneratorFieldDisplayRow",
     "GeneratorPlayerDisplayRow",
+    "add_current_roster_to_pool_display_state",
     "empty_generator_display_state",
     "generate_generator_preview_display_state",
     "import_generator_to_game_display_state",
     "load_generator_display_state",
+    "sync_generator_pool_display_state",
     "update_generator_display_selection",
 ]
 

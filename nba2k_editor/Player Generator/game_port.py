@@ -756,6 +756,15 @@ def _ascii_name_text(value: object) -> str:
     return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
 
 
+def _model_player_field_index(model: Any) -> dict[str, FieldEntry]:
+    return {
+        f"{entry.section}/{entry.normalized_name}": entry
+        for groups in model.grouped_fields("Players").values()
+        for entries in groups.values()
+        for entry in entries
+    }
+
+
 def apply_generated_rows_to_game(
     model: Any,
     rows: Iterable[Any],
@@ -767,23 +776,16 @@ def apply_generated_rows_to_game(
 ) -> GamePortResult:
     if player_index < 0:
         raise ValueError("player_index must be >= 0")
-    authored = field_index
+    authored = _model_player_field_index(model)
     results: list[GamePortFieldResult] = []
-    for row in rows:
+    for row in _ordered_generated_rows_for_game_write(rows):
         field_key = str(getattr(row, "field_key", "")).strip()
         attempted_value: int | str | None = None
         try:
             attempted_value = _row_value(row)
-            if authored is None:
-                authored = authored_player_field_index(offsets_path)
             entry = authored[field_key]
-            write_no_readback = getattr(model, "write_entry_value_no_readback", None)
-            if callable(write_no_readback):
-                write_no_readback(entry, index=player_index, value=attempted_value)
-                readback_value = attempted_value
-            else:
-                readback = model.write_entry_value(entry, index=player_index, value=attempted_value)
-                readback_value = readback.get("display_value") if isinstance(readback, dict) else readback
+            readback = model.write_entry_value(entry, index=player_index, value=attempted_value)
+            readback_value = readback.get("display_value") if isinstance(readback, dict) else readback
             results.append(
                 GamePortFieldResult(
                     field_key=field_key,
@@ -821,6 +823,21 @@ def apply_generated_rows_to_game(
         failed=failed,
         fields=tuple(results),
     )
+
+
+def _ordered_generated_rows_for_game_write(rows: Iterable[Any]) -> tuple[Any, ...]:
+    materialized = tuple(rows)
+    return tuple(sorted(materialized, key=_game_write_order_key))
+
+
+def _game_write_order_key(row: Any) -> tuple[int, str]:
+    field_key = str(getattr(row, "field_key", "")).strip()
+    # Main editor writes a single selected field. Generated import writes a packed
+    # field batch; write Contest Shot after the surrounding defense tendency
+    # package so the game-side visible T/CONTEST cell is the final write.
+    if field_key == "Tendencies/CONTESTSHOT":
+        return (1, field_key)
+    return (0, field_key)
 
 
 def _row_value(row: Any) -> int | str:

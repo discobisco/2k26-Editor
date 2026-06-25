@@ -283,13 +283,7 @@
               "length": 16,
               "requiresDereference": true,
               "type": "Integer"
-            }
-          }
-        },
-        {
-          "normalized_name": "HEIGHTCM",
-          "display_name": "Height (cm)",
-          "versions": {
+            },
             "2K26": {
               "address": 0,
               "div100": true,
@@ -351,23 +345,9 @@
             },
             "2K25": {
               "address": 248,
-              "dereferenceAddress": 120,
               "length": 16,
-              "requiresDereference": true,
               "type": "Float"
             },
-            "2K26": {
-              "address": 256,
-              "hex": "0x100",
-              "length": 32,
-              "type": "Float"
-            }
-          }
-        },
-        {
-          "normalized_name": "WEIGHTKG",
-          "display_name": "Weight (kg)",
-          "versions": {
             "2K26": {
               "address": 256,
               "from_pounds": true,
@@ -561,8 +541,8 @@
           }
         },
         {
-          "normalized_name": "BOOMPERCENT",
-          "display_name": "Boom Percent",
+          "normalized_name": "BOOMPERCENTAGE",
+          "display_name": "Boom Percentage",
           "versions": {
             "2K26": {
               "address": 953,
@@ -587,8 +567,8 @@
           }
         },
         {
-          "normalized_name": "BUSTPERCENT",
-          "display_name": "Bust Percent",
+          "normalized_name": "BUSTPERCENTAGE",
+          "display_name": "Bust Percentage",
           "versions": {
             "2K26": {
               "address": 954,
@@ -935,6 +915,26 @@
           }
         },
         {
+          "normalized_name": "COLLEGE",
+          "display_name": "FROM",
+          "versions": {
+            "2K22": {
+              "address": 120,
+              "hex": "0x78",
+              "length": 8,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 176,
+              "hex": "0xB0",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            }
+          }
+        },
+        {
           "normalized_name": "GLEAGUETEAMID",
           "display_name": "G-LEAGUE_TEAM_ID",
           "versions": {
@@ -1031,6 +1031,34 @@
               "length": 2,
               "startBit": 0,
               "type": "combo"
+            }
+          }
+        },
+        {
+          "normalized_name": "INJURY1DURATION",
+          "display_name": "Injury 1 Duration",
+          "versions": {
+            "2K26": {
+              "address": 812,
+              "hex": "0x32C",
+              "length": 16,
+              "note": "u16 LE. 1440 ticks/day. Write: (old_stored % 1440) + days * 1440",
+              "startBit": 0,
+              "type": "Integer"
+            }
+          }
+        },
+        {
+          "normalized_name": "INJURY2DURATION",
+          "display_name": "Injury 2 Duration",
+          "versions": {
+            "2K26": {
+              "address": 816,
+              "hex": "0x330",
+              "length": 24,
+              "note": "u24 LE. 1440 ticks/day. Write: (old_stored % 1440) + days * 1440. Zero bytes 816-818 to clear.",
+              "startBit": 0,
+              "type": "Integer"
             }
           }
         },
@@ -1576,16 +1604,9 @@
           }
         },
         {
-          "normalized_name": "PEAKEND",
-          "display_name": "Peak End",
+          "normalized_name": "PEAKENDAGE",
+          "display_name": "Peak End Age",
           "versions": {
-            "2K22,2K23,2K24": {
-              "address": 115,
-              "hex": "0x73",
-              "length": 6,
-              "startBit": 2,
-              "type": "bit"
-            },
             "2K26": {
               "address": 271,
               "bit_length": 6,
@@ -1598,16 +1619,9 @@
           }
         },
         {
-          "normalized_name": "PEAKSTART",
-          "display_name": "Peak Start",
+          "normalized_name": "PEAKSTARTAGE",
+          "display_name": "Peak Start Age",
           "versions": {
-            "2K22,2K23,2K24": {
-              "address": 114,
-              "hex": "0x72",
-              "length": 6,
-              "startBit": 4,
-              "type": "bit"
-            },
             "2K26": {
               "address": 270,
               "bit_length": 6,
@@ -1616,6 +1630,32 @@
               "length": 6,
               "startBit": 2,
               "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "PEAKEND",
+          "display_name": "PEAKEND",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 115,
+              "hex": "0x73",
+              "length": 6,
+              "startBit": 2,
+              "type": "bit"
+            }
+          }
+        },
+        {
+          "normalized_name": "PEAKSTART",
+          "display_name": "PEAKSTART",
+          "versions": {
+            "2K22,2K23,2K24": {
+              "address": 114,
+              "hex": "0x72",
+              "length": 6,
+              "startBit": 4,
+              "type": "bit"
             }
           }
         },
@@ -2270,20 +2310,6 @@
           }
         },
         {
-          "normalized_name": "INJURY1DURATION",
-          "display_name": "Injury 1 Duration",
-          "versions": {
-            "2K26": {
-              "address": 812,
-              "hex": "0x32C",
-              "length": 16,
-              "note": "u16 LE. 1440 ticks/day. Write: (old_stored % 1440) + days * 1440",
-              "startBit": 0,
-              "type": "Integer"
-            }
-          }
-        },
-        {
           "normalized_name": "INJURY2STATUS",
           "display_name": "Injury 2 Status",
           "versions": {
@@ -2341,20 +2367,6 @@
           }
         },
         {
-          "normalized_name": "INJURY2DURATION",
-          "display_name": "Injury 2 Duration",
-          "versions": {
-            "2K26": {
-              "address": 816,
-              "hex": "0x330",
-              "length": 24,
-              "note": "u24 LE. 1440 ticks/day. Write: (old_stored % 1440) + days * 1440. Zero bytes 816-818 to clear.",
-              "startBit": 0,
-              "type": "Integer"
-            }
-          }
-        },
-        {
           "normalized_name": "ISINJURY1TYPELEFTBODY",
           "display_name": "Is Injury 1 Type Left Body",
           "versions": {
@@ -2398,11 +2410,11 @@
               "type": "combo"
             },
             "2K25": {
-              "address": 724,
-              "dereferenceAddress": 96,
-              "length": 24,
-              "requiresDereference": true,
-              "type": "WString"
+              "address": 96,
+              "hex": "0x60",
+              "show_hex": true,
+              "team_address_dropdown": true,
+              "type": "uint64"
             },
             "2K26": {
               "address": 96,
@@ -2410,17 +2422,6 @@
               "show_hex": true,
               "team_address_dropdown": true,
               "type": "uint64"
-            }
-          }
-        },
-        {
-          "normalized_name": "CURRENTTEAMADDRESS",
-          "display_name": "Current Team Address",
-          "versions": {
-            "2K25,2K26": {
-              "address": 96,
-              "length": 64,
-              "type": "Pointer"
             }
           }
         },
@@ -2654,6 +2655,19 @@
     },
     "Gear": {
       "Shoes/Gear": [
+        {
+          "normalized_name": "RIGHTARMFREQUENCY",
+          "display_name": "Right Arm Frequency",
+          "versions": {
+            "2K26": {
+              "address": 919,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "hex": "0x397",
+              "type": "bitfield"
+            }
+          }
+        },
         {
           "normalized_name": "SHOEAWAY",
           "display_name": "Shoe Away",
@@ -2918,10 +2932,10 @@
             },
             "2K26": {
               "address": 840,
-              "hex": "0x348",
-              "type": "bitfield",
+              "bit_length": 3,
               "bit_offset": 3,
-              "bit_length": 3
+              "hex": "0x348",
+              "type": "bitfield"
             }
           }
         },
@@ -3810,13 +3824,6 @@
               "length": 3,
               "startBit": 0,
               "type": "Integer"
-            },
-            "2K26": {
-              "address": 919,
-              "hex": "0x397",
-              "type": "bitfield",
-              "bit_offset": 0,
-              "bit_length": 3
             }
           }
         },
@@ -4360,33 +4367,6 @@
           }
         },
         {
-          "normalized_name": "SHORTSAWAYCOLOR",
-          "display_name": "Shorts Away Color",
-          "versions": {
-            "2K22": {
-              "address": 340,
-              "hex": "0x154",
-              "length": 3,
-              "startBit": 7,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 304,
-              "hex": "0x130",
-              "length": 3,
-              "startBit": 7,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 392,
-              "hex": "0x188",
-              "length": 3,
-              "startBit": 3,
-              "type": "Integer"
-            }
-          }
-        },
-        {
           "normalized_name": "SHORTSCOMPRESSION",
           "display_name": "Shorts Compression",
           "versions": {
@@ -4474,8 +4454,28 @@
           }
         },
         {
+          "normalized_name": "SHORTSAWAYCOLOR",
+          "display_name": "SHORTS_AWAY_COLOR",
+          "versions": {
+            "2K22": {
+              "address": 340,
+              "hex": "0x154",
+              "length": 3,
+              "startBit": 7,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 304,
+              "hex": "0x130",
+              "length": 3,
+              "startBit": 7,
+              "type": "combo"
+            }
+          }
+        },
+        {
           "normalized_name": "SHORTSHOMECOLOR",
-          "display_name": "Shorts Home Color",
+          "display_name": "SHORTS_HOME_COLOR",
           "versions": {
             "2K22": {
               "address": 340,
@@ -4490,13 +4490,6 @@
               "length": 3,
               "startBit": 4,
               "type": "combo"
-            },
-            "2K26": {
-              "address": 392,
-              "hex": "0x188",
-              "length": 3,
-              "startBit": 0,
-              "type": "Integer"
             }
           }
         }
@@ -5535,7 +5528,8 @@
             "2K25": {
               "address": 921,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1001,
@@ -5567,7 +5561,8 @@
             "2K25": {
               "address": 923,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1003,
@@ -5599,7 +5594,8 @@
             "2K25": {
               "address": 919,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 999,
@@ -5631,7 +5627,8 @@
             "2K25": {
               "address": 918,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 998,
@@ -5663,7 +5660,8 @@
             "2K25": {
               "address": 936,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1016,
@@ -5695,7 +5693,8 @@
             "2K25": {
               "address": 914,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 993,
@@ -5727,7 +5726,8 @@
             "2K25": {
               "address": 922,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1002,
@@ -5759,7 +5759,8 @@
             "2K25": {
               "address": 920,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1000,
@@ -5791,7 +5792,8 @@
             "2K25": {
               "address": 945,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1025,
@@ -5823,7 +5825,8 @@
             "2K25": {
               "address": 925,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1005,
@@ -5855,7 +5858,8 @@
             "2K25": {
               "address": 924,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1004,
@@ -5887,7 +5891,8 @@
             "2K25": {
               "address": 965,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1044,
@@ -5902,10 +5907,25 @@
           "normalized_name": "POSTFADE",
           "display_name": "Post Fade",
           "versions": {
+            "2K22": {
+              "address": 1056,
+              "hex": "0x420",
+              "length": 8,
+              "startBit": 0,
+              "type": "slider"
+            },
+            "2K23,2K24": {
+              "address": 1060,
+              "hex": "0x424",
+              "length": 8,
+              "startBit": 0,
+              "type": "slider"
+            },
             "2K25": {
               "address": 915,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 994,
@@ -5937,7 +5957,8 @@
             "2K25": {
               "address": 916,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 996,
@@ -5969,7 +5990,8 @@
             "2K25": {
               "address": 917,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 997,
@@ -6001,7 +6023,8 @@
             "2K25": {
               "address": 944,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1024,
@@ -6033,7 +6056,8 @@
             "2K25": {
               "address": 935,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1015,
@@ -6067,7 +6091,8 @@
             "2K25": {
               "address": 931,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1011,
@@ -6099,7 +6124,8 @@
             "2K25": {
               "address": 933,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1013,
@@ -6131,7 +6157,8 @@
             "2K25": {
               "address": 934,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1014,
@@ -6163,7 +6190,8 @@
             "2K25": {
               "address": 928,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1008,
@@ -6195,7 +6223,8 @@
             "2K25": {
               "address": 930,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1010,
@@ -6227,7 +6256,8 @@
             "2K25": {
               "address": 929,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1009,
@@ -6259,7 +6289,8 @@
             "2K25": {
               "address": 932,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1012,
@@ -6299,7 +6330,8 @@
             "2K25": {
               "address": 943,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1023,
@@ -6331,7 +6363,8 @@
             "2K25": {
               "address": 937,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1017,
@@ -6363,7 +6396,8 @@
             "2K25": {
               "address": 938,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1018,
@@ -6395,7 +6429,8 @@
             "2K25": {
               "address": 941,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1021,
@@ -6427,7 +6462,8 @@
             "2K25": {
               "address": 940,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1020,
@@ -6459,7 +6495,8 @@
             "2K25": {
               "address": 939,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1019,
@@ -6520,7 +6557,8 @@
             "2K25": {
               "address": 948,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1028,
@@ -6552,7 +6590,8 @@
             "2K25": {
               "address": 959,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1039,
@@ -6584,7 +6623,8 @@
             "2K25": {
               "address": 951,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1033,
@@ -6616,7 +6656,8 @@
             "2K25": {
               "address": 961,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1041,
@@ -6634,7 +6675,8 @@
             "2K25": {
               "address": 953,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             }
           }
         },
@@ -6659,7 +6701,8 @@
             "2K25": {
               "address": 955,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1035,
@@ -6691,7 +6734,8 @@
             "2K25": {
               "address": 957,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1037,
@@ -6723,7 +6767,8 @@
             "2K25": {
               "address": 949,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1031,
@@ -6755,7 +6800,8 @@
             "2K25": {
               "address": 963,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1043,
@@ -6814,7 +6860,8 @@
             "2K25": {
               "address": 960,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1040,
@@ -6846,7 +6893,8 @@
             "2K25": {
               "address": 952,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1034,
@@ -6878,7 +6926,8 @@
             "2K25": {
               "address": 962,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1042,
@@ -6896,7 +6945,8 @@
             "2K25": {
               "address": 954,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             }
           }
         },
@@ -6921,7 +6971,8 @@
             "2K25": {
               "address": 956,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1036,
@@ -6953,7 +7004,8 @@
             "2K25": {
               "address": 958,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1038,
@@ -6985,7 +7037,8 @@
             "2K25": {
               "address": 950,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1032,
@@ -7019,7 +7072,8 @@
             "2K25": {
               "address": 966,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1045,
@@ -7051,7 +7105,8 @@
             "2K25": {
               "address": 942,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1022,
@@ -7083,7 +7138,8 @@
             "2K25": {
               "address": 946,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1026,
@@ -7176,26 +7232,6 @@
           }
         },
         {
-          "normalized_name": "POSTFADEAWAY",
-          "display_name": "POST_FADEAWAY",
-          "versions": {
-            "2K22": {
-              "address": 1056,
-              "hex": "0x420",
-              "length": 8,
-              "startBit": 0,
-              "type": "slider"
-            },
-            "2K23,2K24": {
-              "address": 1060,
-              "hex": "0x424",
-              "length": 8,
-              "startBit": 0,
-              "type": "slider"
-            }
-          }
-        },
-        {
           "normalized_name": "POTENTIAL",
           "display_name": "Potential",
           "versions": {
@@ -7216,7 +7252,8 @@
             "2K25": {
               "address": 947,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1027,
@@ -7270,7 +7307,8 @@
             "2K25": {
               "address": 927,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1007,
@@ -7302,7 +7340,8 @@
             "2K25": {
               "address": 926,
               "length": 8,
-              "type": "Binary"
+              "type": "Binary",
+              "startBit": 0
             },
             "2K26": {
               "address": 1006,
@@ -7349,6 +7388,18 @@
               "length": 7,
               "startBit": 7,
               "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "CONTESTEDJUMPERMID",
+          "display_name": "Contested Jumper Mid",
+          "versions": {
+            "2K25": {
+              "address": 1002,
+              "length": 7,
+              "startBit": 5,
+              "type": "Integer"
             }
           }
         },
@@ -8688,6 +8739,18 @@
           }
         },
         {
+          "normalized_name": "PUTBACKDUNK",
+          "display_name": "Putback Dunk",
+          "versions": {
+            "2K25": {
+              "address": 973,
+              "length": 7,
+              "startBit": 6,
+              "type": "Integer"
+            }
+          }
+        },
+        {
           "normalized_name": "SPINLAYUP",
           "display_name": "Spin Layup",
           "versions": {
@@ -8859,6 +8922,18 @@
               "length": 7,
               "startBit": 6,
               "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "STEPBACKJUMPERMID",
+          "display_name": "Stepback Jumper Mid",
+          "versions": {
+            "2K25": {
+              "address": 1004,
+              "length": 7,
+              "startBit": 7,
+              "type": "Integer"
             }
           }
         },
@@ -9071,6 +9146,18 @@
               "length": 7,
               "startBit": 6,
               "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "DRIVEPULLUPMID",
+          "display_name": "Drive Pull Up Mid",
+          "versions": {
+            "2K25": {
+              "address": 1008,
+              "length": 7,
+              "startBit": 7,
+              "type": "Integer"
             }
           }
         },
@@ -11256,19 +11343,6 @@
           }
         },
         {
-          "normalized_name": "DRIBBLEPULLUP",
-          "display_name": "Dribble Pull Up",
-          "versions": {
-            "2K26": {
-              "address": 787,
-              "hex": "0x313",
-              "length": 7,
-              "startBit": 0,
-              "type": "Integer"
-            }
-          }
-        },
-        {
           "normalized_name": "FREETHROW",
           "display_name": "Free Throw",
           "versions": {
@@ -11302,32 +11376,6 @@
           }
         },
         {
-          "normalized_name": "GOTOSHOT",
-          "display_name": "Go To Shot",
-          "versions": {
-            "2K26": {
-              "address": 894,
-              "hex": "0x37E",
-              "length": 6,
-              "startBit": 4,
-              "type": "Integer"
-            }
-          }
-        },
-        {
-          "normalized_name": "HOPJUMPER",
-          "display_name": "Hop Jumper",
-          "versions": {
-            "2K26": {
-              "address": 772,
-              "hex": "0x304",
-              "length": 7,
-              "startBit": 7,
-              "type": "Integer"
-            }
-          }
-        },
-        {
           "normalized_name": "JUMPBALLRITUAL",
           "display_name": "Jumpball Ritual",
           "versions": {
@@ -11347,6 +11395,13 @@
             },
             "2K25": {
               "address": 761,
+              "length": 5,
+              "startBit": 6,
+              "type": "Integer"
+            },
+            "2K26": {
+              "address": 769,
+              "hex": "0x301",
               "length": 5,
               "startBit": 6,
               "type": "Integer"
@@ -11373,19 +11428,6 @@
               "address": 829,
               "length": 7,
               "startBit": 3,
-              "type": "Integer"
-            }
-          }
-        },
-        {
-          "normalized_name": "LOWERBASE",
-          "display_name": "Lower/Base",
-          "versions": {
-            "2K26": {
-              "address": 892,
-              "hex": "0x37C",
-              "length": 10,
-              "startBit": 0,
               "type": "Integer"
             }
           }
@@ -11483,19 +11525,6 @@
           }
         },
         {
-          "normalized_name": "SPINJUMPER",
-          "display_name": "Spin Jumper",
-          "versions": {
-            "2K26": {
-              "address": 466,
-              "hex": "0x1D2",
-              "length": 6,
-              "startBit": 4,
-              "type": "Integer"
-            }
-          }
-        },
-        {
           "normalized_name": "UPPERRELEASE1",
           "display_name": "Upper Release 1",
           "versions": {
@@ -11563,32 +11592,6 @@
         }
       ],
       "Layups And Dunks": [
-        {
-          "normalized_name": "DUNKEMOTION",
-          "display_name": "Dunk Emotion",
-          "versions": {
-            "2K22": {
-              "address": 759,
-              "hex": "0x2F7",
-              "length": 1,
-              "startBit": 7,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 893,
-              "hex": "0x37D",
-              "length": 1,
-              "startBit": 2,
-              "type": "combo"
-            },
-            "2K25": {
-              "address": 255,
-              "length": 1,
-              "startBit": 7,
-              "type": "Integer"
-            }
-          }
-        },
         {
           "normalized_name": "DUNKPACKAGE10",
           "display_name": "Dunk Package 10",
@@ -12053,15 +12056,8 @@
         },
         {
           "normalized_name": "GOTODUNKPACKAGE",
-          "display_name": "Go To Dunk Package",
+          "display_name": "Go-To Dunk Package",
           "versions": {
-            "2K26": {
-              "address": 764,
-              "hex": "0x2FC",
-              "length": 8,
-              "startBit": 0,
-              "type": "Integer"
-            },
             "2K22": {
               "address": 792,
               "hex": "0x318",
@@ -12078,6 +12074,13 @@
             },
             "2K25": {
               "address": 756,
+              "length": 8,
+              "startBit": 0,
+              "type": "Integer"
+            },
+            "2K26": {
+              "address": 764,
+              "hex": "0x2FC",
               "length": 8,
               "startBit": 0,
               "type": "Integer"
@@ -12110,10 +12113,10 @@
             },
             "2K26": {
               "address": 992,
-              "hex": "0x3e0",
-              "type": "bitfield",
+              "bit_length": 6,
               "bit_offset": 0,
-              "bit_length": 6
+              "hex": "0x3e0",
+              "type": "bitfield"
             }
           }
         }
@@ -12123,6 +12126,20 @@
           "normalized_name": "POSTFADE",
           "display_name": "Post Fade",
           "versions": {
+            "2K22": {
+              "address": 417,
+              "hex": "0x1A1",
+              "length": 5,
+              "startBit": 7,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 381,
+              "hex": "0x17D",
+              "length": 5,
+              "startBit": 7,
+              "type": "combo"
+            },
             "2K25": {
               "address": 457,
               "length": 6,
@@ -12131,10 +12148,10 @@
             },
             "2K26": {
               "address": 465,
-              "hex": "0x1d1",
-              "type": "bitfield",
+              "bit_length": 6,
               "bit_offset": 6,
-              "bit_length": 6
+              "hex": "0x1d1",
+              "type": "bitfield"
             }
           }
         },
@@ -12144,20 +12161,22 @@
           "versions": {
             "2K26": {
               "address": 992,
+              "bit_length": 5,
+              "bit_offset": 7,
               "hex": "0x3e0",
               "options": [
-                "\u65e0",
-                "\u57fa\u7840",
+                "无",
+                "基础",
                 "Kevin Durant",
                 "Kawhi Leonard",
                 "Kobe Bryant",
                 "Jaylen Brown",
                 "Jimmy Butler",
                 "Jamal Murray",
-                "\u804c\u4e1a",
-                "\u804c\u4e1a2",
-                "\u666e\u901a",
-                "\u7cbe\u82f1",
+                "职业",
+                "职业2",
+                "普通",
+                "精英",
                 "Kareem Abdul-Jabbar",
                 "Carmelo Anthony",
                 "Jalen Brunson",
@@ -12174,9 +12193,7 @@
                 "Domantas Sabonis",
                 "Ivica Zubac"
               ],
-              "type": "bitfield",
-              "bit_offset": 7,
-              "bit_length": 5
+              "type": "bitfield"
             }
           }
         },
@@ -12206,10 +12223,10 @@
             },
             "2K26": {
               "address": 452,
-              "hex": "0x1c4",
-              "type": "bitfield",
+              "bit_length": 5,
               "bit_offset": 6,
-              "bit_length": 5
+              "hex": "0x1c4",
+              "type": "bitfield"
             }
           }
         },
@@ -12246,6 +12263,8 @@
             },
             "2K26": {
               "address": 924,
+              "bit_length": 4,
+              "bit_offset": 0,
               "hex": "0x39c",
               "options": [
                 "Big",
@@ -12268,9 +12287,40 @@
                 "Domantas Sabonis",
                 "Normal WNBA"
               ],
-              "type": "bitfield",
-              "bit_offset": 0,
-              "bit_length": 4
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "POSTSPINSHOT",
+          "display_name": "Post Spin Shot",
+          "versions": {
+            "2K22": {
+              "address": 405,
+              "hex": "0x195",
+              "length": 1,
+              "startBit": 5,
+              "type": "combo"
+            },
+            "2K23": {
+              "address": 369,
+              "hex": "0x171",
+              "length": 1,
+              "startBit": 5,
+              "type": "combo"
+            },
+            "2K24": {
+              "address": 899,
+              "hex": "0x383",
+              "length": 1,
+              "startBit": 1,
+              "type": "combo"
+            },
+            "2K25": {
+              "address": 903,
+              "length": 2,
+              "startBit": 6,
+              "type": "Integer"
             }
           }
         },
@@ -12280,34 +12330,14 @@
           "versions": {
             "2K26": {
               "address": 983,
+              "bit_length": 2,
+              "bit_offset": 6,
               "hex": "0x3d7",
               "options": [
                 "Big",
                 "Small"
               ],
-              "type": "bitfield",
-              "bit_offset": 6,
-              "bit_length": 2
-            }
-          }
-        },
-        {
-          "normalized_name": "POSTFADEAWAY",
-          "display_name": "POST_FADEAWAY",
-          "versions": {
-            "2K22": {
-              "address": 417,
-              "hex": "0x1A1",
-              "length": 5,
-              "startBit": 7,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 381,
-              "hex": "0x17D",
-              "length": 5,
-              "startBit": 7,
-              "type": "combo"
+              "type": "bitfield"
             }
           }
         }
@@ -12349,8 +12379,17 @@
           "normalized_name": "BREAKDOWNCOMBOS",
           "display_name": "Breakdown Combos",
           "versions": {
+            "2K24": {
+              "address": 898,
+              "hex": "0x382",
+              "length": 5,
+              "startBit": 2,
+              "type": "combo"
+            },
             "2K26": {
               "address": 979,
+              "bit_length": 6,
+              "bit_offset": 1,
               "hex": "0x3d3",
               "options": [
                 "Basic",
@@ -12425,16 +12464,7 @@
                 "Zion Williamson",
                 "Trae Young"
               ],
-              "type": "bitfield",
-              "bit_offset": 1,
-              "bit_length": 6
-            },
-            "2K24": {
-              "address": 898,
-              "hex": "0x382",
-              "length": 5,
-              "startBit": 2,
-              "type": "combo"
+              "type": "bitfield"
             }
           }
         },
@@ -12450,10 +12480,10 @@
             },
             "2K26": {
               "address": 447,
-              "hex": "0x1bf",
-              "type": "bitfield",
+              "bit_length": 5,
               "bit_offset": 2,
-              "bit_length": 5
+              "hex": "0x1bf",
+              "type": "bitfield"
             }
           }
         },
@@ -12477,6 +12507,13 @@
             },
             "2K25": {
               "address": 779,
+              "length": 7,
+              "startBit": 0,
+              "type": "Integer"
+            },
+            "2K26": {
+              "address": 787,
+              "hex": "0x313",
               "length": 7,
               "startBit": 0,
               "type": "Integer"
@@ -12509,10 +12546,10 @@
             },
             "2K26": {
               "address": 946,
-              "hex": "0x3b2",
-              "type": "bitfield",
+              "bit_length": 6,
               "bit_offset": 3,
-              "bit_length": 6
+              "hex": "0x3b2",
+              "type": "bitfield"
             }
           }
         },
@@ -12528,10 +12565,10 @@
             },
             "2K26": {
               "address": 948,
-              "hex": "0x3b4",
-              "type": "bitfield",
+              "bit_length": 6,
               "bit_offset": 7,
-              "bit_length": 6
+              "hex": "0x3b4",
+              "type": "bitfield"
             }
           }
         },
@@ -12539,12 +12576,32 @@
           "normalized_name": "MOVINGBEHINDTHEBACK",
           "display_name": "Moving Behind The Back",
           "versions": {
+            "2K22": {
+              "address": 790,
+              "hex": "0x316",
+              "length": 4,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 786,
+              "hex": "0x312",
+              "length": 4,
+              "startBit": 1,
+              "type": "combo"
+            },
+            "2K25": {
+              "address": 896,
+              "length": 6,
+              "startBit": 6,
+              "type": "Integer"
+            },
             "2K26": {
               "address": 976,
-              "hex": "0x3d0",
-              "type": "bitfield",
+              "bit_length": 6,
               "bit_offset": 6,
-              "bit_length": 6
+              "hex": "0x3d0",
+              "type": "bitfield"
             }
           }
         },
@@ -12574,10 +12631,10 @@
             },
             "2K26": {
               "address": 980,
-              "hex": "0x3d4",
-              "type": "bitfield",
+              "bit_length": 6,
               "bit_offset": 0,
-              "bit_length": 6
+              "hex": "0x3d4",
+              "type": "bitfield"
             }
           }
         },
@@ -12607,10 +12664,10 @@
             },
             "2K26": {
               "address": 980,
-              "hex": "0x3d4",
-              "type": "bitfield",
+              "bit_length": 5,
               "bit_offset": 7,
-              "bit_length": 5
+              "hex": "0x3d4",
+              "type": "bitfield"
             }
           }
         },
@@ -12640,10 +12697,10 @@
             },
             "2K26": {
               "address": 452,
-              "hex": "0x1c4",
-              "type": "bitfield",
+              "bit_length": 6,
               "bit_offset": 0,
-              "bit_length": 6
+              "hex": "0x1c4",
+              "type": "bitfield"
             }
           }
         },
@@ -12673,10 +12730,10 @@
             },
             "2K26": {
               "address": 959,
-              "hex": "0x3bf",
-              "type": "bitfield",
+              "bit_length": 6,
               "bit_offset": 1,
-              "bit_length": 6
+              "hex": "0x3bf",
+              "type": "bitfield"
             }
           }
         },
@@ -12692,10 +12749,10 @@
             },
             "2K26": {
               "address": 699,
-              "hex": "0x2bb",
-              "type": "bitfield",
+              "bit_length": 6,
               "bit_offset": 2,
-              "bit_length": 6
+              "hex": "0x2bb",
+              "type": "bitfield"
             }
           }
         },
@@ -12730,6 +12787,8 @@
             },
             "2K26": {
               "address": 948,
+              "bit_length": 6,
+              "bit_offset": 0,
               "hex": "0x3b4",
               "options": [
                 "Basic",
@@ -12786,9 +12845,7 @@
                 "Zion Williamson",
                 "Trae Young"
               ],
-              "type": "bitfield",
-              "bit_offset": 0,
-              "bit_length": 6
+              "type": "bitfield"
             }
           }
         },
@@ -12848,6 +12905,13 @@
               "length": 6,
               "startBit": 4,
               "type": "Integer"
+            },
+            "2K26": {
+              "address": 466,
+              "hex": "0x1D2",
+              "length": 6,
+              "startBit": 4,
+              "type": "Integer"
             }
           }
         },
@@ -12877,10 +12941,10 @@
             },
             "2K26": {
               "address": 824,
-              "hex": "0x338",
-              "type": "bitfield",
+              "bit_length": 4,
               "bit_offset": 3,
-              "bit_length": 4
+              "hex": "0x338",
+              "type": "bitfield"
             }
           }
         }
@@ -12932,10 +12996,10 @@
             },
             "2K26": {
               "address": 263,
-              "hex": "0x107",
-              "type": "bitfield",
+              "bit_length": 1,
               "bit_offset": 6,
-              "bit_length": 1
+              "hex": "0x107",
+              "type": "bitfield"
             }
           }
         },
@@ -12976,12 +13040,32 @@
           "normalized_name": "DUNKEMOTION",
           "display_name": "Dunk Emotion",
           "versions": {
+            "2K22": {
+              "address": 759,
+              "hex": "0x2F7",
+              "length": 1,
+              "startBit": 7,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 893,
+              "hex": "0x37D",
+              "length": 1,
+              "startBit": 2,
+              "type": "combo"
+            },
+            "2K25": {
+              "address": 255,
+              "length": 1,
+              "startBit": 7,
+              "type": "Integer"
+            },
             "2K26": {
               "address": 263,
-              "hex": "0x107",
-              "type": "bitfield",
+              "bit_length": 1,
               "bit_offset": 7,
-              "bit_length": 1
+              "hex": "0x107",
+              "type": "bitfield"
             }
           }
         },
@@ -12991,6 +13075,13 @@
           "versions": {
             "2K25": {
               "address": 886,
+              "length": 6,
+              "startBit": 4,
+              "type": "Integer"
+            },
+            "2K26": {
+              "address": 894,
+              "hex": "0x37E",
               "length": 6,
               "startBit": 4,
               "type": "Integer"
@@ -13020,25 +13111,19 @@
               "length": 7,
               "startBit": 7,
               "type": "Integer"
-            }
-          }
-        },
-        {
-          "normalized_name": "JUMPBALLRITUAL",
-          "display_name": "Jumpball Ritual",
-          "versions": {
+            },
             "2K26": {
-              "address": 769,
-              "hex": "0x301",
-              "length": 5,
-              "startBit": 6,
+              "address": 772,
+              "hex": "0x304",
+              "length": 7,
+              "startBit": 7,
               "type": "Integer"
             }
           }
         },
         {
           "normalized_name": "LOWERBASE",
-          "display_name": "LOWER/BASE",
+          "display_name": "Lower/Base",
           "versions": {
             "2K22": {
               "address": 396,
@@ -13053,6 +13138,13 @@
               "length": 10,
               "startBit": 0,
               "type": "combo"
+            },
+            "2K26": {
+              "address": 892,
+              "hex": "0x37C",
+              "length": 10,
+              "startBit": 0,
+              "type": "Integer"
             }
           }
         },
@@ -13467,37 +13559,13 @@
           }
         },
         {
-          "normalized_name": "MOVINGBEHINDTHEBACK",
-          "display_name": "Moving Behind The Back",
-          "versions": {
-            "2K22": {
-              "address": 790,
-              "hex": "0x316",
-              "length": 4,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 786,
-              "hex": "0x312",
-              "length": 4,
-              "startBit": 1,
-              "type": "combo"
-            },
-            "2K25": {
-              "address": 896,
-              "length": 6,
-              "startBit": 6,
-              "type": "Integer"
-            }
-          }
-        },
-        {
           "normalized_name": "NBAJUMPBALLRITUAL",
           "display_name": "NBA Jumpball Ritual",
           "versions": {
             "2K26": {
               "address": 841,
+              "bit_length": 5,
+              "bit_offset": 6,
               "hex": "0x349",
               "options": [
                 "None",
@@ -13531,9 +13599,7 @@
                 "360 Spin",
                 "Warm Hands"
               ],
-              "type": "bitfield",
-              "bit_offset": 6,
-              "bit_length": 5
+              "type": "bitfield"
             }
           }
         },
@@ -13548,7 +13614,7 @@
               "hex": "0x2C6",
               "length": 8,
               "options": [
-                "\u65e0",
+                "无",
                 "Inspect Ball 1",
                 "Inspect Ball 2",
                 "Inspect Ball 3",
@@ -13715,7 +13781,7 @@
               "hex": "0x31D",
               "length": 8,
               "options": [
-                "\u65e0",
+                "无",
                 "Inspect Ball 1",
                 "Inspect Ball 2",
                 "Inspect Ball 3",
@@ -14063,7 +14129,7 @@
         },
         {
           "normalized_name": "ORIGINALCONTRACTYEARS",
-          "display_name": "Original Contract Length",
+          "display_name": "ORIGINAL_CONTRACT_YEARS",
           "versions": {
             "2K22": {
               "address": 833,
@@ -17785,7 +17851,7 @@
       ]
     },
     "Stats": {
-      "Season High": [
+      "Career High Stats": [
         {
           "normalized_name": "ASSISTS",
           "display_name": "Assists",
@@ -17805,12 +17871,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 445,
+              "address": 845,
               "bit_length": 6,
-              "bit_offset": 4,
-              "hex": "0x1BD",
+              "bit_offset": 6,
+              "hex": "0x34D",
               "length": 6,
-              "startBit": 4,
+              "startBit": 6,
               "type": "bitfield"
             }
           }
@@ -17834,12 +17900,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 442,
+              "address": 415,
               "bit_length": 5,
-              "bit_offset": 6,
-              "hex": "0x1BA",
+              "bit_offset": 3,
+              "hex": "0x19F",
               "length": 5,
-              "startBit": 6,
+              "startBit": 3,
               "type": "bitfield"
             }
           }
@@ -17856,11 +17922,11 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 272,
-              "bit_length": 5,
+              "address": 950,
+              "bit_length": 6,
               "bit_offset": 3,
-              "hex": "0x110",
-              "length": 5,
+              "hex": "0x3B6",
+              "length": 6,
               "startBit": 3,
               "type": "bitfield"
             }
@@ -17885,12 +17951,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 441,
+              "address": 432,
               "bit_length": 7,
-              "bit_offset": 7,
-              "hex": "0x1B9",
+              "bit_offset": 0,
+              "hex": "0x1B0",
               "length": 7,
-              "startBit": 7,
+              "startBit": 0,
               "type": "bitfield"
             }
           }
@@ -17914,12 +17980,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 441,
+              "address": 431,
               "bit_length": 7,
-              "bit_offset": 0,
-              "hex": "0x1B9",
+              "bit_offset": 1,
+              "hex": "0x1AF",
               "length": 7,
-              "startBit": 0,
+              "startBit": 1,
               "type": "bitfield"
             }
           }
@@ -17943,12 +18009,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 444,
+              "address": 436,
               "bit_length": 6,
-              "bit_offset": 0,
-              "hex": "0x1BC",
+              "bit_offset": 1,
+              "hex": "0x1B4",
               "length": 6,
-              "startBit": 0,
+              "startBit": 1,
               "type": "bitfield"
             }
           }
@@ -17972,12 +18038,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 444,
+              "address": 436,
               "bit_length": 6,
-              "bit_offset": 6,
-              "hex": "0x1BC",
+              "bit_offset": 7,
+              "hex": "0x1B4",
               "length": 6,
-              "startBit": 6,
+              "startBit": 7,
               "type": "bitfield"
             }
           }
@@ -18003,10 +18069,10 @@
             "2K26": {
               "address": 796,
               "bit_length": 7,
-              "bit_offset": 7,
+              "bit_offset": 0,
               "hex": "0x31C",
               "length": 7,
-              "startBit": 7,
+              "startBit": 0,
               "type": "bitfield"
             }
           }
@@ -18023,12 +18089,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 951,
+              "address": 949,
               "bit_length": 6,
-              "bit_offset": 1,
-              "hex": "0x3B7",
+              "bit_offset": 5,
+              "hex": "0x3B5",
               "length": 6,
-              "startBit": 1,
+              "startBit": 5,
               "type": "bitfield"
             }
           }
@@ -18052,12 +18118,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 440,
+              "address": 430,
               "bit_length": 8,
-              "bit_offset": 0,
-              "hex": "0x1B8",
+              "bit_offset": 1,
+              "hex": "0x1AE",
               "length": 8,
-              "startBit": 0,
+              "startBit": 1,
               "type": "bitfield"
             }
           }
@@ -18081,12 +18147,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 434,
+              "address": 846,
               "bit_length": 6,
-              "bit_offset": 7,
-              "hex": "0x1B2",
+              "bit_offset": 4,
+              "hex": "0x34E",
               "length": 6,
-              "startBit": 7,
+              "startBit": 4,
               "type": "bitfield"
             }
           }
@@ -18110,10 +18176,10 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 443,
+              "address": 363,
               "bit_length": 5,
               "bit_offset": 3,
-              "hex": "0x1BB",
+              "hex": "0x16B",
               "length": 5,
               "startBit": 3,
               "type": "bitfield"
@@ -18139,12 +18205,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 438,
+              "address": 434,
               "bit_length": 6,
-              "bit_offset": 4,
-              "hex": "0x1B6",
+              "bit_offset": 1,
+              "hex": "0x1B2",
               "length": 6,
-              "startBit": 4,
+              "startBit": 1,
               "type": "bitfield"
             }
           }
@@ -18168,18 +18234,18 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 978,
+              "address": 437,
               "bit_length": 6,
-              "bit_offset": 2,
-              "hex": "0x3D2",
+              "bit_offset": 5,
+              "hex": "0x1B5",
               "length": 6,
-              "startBit": 2,
+              "startBit": 5,
               "type": "bitfield"
             }
           }
         }
       ],
-      "Career High": [
+      "Season High Stats": [
         {
           "normalized_name": "ASSISTS",
           "display_name": "Assists",
@@ -18199,12 +18265,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 845,
+              "address": 445,
               "bit_length": 6,
-              "bit_offset": 6,
-              "hex": "0x34D",
+              "bit_offset": 4,
+              "hex": "0x1BD",
               "length": 6,
-              "startBit": 6,
+              "startBit": 4,
               "type": "bitfield"
             }
           }
@@ -18228,12 +18294,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 415,
+              "address": 442,
               "bit_length": 5,
-              "bit_offset": 3,
-              "hex": "0x19F",
+              "bit_offset": 6,
+              "hex": "0x1BA",
               "length": 5,
-              "startBit": 3,
+              "startBit": 6,
               "type": "bitfield"
             }
           }
@@ -18250,11 +18316,11 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 950,
-              "bit_length": 6,
+              "address": 272,
+              "bit_length": 5,
               "bit_offset": 3,
-              "hex": "0x3B6",
-              "length": 6,
+              "hex": "0x110",
+              "length": 5,
               "startBit": 3,
               "type": "bitfield"
             }
@@ -18279,12 +18345,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 432,
+              "address": 441,
               "bit_length": 7,
-              "bit_offset": 0,
-              "hex": "0x1B0",
+              "bit_offset": 7,
+              "hex": "0x1B9",
               "length": 7,
-              "startBit": 0,
+              "startBit": 7,
               "type": "bitfield"
             }
           }
@@ -18308,12 +18374,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 431,
+              "address": 441,
               "bit_length": 7,
-              "bit_offset": 1,
-              "hex": "0x1AF",
+              "bit_offset": 0,
+              "hex": "0x1B9",
               "length": 7,
-              "startBit": 1,
+              "startBit": 0,
               "type": "bitfield"
             }
           }
@@ -18337,12 +18403,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 436,
+              "address": 444,
               "bit_length": 6,
-              "bit_offset": 1,
-              "hex": "0x1B4",
+              "bit_offset": 0,
+              "hex": "0x1BC",
               "length": 6,
-              "startBit": 1,
+              "startBit": 0,
               "type": "bitfield"
             }
           }
@@ -18366,12 +18432,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 436,
+              "address": 444,
               "bit_length": 6,
-              "bit_offset": 7,
-              "hex": "0x1B4",
+              "bit_offset": 6,
+              "hex": "0x1BC",
               "length": 6,
-              "startBit": 7,
+              "startBit": 6,
               "type": "bitfield"
             }
           }
@@ -18397,10 +18463,10 @@
             "2K26": {
               "address": 796,
               "bit_length": 7,
-              "bit_offset": 0,
+              "bit_offset": 7,
               "hex": "0x31C",
               "length": 7,
-              "startBit": 0,
+              "startBit": 7,
               "type": "bitfield"
             }
           }
@@ -18417,12 +18483,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 949,
+              "address": 951,
               "bit_length": 6,
-              "bit_offset": 5,
-              "hex": "0x3B5",
+              "bit_offset": 1,
+              "hex": "0x3B7",
               "length": 6,
-              "startBit": 5,
+              "startBit": 1,
               "type": "bitfield"
             }
           }
@@ -18446,12 +18512,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 430,
+              "address": 440,
               "bit_length": 8,
-              "bit_offset": 1,
-              "hex": "0x1AE",
+              "bit_offset": 0,
+              "hex": "0x1B8",
               "length": 8,
-              "startBit": 1,
+              "startBit": 0,
               "type": "bitfield"
             }
           }
@@ -18475,12 +18541,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 846,
+              "address": 434,
               "bit_length": 6,
-              "bit_offset": 4,
-              "hex": "0x34E",
+              "bit_offset": 7,
+              "hex": "0x1B2",
               "length": 6,
-              "startBit": 4,
+              "startBit": 7,
               "type": "bitfield"
             }
           }
@@ -18504,10 +18570,10 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 363,
+              "address": 443,
               "bit_length": 5,
               "bit_offset": 3,
-              "hex": "0x16B",
+              "hex": "0x1BB",
               "length": 5,
               "startBit": 3,
               "type": "bitfield"
@@ -18533,12 +18599,12 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 434,
+              "address": 438,
               "bit_length": 6,
-              "bit_offset": 1,
-              "hex": "0x1B2",
+              "bit_offset": 4,
+              "hex": "0x1B6",
               "length": 6,
-              "startBit": 1,
+              "startBit": 4,
               "type": "bitfield"
             }
           }
@@ -18562,13 +18628,749 @@
               "type": "bit"
             },
             "2K26": {
-              "address": 437,
+              "address": 978,
               "bit_length": 6,
-              "bit_offset": 5,
-              "hex": "0x1B5",
+              "bit_offset": 2,
+              "hex": "0x3D2",
               "length": 6,
-              "startBit": 5,
+              "startBit": 2,
               "type": "bitfield"
+            }
+          }
+        }
+      ],
+      "Stat IDs": [
+        {
+          "normalized_name": "CURRENTYEARSTATID",
+          "display_name": "Current Year Stat ID",
+          "versions": {
+            "2K22": {
+              "address": 252,
+              "hex": "0xFC",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 212,
+              "hex": "0xD4",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 296,
+              "hex": "0x128",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID1",
+          "display_name": "STATS_ID#1",
+          "versions": {
+            "2K22": {
+              "address": 254,
+              "hex": "0xFE",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 214,
+              "hex": "0xD6",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 298,
+              "hex": "0x12A",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID2",
+          "display_name": "STATS_ID#2",
+          "versions": {
+            "2K22": {
+              "address": 256,
+              "hex": "0x100",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 216,
+              "hex": "0xD8",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 300,
+              "hex": "0x12C",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID3",
+          "display_name": "STATS_ID#3",
+          "versions": {
+            "2K22": {
+              "address": 258,
+              "hex": "0x102",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 218,
+              "hex": "0xDA",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 302,
+              "hex": "0x12E",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID4",
+          "display_name": "STATS_ID#4",
+          "versions": {
+            "2K22": {
+              "address": 260,
+              "hex": "0x104",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 220,
+              "hex": "0xDC",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 304,
+              "hex": "0x130",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID5",
+          "display_name": "STATS_ID#5",
+          "versions": {
+            "2K22": {
+              "address": 262,
+              "hex": "0x106",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 222,
+              "hex": "0xDE",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 306,
+              "hex": "0x132",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID6",
+          "display_name": "STATS_ID#6",
+          "versions": {
+            "2K22": {
+              "address": 264,
+              "hex": "0x108",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 224,
+              "hex": "0xE0",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 308,
+              "hex": "0x134",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID7",
+          "display_name": "STATS_ID#7",
+          "versions": {
+            "2K22": {
+              "address": 266,
+              "hex": "0x10A",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 226,
+              "hex": "0xE2",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 310,
+              "hex": "0x136",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID8",
+          "display_name": "STATS_ID#8",
+          "versions": {
+            "2K22": {
+              "address": 268,
+              "hex": "0x10C",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 228,
+              "hex": "0xE4",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 312,
+              "hex": "0x138",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID9",
+          "display_name": "STATS_ID#9",
+          "versions": {
+            "2K22": {
+              "address": 270,
+              "hex": "0x10E",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 230,
+              "hex": "0xE6",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 314,
+              "hex": "0x13A",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID10",
+          "display_name": "STATS_ID#10",
+          "versions": {
+            "2K22": {
+              "address": 272,
+              "hex": "0x110",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 232,
+              "hex": "0xE8",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 316,
+              "hex": "0x13C",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID11",
+          "display_name": "STATS_ID#11",
+          "versions": {
+            "2K22": {
+              "address": 274,
+              "hex": "0x112",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 234,
+              "hex": "0xEA",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 318,
+              "hex": "0x13E",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID12",
+          "display_name": "STATS_ID#12",
+          "versions": {
+            "2K22": {
+              "address": 276,
+              "hex": "0x114",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 236,
+              "hex": "0xEC",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 320,
+              "hex": "0x140",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID13",
+          "display_name": "STATS_ID#13",
+          "versions": {
+            "2K22": {
+              "address": 278,
+              "hex": "0x116",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 238,
+              "hex": "0xEE",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 322,
+              "hex": "0x142",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID14",
+          "display_name": "STATS_ID#14",
+          "versions": {
+            "2K22": {
+              "address": 280,
+              "hex": "0x118",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 240,
+              "hex": "0xF0",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 324,
+              "hex": "0x144",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID15",
+          "display_name": "STATS_ID#15",
+          "versions": {
+            "2K22": {
+              "address": 282,
+              "hex": "0x11A",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 242,
+              "hex": "0xF2",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 326,
+              "hex": "0x146",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID16",
+          "display_name": "STATS_ID#16",
+          "versions": {
+            "2K22": {
+              "address": 284,
+              "hex": "0x11C",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 244,
+              "hex": "0xF4",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 328,
+              "hex": "0x148",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID17",
+          "display_name": "STATS_ID#17",
+          "versions": {
+            "2K22": {
+              "address": 4366,
+              "hex": "0x110E",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 246,
+              "hex": "0xF6",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 330,
+              "hex": "0x14A",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID18",
+          "display_name": "STATS_ID#18",
+          "versions": {
+            "2K22": {
+              "address": 288,
+              "hex": "0x120",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 248,
+              "hex": "0xF8",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 332,
+              "hex": "0x14C",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID19",
+          "display_name": "STATS_ID#19",
+          "versions": {
+            "2K22": {
+              "address": 290,
+              "hex": "0x122",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 250,
+              "hex": "0xFA",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 334,
+              "hex": "0x14E",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID20",
+          "display_name": "STATS_ID#20",
+          "versions": {
+            "2K22": {
+              "address": 292,
+              "hex": "0x124",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 252,
+              "hex": "0xFC",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 336,
+              "hex": "0x150",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID21",
+          "display_name": "STATS_ID#21",
+          "versions": {
+            "2K22": {
+              "address": 294,
+              "hex": "0x126",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 254,
+              "hex": "0xFE",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 338,
+              "hex": "0x152",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID22",
+          "display_name": "STATS_ID#22",
+          "versions": {
+            "2K22": {
+              "address": 296,
+              "hex": "0x128",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 256,
+              "hex": "0x100",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 340,
+              "hex": "0x154",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID23",
+          "display_name": "STATS_ID#23",
+          "versions": {
+            "2K22": {
+              "address": 298,
+              "hex": "0x12A",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 258,
+              "hex": "0x102",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 342,
+              "hex": "0x156",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID24",
+          "display_name": "STATS_ID#24",
+          "versions": {
+            "2K22": {
+              "address": 300,
+              "hex": "0x12C",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K23,2K24": {
+              "address": 260,
+              "hex": "0x104",
+              "length": 2,
+              "startBit": 0,
+              "type": "combo"
+            },
+            "2K26": {
+              "address": 344,
+              "hex": "0x158",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID25",
+          "display_name": "STATS_ID#25",
+          "versions": {
+            "2K26": {
+              "address": 346,
+              "hex": "0x15A",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID26",
+          "display_name": "STATS_ID#26",
+          "versions": {
+            "2K26": {
+              "address": 348,
+              "hex": "0x15C",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID27",
+          "display_name": "STATS_ID#27",
+          "versions": {
+            "2K26": {
+              "address": 350,
+              "hex": "0x15E",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID28",
+          "display_name": "STATS_ID#28",
+          "versions": {
+            "2K26": {
+              "address": 352,
+              "hex": "0x160",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID29",
+          "display_name": "STATS_ID#29",
+          "versions": {
+            "2K26": {
+              "address": 354,
+              "hex": "0x162",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID30",
+          "display_name": "STATS_ID#30",
+          "versions": {
+            "2K26": {
+              "address": 356,
+              "hex": "0x164",
+              "show_as_hex": false,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATSID31",
+          "display_name": "STATS_ID#31",
+          "versions": {
+            "2K26": {
+              "address": 358,
+              "hex": "0x166",
+              "show_as_hex": false,
+              "type": "ushort"
             }
           }
         }
@@ -18751,6 +19553,77 @@
               "length": 1,
               "startBit": 6,
               "type": "bitfield"
+            }
+          }
+        }
+      ],
+      "Basic Info": [
+        {
+          "normalized_name": "CURRENTTEAM",
+          "display_name": "Current Team",
+          "versions": {
+            "2K26": {
+              "address": 0,
+              "hex": "0x0",
+              "readonly": "False",
+              "show_hex": true,
+              "team_address_dropdown": true,
+              "type": "ulonglong"
+            }
+          }
+        },
+        {
+          "normalized_name": "ISUSED",
+          "display_name": "Is Used",
+          "versions": {
+            "2K26": {
+              "address": 18,
+              "hex": "0x12",
+              "is_usage_flag": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "JERSEYNUMBER",
+          "display_name": "Jersey Number",
+          "versions": {
+            "2K26": {
+              "address": 16,
+              "bit_length": 7,
+              "bit_offset": 0,
+              "hex": "0x10",
+              "length": 7,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "OVERALL",
+          "display_name": "Overall",
+          "versions": {
+            "2K26": {
+              "address": 61,
+              "bit_length": 8,
+              "bit_offset": 0,
+              "hex": "0x3D",
+              "length": 8,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "PREVIOUSTEAM",
+          "display_name": "Previous Team",
+          "versions": {
+            "2K26": {
+              "address": 8,
+              "hex": "0x8",
+              "show_hex": true,
+              "team_address_dropdown": true,
+              "type": "ulonglong"
             }
           }
         }
@@ -19212,892 +20085,7 @@
           }
         }
       ],
-      "Season IDs": [
-        {
-          "normalized_name": "CURRENTYEARSTATID",
-          "display_name": "Current Year Stat ID",
-          "versions": {
-            "2K22": {
-              "address": 252,
-              "hex": "0xFC",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 212,
-              "hex": "0xD4",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 296,
-              "hex": "0x128",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID1",
-          "display_name": "STATS_ID#1",
-          "versions": {
-            "2K22": {
-              "address": 254,
-              "hex": "0xFE",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 214,
-              "hex": "0xD6",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 298,
-              "hex": "0x12A",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID2",
-          "display_name": "STATS_ID#2",
-          "versions": {
-            "2K22": {
-              "address": 256,
-              "hex": "0x100",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 216,
-              "hex": "0xD8",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 300,
-              "hex": "0x12C",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID3",
-          "display_name": "STATS_ID#3",
-          "versions": {
-            "2K22": {
-              "address": 258,
-              "hex": "0x102",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 218,
-              "hex": "0xDA",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 302,
-              "hex": "0x12E",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID4",
-          "display_name": "STATS_ID#4",
-          "versions": {
-            "2K22": {
-              "address": 260,
-              "hex": "0x104",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 220,
-              "hex": "0xDC",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 304,
-              "hex": "0x130",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID5",
-          "display_name": "STATS_ID#5",
-          "versions": {
-            "2K22": {
-              "address": 262,
-              "hex": "0x106",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 222,
-              "hex": "0xDE",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 306,
-              "hex": "0x132",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID6",
-          "display_name": "STATS_ID#6",
-          "versions": {
-            "2K22": {
-              "address": 264,
-              "hex": "0x108",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 224,
-              "hex": "0xE0",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 308,
-              "hex": "0x134",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID7",
-          "display_name": "STATS_ID#7",
-          "versions": {
-            "2K22": {
-              "address": 266,
-              "hex": "0x10A",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 226,
-              "hex": "0xE2",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 310,
-              "hex": "0x136",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID8",
-          "display_name": "STATS_ID#8",
-          "versions": {
-            "2K22": {
-              "address": 268,
-              "hex": "0x10C",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 228,
-              "hex": "0xE4",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 312,
-              "hex": "0x138",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID9",
-          "display_name": "STATS_ID#9",
-          "versions": {
-            "2K22": {
-              "address": 270,
-              "hex": "0x10E",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 230,
-              "hex": "0xE6",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 314,
-              "hex": "0x13A",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID10",
-          "display_name": "STATS_ID#10",
-          "versions": {
-            "2K22": {
-              "address": 272,
-              "hex": "0x110",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 232,
-              "hex": "0xE8",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 316,
-              "hex": "0x13C",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID11",
-          "display_name": "STATS_ID#11",
-          "versions": {
-            "2K22": {
-              "address": 274,
-              "hex": "0x112",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 234,
-              "hex": "0xEA",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 318,
-              "hex": "0x13E",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID12",
-          "display_name": "STATS_ID#12",
-          "versions": {
-            "2K22": {
-              "address": 276,
-              "hex": "0x114",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 236,
-              "hex": "0xEC",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 320,
-              "hex": "0x140",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID13",
-          "display_name": "STATS_ID#13",
-          "versions": {
-            "2K22": {
-              "address": 278,
-              "hex": "0x116",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 238,
-              "hex": "0xEE",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 322,
-              "hex": "0x142",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID14",
-          "display_name": "STATS_ID#14",
-          "versions": {
-            "2K22": {
-              "address": 280,
-              "hex": "0x118",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 240,
-              "hex": "0xF0",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 324,
-              "hex": "0x144",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID15",
-          "display_name": "STATS_ID#15",
-          "versions": {
-            "2K22": {
-              "address": 282,
-              "hex": "0x11A",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 242,
-              "hex": "0xF2",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 326,
-              "hex": "0x146",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID16",
-          "display_name": "STATS_ID#16",
-          "versions": {
-            "2K22": {
-              "address": 284,
-              "hex": "0x11C",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 244,
-              "hex": "0xF4",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 328,
-              "hex": "0x148",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID17",
-          "display_name": "STATS_ID#17",
-          "versions": {
-            "2K22": {
-              "address": 4366,
-              "hex": "0x110E",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 246,
-              "hex": "0xF6",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 330,
-              "hex": "0x14A",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID18",
-          "display_name": "STATS_ID#18",
-          "versions": {
-            "2K22": {
-              "address": 288,
-              "hex": "0x120",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 248,
-              "hex": "0xF8",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 332,
-              "hex": "0x14C",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID19",
-          "display_name": "STATS_ID#19",
-          "versions": {
-            "2K22": {
-              "address": 290,
-              "hex": "0x122",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 250,
-              "hex": "0xFA",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 334,
-              "hex": "0x14E",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID20",
-          "display_name": "STATS_ID#20",
-          "versions": {
-            "2K22": {
-              "address": 292,
-              "hex": "0x124",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 252,
-              "hex": "0xFC",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 336,
-              "hex": "0x150",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID21",
-          "display_name": "STATS_ID#21",
-          "versions": {
-            "2K22": {
-              "address": 294,
-              "hex": "0x126",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 254,
-              "hex": "0xFE",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 338,
-              "hex": "0x152",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID22",
-          "display_name": "STATS_ID#22",
-          "versions": {
-            "2K22": {
-              "address": 296,
-              "hex": "0x128",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 256,
-              "hex": "0x100",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 340,
-              "hex": "0x154",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID23",
-          "display_name": "STATS_ID#23",
-          "versions": {
-            "2K22": {
-              "address": 298,
-              "hex": "0x12A",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 258,
-              "hex": "0x102",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 342,
-              "hex": "0x156",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID24",
-          "display_name": "STATS_ID#24",
-          "versions": {
-            "2K22": {
-              "address": 300,
-              "hex": "0x12C",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K23,2K24": {
-              "address": 260,
-              "hex": "0x104",
-              "length": 2,
-              "startBit": 0,
-              "type": "combo"
-            },
-            "2K26": {
-              "address": 344,
-              "hex": "0x158",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID25",
-          "display_name": "STATS_ID#25",
-          "versions": {
-            "2K26": {
-              "address": 346,
-              "hex": "0x15A",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID26",
-          "display_name": "STATS_ID#26",
-          "versions": {
-            "2K26": {
-              "address": 348,
-              "hex": "0x15C",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID27",
-          "display_name": "STATS_ID#27",
-          "versions": {
-            "2K26": {
-              "address": 350,
-              "hex": "0x15E",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID28",
-          "display_name": "STATS_ID#28",
-          "versions": {
-            "2K26": {
-              "address": 352,
-              "hex": "0x160",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID29",
-          "display_name": "STATS_ID#29",
-          "versions": {
-            "2K26": {
-              "address": 354,
-              "hex": "0x162",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID30",
-          "display_name": "STATS_ID#30",
-          "versions": {
-            "2K26": {
-              "address": 356,
-              "hex": "0x164",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "STATSID31",
-          "display_name": "STATS_ID#31",
-          "versions": {
-            "2K26": {
-              "address": 358,
-              "hex": "0x166",
-              "show_as_hex": false,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_selector"
-        },
-        {
-          "normalized_name": "CURRENTTEAM",
-          "display_name": "Current Team",
-          "versions": {
-            "2K26": {
-              "address": 0,
-              "hex": "0x0",
-              "readonly": "False",
-              "show_hex": true,
-              "team_address_dropdown": true,
-              "type": "ulonglong"
-            }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
-          }
-        },
-        {
-          "normalized_name": "ISUSED",
-          "display_name": "Is Used",
-          "versions": {
-            "2K26": {
-              "address": 18,
-              "hex": "0x12",
-              "is_usage_flag": true,
-              "type": "ushort"
-            }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
-          }
-        },
-        {
-          "normalized_name": "JERSEYNUMBER",
-          "display_name": "Jersey Number",
-          "versions": {
-            "2K26": {
-              "address": 16,
-              "bit_length": 7,
-              "bit_offset": 0,
-              "hex": "0x10",
-              "length": 7,
-              "startBit": 0,
-              "type": "bitfield"
-            }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
-          }
-        },
-        {
-          "normalized_name": "OVERALL",
-          "display_name": "Overall",
-          "versions": {
-            "2K26": {
-              "address": 61,
-              "bit_length": 8,
-              "bit_offset": 0,
-              "hex": "0x3D",
-              "length": 8,
-              "startBit": 0,
-              "type": "bitfield"
-            }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
-          }
-        },
-        {
-          "normalized_name": "PREVIOUSTEAM",
-          "display_name": "Previous Team",
-          "versions": {
-            "2K26": {
-              "address": 8,
-              "hex": "0x8",
-              "show_hex": true,
-              "team_address_dropdown": true,
-              "type": "ulonglong"
-            }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
-          }
-        },
+      "Game Stats": [
         {
           "normalized_name": "GAMESPLAYED",
           "display_name": "Games Played",
@@ -20111,16 +20099,6 @@
               "startBit": 0,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
         },
         {
@@ -20136,16 +20114,6 @@
               "startBit": 4,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
         },
         {
@@ -20161,18 +20129,10 @@
               "startBit": 0,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
-        },
+        }
+      ],
+      "Other Stats": [
         {
           "normalized_name": "ASSISTS",
           "display_name": "Assists",
@@ -20186,16 +20146,6 @@
               "startBit": 0,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
         },
         {
@@ -20211,16 +20161,6 @@
               "startBit": 3,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
         },
         {
@@ -20236,16 +20176,6 @@
               "startBit": 1,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
         },
         {
@@ -20261,16 +20191,6 @@
               "startBit": 6,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
         },
         {
@@ -20286,41 +20206,6 @@
               "startBit": 0,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
-          }
-        },
-        {
-          "normalized_name": "BOX+-",
-          "display_name": "Total +/-",
-          "versions": {
-            "2K26": {
-              "address": 45,
-              "bit_length": 16,
-              "bit_offset": 6,
-              "hex": "0x2D",
-              "length": 16,
-              "startBit": 6,
-              "type": "int"
-            }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
         },
         {
@@ -20336,16 +20221,6 @@
               "startBit": 0,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
         },
         {
@@ -20361,18 +20236,10 @@
               "startBit": 4,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
-        },
+        }
+      ],
+      "Rebounds Stats": [
         {
           "normalized_name": "DEFENSEREBOUNDS",
           "display_name": "Defensive Rebounds",
@@ -20386,16 +20253,6 @@
               "startBit": 0,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
         },
         {
@@ -20411,18 +20268,10 @@
               "startBit": 6,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
-        },
+        }
+      ],
+      "Scoring Stats": [
         {
           "normalized_name": "FIELDGOALSATTEMPTED",
           "display_name": "Field Goals Attempted",
@@ -20436,16 +20285,6 @@
               "startBit": 7,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
         },
         {
@@ -20461,16 +20300,6 @@
               "startBit": 5,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
         },
         {
@@ -20486,16 +20315,6 @@
               "startBit": 3,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
         },
         {
@@ -20511,16 +20330,6 @@
               "startBit": 0,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
         },
         {
@@ -20536,16 +20345,6 @@
               "startBit": 0,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
         },
         {
@@ -20561,16 +20360,6 @@
               "startBit": 0,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
         },
         {
@@ -20586,39 +20375,23 @@
               "startBit": 4,
               "type": "bitfield"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
-        },
+        }
+      ],
+      "Season IDs": [
         {
-          "normalized_name": "SEASON",
-          "display_name": "Season",
+          "normalized_name": "BOX+-",
+          "display_name": "Total +/-",
           "versions": {
-            "2K22,2K23,2K24": {
-              "address": 5,
-              "hex": "0x5",
-              "length": 7,
-              "startBit": 0,
-              "type": "combo"
+            "2K26": {
+              "address": 45,
+              "bit_length": 16,
+              "bit_offset": 6,
+              "hex": "0x2D",
+              "length": 16,
+              "startBit": 6,
+              "type": "int"
             }
-          },
-          "stat_role": "season_id_detail",
-          "selected_record_source": {
-            "base_pointer": "PlayerSeasonStats",
-            "stride": "playerSeasonStatsSize",
-            "selector_role": "season_id_selector",
-            "invalid_ids": [
-              0,
-              65535
-            ]
           }
         }
       ]

@@ -19,7 +19,6 @@ from player_rules import (
     derive_player_profile_values,
     derive_player_rule_values,
 )
-from player_rules import MetricRankings
 from workbook_sqlite import ensure_workbook_sqlite_database, iter_workbook_sqlite_sheet_rows, workbook_sqlite_sheet_names
 
 _GENERATOR_DIR = Path(__file__).resolve().parent
@@ -127,7 +126,6 @@ class SeasonPlayerContextIndex:
     season: int
     source_database_path: Path
     comparison_rows: tuple[dict[str, Any], ...]
-    metric_rankings: MetricRankings
     evidence_by_key: dict[tuple[str, str], PlayerEvidence]
     field_index: dict[str, FieldEntry]
 
@@ -193,13 +191,12 @@ def _cached_authored_player_field_index(offsets_path: str) -> dict[str, FieldEnt
 def generate_player_proposal(
     evidence: PlayerEvidence,
     *,
-    league_player_rows: Iterable[dict[str, Any]] = (),
     offsets_path: str | Path | None = None,
     field_index: dict[str, FieldEntry] | None = None,
 ) -> GeneratedPlayerProposal:
     source_team = str(evidence.team or "").strip().upper()
     profile_result = derive_player_profile_values(evidence)
-    rule_result = derive_player_rule_values(evidence, league_player_rows=league_player_rows)
+    rule_result = derive_player_rule_values(evidence)
     candidates = player_field_candidates_from_results(profile_result, rule_result, offsets_path=offsets_path, field_index=field_index)
     return GeneratedPlayerProposal(
         player_id=evidence.player_id,
@@ -235,7 +232,7 @@ def generate_player_proposal_from_index(
     team: str,
 ) -> GeneratedPlayerProposal:
     evidence = context.evidence_for(player_id=player_id, team=team)
-    return generate_player_proposal(evidence, league_player_rows=context.metric_rankings, field_index=context.field_index)
+    return generate_player_proposal(evidence, field_index=context.field_index)
 
 
 def generate_player_proposals_for_contract(
@@ -494,7 +491,6 @@ def _cached_season_context_index(database_path: str, season: int, offsets_path: 
         season=season,
         source_database_path=database,
         comparison_rows=comparison_rows,
-        metric_rankings=MetricRankings(comparison_rows),
         evidence_by_key=evidence_by_key,
         field_index=dict(field_index),
     )

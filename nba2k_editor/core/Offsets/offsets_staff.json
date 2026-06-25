@@ -72,9 +72,9 @@
             "2K26": {
               "address": 362,
               "hex": "0x16a",
+              "length": 1,
               "readonly": true,
-              "type": "ubyte",
-              "length": 1
+              "type": "ubyte"
             }
           }
         },
@@ -469,6 +469,20 @@
           }
         }
       ],
+      "Team": [
+        {
+          "normalized_name": "CURRENTTEAM",
+          "display_name": "Current Team",
+          "versions": {
+            "2K26": {
+              "address": 24,
+              "hex": "0x18",
+              "readonly": "False",
+              "type": "uint64"
+            }
+          }
+        }
+      ],
       "Contract": [
         {
           "normalized_name": "SALARY",
@@ -537,18 +551,6 @@
               "hex": "0x156",
               "length": 1,
               "type": "ubyte"
-            }
-          }
-        },
-        {
-          "normalized_name": "CURRENTTEAM",
-          "display_name": "Current Team",
-          "versions": {
-            "2K26": {
-              "address": 24,
-              "hex": "0x18",
-              "readonly": "False",
-              "type": "uint64"
             }
           }
         },

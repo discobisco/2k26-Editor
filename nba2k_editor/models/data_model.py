@@ -4,7 +4,7 @@ import queue
 import re
 import threading
 from collections import OrderedDict
-from typing import Any
+from typing import Any, Iterable
 
 from nba2k_editor.core import offsets as offsets_mod
 from nba2k_editor.core.addressing import record_address, resolve_base_pointer_entry
@@ -150,6 +150,18 @@ def target_display_label(executable: str | None) -> str:
 
 
 
+def _json_safe_roster_value(value: Any) -> Any:
+    if isinstance(value, (bytes, bytearray)):
+        return list(bytes(value))
+    if isinstance(value, tuple):
+        return [_json_safe_roster_value(item) for item in value]
+    if isinstance(value, list):
+        return [_json_safe_roster_value(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _json_safe_roster_value(item) for key, item in value.items()}
+    return value
+
+
 class EditorDataModel:
     """Index-based backend model over offsets metadata and GameMemory reads/writes."""
 
@@ -180,7 +192,7 @@ class EditorDataModel:
         self._field_entries_cache: dict[str, tuple[FieldEntry, ...]] = {}
         self._field_context_cache: dict[str, dict[int, tuple[str, str]]] = {}
         self._field_lookup_cache: dict[str, dict[str, FieldEntry]] = {}
-        self._player_team_pointer_cache: dict[int, int | None] = {}
+        self._player_team_pointer_cache: dict[int, int] = {}
 
     def _active_config(self) -> dict[str, Any]:
         self.offsets.initialize_offsets(self.target_executable, force=False)
@@ -231,13 +243,6 @@ class EditorDataModel:
         cached = self._field_context_map(domain).get(id(field))
         if cached is not None:
             return cached
-        wanted_name = _field_identity(field.get("normalized_name") or field.get("display_name"))
-        wanted_display = _field_identity(field.get("display_name") or field.get("normalized_name"))
-        lookup = self._field_lookup(domain)
-        for key in (wanted_name, wanted_display):
-            entry = lookup.get(key)
-            if entry is not None:
-                return entry.section, entry.group
         return "", ""
 
     def _parent_payload(self, domain: str, payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -292,16 +297,56 @@ class EditorDataModel:
     def player_team_filter_options(self) -> tuple[str, ...]:
         return (PLAYER_TEAM_FILTER_ALL, *self.domain_item_labels("Teams"))
 
-    def _read_player_current_team_pointer(self, item: RecordListItem) -> int | None:
-        entry = self._field_by_normalized_name("Players", "CURRENTTEAM")
-        if entry is None:
-            return None
-        try:
-            return int(self.read_entry_value(entry, index=item.index).get("raw_value"))
-        except Exception:
-            return None
+    def _team_player_slot_entries(self) -> list[tuple[int, FieldEntry]]:
+        entries: list[tuple[int, FieldEntry]] = []
+        for entry in self.grouped_fields("Teams").get("Team Players", {}).get("Team Players", ()):
+            normalized = str(entry.normalized_name).strip().upper()
+            if not normalized.startswith("PLAYER"):
+                continue
+            suffix = normalized.replace("PLAYER", "", 1)
+            if not suffix.isdigit():
+                continue
+            entries.append((int(suffix), entry))
+        return sorted(entries, key=lambda item: item[0])[:15]
 
-    def _player_current_team_pointer(self, item: RecordListItem) -> int | None:
+    def player_roster_slot_items_for_team_items(
+        self,
+        team_items: Iterable[RecordListItem],
+    ) -> list[tuple[RecordListItem, dict[str, Any]]]:
+        players_by_address = {int(player.address): player for player in self.loaded_items.get("Players", {}).values()}
+        rows: list[tuple[RecordListItem, dict[str, Any]]] = []
+        for team in team_items:
+            for roster_slot, entry in self._team_player_slot_entries():
+                try:
+                    player_pointer = int(self.read_entry_value(entry, index=team.index).get("raw_value") or 0)
+                except Exception:
+                    continue
+                if not player_pointer:
+                    continue
+                player = players_by_address.get(player_pointer)
+                if player is None:
+                    continue
+                rows.append(
+                    (
+                        player,
+                        {
+                            "team_index": int(team.index),
+                            "team_label": str(team.label),
+                            "team_slot": int(roster_slot),
+                            "team_slot_field": str(entry.normalized_name),
+                        },
+                    )
+                )
+        return rows
+
+    def player_items_for_team_items(self, team_items: Iterable[RecordListItem]) -> list[RecordListItem]:
+        return [player for player, _placement in self.player_roster_slot_items_for_team_items(team_items)]
+
+    def _read_player_current_team_pointer(self, item: RecordListItem) -> int:
+        entry = self._field_by_normalized_name("Players", "CURRENTTEAM")
+        return int(self.read_entry_value(entry, index=item.index).get("raw_value"))
+
+    def _player_current_team_pointer(self, item: RecordListItem) -> int:
         if item.index not in self._player_team_pointer_cache:
             self._player_team_pointer_cache[item.index] = self._read_player_current_team_pointer(item)
         return self._player_team_pointer_cache[item.index]
@@ -924,8 +969,6 @@ class EditorDataModel:
             return "Z"
         if normalized == "BIRTHYEAR":
             return 2006
-        if normalized == "CUSTOMAGEATSETYEAR":
-            return 0
         if entry.section == "Attributes":
             return 25
         if entry.section == "Tendencies":
@@ -935,6 +978,187 @@ class EditorDataModel:
         if _is_player_season_id_selector_entry(entry):
             return 65535
         return None
+
+    def export_player_roster_snapshot(self, *, limit: int | None = None, progress_callback: Any | None = None) -> dict[str, Any]:
+        return self.export_player_roster_snapshot_for_items(self.scan_records("Players", limit=limit), progress_callback=progress_callback)
+
+    def export_player_roster_snapshot_for_items(
+        self,
+        items: Iterable[RecordListItem],
+        *,
+        progress_callback: Any | None = None,
+        mode: str = "custom",
+        placements: Iterable[dict[str, Any] | None] | None = None,
+    ) -> dict[str, Any]:
+        entries = tuple(self._portable_player_roster_entries())
+        records: list[dict[str, Any]] = []
+        selected_items = tuple(items)
+        selected_placements = tuple(placements) if placements is not None else tuple(None for _item in selected_items)
+        if len(selected_placements) != len(selected_items):
+            raise ValueError("player roster placements must match exported items")
+        total = len(selected_items)
+        if progress_callback is not None:
+            progress_callback(0, total, "Exporting player roster...")
+        for current, (item, placement) in enumerate(zip(selected_items, selected_placements), start=1):
+            fields: dict[str, dict[str, Any]] = {}
+            for entry in entries:
+                value = self.read_entry_value(entry, index=item.index)
+                fields[f"{entry.section}/{entry.normalized_name}"] = {
+                    "display_value": _json_safe_roster_value(value.get("display_value")),
+                    "raw_value": _json_safe_roster_value(value.get("raw_value")),
+                }
+            record: dict[str, Any] = {"index": item.index, "label": item.label, "fields": fields}
+            if placement:
+                record.update({key: _json_safe_roster_value(value) for key, value in placement.items()})
+            records.append(record)
+            if progress_callback is not None:
+                progress_callback(current, total, f"Exporting roster: {current}/{total} players")
+        return {
+            "target_executable": self.target_executable,
+            "domain": "Players",
+            "mode": mode,
+            "record_count": len(records),
+            "records": records,
+        }
+
+    def _team_item_for_snapshot_row(self, row: dict[str, Any]) -> RecordListItem | None:
+        team_index = row.get("team_index")
+        if team_index is not None:
+            try:
+                wanted_index = int(team_index)
+            except Exception:
+                wanted_index = None
+            if wanted_index is not None:
+                for team in self.loaded_items.get("Teams", {}).values():
+                    if int(team.index) == wanted_index:
+                        return team
+        team_label = str(row.get("team_label") or "").strip()
+        if team_label:
+            return self.loaded_items.get("Teams", {}).get(team_label)
+        return None
+
+    def _is_team_address_entry(self, entry: FieldEntry) -> bool:
+        payload = self._field_version_payload(entry.field)
+        return _type_key(payload) == "team_address_dropdown" or bool(payload.get("team_address_dropdown"))
+
+    def _snapshot_write_value(self, row: dict[str, Any], entry: FieldEntry, payload: Any) -> Any:
+        if self._is_team_address_entry(entry):
+            team = self._team_item_for_snapshot_row(row)
+            if team is not None:
+                return int(team.address)
+        if isinstance(payload, dict):
+            return payload.get("display_value")
+        return payload
+
+    def apply_player_roster_snapshot(
+        self,
+        snapshot: dict[str, Any],
+        *,
+        limit: int | None = None,
+        progress_callback: Any | None = None,
+        target_items: Iterable[RecordListItem] | None = None,
+    ) -> dict[str, int]:
+        entries = {f"{entry.section}/{entry.normalized_name}": entry for entry in self._portable_player_roster_entries()}
+        records = snapshot.get("records") if isinstance(snapshot, dict) else None
+        if not isinstance(records, list):
+            raise ValueError("player roster snapshot is missing records")
+        target_records = records[:limit]
+        target_indices = tuple(item.index for item in target_items) if target_items is not None else None
+        slot_target_indices: dict[tuple[object, str], int] = {}
+        if target_indices is None:
+            for player, placement in self.player_roster_slot_items_for_team_items(self.loaded_items.get("Teams", {}).values()):
+                slot_key = _field_identity(str(placement.get("team_slot_field") or f"PLAYER{placement.get('team_slot')}"))
+                slot_target_indices[(int(placement["team_index"]), slot_key)] = int(player.index)
+                slot_target_indices[(str(placement["team_label"]), slot_key)] = int(player.index)
+        total = len(target_records) if target_indices is None else min(len(target_records), len(target_indices))
+        if progress_callback is not None:
+            progress_callback(0, total, "Applying player roster snapshot...")
+        attempted = 0
+        succeeded = 0
+        failed = 0
+        skipped = 0
+        placement_attempted = 0
+        placement_succeeded = 0
+        placement_failed = 0
+        for current, row in enumerate(target_records, start=1):
+            if not isinstance(row, dict):
+                skipped += 1
+                continue
+            fields = row.get("fields")
+            if not isinstance(fields, dict):
+                skipped += 1
+                continue
+            has_team_slot = row.get("team_slot") is not None or row.get("team_slot_field") is not None
+            if target_indices is not None:
+                if current > len(target_indices):
+                    skipped += len(fields)
+                    continue
+                index = target_indices[current - 1]
+            elif has_team_slot:
+                slot_key = _field_identity(str(row.get("team_slot_field") or f"PLAYER{row.get('team_slot')}"))
+                index = None
+                team_index = row.get("team_index")
+                if team_index is not None:
+                    try:
+                        index = slot_target_indices.get((int(team_index), slot_key))
+                    except Exception:
+                        index = None
+                if index is None:
+                    team_label = str(row.get("team_label") or "").strip()
+                    if team_label:
+                        index = slot_target_indices.get((team_label, slot_key))
+                if index is None:
+                    skipped += len(fields)
+                    continue
+            else:
+                index_value = row.get("index")
+                if index_value is None:
+                    skipped += 1
+                    continue
+                try:
+                    index = int(index_value)
+                except Exception:
+                    skipped += 1
+                    continue
+            for key, payload in fields.items():
+                entry = entries.get(str(key))
+                if entry is None:
+                    skipped += 1
+                    continue
+                value = self._snapshot_write_value(row, entry, payload)
+                attempted += 1
+                try:
+                    self.write_entry_value(entry, index=index, value=value)
+                    succeeded += 1
+                except Exception:
+                    failed += 1
+            if progress_callback is not None:
+                progress_callback(min(current, total), total, f"Applying roster: {min(current, total)}/{total} players")
+        return {
+            "attempted": attempted,
+            "succeeded": succeeded,
+            "failed": failed,
+            "skipped": skipped,
+            "placement_attempted": placement_attempted,
+            "placement_succeeded": placement_succeeded,
+            "placement_failed": placement_failed,
+        }
+
+    def _portable_player_roster_entries(self) -> list[FieldEntry]:
+        entries: list[FieldEntry] = []
+        for groups in self.grouped_fields("Players").values():
+            for group_entries in groups.values():
+                for entry in group_entries:
+                    try:
+                        payload = self._field_version_payload(entry.field)
+                    except Exception:
+                        continue
+                    if payload.get("readonly") or not _implemented_payload(payload):
+                        continue
+                    if _type_key(payload) in {"pointer", "address", *_ADDRESS_DROPDOWN_TYPES}:
+                        continue
+                    entries.append(entry)
+        return entries
 
     def domain_base(self, domain: str) -> int:
         base_key = self._domain_base_key(domain)

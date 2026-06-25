@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 import re
+import threading
 from importlib import import_module
+from pathlib import Path
 from typing import Any
 
 from nba2k_editor.core.conversions import parse_id_prefixed_option
@@ -24,11 +27,17 @@ from nba2k_editor.models.data_model import (
 APP_TITLE = "Offline Player Data Editor"
 APP_VIEWPORT_WIDTH = 1600
 APP_VIEWPORT_HEIGHT = 900
+
+
+class _OperationCancelled(Exception):
+    pass
 RECORD_LIST_ROW_HEIGHT = 19
 RECORD_LIST_VERTICAL_MARGIN = 140
 MIN_RECORD_LIST_ROWS = 8
 PLAYER_GENERATOR_SCREEN = "Player Generator"
+FRANCHISE_MANAGER_SCREEN = "Franchise Manager"
 TARGET_CHOICES: tuple[str, ...] = ("NBA 2K22", "NBA 2K23", "NBA 2K24", "NBA 2K25", "NBA 2K26")
+PLAYER_ROSTER_EXPORT_MODES: tuple[str, ...] = ("Full Loaded Roster", "Players From Team Range", "Players From Single Team", "Selected Players")
 RECORD_PREVIEW_CARDS = 100
 HISTORY_SIDE_NAV: tuple[str, ...] = ("Season Awards", "Past Champions", "League Leaders", "Hall of Famers")
 HISTORY_AWARD_TABS: tuple[str, ...] = (
@@ -146,6 +155,7 @@ NAV_ORDER: tuple[str, ...] = (
     "Players",
     "Teams",
     PLAYER_GENERATOR_SCREEN,
+    FRANCHISE_MANAGER_SCREEN,
     "NBA History",
     "NBA Records",
     "Staff",
@@ -153,7 +163,7 @@ NAV_ORDER: tuple[str, ...] = (
     "Jerseys",
     "Shoes",
 )
-APP_SCREENS: tuple[str, ...] = ("Home", *EDITOR_DOMAINS, PLAYER_GENERATOR_SCREEN)
+APP_SCREENS: tuple[str, ...] = ("Home", *EDITOR_DOMAINS, PLAYER_GENERATOR_SCREEN, FRANCHISE_MANAGER_SCREEN)
 
 def _tag(*parts: object) -> str:
     return re.sub(r"[^A-Za-z0-9_]+", "_", "__".join(str(part) for part in parts))
@@ -182,12 +192,23 @@ class DpgEditorApp:
         self.team_record_stat = "Points"
         self.player_team_filter = PLAYER_TEAM_FILTER_ALL
         self.player_search_text = ""
+        self.player_roster_snapshot_path = str(Path("outputs") / "player_roster_snapshot.json")
+        self.player_roster_export_mode = PLAYER_ROSTER_EXPORT_MODES[0]
+        self.player_roster_team_start = "0"
+        self.player_roster_team_end = "29"
+        self.operation_cancel_requested = False
+        self.operation_thread: threading.Thread | None = None
+        self.operation_events: list[tuple[str, Any]] = []
+        self.operation_events_lock = threading.Lock()
         self.selected_item_labels: dict[str, set[str]] = {}
         self.selection_anchors: dict[str, str | None] = {}
         self.dirty_rows: set[str] = set()
         self.player_season_stat_id_selection: dict[tuple[int, str], str] = {}
         self.player_generator_display = import_module("nba2k_editor.Player Generator.display")
         self.player_generator_state = self.player_generator_display.empty_generator_display_state()
+        self.franchise_display = import_module("nba2k_editor.franchise_manager.display")
+        self.franchise_facade = self.franchise_display.FranchiseManagerFacade()
+        self.franchise_dashboard = self.franchise_facade.load_franchise()
 
     @property
     def generator_display_state(self) -> Any:
@@ -229,6 +250,18 @@ class DpgEditorApp:
 
     def _player_search_tag(self) -> str:
         return _tag("Players", "search")
+
+    def _player_roster_snapshot_path_tag(self) -> str:
+        return _tag("Players", "roster_snapshot_path")
+
+    def _player_roster_export_mode_tag(self) -> str:
+        return _tag("Players", "roster_export_mode")
+
+    def _player_roster_team_start_tag(self) -> str:
+        return _tag("Players", "roster_team_start")
+
+    def _player_roster_team_end_tag(self) -> str:
+        return _tag("Players", "roster_team_end")
 
 
     def _detail_tag(self, domain: str, name: str) -> str:
@@ -288,6 +321,9 @@ class DpgEditorApp:
     def _operation_progress_tag(self) -> str:
         return _tag("operation", "progress")
 
+    def _operation_cancel_tag(self) -> str:
+        return _tag("operation", "cancel")
+
     def _nav_tag(self, screen: str) -> str:
         return _tag("nav", screen)
 
@@ -309,30 +345,87 @@ class DpgEditorApp:
         if dpg.does_item_exist(tag):
             dpg.delete_item(tag, children_only=True)
 
+    def _request_operation_cancel(self, dpg: Any) -> None:
+        self.operation_cancel_requested = True
+        self._safe_set(dpg, self._operation_message_tag(), "Cancelling...")
+        self._safe_configure(dpg, self._operation_cancel_tag(), enabled=False)
+
+    def _reset_operation_cancel(self, dpg: Any) -> None:
+        self.operation_cancel_requested = False
+        self._safe_configure(dpg, self._operation_cancel_tag(), enabled=True)
+
+    def _raise_if_operation_cancelled(self) -> None:
+        if self.operation_cancel_requested:
+            raise _OperationCancelled("operation cancelled")
+
     def _show_operation_popup(self, dpg: Any, message: str, *, progress: float = 0.0, overlay: str = "") -> None:
         if not hasattr(dpg, "window") or not hasattr(dpg, "configure_item"):
             return
         popup = self._operation_popup_tag()
         message_tag = self._operation_message_tag()
         progress_tag = self._operation_progress_tag()
+        cancel_tag = self._operation_cancel_tag()
         if not dpg.does_item_exist(popup):
             with dpg.window(tag=popup, label="Operation Progress", modal=False, show=True, width=560, height=220, no_scrollbar=True):
                 dpg.add_text(message, tag=message_tag)
                 dpg.add_spacer(height=10)
                 dpg.add_progress_bar(tag=progress_tag, default_value=progress, overlay=overlay, width=-1)
+                dpg.add_spacer(height=10)
+                dpg.add_button(label="Cancel", tag=cancel_tag, width=100, callback=lambda *_args: self._request_operation_cancel(dpg))
         else:
             dpg.configure_item(popup, show=True, width=560, height=220, no_scrollbar=True)
         self._safe_set(dpg, message_tag, message)
         if dpg.does_item_exist(progress_tag):
             dpg.set_value(progress_tag, progress)
         self._safe_configure(dpg, progress_tag, overlay=overlay)
+        self._safe_configure(dpg, cancel_tag, enabled=overlay not in {"complete", "failed", "cancelled"})
         if hasattr(dpg, "focus_item"):
             dpg.focus_item(popup)
 
     def _update_operation_progress(self, dpg: Any, current: int, total: int, message: str) -> None:
+        self._raise_if_operation_cancelled()
         progress = 1.0 if total <= 0 else max(0.0, min(1.0, current / total))
-        overlay = "complete" if total <= 0 or current >= total else f"{current}/{total}"
+        overlay = f"{int(round(progress * 100))}%"
         self._show_operation_popup(dpg, message, progress=progress, overlay=overlay)
+
+    def _queue_operation_event(self, event: str, value: Any) -> None:
+        with self.operation_events_lock:
+            self.operation_events.append((event, value))
+
+    def _pop_operation_events(self) -> list[tuple[str, Any]]:
+        with self.operation_events_lock:
+            events = list(self.operation_events)
+            self.operation_events.clear()
+        return events
+
+    def _background_operation_progress(self, current: int, total: int, message: str) -> None:
+        self._raise_if_operation_cancelled()
+        self._queue_operation_event("progress", (current, total, message))
+
+    def _start_operation_thread(self, dpg: Any, label: str, worker: Any) -> None:
+        if self.operation_thread is not None and self.operation_thread.is_alive():
+            self._show_operation_popup(dpg, "Operation already running...", progress=0.0, overlay="busy")
+            return
+        self._reset_operation_cancel(dpg)
+        with self.operation_events_lock:
+            self.operation_events.clear()
+        self._show_operation_popup(dpg, label, progress=0.0, overlay="0%")
+        self.operation_thread = threading.Thread(target=worker, daemon=True)
+        self.operation_thread.start()
+
+    def _poll_background_operation(self, dpg: Any) -> None:
+        for event, value in self._pop_operation_events():
+            if event == "progress":
+                current, total, message = value
+                progress = 1.0 if total <= 0 else max(0.0, min(1.0, current / total))
+                self._show_operation_popup(dpg, message, progress=progress, overlay=f"{int(round(progress * 100))}%")
+            elif event == "players_status":
+                self._safe_set(dpg, self._status_tag("Players"), str(value))
+            elif event == "generator_status":
+                self._safe_set(dpg, self._player_generator_tag("status"), str(value))
+            elif event == "done":
+                message, overlay = value
+                self._show_operation_popup(dpg, message, progress=1.0, overlay=overlay)
 
     def _bind_item_theme(self, dpg: Any, item: str, theme: str) -> None:
         if theme and dpg.does_item_exist(item) and dpg.does_item_exist(theme):
@@ -947,6 +1040,8 @@ class DpgEditorApp:
             with dpg.group(horizontal=True):
                 dpg.add_button(label="Reload", callback=lambda *_args, i=item: self._load_item_editor(dpg, i))
                 dpg.add_button(label="Save Changes + Readback", callback=lambda *_args, i=item: self._save_item_editor(dpg, i))
+                if item.domain == "Players":
+                    dpg.add_button(label="Reset Players", callback=lambda *_args, i=item: self._reset_item_editor(dpg, i))
             with dpg.child_window(height=-1, border=True):
                 with dpg.tab_bar():
                     for section, groups in self.model.grouped_fields(item.domain).items():
@@ -1030,6 +1125,8 @@ class DpgEditorApp:
             dpg.add_spacer(height=10)
             with dpg.group(horizontal=True):
                 dpg.add_button(label="Load Source", width=130, callback=lambda *_: self._load_player_generator_source(dpg))
+                dpg.add_button(label="Add Current Roster to Pool SQL", width=230, callback=lambda *_: self._add_current_roster_to_player_pool(dpg))
+                dpg.add_button(label="Sync Player Pool SQL", width=170, callback=lambda *_: self._sync_player_generator_pool(dpg))
                 dpg.add_button(label="Display Preview", width=150, callback=lambda *_: self._display_generator_preview(dpg))
                 dpg.add_button(label="Import Generated Players", width=190, callback=lambda *_: self._import_generator_to_game_display(dpg))
                 dpg.add_button(label="Import Matched Names", width=180, callback=lambda *_: self._import_generator_to_game_display(dpg, match_existing_player_names=True))
@@ -1073,8 +1170,59 @@ class DpgEditorApp:
             self.player_generator_state = display.empty_generator_display_state(f"Preview failed: {exc}")
         self._sync_player_generator_status(dpg)
 
+    def _sync_player_generator_pool(self, dpg: Any) -> None:
+        display = self._generator_display_module()
+        self._reset_operation_cancel(dpg)
+        self._show_operation_popup(dpg, "Syncing player pool SQL...", progress=0.0, overlay="0%")
+        progress_callback = lambda current, total, message: self._update_operation_progress(dpg, current, total, message)
+        try:
+            if not getattr(self.player_generator_state, "source_loaded", False):
+                self.player_generator_state = display.load_generator_display_state()
+                self._sync_player_generator_status(dpg)
+            self._refresh_player_generator_dropdowns(dpg)
+            self.player_generator_state = display.sync_generator_pool_display_state(self.player_generator_state, progress_callback=progress_callback)
+        except _OperationCancelled:
+            message = "Pool SQL sync cancelled."
+            self._safe_set(dpg, self._player_generator_tag("status"), message)
+            self._show_operation_popup(dpg, message, progress=1.0, overlay="cancelled")
+            return
+        except Exception as exc:
+            message = f"Pool SQL sync failed: {exc}"
+            self._update_operation_progress(dpg, 0, 1, message)
+            self.player_generator_state = display.empty_generator_display_state(message)
+            self._sync_player_generator_status(dpg)
+            return
+        self._update_operation_progress(dpg, 1, 1, getattr(self.player_generator_state, "status", "Player pool SQL sync complete."))
+        self._sync_player_generator_status(dpg)
+
+    def _add_current_roster_to_player_pool(self, dpg: Any) -> None:
+        display = self._generator_display_module()
+        self._reset_operation_cancel(dpg)
+        self._show_operation_popup(dpg, "Adding current roster to player pool SQL...", progress=0.0, overlay="0%")
+        progress_callback = lambda current, total, message: self._update_operation_progress(dpg, current, total, message)
+        try:
+            if not getattr(self.player_generator_state, "source_loaded", False):
+                self.player_generator_state = display.load_generator_display_state()
+                self._sync_player_generator_status(dpg)
+            self._refresh_player_generator_dropdowns(dpg)
+            self.player_generator_state = display.add_current_roster_to_pool_display_state(self.model, self.player_generator_state, progress_callback=progress_callback)
+        except _OperationCancelled:
+            message = "Add to pool SQL cancelled."
+            self._safe_set(dpg, self._player_generator_tag("status"), message)
+            self._show_operation_popup(dpg, message, progress=1.0, overlay="cancelled")
+            return
+        except Exception as exc:
+            message = f"Add to pool SQL failed: {exc}"
+            self._update_operation_progress(dpg, 0, 1, message)
+            self.player_generator_state = display.empty_generator_display_state(message)
+            self._sync_player_generator_status(dpg)
+            return
+        self._update_operation_progress(dpg, 1, 1, getattr(self.player_generator_state, "status", "Added current roster to player pool SQL."))
+        self._sync_player_generator_status(dpg)
+
     def _import_generator_to_game_display(self, dpg: Any, *, match_existing_player_names: bool = False) -> None:
         display = self._generator_display_module()
+        self._reset_operation_cancel(dpg)
         self._show_operation_popup(dpg, "Importing generated players...", progress=0.0, overlay="0/0")
         progress_callback = lambda current, total, message: self._update_operation_progress(dpg, current, total, message)
         try:
@@ -1084,6 +1232,11 @@ class DpgEditorApp:
                 match_existing_player_names=match_existing_player_names,
                 progress_callback=progress_callback,
             )
+        except _OperationCancelled:
+            message = "Import cancelled."
+            self._safe_set(dpg, self._player_generator_tag("status"), message)
+            self._show_operation_popup(dpg, message, progress=1.0, overlay="cancelled")
+            return
         except Exception as exc:
             message = f"Import failed: {exc}"
             self._update_operation_progress(dpg, 0, 1, message)
@@ -1136,6 +1289,251 @@ class DpgEditorApp:
         self._safe_set(dpg, self._player_generator_tag("status"), getattr(state, "status", ""))
         self._safe_set(dpg, self._generator_table_tag(), self._generator_display_text(state))
 
+    def _player_roster_snapshot_path(self, dpg: Any) -> Path:
+        raw = str(dpg.get_value(self._player_roster_snapshot_path_tag()) or self.player_roster_snapshot_path).strip()
+        if not raw:
+            raw = self.player_roster_snapshot_path
+        self.player_roster_snapshot_path = raw
+        return Path(raw).expanduser()
+
+    def _player_roster_export_mode(self, dpg: Any) -> str:
+        mode = str(dpg.get_value(self._player_roster_export_mode_tag()) or self.player_roster_export_mode).strip()
+        if mode not in PLAYER_ROSTER_EXPORT_MODES:
+            mode = PLAYER_ROSTER_EXPORT_MODES[0]
+        self.player_roster_export_mode = mode
+        return mode
+
+    def _player_roster_team_range(self, dpg: Any) -> tuple[int, int]:
+        start_text = str(dpg.get_value(self._player_roster_team_start_tag()) or self.player_roster_team_start).strip()
+        end_text = str(dpg.get_value(self._player_roster_team_end_tag()) or self.player_roster_team_end).strip()
+        start = max(0, int(start_text))
+        end = max(start, int(end_text))
+        self.player_roster_team_start = str(start)
+        self.player_roster_team_end = str(end)
+        return start, end
+
+    def _player_roster_export_items(
+        self,
+        mode: str,
+        team_range: tuple[int, int] = (0, -1),
+    ) -> tuple[str, list[RecordListItem], list[dict[str, Any] | None] | None]:
+        loaded_players = self.model.loaded_items.get("Players", {})
+        if mode == "Full Loaded Roster":
+            return mode, list(loaded_players.values()), None
+        if mode == "Selected Players":
+            ordered_labels = self.model.player_item_labels_for_team_filter(self.player_team_filter, self.player_search_text)
+            selected_labels = self.selected_item_labels.get("Players", set())
+            return mode, [loaded_players[label] for label in ordered_labels if label in selected_labels and label in loaded_players], None
+        loaded_teams = list(self.model.loaded_items.get("Teams", {}).values())
+        if mode == "Players From Team Range":
+            start, end = team_range
+            rows = self.model.player_roster_slot_items_for_team_items(loaded_teams[start : end + 1])
+            return mode, [player for player, _placement in rows], [placement for _player, placement in rows]
+        if mode == "Players From Single Team":
+            selected = str(self.player_team_filter or "").strip()
+            if not selected or selected == PLAYER_TEAM_FILTER_ALL:
+                raise ValueError("select a team in the Team dropdown for single-team player export")
+            team = self.model.loaded_items.get("Teams", {}).get(selected)
+            if team is None:
+                raise ValueError(f"selected team is not loaded: {selected}")
+            rows = self.model.player_roster_slot_items_for_team_items((team,))
+            return mode, [player for player, _placement in rows], [placement for _player, placement in rows]
+        return mode, list(loaded_players.values()), None
+
+    def _player_roster_apply_target_items(self, dpg: Any, snapshot: dict[str, Any]) -> list[RecordListItem] | None:
+        return None
+
+    def _export_player_roster_snapshot(self, dpg: Any) -> None:
+        path = self._player_roster_snapshot_path(dpg)
+        export_mode = self._player_roster_export_mode(dpg)
+        team_range = self._player_roster_team_range(dpg) if export_mode == "Players From Team Range" else (0, -1)
+
+        def worker() -> None:
+            try:
+                self.model.attach()
+                mode, items, placements = self._player_roster_export_items(export_mode, team_range)
+                snapshot = self.model.export_player_roster_snapshot_for_items(
+                    items,
+                    progress_callback=self._background_operation_progress,
+                    mode=mode,
+                    placements=placements,
+                )
+                self._raise_if_operation_cancelled()
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+            except _OperationCancelled:
+                message = "Roster export cancelled."
+                self._queue_operation_event("players_status", message)
+                self._queue_operation_event("done", (message, "cancelled"))
+                return
+            except Exception as exc:
+                message = f"Roster export failed: {exc}"
+                self._queue_operation_event("players_status", message)
+                self._queue_operation_event("done", (message, "failed"))
+                return
+            message = f"Exported {snapshot.get('record_count', 0)} players to {path}"
+            self._queue_operation_event("players_status", message)
+            self._queue_operation_event("done", (message, "complete"))
+
+        self._start_operation_thread(dpg, "Exporting player roster...", worker)
+
+    def _apply_player_roster_snapshot(self, dpg: Any) -> None:
+        path = self._player_roster_snapshot_path(dpg)
+        try:
+            snapshot = json.loads(path.read_text(encoding="utf-8"))
+            target_items = self._player_roster_apply_target_items(dpg, snapshot)
+        except Exception as exc:
+            message = f"Roster apply failed: {exc}"
+            self._safe_set(dpg, self._status_tag("Players"), message)
+            self._show_operation_popup(dpg, message, progress=1.0, overlay="failed")
+            return
+
+        def worker() -> None:
+            try:
+                self.model.attach()
+                result = self.model.apply_player_roster_snapshot(snapshot, progress_callback=self._background_operation_progress, target_items=target_items)
+            except _OperationCancelled:
+                message = "Roster apply cancelled."
+                self._queue_operation_event("players_status", message)
+                self._queue_operation_event("done", (message, "cancelled"))
+                return
+            except Exception as exc:
+                message = f"Roster apply failed: {exc}"
+                self._queue_operation_event("players_status", message)
+                self._queue_operation_event("done", (message, "failed"))
+                return
+            message = (
+                f"Applied roster snapshot: {result.get('succeeded', 0)} succeeded, "
+                f"{result.get('failed', 0)} failed, {result.get('skipped', 0)} skipped"
+            )
+            self._queue_operation_event("players_status", message)
+            self._queue_operation_event("done", (message, "complete"))
+
+        self._start_operation_thread(dpg, "Applying player roster snapshot...", worker)
+
+    def _franchise_tag(self, *parts: object) -> str:
+        return _tag(FRANCHISE_MANAGER_SCREEN, *parts)
+
+    def _franchise_lines_text(self, title: str, lines: object) -> str:
+        if isinstance(lines, str):
+            values = (lines,)
+        elif lines:
+            values = tuple(str(line) for line in lines)  # type: ignore[union-attr]
+        else:
+            values = ("--",)
+        return "\n".join((title, "", *values))
+
+    def _franchise_overview_text(self, dashboard: Any) -> str:
+        overview = getattr(dashboard, "overview", None)
+        return "\n".join(
+            (
+                "Franchise Overview",
+                "",
+                f"Current Season: {getattr(overview, 'current_season', '--')}",
+                f"Current Phase: {getattr(overview, 'current_phase', '--')}",
+                f"League Champion: {getattr(overview, 'league_champion', '--')}",
+                f"Upcoming Draft: {getattr(overview, 'upcoming_draft', '--')}",
+                f"Active User Team: {getattr(overview, 'active_user_team', '--')}",
+                f"User Role: {getattr(overview, 'user_role', '--')}",
+            )
+        )
+
+    def _franchise_next_stop_text(self, dashboard: Any) -> str:
+        stop = getattr(dashboard, "next_sim_stop", None)
+        return "\n".join(
+            (
+                "Next Simulation Stop",
+                "",
+                f"Date: {getattr(stop, 'date_label', '--')}",
+                f"Reason: {getattr(stop, 'reason', '--')}",
+                f"Priority: {getattr(stop, 'priority', '--')}",
+                f"Teams Requesting Review: {getattr(stop, 'teams_requesting_review', '--')}",
+            )
+        )
+
+    def _franchise_snapshot_text(self, dashboard: Any) -> str:
+        snapshot = getattr(dashboard, "league_snapshot", None)
+        return "\n\n".join(
+            (
+                self._franchise_lines_text("League Snapshot", getattr(snapshot, "standings_summary", ())),
+                self._franchise_lines_text("Top Teams", getattr(snapshot, "top_teams", ())),
+                self._franchise_lines_text("Worst Teams", getattr(snapshot, "worst_teams", ())),
+                self._franchise_lines_text("Championship Favorites", getattr(snapshot, "championship_favorites", ())),
+                self._franchise_lines_text("MVP Race", getattr(snapshot, "mvp_race", ())),
+                self._franchise_lines_text("Rookie Race", getattr(snapshot, "rookie_race", ())),
+            )
+        )
+
+    def _sync_franchise_dashboard(self, dpg: Any, dashboard: Any | None = None) -> None:
+        if dashboard is not None:
+            self.franchise_dashboard = dashboard
+        dashboard = self.franchise_dashboard
+        self._safe_set(dpg, self._franchise_tag("status"), getattr(dashboard, "status", ""))
+        self._safe_set(dpg, self._franchise_tag("overview"), self._franchise_overview_text(dashboard))
+        self._safe_set(dpg, self._franchise_tag("snapshot"), self._franchise_snapshot_text(dashboard))
+        self._safe_set(dpg, self._franchise_tag("owner_alerts"), self._franchise_lines_text("Owner Alerts", getattr(dashboard, "owner_alerts", ())))
+        self._safe_set(dpg, self._franchise_tag("gm_alerts"), self._franchise_lines_text("GM Alerts", getattr(dashboard, "gm_alerts", ())))
+        self._safe_set(dpg, self._franchise_tag("next_stop"), self._franchise_next_stop_text(dashboard))
+        self._safe_set(dpg, self._franchise_tag("activity"), self._franchise_lines_text("League Activity Feed", getattr(dashboard, "activity_feed", ())))
+        self._safe_set(dpg, self._franchise_tag("development"), self._franchise_lines_text("Development Watch", getattr(dashboard, "development_watch", ())))
+
+    def _run_franchise_action(self, dpg: Any, action: Any) -> None:
+        try:
+            dashboard = action(self.franchise_facade)
+        except Exception as exc:
+            self._safe_set(dpg, self._franchise_tag("status"), f"Franchise action failed: {exc}")
+            return
+        self._sync_franchise_dashboard(dpg, dashboard)
+
+    def _show_franchise_report(self, dpg: Any, title: str, lines: object) -> None:
+        self._safe_set(dpg, self._franchise_tag("activity"), self._franchise_lines_text(title, lines))
+
+    def _build_franchise_manager_screen(self, dpg: Any, *, show: bool = False) -> None:
+        with dpg.child_window(tag=self._screen_tag(FRANCHISE_MANAGER_SCREEN), show=show, width=-1, height=-1, border=False):
+            dpg.add_text("Franchise Manager")
+            dpg.add_spacer(height=8)
+            dpg.add_text(getattr(self.franchise_dashboard, "status", ""), tag=self._franchise_tag("status"))
+            dpg.add_spacer(height=10)
+            with dpg.group(horizontal=True):
+                dpg.add_button(label="Create Franchise", width=130, callback=lambda *_args: self._run_franchise_action(dpg, lambda facade: facade.create_franchise()))
+                dpg.add_button(label="Load Franchise", width=120, callback=lambda *_args: self._run_franchise_action(dpg, lambda facade: facade.load_franchise()))
+                dpg.add_button(label="Save Franchise", width=120, callback=lambda *_args: self._run_franchise_action(dpg, lambda facade: facade.save_franchise()))
+                dpg.add_button(label="Import 2K Data", width=130, callback=lambda *_args: self._run_franchise_action(dpg, lambda facade: facade.import_2k_data_from_offsets(self.model)))
+                dpg.add_button(label="Run Evaluations", width=135, callback=lambda *_args: self._run_franchise_action(dpg, lambda facade: facade.run_gm_evaluations()))
+                dpg.add_button(label="Advance Phase", width=125, callback=lambda *_args: self._run_franchise_action(dpg, lambda facade: facade.advance_phase()))
+            dpg.add_spacer(height=6)
+            with dpg.group(horizontal=True):
+                dpg.add_button(label="Open Draft Room", width=140, callback=lambda *_args: self._show_franchise_report(dpg, "Draft Room", self.franchise_facade.get_draft_report()))
+                dpg.add_button(label="Open Team View", width=130, callback=lambda *_args: self._show_franchise_report(dpg, "Team View", (str(self.franchise_facade.get_team_dashboard().display_name), *self.franchise_facade.get_team_dashboard().recent_logs)))
+                dpg.add_button(label="Open League History", width=155, callback=lambda *_args: self._show_franchise_report(dpg, "League History", self.franchise_facade.get_history_report()))
+            dpg.add_spacer(height=12)
+            with dpg.group(horizontal=True):
+                with dpg.child_window(width=380, height=210, border=True):
+                    dpg.add_text("Franchise Overview")
+                    dpg.add_input_text(tag=self._franchise_tag("overview"), default_value=self._franchise_overview_text(self.franchise_dashboard), multiline=True, readonly=True, width=-1, height=-1)
+                with dpg.child_window(width=-1, height=210, border=True):
+                    dpg.add_text("League Snapshot")
+                    dpg.add_input_text(tag=self._franchise_tag("snapshot"), default_value=self._franchise_snapshot_text(self.franchise_dashboard), multiline=True, readonly=True, width=-1, height=-1)
+            dpg.add_spacer(height=8)
+            with dpg.group(horizontal=True):
+                with dpg.child_window(width=380, height=150, border=True):
+                    dpg.add_text("Owner Alerts")
+                    dpg.add_input_text(tag=self._franchise_tag("owner_alerts"), default_value=self._franchise_lines_text("Owner Alerts", getattr(self.franchise_dashboard, "owner_alerts", ())), multiline=True, readonly=True, width=-1, height=-1)
+                with dpg.child_window(width=380, height=150, border=True):
+                    dpg.add_text("GM Alerts")
+                    dpg.add_input_text(tag=self._franchise_tag("gm_alerts"), default_value=self._franchise_lines_text("GM Alerts", getattr(self.franchise_dashboard, "gm_alerts", ())), multiline=True, readonly=True, width=-1, height=-1)
+                with dpg.child_window(width=-1, height=150, border=True):
+                    dpg.add_text("Next Simulation Stop")
+                    dpg.add_input_text(tag=self._franchise_tag("next_stop"), default_value=self._franchise_next_stop_text(self.franchise_dashboard), multiline=True, readonly=True, width=-1, height=-1)
+            dpg.add_spacer(height=8)
+            with dpg.group(horizontal=True):
+                with dpg.child_window(width=580, height=-1, border=True):
+                    dpg.add_text("League Activity Feed")
+                    dpg.add_input_text(tag=self._franchise_tag("activity"), default_value=self._franchise_lines_text("League Activity Feed", getattr(self.franchise_dashboard, "activity_feed", ())), multiline=True, readonly=True, width=-1, height=-1)
+                with dpg.child_window(width=-1, height=-1, border=True):
+                    dpg.add_text("Development Watch")
+                    dpg.add_input_text(tag=self._franchise_tag("development"), default_value=self._franchise_lines_text("Development Watch", getattr(self.franchise_dashboard, "development_watch", ())), multiline=True, readonly=True, width=-1, height=-1)
+
     def _build_players_screen(self, dpg: Any, *, show: bool = False) -> None:
         domain = "Players"
         with dpg.child_window(tag=self._screen_tag(domain), show=show, width=-1, height=-1, border=False):
@@ -1143,6 +1541,25 @@ class DpgEditorApp:
                 dpg.add_button(label="Refresh", width=90, callback=lambda *_args: self._attach_and_scan(dpg, domain))
                 dpg.add_spacer(width=18)
                 dpg.add_text("Players: 0", tag=self._count_tag(domain))
+            dpg.add_spacer(height=10)
+            with dpg.group(horizontal=True):
+                dpg.add_text("Roster snapshot")
+                dpg.add_input_text(tag=self._player_roster_snapshot_path_tag(), default_value=self.player_roster_snapshot_path, width=420)
+                dpg.add_button(label="Export Players", width=130, callback=lambda *_args: self._export_player_roster_snapshot(dpg))
+                dpg.add_button(label="Apply Roster Snapshot", width=170, callback=lambda *_args: self._apply_player_roster_snapshot(dpg))
+            dpg.add_spacer(height=6)
+            with dpg.group(horizontal=True):
+                dpg.add_text("Export mode")
+                dpg.add_combo(
+                    list(PLAYER_ROSTER_EXPORT_MODES),
+                    tag=self._player_roster_export_mode_tag(),
+                    default_value=self.player_roster_export_mode,
+                    width=210,
+                )
+                dpg.add_text("Team range")
+                dpg.add_input_text(tag=self._player_roster_team_start_tag(), default_value=self.player_roster_team_start, width=45)
+                dpg.add_text("to")
+                dpg.add_input_text(tag=self._player_roster_team_end_tag(), default_value=self.player_roster_team_end, width=45)
             dpg.add_spacer(height=10)
             with dpg.group(horizontal=True):
                 dpg.add_text("Team")
@@ -1289,6 +1706,9 @@ class DpgEditorApp:
         if domain == PLAYER_GENERATOR_SCREEN:
             self._build_player_generator_screen(dpg, show=show)
             return
+        if domain == FRANCHISE_MANAGER_SCREEN:
+            self._build_franchise_manager_screen(dpg, show=show)
+            return
         if domain == "Players":
             self._build_players_screen(dpg, show=show)
             return
@@ -1344,8 +1764,9 @@ class DpgEditorApp:
                             self._add_nav_button(dpg, domain, self._display_label(domain))
                 with dpg.child_window(width=-1, height=-1, border=False):
                     self._build_home_screen(dpg, show=True)
-                    for domain in (*EDITOR_DOMAINS, PLAYER_GENERATOR_SCREEN):
-                        self._build_domain_screen(dpg, domain, show=False)
+                    for domain in APP_SCREENS:
+                        if domain != "Home":
+                            self._build_domain_screen(dpg, domain, show=False)
         self._refresh_nav_state(dpg)
 
         dpg.create_viewport(title=APP_TITLE, width=APP_VIEWPORT_WIDTH, height=APP_VIEWPORT_HEIGHT)
@@ -1357,6 +1778,7 @@ class DpgEditorApp:
             self._attach_and_load_all(dpg)
         while dpg.is_dearpygui_running():
             self._poll_background_scan(dpg)
+            self._poll_background_operation(dpg)
             dpg.render_dearpygui_frame()
 
 

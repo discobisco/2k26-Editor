@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Iterable, Iterator
+from typing import Any
 
 from player_evidence import PlayerEvidence
 from stat_neighbor_framework import hot_zone_neutral_values, load_latest_stat_neighbor_model, select_positions_from_evidence
@@ -32,41 +32,16 @@ class PlayerRuleResult:
     values: dict[str, RuleValue]
 
 
-class MetricRankings:
-    """Small compatibility wrapper for the deleted formula stack.
-
-    The new framework does not use rank-weighted formulas. This class preserves
-    the existing `SeasonPlayerContextIndex.metric_rankings` contract without
-    reintroducing the old duplicated rule modules.
-    """
-
-    def __init__(self, comparison_rows: Iterable[dict[str, Any]]):
-        self.comparison_rows = tuple(comparison_rows)
-
-    def __iter__(self) -> Iterator[dict[str, Any]]:
-        return iter(self.comparison_rows)
-
-    def rank(self, value: object, path: str) -> float | None:
-        selected = _float(value)
-        if selected is None:
-            return None
-        values = sorted(v for row in self.comparison_rows if (v := _float(row.get(path))) is not None)
-        if not values:
-            return None
-        below = sum(1 for v in values if v < selected)
-        equal = sum(1 for v in values if v == selected)
-        return (below + (equal * 0.5)) / len(values)
-
-
 def derive_player_profile_values(evidence: PlayerEvidence) -> PlayerProfileResult:
     values: dict[str, ProfileValue] = {}
     first, last = _split_name(evidence.identity.get("player") or evidence.season_info.get("player") or evidence.player_id)
     _add_profile(values, "Vitals/FIRSTNAME", first, "profile_sql_identity", "player_info.player")
     _add_profile(values, "Vitals/LASTNAME", last, "profile_sql_identity", "player_info.player")
 
-    height = _int_round(evidence.identity.get("ht_in_in"))
+    height_inches = _float(evidence.identity.get("ht_in_in"))
+    height_cm = None if height_inches is None else int(round(height_inches * 2.54))
     weight = _int_round(evidence.identity.get("wt"))
-    _add_profile(values, "Vitals/HEIGHT", height, "profile_sql_bio", "player_info.ht_in_in")
+    _add_profile(values, "Vitals/HEIGHTCM", height_cm, "profile_sql_bio_cm", "player_info.ht_in_in")
     _add_profile(values, "Vitals/WEIGHT", weight, "profile_sql_bio", "player_info.wt")
 
     positions = select_positions_from_evidence(evidence.play_by_play, evidence.season_info.get("pos") or evidence.identity.get("pos"))
@@ -93,17 +68,13 @@ def derive_player_profile_values(evidence: PlayerEvidence) -> PlayerProfileResul
     return PlayerProfileResult(values=values)
 
 
-def derive_player_rule_values(
-    evidence: PlayerEvidence,
-    *,
-    league_player_rows: Iterable[dict[str, Any]] = (),
-) -> PlayerRuleResult:
+def derive_player_rule_values(evidence: PlayerEvidence) -> PlayerRuleResult:
     positions = select_positions_from_evidence(evidence.play_by_play, evidence.season_info.get("pos") or evidence.identity.get("pos"))
     if not positions.primary:
         return PlayerRuleResult(values={})
 
     model = load_latest_stat_neighbor_model()
-    suggestions = model.suggestions_for(player_id=evidence.player_id, team=evidence.team, position=positions.primary)
+    suggestions = model.suggestions_for_evidence(evidence=evidence, position=positions.primary)
     values: dict[str, RuleValue] = {
         key: RuleValue(value=suggestion.value, source_rule=suggestion.source_rule, evidence_keys=suggestion.evidence_keys)
         for key, suggestion in suggestions.items()
@@ -130,8 +101,8 @@ def _split_name(value: object) -> tuple[str, str]:
         return "", ""
     parts = text.split(" ")
     if len(parts) == 1:
-        return parts[0], ""
-    return " ".join(parts[:-1]), parts[-1]
+        return "", parts[0]
+    return parts[0], " ".join(parts[1:])
 
 
 def _birth_date_from_source(value: object) -> datetime | None:
@@ -166,7 +137,6 @@ def _int_round(value: object) -> int | None:
 
 
 __all__ = [
-    "MetricRankings",
     "PlayerProfileResult",
     "PlayerRuleResult",
     "ProfileValue",
