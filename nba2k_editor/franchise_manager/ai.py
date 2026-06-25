@@ -5,6 +5,7 @@ from typing import Any
 from .assets import team_asset_breakdown, team_need_summary
 from .finances import assess_team_finances
 from .models import FranchiseTeam, ImportedSnapshot, ReasonLog, TeamDirection, TeamEvaluation
+from .objectives import objective_review_evidence, objectives_from_snapshots, owner_end_season_review
 from .transactions import recommend_team_transactions
 from .world import TeamContext, build_team_context
 
@@ -25,11 +26,17 @@ def evaluate_team_at_stop(
 
     context = build_team_context(season=season, team=team, snapshots=snapshots)
     direction = _classify_direction(context)
+    objectives = objectives_from_snapshots(snapshots, season=season, team_id=team.team_id)
+    objective_review = owner_end_season_review(context, objectives, direction) if objectives else None
     recommendations = recommend_team_transactions(context, direction)
     actions = tuple(item.message for item in recommendations[:4])
     owner_report = _owner_report(context, direction)
+    if objective_review is not None:
+        owner_report += f" Directive review: {objective_review.summary}"
     gm_report = _gm_report(context, direction, actions)
     owner_evidence = _shared_evidence(context)
+    if objective_review is not None:
+        owner_evidence["objective_review"] = objective_review_evidence(objective_review)
     gm_evidence = dict(owner_evidence)
     gm_evidence.update(
         {

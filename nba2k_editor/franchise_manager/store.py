@@ -25,6 +25,7 @@ from .models import (
     TeamEvaluation,
     validate_profile_scores,
 )
+from .objectives import ObjectiveDirective, objective_from_payload, objective_to_payload
 from .progression import (
     HistoricalStatsProvider,
     InGamePlayerSnapshot,
@@ -531,6 +532,33 @@ class FranchiseStore:
         sql += " ORDER BY id"
         return tuple(json.loads(row["payload_json"]) for row in self._conn.execute(sql, params))
 
+    def upsert_objectives(self, season: int, team_id: str, objectives: Iterable[ObjectiveDirective | dict[str, Any]]) -> None:
+        self._conn.execute("DELETE FROM franchise_objectives WHERE season = ? AND team_id = ?", (season, team_id))
+        rows = []
+        for objective in objectives:
+            payload = objective_to_payload(objective)
+            objective_type = str(payload.get("objective_type") or payload.get("type") or "").strip()
+            if not objective_type:
+                raise ValueError("objective requires objective_type")
+            payload["season"] = season
+            payload["team_id"] = team_id
+            status = str(payload.get("status") or "open")
+            rows.append((season, team_id, objective_type, status, json.dumps(payload, sort_keys=True)))
+        self._conn.executemany(
+            "INSERT INTO franchise_objectives(season, team_id, objective_type, status, payload_json) VALUES (?, ?, ?, ?, ?)",
+            rows,
+        )
+        self._conn.commit()
+
+    def list_objectives(self, *, season: int, team_id: str | None = None) -> tuple[ObjectiveDirective, ...]:
+        sql = "SELECT payload_json FROM franchise_objectives WHERE season = ?"
+        params: list[object] = [season]
+        if team_id is not None:
+            sql += " AND team_id = ?"
+            params.append(team_id)
+        sql += " ORDER BY id"
+        return tuple(objective_from_payload(json.loads(row["payload_json"])) for row in self._conn.execute(sql, params))
+
     def _evaluation_snapshots_for_team(self, season: int, team_id: str) -> tuple[ImportedSnapshot, ...]:
         snapshots = list(self.snapshots_for_season(season))
         players = [_player_payload(player) for player in self.list_franchise_players(season=season, team_id=team_id)]
@@ -539,6 +567,7 @@ class FranchiseStore:
         draft_picks = [_draft_pick_payload(pick) for pick in self.list_draft_picks(season=season, team_id=team_id)]
         finances = self.list_team_finances(season=season, team_id=team_id)
         transactions = list(self.list_transactions(season=season, team_id=team_id))
+        objectives = [objective_to_payload(objective) for objective in self.list_objectives(season=season, team_id=team_id)]
         if players:
             snapshots.append(ImportedSnapshot(season, None, ImportedDataKind.PLAYER_STATS, {"players": players}))
         if injuries:
@@ -550,6 +579,8 @@ class FranchiseStore:
             snapshots.append(ImportedSnapshot(season, None, ImportedDataKind.CONTRACTS, contract_payload))
         if transactions:
             snapshots.append(ImportedSnapshot(season, None, ImportedDataKind.TRADES, {"transactions": transactions}))
+        if objectives:
+            snapshots.append(ImportedSnapshot(season, None, ImportedDataKind.OBJECTIVES, {"objectives": objectives}))
         return tuple(snapshots)
 
     def add_reason_logs(self, logs: Iterable[ReasonLog]) -> None:
