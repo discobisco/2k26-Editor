@@ -22,8 +22,9 @@ class ActiveExportRunTests(unittest.TestCase):
             first = create_next_run_dir(repo)
             second = create_next_run_dir(repo)
 
-            self.assertEqual(repo / "outputs" / "current_active_stat_extractor_runs" / "run_001", first)
-            self.assertEqual(repo / "outputs" / "current_active_stat_extractor_runs" / "run_002", second)
+            runs_root = repo / "outputs" / "current_active_stat_extractor_runs" / "Pull from DATA runs"
+            self.assertEqual(runs_root / "run_001", first)
+            self.assertEqual(runs_root / "run_002", second)
             self.assertTrue(first.is_dir())
             self.assertTrue(second.is_dir())
             self.assertEqual(second, latest_run_dir(repo))

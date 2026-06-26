@@ -10,6 +10,16 @@
       "Badges",
       "Stats"
     ],
+    "Draft Class": [
+      "Vitals",
+      "Gear",
+      "Attributes",
+      "Tendencies",
+      "Signature",
+      "Contract",
+      "Badges",
+      "Stats"
+    ],
     "Teams": [
       "Vitals",
       "Jerseys",
@@ -84,9 +94,24 @@
         "Team": {
           "address": 132505568,
           "chain": []
+        },
+        "DraftClass": {
+          "address": 112991456,
+          "chain": [],
+          "finalOffset": 8,
+          "schema_alias": "Players",
+          "record_count": 150,
+          "signature": "draft_NBA_150",
+          "signature_offset": 112991432,
+          "pointer_offset": 24,
+          "note": "NBA 2K25 draft-class table. Read qword at module+0x6BC1CE0 (draft_NBA_150 signature +0x18), then add finalOffset 0x8 so existing 2K25 player offsets apply to the draft player body. Row stride is draftClassSize."
         }
       },
-      "stride_constants": {}
+      "stride_constants": {
+        "draftClassSize": 2136,
+        "draftClassCount": 150,
+        "draftClassBodyOffset": 8
+      }
     },
     "2K26": {
       "game_info": {
@@ -111,6 +136,17 @@
               "dereference": true
             }
           ]
+        },
+        "DraftClass": {
+          "address": 111376512,
+          "chain": [],
+          "finalOffset": 8,
+          "schema_alias": "Players",
+          "record_count": 150,
+          "signature": "draft_NBA_150",
+          "signature_offset": 111376488,
+          "pointer_offset": 24,
+          "note": "NBA draft-class create-screen table. Read qword at module+0x6A37880 (draft_NBA_150 signature +0x18), then add finalOffset 0x8 so existing player offsets apply to the draft player body. Row stride is draftClassSize."
         },
         "Team": {
           "address": 132248328,
@@ -161,6 +197,9 @@
         "stadiumSize": 4792,
         "staffSize": 432,
         "shoeSize": 384,
+        "draftClassSize": 2264,
+        "draftClassCount": 150,
+        "draftClassBodyOffset": 8,
         "recordSize": 152,
         "historySize": 168,
         "hallOfFameSize": 108
@@ -170,6 +209,78 @@
   "split_schema": {
     "offsets_players.json": {
       "Players": {
+        "Vitals": {
+          "ID": {},
+          "Body": {},
+          "Vitals": {},
+          "Health": {},
+          "Team": {},
+          "Type": {}
+        },
+        "Gear": {
+          "Shoes/Gear": {},
+          "Upper Body Accessories": {},
+          "Lower Body Accessories": {}
+        },
+        "Attributes": {
+          "Offense": {},
+          "Defense": {},
+          "Athleticism": {},
+          "Durability": {},
+          "Mental": {},
+          "Misc": {},
+          "Rebounding": {}
+        },
+        "Tendencies": {
+          "Jump Shooting": {},
+          "Layups And Dunks": {},
+          "Drive Setup": {},
+          "Driving": {},
+          "Passing": {},
+          "Post Game": {},
+          "Freelance": {},
+          "Defense": {},
+          "Hot Zones": {},
+          "Tendencies": {}
+        },
+        "Signature": {
+          "Jump Shooting": {},
+          "Layups And Dunks": {},
+          "Post Game": {},
+          "Ball Handling": {},
+          "Misc": {}
+        },
+        "Contract": {
+          "Contract Terms": {},
+          "Contract Options": {},
+          "Contract Status": {},
+          "Salary": {}
+        },
+        "Badges": {
+          "Inside Scoring": {},
+          "Outside Scoring": {},
+          "Playmaking": {},
+          "Defending": {},
+          "Athleticism": {},
+          "Rebounding": {},
+          "Personality": {},
+          "General": {}
+        },
+        "Stats": {
+          "Career High Stats": {},
+          "Season High Stats": {},
+          "Stat IDs": {},
+          "Awards": {},
+          "Basic Info": {},
+          "Edit": {},
+          "Game Stats": {},
+          "Other Stats": {},
+          "Rebounds Stats": {},
+          "Scoring Stats": {},
+          "Season IDs": {}
+        }
+      },
+      "Draft Class": {
         "Vitals": {
           "ID": {},
           "Body": {},
