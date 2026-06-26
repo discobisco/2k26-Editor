@@ -18,6 +18,8 @@ from nba2k_editor.models.data_model import (
     EditorDataModel,
     FieldEntry,
     PLAYER_TEAM_FILTER_ALL,
+    PLAYER_TEAM_FILTER_BASE_TEAMS,
+    PLAYER_TEAM_FILTER_DRAFT_CLASS,
     RecordListItem,
     target_display_label,
     verify_edits,
@@ -37,7 +39,9 @@ MIN_RECORD_LIST_ROWS = 8
 PLAYER_GENERATOR_SCREEN = "Player Generator"
 FRANCHISE_MANAGER_SCREEN = "Franchise Manager"
 TARGET_CHOICES: tuple[str, ...] = ("NBA 2K22", "NBA 2K23", "NBA 2K24", "NBA 2K25", "NBA 2K26")
-PLAYER_ROSTER_EXPORT_MODES: tuple[str, ...] = ("Full Loaded Roster", "Players From Team Range", "Players From Single Team", "Selected Players")
+PLAYER_ROSTER_EXPORT_MODES: tuple[str, ...] = ("Full Loaded Roster", "Draft Class", "Players From Team Range", "Players From Single Team", "Selected Players")
+PLAYER_ROSTER_EXPORTS_DIR = Path("outputs") / "exports"
+PLAYER_ROSTER_DEFAULT_EXPORT_FILE = "player_roster_snapshot.json"
 RECORD_PREVIEW_CARDS = 100
 HISTORY_SIDE_NAV: tuple[str, ...] = ("Season Awards", "Past Champions", "League Leaders", "Hall of Famers")
 HISTORY_AWARD_TABS: tuple[str, ...] = (
@@ -192,7 +196,9 @@ class DpgEditorApp:
         self.team_record_stat = "Points"
         self.player_team_filter = PLAYER_TEAM_FILTER_ALL
         self.player_search_text = ""
-        self.player_roster_snapshot_path = str(Path("outputs") / "player_roster_snapshot.json")
+        self.player_roster_export_folder = str(PLAYER_ROSTER_EXPORTS_DIR)
+        self.player_roster_snapshot_filename = PLAYER_ROSTER_DEFAULT_EXPORT_FILE
+        self.player_roster_snapshot_path = str(Path(self.player_roster_export_folder) / self.player_roster_snapshot_filename)
         self.player_roster_export_mode = PLAYER_ROSTER_EXPORT_MODES[0]
         self.player_roster_team_start = "0"
         self.player_roster_team_end = "29"
@@ -253,6 +259,12 @@ class DpgEditorApp:
 
     def _player_roster_snapshot_path_tag(self) -> str:
         return _tag("Players", "roster_snapshot_path")
+
+    def _player_roster_export_folder_tag(self) -> str:
+        return _tag("Players", "roster_export_folder")
+
+    def _player_roster_snapshot_filename_tag(self) -> str:
+        return _tag("Players", "roster_snapshot_filename")
 
     def _player_roster_export_mode_tag(self) -> str:
         return _tag("Players", "roster_export_mode")
@@ -332,6 +344,15 @@ class DpgEditorApp:
 
     def _game_status_text(self) -> str:
         return self.model.runtime_status_text()
+
+    def _dpg_value_or_default(self, dpg: Any, tag: str, default: object) -> object:
+        try:
+            if hasattr(dpg, "does_item_exist") and not dpg.does_item_exist(tag):
+                return default
+            value = dpg.get_value(tag)
+        except Exception:
+            return default
+        return default if value is None else value
 
     def _safe_set(self, dpg: Any, tag: str, value: object) -> None:
         if dpg.does_item_exist(tag):
@@ -474,12 +495,22 @@ class DpgEditorApp:
     def _attach_and_load_all(self, dpg: Any) -> None:
         self._start_background_scan(dpg, EDITOR_DOMAINS)
 
+    def _scan_domains_for_request(self, domains: tuple[str, ...]) -> tuple[str, ...]:
+        expanded: list[str] = []
+        for domain in domains:
+            if domain not in expanded:
+                expanded.append(domain)
+            if domain == "Players" and "Draft Class" not in expanded:
+                expanded.append("Draft Class")
+        return tuple(expanded)
+
     def _start_background_scan(self, dpg: Any, domains: tuple[str, ...]) -> None:
-        if not self.model.start_background_refresh(domains):
+        scan_domains = self._scan_domains_for_request(domains)
+        if not self.model.start_background_refresh(scan_domains):
             self._safe_set(dpg, self._home_target_status_tag(), "Scan already running...")
             return
         self._safe_set(dpg, self._home_target_status_tag(), "Loading record lists...")
-        for domain in domains:
+        for domain in scan_domains:
             self._safe_set(dpg, self._status_tag(domain), "Queued for scan...")
 
     def _poll_background_scan(self, dpg: Any) -> None:
@@ -498,7 +529,7 @@ class DpgEditorApp:
                 print("DPG_LOADED_LISTS NBA2K Editor", flush=True)
 
     def _sync_domain_list(self, dpg: Any, domain: str) -> None:
-        if domain == "Players":
+        if domain in {"Players", "Draft Class"}:
             self._sync_player_list(dpg)
             return
         labels = self.model.domain_item_labels(domain)
@@ -507,8 +538,6 @@ class DpgEditorApp:
         self._sync_selection_state(domain, labels, selected.display_label if selected is not None else "")
         self._safe_set(dpg, self._status_tag(domain), self.model.domain_status(domain))
         self._render_selectable_list(dpg, domain, labels)
-        if domain in {"NBA History", "NBA Records"}:
-            self._sync_record_screen_rows(dpg, domain)
         if domain == "Teams":
             self._sync_player_team_filter(dpg)
             self._sync_player_list(dpg)
@@ -526,7 +555,8 @@ class DpgEditorApp:
         self._sync_player_team_filter(dpg)
         labels = self.model.player_item_labels_for_team_filter(self.player_team_filter, self.player_search_text)
         self._safe_set(dpg, self._player_search_tag(), self.player_search_text)
-        total_count = self.model.domain_item_count(domain)
+        filtered_items = self.model.player_items_for_team_filter(self.player_team_filter)
+        total_count = len(filtered_items) if self.player_team_filter in {PLAYER_TEAM_FILTER_BASE_TEAMS, PLAYER_TEAM_FILTER_DRAFT_CLASS} else self.model.domain_item_count(domain)
         visible_count = len(labels)
         has_filter = self.player_team_filter != PLAYER_TEAM_FILTER_ALL or bool(self.player_search_text.strip())
         count_text = f"Players: {visible_count} / {total_count}" if has_filter else f"Players: {visible_count}"
@@ -811,7 +841,7 @@ class DpgEditorApp:
 
     def _selected_editor_items(self, domain: str, fallback_item: RecordListItem) -> list[RecordListItem]:
         selected_labels = self.selected_item_labels.get(domain, set())
-        loaded_items = self.model.loaded_items.get(domain, {})
+        loaded_items = self.model.player_items_for_team_filter(self.player_team_filter) if domain == "Players" else self.model.loaded_items.get(domain, {})
         ordered_labels = self.model.player_item_labels_for_team_filter(self.player_team_filter, self.player_search_text) if domain == "Players" else self.model.domain_item_labels(domain)
         items = [loaded_items[label] for label in ordered_labels if label in selected_labels and label in loaded_items]
         if not items:
@@ -1290,11 +1320,32 @@ class DpgEditorApp:
         self._safe_set(dpg, self._generator_table_tag(), self._generator_display_text(state))
 
     def _player_roster_snapshot_path(self, dpg: Any) -> Path:
-        raw = str(dpg.get_value(self._player_roster_snapshot_path_tag()) or self.player_roster_snapshot_path).strip()
-        if not raw:
-            raw = self.player_roster_snapshot_path
-        self.player_roster_snapshot_path = raw
-        return Path(raw).expanduser()
+        folder_raw = str(
+            self._dpg_value_or_default(dpg, self._player_roster_export_folder_tag(), self.player_roster_export_folder)
+            or self.player_roster_export_folder
+        ).strip()
+        filename_raw = str(
+            self._dpg_value_or_default(dpg, self._player_roster_snapshot_filename_tag(), self.player_roster_snapshot_filename)
+            or self.player_roster_snapshot_filename
+        ).strip()
+        if not folder_raw:
+            folder_raw = str(PLAYER_ROSTER_EXPORTS_DIR)
+        if not filename_raw:
+            filename_raw = PLAYER_ROSTER_DEFAULT_EXPORT_FILE
+        filename_path = Path(filename_raw).expanduser()
+        if not filename_path.suffix:
+            filename_path = filename_path.with_suffix(".json")
+        if filename_path.is_absolute() or filename_path.parent != Path("."):
+            path = filename_path
+            self.player_roster_export_folder = str(path.parent)
+            self.player_roster_snapshot_filename = path.name
+        else:
+            folder = Path(folder_raw).expanduser()
+            path = folder / filename_path.name
+            self.player_roster_export_folder = str(folder)
+            self.player_roster_snapshot_filename = filename_path.name
+        self.player_roster_snapshot_path = str(path)
+        return path
 
     def _player_roster_export_mode(self, dpg: Any) -> str:
         mode = str(dpg.get_value(self._player_roster_export_mode_tag()) or self.player_roster_export_mode).strip()
@@ -1320,6 +1371,9 @@ class DpgEditorApp:
         loaded_players = self.model.loaded_items.get("Players", {})
         if mode == "Full Loaded Roster":
             return mode, list(loaded_players.values()), None
+        if mode == "Draft Class":
+            self.model._ensure_draft_class_items_loaded()
+            return mode, list(self.model.loaded_items.get("Draft Class", {}).values()), None
         if mode == "Selected Players":
             ordered_labels = self.model.player_item_labels_for_team_filter(self.player_team_filter, self.player_search_text)
             selected_labels = self.selected_item_labels.get("Players", set())
@@ -1340,7 +1394,10 @@ class DpgEditorApp:
             return mode, [player for player, _placement in rows], [placement for _player, placement in rows]
         return mode, list(loaded_players.values()), None
 
-    def _player_roster_apply_target_items(self, dpg: Any, snapshot: dict[str, Any]) -> list[RecordListItem] | None:
+    def _player_roster_apply_target_items(self, mode: str, snapshot: dict[str, Any]) -> list[RecordListItem] | None:
+        if mode == "Draft Class":
+            self.model._ensure_draft_class_items_loaded()
+            return list(self.model.loaded_items.get("Draft Class", {}).values())
         return None
 
     def _export_player_roster_snapshot(self, dpg: Any) -> None:
@@ -1379,9 +1436,9 @@ class DpgEditorApp:
 
     def _apply_player_roster_snapshot(self, dpg: Any) -> None:
         path = self._player_roster_snapshot_path(dpg)
+        apply_mode = self._player_roster_export_mode(dpg)
         try:
             snapshot = json.loads(path.read_text(encoding="utf-8"))
-            target_items = self._player_roster_apply_target_items(dpg, snapshot)
         except Exception as exc:
             message = f"Roster apply failed: {exc}"
             self._safe_set(dpg, self._status_tag("Players"), message)
@@ -1391,6 +1448,7 @@ class DpgEditorApp:
         def worker() -> None:
             try:
                 self.model.attach()
+                target_items = self._player_roster_apply_target_items(apply_mode, snapshot)
                 result = self.model.apply_player_roster_snapshot(snapshot, progress_callback=self._background_operation_progress, target_items=target_items)
             except _OperationCancelled:
                 message = "Roster apply cancelled."
@@ -1543,8 +1601,10 @@ class DpgEditorApp:
                 dpg.add_text("Players: 0", tag=self._count_tag(domain))
             dpg.add_spacer(height=10)
             with dpg.group(horizontal=True):
-                dpg.add_text("Roster snapshot")
-                dpg.add_input_text(tag=self._player_roster_snapshot_path_tag(), default_value=self.player_roster_snapshot_path, width=420)
+                dpg.add_text("Export folder")
+                dpg.add_input_text(tag=self._player_roster_export_folder_tag(), default_value=self.player_roster_export_folder, width=320)
+                dpg.add_text("File name")
+                dpg.add_input_text(tag=self._player_roster_snapshot_filename_tag(), default_value=self.player_roster_snapshot_filename, width=260)
                 dpg.add_button(label="Export Players", width=130, callback=lambda *_args: self._export_player_roster_snapshot(dpg))
                 dpg.add_button(label="Apply Roster Snapshot", width=170, callback=lambda *_args: self._apply_player_roster_snapshot(dpg))
             dpg.add_spacer(height=6)
@@ -1630,12 +1690,19 @@ class DpgEditorApp:
         domain = "NBA History"
         with dpg.child_window(tag=self._screen_tag(domain), show=show, width=-1, height=-1, border=False):
             with dpg.group(horizontal=True):
-                with dpg.child_window(width=210, height=-1, border=False):
+                with dpg.child_window(width=260, height=-1, border=False):
                     dpg.add_button(label="Refresh", width=-1, callback=lambda *_args: self._attach_and_scan(dpg, domain))
+                    dpg.add_spacer(height=6)
+                    dpg.add_button(label="Edit Selected History Row", width=-1, callback=lambda *_args: self._open_selected(dpg, domain))
                     dpg.add_spacer(height=18)
                     for label in HISTORY_SIDE_NAV:
                         dpg.add_button(label=label, width=-1, height=34, callback=lambda *_args, selected=label: self._set_history_section(dpg, selected))
                         dpg.add_spacer(height=6)
+                    dpg.add_spacer(height=10)
+                    dpg.add_text("Loaded history rows")
+                    dpg.add_spacer(height=4)
+                    with dpg.child_window(width=-1, height=240, border=True):
+                        dpg.add_group(tag=self._list_content_tag(domain))
                 with dpg.child_window(width=-1, height=-1, border=True):
                     dpg.add_text(self.history_section, tag=self._heading_tag(domain))
                     dpg.add_spacer(height=14)
@@ -1650,7 +1717,6 @@ class DpgEditorApp:
                         for section in HISTORY_TABLE_COLUMNS:
                             with dpg.group(tag=self._history_table_group_tag(section), show=section == self.history_section):
                                 dpg.add_group(tag=self._history_table_content_tag(section))
-                    self._sync_record_screen_rows(dpg, domain)
 
     def _build_records_screen(self, dpg: Any, *, show: bool = False) -> None:
         domain = "NBA Records"
@@ -1658,10 +1724,17 @@ class DpgEditorApp:
             with dpg.group(horizontal=True):
                 with dpg.child_window(width=260, height=-1, border=False):
                     dpg.add_button(label="Refresh", width=-1, callback=lambda *_args: self._attach_and_scan(dpg, domain))
+                    dpg.add_spacer(height=6)
+                    dpg.add_button(label="Edit Selected Record", width=-1, callback=lambda *_args: self._open_selected(dpg, domain))
                     dpg.add_spacer(height=18)
                     for label in RECORD_SIDE_NAV:
                         dpg.add_button(label=label, width=-1, height=34, callback=lambda *_args, selected=label: self._set_record_section(dpg, selected))
                         dpg.add_spacer(height=6)
+                    dpg.add_spacer(height=10)
+                    dpg.add_text("Loaded records")
+                    dpg.add_spacer(height=4)
+                    with dpg.child_window(width=-1, height=240, border=True):
+                        dpg.add_group(tag=self._list_content_tag(domain))
                 with dpg.child_window(width=-1, height=-1, border=True):
                     dpg.add_text(self.record_section, tag=self._heading_tag(domain))
                     dpg.add_spacer(height=14)

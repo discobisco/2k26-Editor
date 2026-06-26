@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import unittest
 from typing import Any
 
@@ -77,6 +78,15 @@ class DpgEditorRecordLazyPreviewTests(unittest.TestCase):
         self.assertEqual(0, model.clear_record_calls)
         self.assertEqual(0, model.refresh_history_calls)
         self.assertEqual(0, model.refresh_record_calls)
+
+    def test_history_and_records_screens_have_selectable_lists_and_edit_buttons(self) -> None:
+        history_source = inspect.getsource(DpgEditorApp._build_history_screen)
+        records_source = inspect.getsource(DpgEditorApp._build_records_screen)
+
+        self.assertIn('label="Edit Selected History Row"', history_source)
+        self.assertIn('self._list_content_tag(domain)', history_source)
+        self.assertIn('label="Edit Selected Record"', records_source)
+        self.assertIn('self._list_content_tag(domain)', records_source)
 
 
 if __name__ == "__main__":

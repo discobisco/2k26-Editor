@@ -5,8 +5,9 @@ from collections import OrderedDict
 from typing import Any
 
 from nba2k_editor.core.field_io import _display_to_raw_value, _raw_to_display_value
-from nba2k_editor.models.data_model import EDITOR_DOMAINS, EditorDataModel
+from nba2k_editor.models.data_model import EDITOR_DOMAINS, EditorDataModel, PLAYER_TEAM_FILTER_BASE_TEAMS
 from nba2k_editor.models.schema import FieldEntry, RecordListItem
+from nba2k_editor.ui.dpg_editor import DpgEditorApp, PLAYER_ROSTER_EXPORT_MODES
 
 
 class RosterSlotModel(EditorDataModel):
@@ -14,13 +15,18 @@ class RosterSlotModel(EditorDataModel):
         self.loaded_items = {domain: {} for domain in EDITOR_DOMAINS}
         self.target_executable = "NBA2K26.exe"
         self.team = RecordListItem("Teams", 0, 0x5000, "Golden State Warriors")
+        self.expansion_team = RecordListItem("Teams", 30, 0x6000, "Expansion Team")
         self.player_a = RecordListItem("Players", 2, 0x1200, "Alpha")
         self.player_b = RecordListItem("Players", 3, 0x1300, "Beta")
-        self.loaded_items["Teams"] = {self.team.label: self.team}
+        self.player_c = RecordListItem("Players", 4, 0x1400, "Gamma")
+        self.draft_player = RecordListItem("Draft Class", 5, 0x2500, "Draft Alpha")
+        self.loaded_items["Teams"] = {self.team.label: self.team, self.expansion_team.label: self.expansion_team}
         self.loaded_items["Players"] = {
             self.player_a.display_label: self.player_a,
             self.player_b.display_label: self.player_b,
+            self.player_c.display_label: self.player_c,
         }
+        self.loaded_items["Draft Class"] = {self.draft_player.display_label: self.draft_player}
         self.slot_entries = [
             FieldEntry("Teams", "Team Players", "Team Players", 0, {"normalized_name": "PLAYER10"}),
             FieldEntry("Teams", "Team Players", "Team Players", 1, {"normalized_name": "PLAYER1"}),
@@ -29,6 +35,8 @@ class RosterSlotModel(EditorDataModel):
         ]
         self.current_team_reads = 0
         self.writes: list[tuple[str, int, Any]] = []
+        self.draft_reads: list[tuple[str, int, str]] = []
+        self.draft_writes: list[tuple[str, int, str, Any]] = []
 
     def grouped_fields(self, domain: str):  # type: ignore[override]
         if domain == "Teams":
@@ -39,11 +47,25 @@ class RosterSlotModel(EditorDataModel):
         if entry.domain == "Players" and entry.normalized_name == "CURRENTTEAM":
             self.current_team_reads += 1
             raise AssertionError("team export must not scan Players/CURRENTTEAM")
-        slot_values = {"PLAYER1": self.player_a.address, "PLAYER2": self.player_b.address, "PLAYER10": 0}
+        if index == self.expansion_team.index:
+            slot_values = {"PLAYER1": self.player_c.address}
+        else:
+            slot_values = {"PLAYER1": self.player_a.address, "PLAYER2": self.player_b.address, "PLAYER10": 0}
         return {"raw_value": slot_values.get(entry.normalized_name, 0), "display_value": slot_values.get(entry.normalized_name, 0)}
 
     def write_entry_value(self, entry: FieldEntry, *, index: int, value: Any, stat_selector: object | None = None) -> None:  # type: ignore[override]
         self.writes.append((entry.normalized_name, index, value))
+
+    def _read_field_at_record_address(self, domain: str, record_addr: int, field: dict[str, Any]) -> dict[str, Any]:  # type: ignore[override]
+        self.draft_reads.append((domain, record_addr, str(field.get("normalized_name"))))
+        return {"raw_value": "Draft Alpha", "display_value": "Draft Alpha"}
+
+    def _write_field_at_record_address(self, domain: str, record_addr: int, field: dict[str, Any], value: Any) -> Any:  # type: ignore[override]
+        self.draft_writes.append((domain, record_addr, str(field.get("normalized_name")), value))
+        return value
+
+    def _ensure_draft_class_items_loaded(self) -> None:  # type: ignore[override]
+        return None
 
     def _field_version_payload(self, field: dict[str, Any]) -> dict[str, Any]:  # type: ignore[override]
         return dict(field.get("payload", {}))
@@ -78,6 +100,26 @@ class PlayerRosterSnapshotExportTests(unittest.TestCase):
         )
         self.assertEqual(0, model.current_team_reads)
 
+    def test_base_team_filter_lists_only_players_in_team_slots_zero_to_twenty_nine(self) -> None:
+        model = RosterSlotModel()
+
+        labels = model.player_item_labels_for_team_filter(PLAYER_TEAM_FILTER_BASE_TEAMS)
+        items = model.player_items_for_team_filter(PLAYER_TEAM_FILTER_BASE_TEAMS)
+
+        self.assertIn(PLAYER_TEAM_FILTER_BASE_TEAMS, model.player_team_filter_options())
+        self.assertEqual([model.player_a.display_label, model.player_b.display_label], labels)
+        self.assertEqual({model.player_a.display_label: model.player_a, model.player_b.display_label: model.player_b}, items)
+        self.assertNotIn(model.player_c.display_label, labels)
+        self.assertEqual(0, model.current_team_reads)
+
+    def test_base_team_filter_searches_within_zero_to_twenty_nine_team_slot_players(self) -> None:
+        model = RosterSlotModel()
+
+        labels = model.player_item_labels_for_team_filter(PLAYER_TEAM_FILTER_BASE_TEAMS, "bet")
+
+        self.assertEqual([model.player_b.display_label], labels)
+        self.assertEqual(0, model.current_team_reads)
+
     def test_export_records_raw_values_and_team_slot_metadata(self) -> None:
         model = RosterSlotModel()
         first_name_entry = model._portable_player_roster_entries()[0]
@@ -106,6 +148,38 @@ class PlayerRosterSnapshotExportTests(unittest.TestCase):
             {"display_value": "Golden State Warriors", "raw_value": 0x5000},
             row["fields"]["Vitals/CURRENTTEAM"],
         )
+
+    def test_draft_class_snapshot_export_reads_draft_domain_body(self) -> None:
+        model = RosterSlotModel()
+
+        snapshot = model.export_player_roster_snapshot_for_items((model.draft_player,), mode="Draft Class")
+
+        self.assertEqual("Draft Class", snapshot["mode"])
+        self.assertEqual("Draft Class", snapshot["domain"])
+        self.assertEqual(1, snapshot["record_count"])
+        self.assertEqual({"display_value": "Draft Alpha", "raw_value": "Draft Alpha"}, snapshot["records"][0]["fields"]["Vitals/FIRSTNAME"])
+        self.assertIn(("Draft Class", model.draft_player.address, "FIRSTNAME"), model.draft_reads)
+
+    def test_draft_class_snapshot_apply_writes_draft_domain_body(self) -> None:
+        model = RosterSlotModel()
+        snapshot = {"records": [{"fields": {"Vitals/FIRSTNAME": {"display_value": "Draft Beta"}}}]}
+
+        result = model.apply_player_roster_snapshot(snapshot, target_items=(model.draft_player,))
+
+        self.assertEqual(1, result["succeeded"])
+        self.assertEqual([], model.writes)
+        self.assertEqual([("Draft Class", model.draft_player.address, "FIRSTNAME", "Draft Beta")], model.draft_writes)
+
+    def test_draft_class_is_roster_snapshot_mode_and_routes_to_draft_items(self) -> None:
+        model = RosterSlotModel()
+        app = DpgEditorApp(model)
+
+        mode, items, placements = app._player_roster_export_items("Draft Class")
+
+        self.assertIn("Draft Class", PLAYER_ROSTER_EXPORT_MODES)
+        self.assertEqual("Draft Class", mode)
+        self.assertEqual([model.draft_player], items)
+        self.assertIsNone(placements)
 
     def test_apply_uses_target_team_address_without_replaying_team_slot(self) -> None:
         model = RosterSlotModel()
