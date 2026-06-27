@@ -1698,11 +1698,6 @@ class DpgEditorApp:
                     for label in HISTORY_SIDE_NAV:
                         dpg.add_button(label=label, width=-1, height=34, callback=lambda *_args, selected=label: self._set_history_section(dpg, selected))
                         dpg.add_spacer(height=6)
-                    dpg.add_spacer(height=10)
-                    dpg.add_text("Loaded history rows")
-                    dpg.add_spacer(height=4)
-                    with dpg.child_window(width=-1, height=240, border=True):
-                        dpg.add_group(tag=self._list_content_tag(domain))
                 with dpg.child_window(width=-1, height=-1, border=True):
                     dpg.add_text(self.history_section, tag=self._heading_tag(domain))
                     dpg.add_spacer(height=14)
@@ -1730,11 +1725,6 @@ class DpgEditorApp:
                     for label in RECORD_SIDE_NAV:
                         dpg.add_button(label=label, width=-1, height=34, callback=lambda *_args, selected=label: self._set_record_section(dpg, selected))
                         dpg.add_spacer(height=6)
-                    dpg.add_spacer(height=10)
-                    dpg.add_text("Loaded records")
-                    dpg.add_spacer(height=4)
-                    with dpg.child_window(width=-1, height=240, border=True):
-                        dpg.add_group(tag=self._list_content_tag(domain))
                 with dpg.child_window(width=-1, height=-1, border=True):
                     dpg.add_text(self.record_section, tag=self._heading_tag(domain))
                     dpg.add_spacer(height=14)
