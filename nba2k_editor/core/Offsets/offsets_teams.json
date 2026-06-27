@@ -3180,6 +3180,17 @@
         {
           "normalized_name": "CURRENTYEARSTATS",
           "display_name": "CURRENT_YEAR_STATS",
+          "selected_record_source": {
+            "role": "team_record_start",
+            "target_domain": "NBA Records",
+            "versions": [
+              "2K26"
+            ],
+            "strategy": "team_records_start_plus_team_index_block",
+            "start_index": 3100,
+            "row_count": 510,
+            "source": "NBA2K26_history_record_routing_extract.json:team_record_embedded_records"
+          },
           "versions": {
             "2K22,2K23,2K24": {
               "address": 3712,

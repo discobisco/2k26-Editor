@@ -125,7 +125,7 @@
       },
       "base_pointers": {
         "Player": {
-          "address": 132247032,
+          "address": 132254824,
           "chain": []
         },
         "PlayerSeasonStats": {
@@ -138,34 +138,34 @@
           ]
         },
         "DraftClass": {
-          "address": 111376512,
+          "address": 111383040,
           "chain": [],
           "finalOffset": 8,
           "schema_alias": "Players",
           "record_count": 150,
           "signature": "draft_NBA_150",
-          "signature_offset": 111376488,
+          "signature_offset": 111383016,
           "pointer_offset": 24,
-          "note": "NBA draft-class create-screen table. Read qword at module+0x6A37880 (draft_NBA_150 signature +0x18), then add finalOffset 0x8 so existing player offsets apply to the draft player body. Row stride is draftClassSize."
+          "note": "NBA draft-class create-screen table. Read qword at module+0x6A39200 (draft_NBA_150 signature +0x18), then add finalOffset 0x8 so existing player offsets apply to the draft player body. Row stride is draftClassSize."
         },
         "Team": {
-          "address": 132248328,
+          "address": 132254856,
           "chain": []
         },
         "Staff": {
-          "address": 132248392,
+          "address": 132254920,
           "chain": []
         },
         "Stadium": {
-          "address": 132248320,
+          "address": 132254848,
           "chain": []
         },
         "Jersey": {
-          "address": 132248424,
+          "address": 132254952,
           "chain": []
         },
         "Shoes": {
-          "address": 132248760,
+          "address": 132255288,
           "chain": []
         },
         "TeamHistory": {
@@ -173,12 +173,12 @@
           "chain": []
         },
         "NBAHistory": {
-          "address": 132248520,
+          "address": 132255048,
           "chain": [],
           "finalOffset": 8
         },
         "Record": {
-          "address": 132248496,
+          "address": 132255024,
           "chain": []
         },
         "HallOfFame": {
