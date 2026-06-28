@@ -84,7 +84,14 @@ class FakeModel:
             RecordListItem(domain="Players", index=0, address=0x1000, label="Alpha"),
             RecordListItem(domain="Players", index=1, address=0x1100, label="Beta"),
         )
-        self.loaded_items = {"Players": {item.display_label: item for item in self.items}}
+        self.team_items = (
+            RecordListItem(domain="Teams", index=0, address=0x2000, label="Team A"),
+            RecordListItem(domain="Teams", index=1, address=0x3000, label="Team B"),
+        )
+        self.loaded_items = {
+            "Players": {item.display_label: item for item in self.items},
+            "Teams": {item.display_label: item for item in self.team_items},
+        }
         self.writes: list[tuple[int, str]] = []
         self.resets: list[tuple[int, str | None]] = []
 
@@ -93,6 +100,9 @@ class FakeModel:
 
     def player_item_labels_for_team_filter(self, _team_filter: str | None, _search_text: str | None) -> list[str]:
         return self.domain_item_labels("Players")
+
+    def player_items_for_team_filter(self, _team_filter: str | None) -> dict[str, RecordListItem]:
+        return self.loaded_items["Players"]
 
     def select_item_by_label(self, domain: str, selected_label: str | None) -> RecordListItem | None:
         if selected_label is None:
@@ -138,6 +148,43 @@ class DpgEditorBatchSelectionTests(unittest.TestCase):
 
         self.assertEqual([(0, "80"), (1, "80")], model.writes)
         self.assertNotIn(row_key, app.dirty_rows)
+        self.assertEqual("saved 2 records", dpg.get_value(app._row_status_tag(source, entry)))
+
+    def test_batch_editor_window_label_uses_player_count_not_player_name(self) -> None:
+        model = FakeModel()
+        app = DpgEditorApp(model)  # type: ignore[arg-type]
+        source = model.items[0]
+        app.selected_item_labels["Players"] = {item.display_label for item in model.items}
+
+        label = app._editor_window_label(source)
+
+        self.assertEqual("Players [2 selected]", label)
+        self.assertNotIn(source.label, label)
+
+    def test_single_editor_window_label_keeps_player_name(self) -> None:
+        model = FakeModel()
+        app = DpgEditorApp(model)  # type: ignore[arg-type]
+        source = model.items[0]
+        app.selected_item_labels["Players"] = {source.display_label}
+
+        self.assertEqual("Players [0] Alpha", app._editor_window_label(source))
+
+    def test_batch_save_applies_to_same_non_player_domain(self) -> None:
+        model = FakeModel()
+        app = DpgEditorApp(model)  # type: ignore[arg-type]
+        dpg = FakeDpg()
+        source = model.team_items[0]
+        entry = FieldEntry("Teams", "Vitals", "Names", 7, {"display_name": "City", "normalized_name": "CITYNAME"})
+        row_key = f"Teams:{source.index}:{entry.ordinal}"
+        app.open_rows[row_key] = entry
+        app.selected_item_labels["Teams"] = {item.display_label for item in model.team_items}
+        app.selected_item_labels["Players"] = {item.display_label for item in model.items}
+
+        dpg.set_value(app._row_current_tag(source, entry), "Old City")
+        dpg.set_value(app._row_new_tag(source, entry), "New City")
+        app._save_item_editor(dpg, source)
+
+        self.assertEqual([(0, "New City"), (1, "New City")], model.writes)
         self.assertEqual("saved 2 records", dpg.get_value(app._row_status_tag(source, entry)))
 
     def test_batch_save_shows_operation_popup_for_multi_selected_players(self) -> None:

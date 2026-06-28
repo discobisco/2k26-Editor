@@ -850,6 +850,12 @@ class DpgEditorApp:
             items.insert(0, fallback_item)
         return items
 
+    def _editor_window_label(self, item: RecordListItem) -> str:
+        target_count = len(self._selected_editor_items(item.domain, item))
+        if target_count > 1:
+            return f"{item.domain} [{target_count} selected]"
+        return f"{item.domain} [{item.index}] {item.label}"
+
     def _load_item_editor(self, dpg: Any, item: RecordListItem) -> None:
         loaded = 0
         failed = 0
@@ -924,8 +930,9 @@ class DpgEditorApp:
 
     def _open_editor_window(self, dpg: Any, item: RecordListItem) -> None:
         win_tag = _tag("editor", item.domain, item.index, "window")
+        window_label = self._editor_window_label(item)
         if dpg.does_item_exist(win_tag):
-            dpg.configure_item(win_tag, show=True)
+            dpg.configure_item(win_tag, show=True, label=window_label)
             dpg.focus_item(win_tag)
             return
 
@@ -1066,7 +1073,7 @@ class DpgEditorApp:
                                             dpg.add_text("--", tag=career_cell_tag(row_index, label))
             show_team_record_rows()
 
-        with dpg.window(label=f"{item.domain} [{item.index}] {item.label}", tag=win_tag, width=1120, height=760):
+        with dpg.window(label=window_label, tag=win_tag, width=1120, height=760):
             with dpg.group(horizontal=True):
                 dpg.add_button(label="Reload", callback=lambda *_args, i=item: self._load_item_editor(dpg, i))
                 dpg.add_button(label="Save Changes + Readback", callback=lambda *_args, i=item: self._save_item_editor(dpg, i))

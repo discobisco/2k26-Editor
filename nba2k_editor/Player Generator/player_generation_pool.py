@@ -1052,7 +1052,7 @@ def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None
         for section_groups in grouped.values()
         for group_entries in section_groups.values()
         for entry in group_entries
-        if str(entry.normalized_name).upper() in {"HEIGHTCM", "WEIGHT", "WEIGHTKG"}
+        if str(entry.normalized_name).upper() in {"HEIGHT", "WEIGHT", "WEIGHTKG"}
     }
     attribute_entries = [entry for group_entries in grouped.get("Attributes", {}).values() for entry in group_entries]
     tendency_entries = [entry for group_entries in grouped.get("Tendencies", {}).values() for entry in group_entries]
@@ -1097,12 +1097,10 @@ def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None
                 stat_id = _raw_int(model.read_entry_value(entry, index=player.index))
                 break
         stat_row["current_year_stat_id"] = "" if stat_id is None else stat_id
-        height_cm_entry = vital_entries.get("HEIGHTCM")
+        height_entry = vital_entries.get("HEIGHT")
         weight_entry = vital_entries.get("WEIGHT")
         weight_kg_entry = vital_entries.get("WEIGHTKG")
-        stat_row["height_cm"] = "" if height_cm_entry is None else _display(model.read_entry_value(height_cm_entry, index=player.index))
-        height_cm = as_float(stat_row.get("height_cm"))
-        stat_row["height_inches"] = "" if height_cm is None else round(height_cm / 2.54, 4)
+        stat_row["height_inches"] = "" if height_entry is None else _display(model.read_entry_value(height_entry, index=player.index))
         stat_row["weight_pounds"] = "" if weight_entry is None else _display(model.read_entry_value(weight_entry, index=player.index))
         stat_row["weight_kg"] = "" if weight_kg_entry is None else _display(model.read_entry_value(weight_kg_entry, index=player.index))
         for entry in stat_detail_entries:
