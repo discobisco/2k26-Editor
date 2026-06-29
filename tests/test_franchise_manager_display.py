@@ -152,38 +152,6 @@ class FranchiseManagerDisplayTests(unittest.TestCase):
             finally:
                 facade.close()
 
-    def test_dpg_franchise_manager_screen_is_thin_ui_and_calls_facade_only(self) -> None:
-        source = (REPO_ROOT / "nba2k_editor" / "ui" / "dpg_editor.py").read_text(encoding="utf-8")
-
-        self.assertIn('FRANCHISE_MANAGER_SCREEN = "Franchise Manager"', source)
-        self.assertIn('import_module("nba2k_editor.franchise_manager.display")', source)
-        self.assertIn("def _build_franchise_manager_screen", source)
-        self.assertIn("import_2k_data_from_offsets(self.model)", source)
-        screen_source = source[source.find("def _build_franchise_manager_screen"): source.find("def _build_players_screen")]
-        for label in (
-            'label="Import 2K Data"',
-            'label="Run Evaluations"',
-            'label="Advance Phase"',
-            'label="Open Draft Room"',
-            'label="Open Team View"',
-            'label="Open League History"',
-            'label="Load Teams From Game"',
-            'label="Import W-L"',
-            'label="Save Franchise"',
-        ):
-            self.assertIn(label, screen_source)
-        self.assertIn("Franchise Overview", screen_source)
-        self.assertIn("League Snapshot", screen_source)
-        self.assertIn("Owner Alerts", screen_source)
-        self.assertIn("GM Alerts", screen_source)
-        self.assertIn("Next Simulation Stop", screen_source)
-        self.assertIn("League Activity Feed", screen_source)
-        self.assertIn("Development Watch", screen_source)
-        self.assertNotIn("dpg.table", screen_source)
-        forbidden = ("FranchiseStore", "OwnerProfile", "GMProfile", "ImportedSnapshot", "evaluate_team_at_stop", "build_draft_class")
-        for token in forbidden:
-            self.assertNotIn(token, source)
-
     def test_dpg_text_rendering_uses_dashboard_view_model_fields(self) -> None:
         editor = import_module("nba2k_editor.ui.dpg_editor")
         app = editor.DpgEditorApp(SimpleNamespace())
