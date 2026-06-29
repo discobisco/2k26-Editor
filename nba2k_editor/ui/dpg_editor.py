@@ -215,6 +215,7 @@ class DpgEditorApp:
         self.franchise_display = import_module("nba2k_editor.franchise_manager.display")
         self.franchise_facade = self.franchise_display.FranchiseManagerFacade()
         self.franchise_dashboard = self.franchise_facade.load_franchise()
+        self.franchise_manual_standings_text = "Team, Wins, Losses\n"
 
     @property
     def generator_display_state(self) -> Any:
@@ -1085,11 +1086,13 @@ class DpgEditorApp:
                         with dpg.tab(label=section):
                             for group, entries in groups.items():
                                 entries_list = list(entries)
+                                options: list[str] = []
                                 with dpg.collapsing_header(label=group, default_open=group in {"ID", "Vitals", "Basic Info"}):
                                     if item.domain == "Players" and section == "Stats" and group == "Season IDs":
-                                        options = self.model.player_season_stat_id_options(item.index)
+                                        selector_options = self.model.player_season_stat_id_options(item.index)
+                                        options = [option for option in selector_options if parse_id_prefixed_option(option) is not None]
+                                        key = self._season_stat_selector_key(item)
                                         if options:
-                                            key = self._season_stat_selector_key(item)
                                             selected = self.player_season_stat_id_selection.get(key)
                                             if selected not in options:
                                                 selected = next((option for option in options if parse_id_prefixed_option(option) is not None), options[0])
@@ -1105,10 +1108,13 @@ class DpgEditorApp:
                                                 )
                                             dpg.add_spacer(height=6)
                                         else:
-                                            dpg.add_text("No Season Stat ID values available")
+                                            self.player_season_stat_id_selection.pop(key, None)
+                                            dpg.add_text("No player seasons with stats available")
                                             dpg.add_spacer(height=6)
                                     if item.domain == "Players" and section == "Stats" and group == "Season IDs":
                                         entries_list = [entry for entry in entries_list if not self.model.is_player_season_id_selector_entry(entry)]
+                                        if not options:
+                                            entries_list = [entry for entry in entries_list if not self.model.is_player_selected_stat_detail_entry(entry)]
                                     render_table(entries_list)
                     if item.domain == "Teams":
                         with dpg.tab(label="Team Records"):
@@ -1479,6 +1485,11 @@ class DpgEditorApp:
     def _franchise_tag(self, *parts: object) -> str:
         return _tag(FRANCHISE_MANAGER_SCREEN, *parts)
 
+    def _import_manual_franchise_standings(self, dpg: Any) -> None:
+        text = str(dpg.get_value(self._franchise_tag("manual_standings_text")) or "")
+        self.franchise_manual_standings_text = text
+        self._run_franchise_action(dpg, lambda facade: facade.import_manual_standings_text(text))
+
     def _franchise_lines_text(self, title: str, lines: object) -> str:
         if isinstance(lines, str):
             values = (lines,)
@@ -1571,6 +1582,13 @@ class DpgEditorApp:
                 dpg.add_button(label="Open Draft Room", width=140, callback=lambda *_args: self._show_franchise_report(dpg, "Draft Room", self.franchise_facade.get_draft_report()))
                 dpg.add_button(label="Open Team View", width=130, callback=lambda *_args: self._show_franchise_report(dpg, "Team View", (str(self.franchise_facade.get_team_dashboard().display_name), *self.franchise_facade.get_team_dashboard().recent_logs)))
                 dpg.add_button(label="Open League History", width=155, callback=lambda *_args: self._show_franchise_report(dpg, "League History", self.franchise_facade.get_history_report()))
+            dpg.add_spacer(height=8)
+            with dpg.child_window(width=-1, height=120, border=True):
+                dpg.add_text("Manual Team W-L Entry")
+                dpg.add_text("Paste rows from a screenshot as: Team, Wins, Losses or Team 44-12")
+                with dpg.group(horizontal=True):
+                    dpg.add_input_text(tag=self._franchise_tag("manual_standings_text"), default_value=self.franchise_manual_standings_text, multiline=True, width=-140, height=62)
+                    dpg.add_button(label="Import W-L", width=110, height=30, callback=lambda *_args: self._import_manual_franchise_standings(dpg))
             dpg.add_spacer(height=12)
             with dpg.group(horizontal=True):
                 with dpg.child_window(width=380, height=210, border=True):
@@ -1726,8 +1744,6 @@ class DpgEditorApp:
             with dpg.group(horizontal=True):
                 with dpg.child_window(width=260, height=-1, border=False):
                     dpg.add_button(label="Refresh", width=-1, callback=lambda *_args: self._attach_and_scan(dpg, domain))
-                    dpg.add_spacer(height=6)
-                    dpg.add_button(label="Edit Selected Record", width=-1, callback=lambda *_args: self._open_selected(dpg, domain))
                     dpg.add_spacer(height=18)
                     for label in RECORD_SIDE_NAV:
                         dpg.add_button(label=label, width=-1, height=34, callback=lambda *_args, selected=label: self._set_record_section(dpg, selected))

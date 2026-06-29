@@ -103,8 +103,7 @@
           "record_count": 150,
           "signature": "draft_NBA_150",
           "signature_offset": 112991432,
-          "pointer_offset": 24,
-          "note": "NBA 2K25 draft-class table. Read qword at module+0x6BC1CE0 (draft_NBA_150 signature +0x18), then add finalOffset 0x8 so existing 2K25 player offsets apply to the draft player body. Row stride is draftClassSize."
+          "pointer_offset": 24
         }
       },
       "stride_constants": {
@@ -145,8 +144,7 @@
           "record_count": 150,
           "signature": "draft_NBA_150",
           "signature_offset": 111383016,
-          "pointer_offset": 24,
-          "note": "NBA draft-class create-screen table. Read qword at module+0x6A39200 (draft_NBA_150 signature +0x18), then add finalOffset 0x8 so existing player offsets apply to the draft player body. Row stride is draftClassSize."
+          "pointer_offset": 24
         },
         "Team": {
           "address": 132254856,

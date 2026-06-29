@@ -32,6 +32,7 @@ class FranchiseManagerDisplayTests(unittest.TestCase):
             "AdvancePhase",
             "Import2KDataFromOffsets",
             "ImportManualLeagueSnapshotFile",
+            "ImportManualStandingsText",
             "GenerateDraftClass",
             "RunOwnerEvaluations",
             "RunGMEvaluations",
@@ -120,6 +121,25 @@ class FranchiseManagerDisplayTests(unittest.TestCase):
         self.assertEqual(6120, snapshots[1].payload["Boston Celtics"]["points"])
         self.assertTrue(any("manual_import" in item for item in history))
 
+    def test_facade_imports_manual_standings_text_from_pasted_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            facade = FranchiseManagerFacade(Path(tmp) / "franchise.sqlite")
+            try:
+                facade.create_franchise(start_season=2026)
+                dashboard = facade.import_manual_standings_text(
+                    "Team, Wins, Losses\nBoston Celtics, 44, 12\nNew York Knicks 20-36\nLos Angeles Lakers 30 26"
+                )
+                snapshots = facade.store.snapshots_for_season(2026) if facade.store is not None else ()
+                history = facade.get_history_report()
+            finally:
+                facade.close()
+
+        self.assertIn("Imported manual standings text: 3 standings rows", dashboard.status)
+        self.assertIn("Boston Celtics: 44-12", dashboard.league_snapshot.top_teams)
+        self.assertEqual((ImportedDataKind.STANDINGS,), tuple(snapshot.kind for snapshot in snapshots))
+        self.assertEqual({"wins": 20, "losses": 36}, snapshots[0].payload["New York Knicks"])
+        self.assertTrue(any("manual_standings_import" in item for item in history))
+
     def test_manual_league_snapshot_file_requires_standings_wins_and_losses(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             snapshot_path = Path(tmp) / "bad_manual_snapshot.json"
@@ -147,6 +167,8 @@ class FranchiseManagerDisplayTests(unittest.TestCase):
             'label="Open Draft Room"',
             'label="Open Team View"',
             'label="Open League History"',
+            'label="Load Teams From Game"',
+            'label="Import W-L"',
             'label="Save Franchise"',
         ):
             self.assertIn(label, screen_source)

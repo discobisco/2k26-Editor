@@ -18,6 +18,7 @@ FEATURES: tuple[str, ...] = (
     "fg_pct",
     "x3pa_per36",
     "x3p_pct",
+    "e_fg_percent",
     "fta_per36",
     "ft_pct",
     "ast_per36",
@@ -27,6 +28,80 @@ FEATURES: tuple[str, ...] = (
     "blk_per36",
     "tov_per36",
     "pf_per36",
+    "games",
+    "mp_per_game",
+    "pts_per100",
+    "fga_per100",
+    "x3pa_per100",
+    "fta_per100",
+    "ast_per100",
+    "orb_per100",
+    "drb_per100",
+    "trb_per100",
+    "stl_per100",
+    "blk_per100",
+    "tov_per100",
+    "pf_per100",
+    "player_o_rtg",
+    "player_d_rtg",
+    "per",
+    "ts_percent",
+    "x3p_ar",
+    "f_tr",
+    "orb_percent",
+    "drb_percent",
+    "trb_percent",
+    "ast_percent",
+    "stl_percent",
+    "blk_percent",
+    "tov_percent",
+    "usg_percent",
+    "ows",
+    "dws",
+    "ws",
+    "ws_48",
+    "obpm",
+    "dbpm",
+    "bpm",
+    "vorp",
+    "avg_dist_fga",
+    "percent_fga_from_x2p_range",
+    "percent_fga_from_x0_3_range",
+    "percent_fga_from_x3_10_range",
+    "percent_fga_from_x10_16_range",
+    "percent_fga_from_x16_3p_range",
+    "percent_fga_from_x3p_range",
+    "fg_percent_from_x2p_range",
+    "fg_percent_from_x0_3_range",
+    "fg_percent_from_x3_10_range",
+    "fg_percent_from_x10_16_range",
+    "fg_percent_from_x16_3p_range",
+    "fg_percent_from_x3p_range",
+    "percent_assisted_x2p_fg",
+    "percent_assisted_x3p_fg",
+    "percent_dunks_of_fga",
+    "num_of_dunks",
+    "percent_corner_3s_of_3pa",
+    "corner_3_point_percent",
+    "team_o_rtg",
+    "team_d_rtg",
+    "team_n_rtg",
+    "team_pace",
+    "team_srs",
+    "team_ts_percent",
+    "team_x3p_ar",
+    "team_e_fg_percent",
+    "team_tov_percent",
+    "team_orb_percent",
+    "team_drb_percent",
+    "team_opp_e_fg_percent",
+    "all_star",
+    "all_nba",
+    "all_defense",
+    "award_share",
+    "mvp_share",
+    "dpoy_share",
+    "all_team_vote_share",
 )
 BODY_FEATURES: tuple[str, ...] = ("height_inches", "weight_pounds")
 _MODEL_PREFIX = "POSITION_STAT_NEIGHBOR_MODEL_"
@@ -188,6 +263,9 @@ def hot_zone_neutral_values() -> dict[str, NeighborFieldSuggestion]:
 
 def _latest_model_dir() -> Path:
     base = _repo_root() / "nba2k_editor" / "Player Generator" / "NBA Player Data" / "player_generation_pool"
+    merged_sqlite = base / "POSITION_STAT_NEIGHBOR_MODEL.sqlite"
+    if merged_sqlite.is_file():
+        return merged_sqlite
     candidates = []
     for path in base.iterdir() if base.exists() else ():
         if path.is_file() and path.name.startswith(_MODEL_PREFIX) and path.suffix == ".sqlite":
@@ -338,33 +416,184 @@ def _distance(
 
 
 def _features_for_field(field_key: str) -> tuple[str, ...]:
-    key = _identity(field_key)
+    section, _sep, raw_name = field_key.partition("/")
+    key = _identity(raw_name or field_key)
+    section_key = _identity(section)
+    is_tendency = section_key == "TENDENCIES"
+
+    # Availability / body / durability. These should not fall through to star-impact stats.
+    three_zone_keys = {"CENTER3", "LEFT3", "RIGHT3", "3CENTER", "3LEFT", "3LEFTCENTER", "3RIGHT", "3RIGHTCENTER"}
+    mid_zone_keys = {"MIDRANGECENTER", "MIDRANGELEFT", "MIDRANGELEFTCENTER", "MIDRANGERIGHT", "MIDRANGERIGHTCENTER"}
+    close_zone_keys = {"CLOSELEFT", "CLOSEMIDDLE", "CLOSERIGHT", "UNDERBASKET"}
+    if key in three_zone_keys:
+        return ("fg_percent_from_x3p_range", "corner_3_point_percent", "percent_corner_3s_of_3pa", "x3p_pct")
+    if key in mid_zone_keys:
+        return ("fg_percent_from_x10_16_range", "fg_percent_from_x16_3p_range", "avg_dist_fga")
+    if key in close_zone_keys:
+        return ("fg_percent_from_x0_3_range", "fg_percent_from_x3_10_range", "percent_fga_from_x0_3_range")
+    if "DURABILITY" in key:
+        return ("games", "mp_per_game")
+    if key == "STAMINA":
+        return ("mp_per_game", "games")
+    if key == "STRENGTH":
+        return ("weight_pounds", "height_inches", "orb_percent", "drb_percent", "f_tr")
+    if key == "VERTICAL":
+        return ("blk_percent", "percent_dunks_of_fga", "num_of_dunks", "height_inches")
+    if key in {"SPEED", "ACCELERATION", "AGILITY"}:
+        return ("height_inches", "weight_pounds", "stl_percent", "ast_percent")
+    if key in {"SPEEDWITHBALL", "BALLCONTROL"} or "HANDLE" in key or "DRIBBLE" in key or "SIZEUP" in key:
+        return ("ast_percent", "tov_percent", "usg_percent", "percent_assisted_x2p_fg")
+
+    # Defense-specific names must precede PASS/SHOT/FREE string checks.
+    if key == "PASSPERCEPTION" or "INTERCEPTION" in key:
+        return ("stl_percent", "stl_per100", "dbpm", "dws")
+    if key in {"CONTESTSHOT", "TAKECHARGE"}:
+        return ("dbpm", "dws", "pf_per100", "team_d_rtg")
+    if key in {"FOUL", "HARDFOUL"}:
+        return ("pf_per100", "player_d_rtg")
+    if "PERIMETERDEFENSE" in key or "LATERAL" in key:
+        return ("stl_percent", "dbpm", "dws", "pf_per100")
+    if "INTERIORDEFENSE" in key or "HELPDEFENSE" in key:
+        return ("blk_percent", "drb_percent", "dbpm", "dws", "height_inches", "weight_pounds", "all_defense", "dpoy_share")
+    if "DEFENSECONSISTENCY" in key or key == "PICKANDROLLDEFENSEIQ":
+        return ("dbpm", "dws", "stl_percent", "blk_percent", "drb_percent", "all_defense", "dpoy_share")
+
+    # Shot-location skill vs behavior. Attributes use efficiency; tendencies use frequency/location.
     if "3PT" in key or "3POINT" in key or "THREE" in key:
-        return ("x3pa_per36", "x3p_pct", "fga_per36", "pts_per36")
-    if "FREE" in key or "FOUL" in key or "DRAW" in key:
-        return ("fta_per36", "ft_pct", "pts_per36")
-    if "PASS" in key or "ASSIST" in key or "VISION" in key or "TOUCH" in key:
-        return ("ast_per36", "tov_per36")
-    if "REBOUND" in key or "BOXOUT" in key or "PUTBACK" in key:
-        return ("orb_per36", "drb_per36", "height_inches", "weight_pounds")
-    if "STEAL" in key or "INTERCEPT" in key:
-        return ("stl_per36", "pf_per36")
-    if "BLOCK" in key or "INTERIORDEFENSE" in key or "HELPDEFENSE" in key:
-        return ("blk_per36", "pf_per36", "drb_per36", "height_inches", "weight_pounds")
-    if "DUNK" in key or "LAYUP" in key or "CLOSE" in key or "POST" in key:
-        return ("pts_per36", "fga_per36", "fg_pct", "fta_per36", "height_inches", "weight_pounds")
-    if "SHOT" in key or "JUMPER" in key or "MIDRANGE" in key or "FADE" in key:
-        return ("pts_per36", "fga_per36", "fg_pct")
-    if "BALL" in key or "HANDLE" in key:
-        return ("ast_per36", "tov_per36", "pts_per36")
-    if "DEFENSE" in key or "LATERAL" in key:
-        return ("stl_per36", "blk_per36", "pf_per36")
-    return FEATURES
+        return (
+            "x3pa_per100",
+            "percent_fga_from_x3p_range",
+            "x3p_ar",
+            "percent_corner_3s_of_3pa",
+            "avg_dist_fga",
+        ) if is_tendency else (
+            "x3p_pct",
+            "fg_percent_from_x3p_range",
+            "corner_3_point_percent",
+        )
+    if "MIDRANGE" in key or key.startswith("MID") or "MID" in key or "FADE" in key:
+        return (
+            "percent_fga_from_x10_16_range",
+            "percent_fga_from_x16_3p_range",
+            "avg_dist_fga",
+        ) if is_tendency else (
+            "fg_percent_from_x10_16_range",
+            "fg_percent_from_x16_3p_range",
+            "fg_pct",
+        )
+    if "CLOSE" in key or "BASKETUNDER" in key or "UNDERBASKET" in key:
+        return (
+            "percent_fga_from_x0_3_range",
+            "percent_fga_from_x3_10_range",
+            "fta_per100",
+            "f_tr",
+        ) if is_tendency else (
+            "fg_percent_from_x0_3_range",
+            "fg_percent_from_x2p_range",
+            "ts_percent",
+            "height_inches",
+            "weight_pounds",
+        )
+    if "LAYUP" in key or "FLOATER" in key or "EUROSTEP" in key or "HOPSTEP" in key or "STEPTHROUGH" in key or "USEGLASS" in key:
+        return (
+            "percent_fga_from_x0_3_range",
+            "percent_fga_from_x3_10_range",
+            "f_tr",
+            "percent_assisted_x2p_fg",
+        ) if is_tendency else (
+            "fg_percent_from_x0_3_range",
+            "fg_percent_from_x3_10_range",
+            "ts_percent",
+        )
+    if "DUNK" in key or "ALLEYOOP" in key:
+        return ("percent_dunks_of_fga", "num_of_dunks", "percent_fga_from_x0_3_range", "height_inches", "weight_pounds")
+
+    # Post fields are close/mid/self-created proxies, not general points.
+    if "POSTHOOK" in key or "HOOK" in key:
+        return ("fg_percent_from_x3_10_range", "fg_percent_from_x0_3_range", "height_inches", "weight_pounds")
+    if "POSTFADE" in key:
+        return ("fg_percent_from_x10_16_range", "fg_percent_from_x16_3p_range", "percent_assisted_x2p_fg", "height_inches")
+    if "POST" in key:
+        return (
+            "percent_fga_from_x0_3_range",
+            "percent_fga_from_x3_10_range",
+            "height_inches",
+            "weight_pounds",
+            "f_tr",
+        ) if is_tendency else (
+            "fg_percent_from_x0_3_range",
+            "fg_percent_from_x3_10_range",
+            "height_inches",
+            "weight_pounds",
+            "f_tr",
+        )
+
+    # Playmaking: skill/risk for attributes; frequency/role for tendencies.
+    if "TOUCH" in key:
+        return ("usg_percent", "ast_per100", "fga_per100", "tov_per100")
+    if "PASS" in key or "ASSIST" in key or "VISION" in key or "DISH" in key:
+        return ("ast_per100", "usg_percent", "tov_per100") if is_tendency else ("ast_percent", "tov_percent")
+
+    # Rebounding: split offensive/defensive when the field names do.
+    if "OFFENSIVEREBOUND" in key:
+        return ("orb_percent", "orb_per100", "height_inches", "weight_pounds")
+    if "DEFENSEREBOUND" in key or "DEFENSIVEREBOUND" in key:
+        return ("drb_percent", "drb_per100", "height_inches", "weight_pounds")
+    if "REBOUND" in key or "BOXOUT" in key:
+        return ("orb_percent", "drb_percent", "trb_percent", "orb_per100", "drb_per100", "height_inches", "weight_pounds")
+    if "PUTBACK" in key:
+        return ("orb_percent", "orb_per100", "percent_fga_from_x0_3_range", "height_inches", "weight_pounds")
+
+    if "STEAL" in key:
+        return ("stl_per100", "pf_per100") if is_tendency else ("stl_percent", "stl_per100", "dbpm", "dws")
+    if "BLOCK" in key:
+        return ("blk_per100", "pf_per100", "height_inches") if is_tendency else ("blk_percent", "blk_per100", "dbpm", "dws", "height_inches", "weight_pounds")
+
+    # Drive/freelance/setup tendencies are behavior, not shooting skill.
+    if key == "CRASH":
+        return ("orb_percent", "drb_percent", "orb_per100", "drb_per100", "height_inches", "weight_pounds")
+    if any(token in key for token in ("DRIVE", "DRIVING", "ISO", "SETUP", "TRIPLETHREAT", "JABSTEP", "PUMPFAKE", "ATTACKSTRONG", "SPOTUPDRIVE", "OFFSCREENDRIVE")):
+        return ("f_tr", "percent_fga_from_x0_3_range", "percent_fga_from_x3_10_range", "usg_percent", "tov_percent", "percent_assisted_x2p_fg")
+    if "SPOTUP" in key or "OFFSCREEN" in key or "TRANSITION" in key:
+        return ("percent_assisted_x3p_fg", "percent_fga_from_x3p_range", "percent_corner_3s_of_3pa", "x3pa_per100", "x3p_ar")
+    if key == "ROLLVSPOP":
+        return ("percent_dunks_of_fga", "percent_fga_from_x3p_range", "x3p_ar", "height_inches", "weight_pounds")
+    if key == "PLAYDISCIPLINE":
+        return ("tov_percent", "pf_per100", "team_tov_percent")
+
+    if "FREE" in key:
+        return ("ft_pct",)
+    if "DRAWFOUL" in key or "DRAW" in key:
+        return ("fta_per100", "f_tr")
+    if "SHOT" in key or "JUMPER" in key or key == "IQSHOT":
+        return (
+            "percent_fga_from_x2p_range",
+            "avg_dist_fga",
+            "fga_per100",
+        ) if is_tendency else (
+            "fg_pct",
+            "e_fg_percent",
+            "ts_percent",
+        )
+
+    if key in {"HANDS", "HUSTLE"}:
+        return ("orb_percent", "stl_percent", "blk_percent", "games", "mp_per_game")
+    if "OFFENSIVECONSISTENCY" in key or key == "IQSHOT":
+        return ("ts_percent", "ows", "obpm", "tov_percent", "usg_percent")
+    if "CONSIST" in key or "POTENTIAL" in key or "INTANG" in key or key.endswith("IQ"):
+        return ("per", "bpm", "vorp", "ws", "ws_48", "award_share", "all_nba", "all_star")
+    return ("per", "bpm", "vorp", "ws", "ts_percent", "usg_percent")
 
 
 def target_features_from_evidence(evidence: Any) -> dict[str, float | None]:
+    identity = getattr(evidence, "identity", {}) or {}
     per_game = getattr(evidence, "per_game", {}) or {}
     per_36 = getattr(evidence, "per_36", {}) or {}
+    per_100 = getattr(evidence, "per_100", {}) or {}
+    advanced = getattr(evidence, "advanced", {}) or {}
+    shooting = getattr(evidence, "shooting", {}) or {}
+    team_summary = getattr(evidence, "team_summary", {}) or {}
+    source_context = getattr(evidence, "source_context", {}) or {}
 
     def per36(per36_col: str, per_game_col: str) -> float | None:
         direct = _float(per_36.get(per36_col))
@@ -378,12 +607,13 @@ def target_features_from_evidence(evidence: Any) -> dict[str, float | None]:
             return per_game_value
         return per_game_value * 36.0 / minutes
 
-    features = {
+    features: dict[str, float | None] = {
         "pts_per36": per36("pts_per_36_min", "pts_per_game"),
         "fga_per36": per36("fga_per_36_min", "fga_per_game"),
         "fg_pct": _float(per_game.get("fg_percent")),
         "x3pa_per36": per36("x3pa_per_36_min", "x3pa_per_game"),
         "x3p_pct": _float(per_game.get("x3p_percent")),
+        "e_fg_percent": _float(per_100.get("e_fg_percent")) or _float(per_game.get("e_fg_percent")),
         "fta_per36": per36("fta_per_36_min", "fta_per_game"),
         "ft_pct": _float(per_game.get("ft_percent")),
         "ast_per36": per36("ast_per_36_min", "ast_per_game"),
@@ -393,10 +623,48 @@ def target_features_from_evidence(evidence: Any) -> dict[str, float | None]:
         "blk_per36": per36("blk_per_36_min", "blk_per_game"),
         "tov_per36": per36("tov_per_36_min", "tov_per_game"),
         "pf_per36": per36("pf_per_36_min", "pf_per_game"),
-        "height_inches": _float(getattr(evidence, "identity", {}).get("ht_in_in")),
-        "weight_pounds": _float(getattr(evidence, "identity", {}).get("wt")),
+        "games": _float(per_game.get("g")),
+        "mp_per_game": _float(per_game.get("mp_per_game")),
+        "pts_per100": _float(per_100.get("pts_per_100_poss")),
+        "fga_per100": _float(per_100.get("fga_per_100_poss")),
+        "x3pa_per100": _float(per_100.get("x3pa_per_100_poss")),
+        "fta_per100": _float(per_100.get("fta_per_100_poss")),
+        "ast_per100": _float(per_100.get("ast_per_100_poss")),
+        "orb_per100": _float(per_100.get("orb_per_100_poss")),
+        "drb_per100": _float(per_100.get("drb_per_100_poss")),
+        "trb_per100": _float(per_100.get("trb_per_100_poss")),
+        "stl_per100": _float(per_100.get("stl_per_100_poss")),
+        "blk_per100": _float(per_100.get("blk_per_100_poss")),
+        "tov_per100": _float(per_100.get("tov_per_100_poss")),
+        "pf_per100": _float(per_100.get("pf_per_100_poss")),
+        "player_o_rtg": _float(per_100.get("o_rtg")),
+        "player_d_rtg": _float(per_100.get("d_rtg")),
+        "height_inches": _float(identity.get("ht_in_in")),
+        "weight_pounds": _float(identity.get("wt")),
     }
-    return {key: (0.0 if value is None else value) for key, value in features.items()}
+    for column in (
+        "per", "ts_percent", "x3p_ar", "f_tr", "orb_percent", "drb_percent", "trb_percent", "ast_percent", "stl_percent", "blk_percent", "tov_percent", "usg_percent", "ows", "dws", "ws", "ws_48", "obpm", "dbpm", "bpm", "vorp",
+    ):
+        features[column] = _float(advanced.get(column))
+    for column in (
+        "avg_dist_fga", "percent_fga_from_x2p_range", "percent_fga_from_x0_3_range", "percent_fga_from_x3_10_range", "percent_fga_from_x10_16_range", "percent_fga_from_x16_3p_range", "percent_fga_from_x3p_range", "fg_percent_from_x2p_range", "fg_percent_from_x0_3_range", "fg_percent_from_x3_10_range", "fg_percent_from_x10_16_range", "fg_percent_from_x16_3p_range", "fg_percent_from_x3p_range", "percent_assisted_x2p_fg", "percent_assisted_x3p_fg", "percent_dunks_of_fga", "num_of_dunks", "percent_corner_3s_of_3pa", "corner_3_point_percent",
+    ):
+        features[column] = _float(shooting.get(column))
+    for source, target in (
+        ("o_rtg", "team_o_rtg"), ("d_rtg", "team_d_rtg"), ("n_rtg", "team_n_rtg"), ("pace", "team_pace"), ("srs", "team_srs"), ("ts_percent", "team_ts_percent"), ("x3p_ar", "team_x3p_ar"), ("e_fg_percent", "team_e_fg_percent"), ("tov_percent", "team_tov_percent"), ("orb_percent", "team_orb_percent"), ("drb_percent", "team_drb_percent"), ("opp_e_fg_percent", "team_opp_e_fg_percent"),
+    ):
+        features[target] = _float(team_summary.get(source))
+    features["all_star"] = 1.0 if source_context.get("all_star_selections.season") is not None else None
+    all_team_type = str(source_context.get("all_teams.type") or "").upper()
+    all_team_number = _float(source_context.get("all_teams.number_tm"))
+    features["all_nba"] = max(1.0, 4.0 - all_team_number) if all_team_number is not None and "NBA" in all_team_type else None
+    features["all_defense"] = max(1.0, 3.0 - all_team_number) if all_team_number is not None and "DEF" in all_team_type else None
+    features["award_share"] = _float(source_context.get("player_award_shares.share"))
+    award_name = str(source_context.get("player_award_shares.award") or "").upper()
+    features["mvp_share"] = features["award_share"] if "MVP" in award_name and "FINAL" not in award_name else None
+    features["dpoy_share"] = features["award_share"] if "DPOY" in award_name or "DEFENSIVE" in award_name else None
+    features["all_team_vote_share"] = _float(source_context.get("all_team_voting.share"))
+    return features
 
 
 def _repo_root() -> Path:

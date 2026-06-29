@@ -79,14 +79,19 @@ class DpgEditorRecordLazyPreviewTests(unittest.TestCase):
         self.assertEqual(0, model.refresh_history_calls)
         self.assertEqual(0, model.refresh_record_calls)
 
-    def test_history_and_records_screens_have_selectable_lists_and_edit_buttons(self) -> None:
+    def test_history_and_records_screens_keep_existing_layout_buttons_only(self) -> None:
         history_source = inspect.getsource(DpgEditorApp._build_history_screen)
         records_source = inspect.getsource(DpgEditorApp._build_records_screen)
+        history_table_source = inspect.getsource(DpgEditorApp._render_history_table)
 
-        self.assertIn('label="Edit Selected History Row"', history_source)
-        self.assertIn('self._list_content_tag(domain)', history_source)
-        self.assertIn('label="Edit Selected Record"', records_source)
-        self.assertIn('self._list_content_tag(domain)', records_source)
+        self.assertNotIn('self._list_content_tag(domain)', history_source)
+        self.assertNotIn('dpg.add_table_column(label="Edit")', history_table_source)
+        self.assertNotIn('dpg.add_button(label="Edit"', history_table_source)
+        self.assertIn("_attach_and_scan(dpg, domain)", history_source)
+        self.assertNotIn('self._list_content_tag(domain)', records_source)
+        self.assertNotIn('label="Edit Selected Record"', records_source)
+        self.assertNotIn('dpg.add_table_column(label="Edit")', records_source)
+        self.assertIn("_attach_and_scan(dpg, domain)", records_source)
 
 
 if __name__ == "__main__":

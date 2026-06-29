@@ -13,13 +13,10 @@ from nba2k_editor.core.field_io import (
     _ADDRESS_DROPDOWN_TYPES,
     _display_to_raw_value,
     _field_address,
-    _field_offset,
     _id_prefixed_option,
     _implemented_payload,
-    _numeric_width,
     _raw_to_display_value,
     _read_authored_value,
-    _string_length,
     _type_key,
     _write_authored_value,
 )
@@ -79,10 +76,6 @@ def _plausible_record_name_part(value: object) -> bool:
     if len(text) < 2:
         return False
     return any(char.isalpha() for char in text) and all(char.isalpha() or char in " .'-" for char in text)
-
-
-def _label_has_letter(labels: list[str]) -> bool:
-    return any(any(char.isalpha() for char in str(label)) for label in labels)
 
 
 def _valid_nba_record_label_values(values: list[Any]) -> bool:
@@ -636,26 +629,6 @@ class EditorDataModel:
                 values[label] = self._read_named_value_at_record_address(domain, record_addr, candidates)
         return values
 
-    def _packed_record_summary_stride(self, domain: str) -> int:
-        max_end = 0
-        for _label, candidates in self._record_summary_specs(domain):
-            for name in candidates:
-                entry = self._field_by_normalized_name(domain, name)
-                if entry is None:
-                    continue
-                payload = self._field_version_payload(entry.field)
-                offset = _field_offset(payload)
-                type_key = _type_key(payload)
-                if type_key in {"string", "wstring"}:
-                    width = _string_length(payload)
-                elif type_key == "float":
-                    width = 4
-                else:
-                    width = _numeric_width(payload)
-                max_end = max(max_end, offset + width)
-                break
-        return max(1, (max_end + 7) // 8 * 8)
-
     def selected_record_summary_values(self, domain: str) -> dict[str, str]:
         return self._record_summary_values_for_item(domain, self.selected_items[domain])
 
@@ -672,7 +645,7 @@ class EditorDataModel:
         rows: list[dict[str, str]] = []
         if domain == "NBA Records" and record_row_start is not None:
             base = self.domain_base(domain)
-            row_stride = int(record_row_stride) if record_row_stride is not None else self._packed_record_summary_stride(domain)
+            row_stride = int(record_row_stride) if record_row_stride is not None else self.domain_stride(domain)
             max_rows = min(limit, int(record_row_count) if record_row_count is not None else limit)
             for offset in range(max_rows):
                 record_addr = base + (int(record_row_start) + offset) * row_stride
@@ -922,8 +895,6 @@ class EditorDataModel:
         return " ".join(labels)
 
     def _valid_label_values(self, domain: str, record_addr: int, values: list[Any], labels: list[str]) -> bool:
-        if domain == "Players":
-            return bool(labels) and _label_has_letter(labels)
         if domain == "NBA Records":
             return _valid_nba_record_label_values(values)
         if domain == "NBA History":

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -180,6 +181,34 @@ class FranchiseManagerFacade:
             status += " Resolved current stop."
         return self.get_league_dashboard(status=status)
 
+    def import_manual_standings_text(self, text: str, *, resolve_stop: bool = False) -> LeagueDashboardView:
+        store = self._require_store()
+        season = self._current_season()
+        stop = store.next_stop(season)
+        stop_id = stop[0] if stop else None
+        standings_payload = _manual_standings_payload_from_text(text)
+        store.import_2k_data(ImportedSnapshot(season=season, stop_id=stop_id, kind=ImportedDataKind.STANDINGS, payload=standings_payload))
+        if resolve_stop and stop_id is not None:
+            store.resolve_stop(stop_id)
+        store.add_reason_logs((
+            ReasonLog(
+                season=season,
+                team_id="LEAGUE",
+                actor="import",
+                message=f"Imported manual standings text: {len(standings_payload)} standings rows.",
+                action="manual_standings_import",
+                evidence={
+                    "standings_rows": len(standings_payload),
+                    "stop_id": stop_id,
+                    "resolved_stop": bool(resolve_stop and stop_id is not None),
+                },
+            ),
+        ))
+        status = f"Imported manual standings text: {len(standings_payload)} standings rows."
+        if resolve_stop and stop_id is not None:
+            status += " Resolved current stop."
+        return self.get_league_dashboard(status=status)
+
     def generate_draft_class(self, draft_year: int | None = None, *, mode: DraftClassMode | str = DraftClassMode.DRAFT_PICKS) -> LeagueDashboardView:
         store = self._require_store()
         season = self._current_season()
@@ -328,6 +357,7 @@ class FranchiseManagerFacade:
     AdvancePhase = advance_phase
     Import2KDataFromOffsets = import_2k_data_from_offsets
     ImportManualLeagueSnapshotFile = import_manual_league_snapshot_file
+    ImportManualStandingsText = import_manual_standings_text
     GenerateDraftClass = generate_draft_class
     RunOwnerEvaluations = run_owner_evaluations
     RunGMEvaluations = run_gm_evaluations
@@ -360,6 +390,46 @@ def _manual_snapshot_payload_from_json(path: Path) -> tuple[dict[str, dict[str, 
     if not isinstance(team_stats_raw, dict):
         raise ValueError("manual league snapshot team_stats must be an object when provided")
     return standings, _coerce_nested_int_payload(team_stats_raw, object_name="team_stats")
+
+
+def _manual_standings_payload_from_text(text: str) -> dict[str, dict[str, int]]:
+    standings: dict[str, dict[str, int]] = {}
+    for line_number, raw_line in enumerate(str(text or "").splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parsed = _parse_manual_standings_line(line)
+        if parsed is None:
+            lowered = line.lower()
+            if line_number == 1 and "team" in lowered and ("win" in lowered or "w" in lowered) and ("loss" in lowered or "l" in lowered):
+                continue
+            raise ValueError(f"manual standings line {line_number} must be 'Team, Wins, Losses' or 'Team 44-12': {raw_line!r}")
+        team_key, wins, losses = parsed
+        if not team_key:
+            raise ValueError(f"manual standings line {line_number} contains a blank team name")
+        if team_key in standings:
+            raise ValueError(f"manual standings line {line_number} duplicates team: {team_key}")
+        standings[team_key] = {"wins": wins, "losses": losses}
+    if not standings:
+        raise ValueError("manual standings text did not contain any team rows")
+    return standings
+
+
+def _parse_manual_standings_line(line: str) -> tuple[str, int, int] | None:
+    if "," in line or "\t" in line:
+        cells = [cell.strip() for cell in re.split(r"[,\t]+", line) if cell.strip()]
+        if len(cells) >= 3:
+            try:
+                return " ".join(cells[:-2]), _coerce_int(cells[-2], field_name="wins"), _coerce_int(cells[-1], field_name="losses")
+            except ValueError:
+                return None
+    match = re.match(r"^(.+?)\s*[:;,\-]?\s+(\d+)\s*[-/]\s*(\d+)\s*$", line)
+    if match:
+        return match.group(1).strip(), _coerce_int(match.group(2), field_name="wins"), _coerce_int(match.group(3), field_name="losses")
+    match = re.match(r"^(.+?)\s+(\d+)\s+(\d+)\s*$", line)
+    if match:
+        return match.group(1).strip(), _coerce_int(match.group(2), field_name="wins"), _coerce_int(match.group(3), field_name="losses")
+    return None
 
 
 def _coerce_standings_payload(raw: dict[Any, Any]) -> dict[str, dict[str, int]]:

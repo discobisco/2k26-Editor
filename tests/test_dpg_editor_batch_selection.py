@@ -92,11 +92,34 @@ class FakeModel:
             "Players": {item.display_label: item for item in self.items},
             "Teams": {item.display_label: item for item in self.team_items},
         }
+        self.selected_items: dict[str, RecordListItem | None] = {"Players": self.items[0], "Teams": self.team_items[0]}
         self.writes: list[tuple[int, str]] = []
         self.resets: list[tuple[int, str | None]] = []
+        self.attaches = 0
+        self.refreshes: list[str] = []
+
+    def attach(self) -> bool:
+        self.attaches += 1
+        return True
+
+    def refresh_domain_items(self, domain: str):
+        self.refreshes.append(domain)
+        return list(self.loaded_items[domain].values())
 
     def domain_item_labels(self, domain: str) -> list[str]:
         return list(self.loaded_items[domain])
+
+    def domain_item_count(self, domain: str) -> int:
+        return len(self.loaded_items[domain])
+
+    def domain_status(self, domain: str) -> str:
+        return f"loaded {len(self.loaded_items[domain])} {domain.lower()} records"
+
+    def selected_item(self, domain: str) -> RecordListItem | None:
+        return self.selected_items.get(domain)
+
+    def player_team_filter_options(self) -> tuple[str, ...]:
+        return ("All Players",)
 
     def player_item_labels_for_team_filter(self, _team_filter: str | None, _search_text: str | None) -> list[str]:
         return self.domain_item_labels("Players")
@@ -106,8 +129,10 @@ class FakeModel:
 
     def select_item_by_label(self, domain: str, selected_label: str | None) -> RecordListItem | None:
         if selected_label is None:
+            self.selected_items[domain] = None
             return None
-        return self.loaded_items[domain].get(selected_label)
+        self.selected_items[domain] = self.loaded_items[domain].get(selected_label)
+        return self.selected_items[domain]
 
     def selected_detail_title(self, _domain: str, _label: str) -> str:
         return ""
