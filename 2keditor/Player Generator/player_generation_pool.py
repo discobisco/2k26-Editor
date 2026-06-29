@@ -18,12 +18,13 @@ import json
 import math
 import re
 import sqlite3
-from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from statistics import median
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from functools import lru_cache
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+from game_port import _person_name_keys
 
 POSITIONS = ("PG", "SG", "SF", "PF", "C")
 _GENERATOR_DIR = Path(__file__).resolve().parent
@@ -35,6 +36,7 @@ OUTPUT_DIR = _PLAYER_POOL_DIR
 MASTER_SQLITE = _SOURCE_ROOT / "NBA_DATA_Master.sqlite"
 POOL_SQLITE = _PLAYER_POOL_DIR / "player_generation_pool.sqlite"
 OUT_PREFIX = "POSITION_STAT_NEIGHBOR_MODEL_"
+MERGED_MODEL_SQLITE = OUTPUT_DIR / "POSITION_STAT_NEIGHBOR_MODEL.sqlite"
 REQUIRED_RUN_FILES = ("current_active_player_stats.csv", "current_active_player_attributes.csv", "current_active_player_tendencies.csv")
 BASE_COLS = {"team_slot", "team_index", "team_label", "roster_slot", "player_index", "player_label"}
 FEATURES = (
@@ -43,6 +45,7 @@ FEATURES = (
     "fg_pct",
     "x3pa_per36",
     "x3p_pct",
+    "e_fg_percent",
     "fta_per36",
     "ft_pct",
     "ast_per36",
@@ -52,8 +55,81 @@ FEATURES = (
     "blk_per36",
     "tov_per36",
     "pf_per36",
+    "games",
+    "mp_per_game",
+    "pts_per100",
+    "fga_per100",
+    "x3pa_per100",
+    "fta_per100",
+    "ast_per100",
+    "orb_per100",
+    "drb_per100",
+    "trb_per100",
+    "stl_per100",
+    "blk_per100",
+    "tov_per100",
+    "pf_per100",
+    "player_o_rtg",
+    "player_d_rtg",
+    "per",
+    "ts_percent",
+    "x3p_ar",
+    "f_tr",
+    "orb_percent",
+    "drb_percent",
+    "trb_percent",
+    "ast_percent",
+    "stl_percent",
+    "blk_percent",
+    "tov_percent",
+    "usg_percent",
+    "ows",
+    "dws",
+    "ws",
+    "ws_48",
+    "obpm",
+    "dbpm",
+    "bpm",
+    "vorp",
+    "avg_dist_fga",
+    "percent_fga_from_x2p_range",
+    "percent_fga_from_x0_3_range",
+    "percent_fga_from_x3_10_range",
+    "percent_fga_from_x10_16_range",
+    "percent_fga_from_x16_3p_range",
+    "percent_fga_from_x3p_range",
+    "fg_percent_from_x2p_range",
+    "fg_percent_from_x0_3_range",
+    "fg_percent_from_x3_10_range",
+    "fg_percent_from_x10_16_range",
+    "fg_percent_from_x16_3p_range",
+    "fg_percent_from_x3p_range",
+    "percent_assisted_x2p_fg",
+    "percent_assisted_x3p_fg",
+    "percent_dunks_of_fga",
+    "num_of_dunks",
+    "percent_corner_3s_of_3pa",
+    "corner_3_point_percent",
+    "team_o_rtg",
+    "team_d_rtg",
+    "team_n_rtg",
+    "team_pace",
+    "team_srs",
+    "team_ts_percent",
+    "team_x3p_ar",
+    "team_e_fg_percent",
+    "team_tov_percent",
+    "team_orb_percent",
+    "team_drb_percent",
+    "team_opp_e_fg_percent",
+    "all_star",
+    "all_nba",
+    "all_defense",
+    "award_share",
+    "mvp_share",
+    "dpoy_share",
+    "all_team_vote_share",
 )
-BODY_FEATURES = ("height_inches", "weight_pounds")
 VITAL_COLUMNS = ("height_inches", "height_cm", "weight_pounds", "weight_kg")
 REQUIRED_LIVE_STAT_FIELDS = {
     "Assists",
@@ -72,41 +148,13 @@ REQUIRED_LIVE_STAT_FIELDS = {
     "Three Pointers Made",
     "Turnovers",
 }
-_NAME_SUFFIXES = {"JR", "SR", "II", "III", "IV", "V"}
-
-
 @dataclass(frozen=True)
 class PlayerGenerationPoolRequest:
-    season: int = 2026
     root: Path = _REPO_ROOT
     force: bool = False
 
     def normalized(self) -> "PlayerGenerationPoolRequest":
-        return PlayerGenerationPoolRequest(season=int(self.season), root=Path(self.root).resolve(), force=bool(self.force))
-
-
-def ascii_name_text(value: object) -> str:
-    from game_port import _ascii_name_text
-
-    return _ascii_name_text(value)
-
-
-def identity(value: object) -> str:
-    from game_port import _identity
-
-    return _identity(value)
-
-
-def name_tokens(value: object) -> tuple[str, ...]:
-    from game_port import _name_tokens
-
-    return _name_tokens(value)
-
-
-def person_name_keys(*values: object) -> tuple[str, ...]:
-    from game_port import _person_name_keys
-
-    return _person_name_keys(*values)
+        return PlayerGenerationPoolRequest(root=Path(self.root).resolve(), force=bool(self.force))
 
 
 def read_csv(path: Path) -> List[Dict[str, str]]:
@@ -114,28 +162,18 @@ def read_csv(path: Path) -> List[Dict[str, str]]:
         return list(csv.DictReader(f))
 
 
-def write_csv(path: Path, rows: List[Dict[str, Any]], fieldnames: Sequence[str]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        w.writeheader()
-        for row in rows:
-            w.writerow(row)
-
-
-
-
 def player_pool_dir() -> Path:
     return _PLAYER_POOL_DIR
 
+
 def pool_database_path(root: Path | None = None) -> Path:
-    _ = root  # kept for compatibility with existing callers; the pool belongs to Player Generator data.
+    _ = root
     return POOL_SQLITE
 
 
 def position_stat_neighbor_model_path(sources: Sequence[str]) -> Path:
-    model_number = len(tuple(sources))
-    return OUTPUT_DIR / f"{OUT_PREFIX}{model_number:03d}.sqlite"
+    _ = sources
+    return MERGED_MODEL_SQLITE
 
 
 def complete_run_ids(root: Path | None = None) -> tuple[str, ...]:
@@ -143,13 +181,10 @@ def complete_run_ids(root: Path | None = None) -> tuple[str, ...]:
     base = project_root / RUNS_DIR
     rows: list[tuple[int, str]] = []
     for path in base.iterdir() if base.exists() else ():
-        if not path.is_dir() or not path.name.startswith("run_"):
-            continue
-        suffix = path.name.split("_", 1)[-1]
-        if not suffix.isdigit():
-            continue
-        if all((path / name).is_file() for name in REQUIRED_RUN_FILES):
-            rows.append((int(suffix), path.name))
+        if path.is_dir() and path.name.startswith("run_"):
+            suffix = path.name.split("_", 1)[-1]
+            if suffix.isdigit() and all((path / name).is_file() for name in REQUIRED_RUN_FILES):
+                rows.append((int(suffix), path.name))
     return tuple(name for _num, name in sorted(rows))
 
 
@@ -159,8 +194,7 @@ def run_file_signature(root: Path, runs: Sequence[str]) -> dict[str, dict[str, f
     for run_id in runs:
         run_dir = project_root / RUNS_DIR / run_id
         for name in REQUIRED_RUN_FILES:
-            path = run_dir / name
-            stat = path.stat()
+            stat = (run_dir / name).stat()
             signature[f"{run_id}/{name}"] = {"mtime_ns": stat.st_mtime_ns, "size": stat.st_size}
     return signature
 
@@ -228,16 +262,15 @@ def source_signature(root: Path, sources: Sequence[str]) -> dict[str, Any]:
             _ensure_pool_export_tables(connection)
             for snapshot_id in snapshot_sources:
                 row = connection.execute(
-                    "SELECT season, created_at, stats_rows, attribute_rows, tendency_rows FROM pool_export_snapshots WHERE snapshot_id = ?",
+                    "SELECT created_at, stats_rows, attribute_rows, tendency_rows FROM pool_export_snapshots WHERE snapshot_id = ?",
                     (snapshot_id,),
                 ).fetchone()
                 if row is not None:
                     signature[f"snapshot/{snapshot_id}"] = {
-                        "season": int(row[0]),
-                        "created_at": str(row[1]),
-                        "stats_rows": int(row[2]),
-                        "attribute_rows": int(row[3]),
-                        "tendency_rows": int(row[4]),
+                        "created_at": str(row[0]),
+                        "stats_rows": int(row[1]),
+                        "attribute_rows": int(row[2]),
+                        "tendency_rows": int(row[3]),
                     }
     return signature
 
@@ -253,22 +286,13 @@ def _pool_manifest_values(path: Path) -> dict[str, str]:
     return {str(key): str(value) for key, value in rows}
 
 
-def _pool_is_current(root: Path, season: int, sources: Sequence[str]) -> bool:
+def _pool_is_current(root: Path, sources: Sequence[str]) -> bool:
     manifest = _pool_manifest_values(pool_database_path())
     if not manifest:
         return False
-    if manifest.get("season") != str(season):
-        return False
     if json.loads(manifest.get("source_runs", "[]")) != list(sources):
         return False
-    if json.loads(manifest.get("run_file_signature", "{}")) != source_signature(root, sources):
-        return False
-    model_path = Path(manifest.get("model_path") or manifest.get("model_dir", ""))
-    try:
-        model_path.relative_to(OUTPUT_DIR)
-    except ValueError:
-        return False
-    return model_path.is_file() and model_path.suffix == ".sqlite"
+    return json.loads(manifest.get("run_file_signature", "{}")) == source_signature(root, sources)
 
 
 def as_float(v: Any) -> Optional[float]:
@@ -297,31 +321,6 @@ def per36(total: Optional[float], minutes: Optional[float]) -> Optional[float]:
     return None if r is None else r * 36.0
 
 
-def median_float(vals: Sequence[float]) -> float:
-    return float(median(vals))
-
-
-def is_aggregate_team(team: object) -> bool:
-    value = str(team or "").upper()
-    return value == "TOT" or bool(re.fullmatch(r"\dTM", value))
-
-
-def row_get(row: sqlite3.Row, key: str) -> Any:
-    return row[key] if key in row.keys() else None
-
-
-def select_player_rows(rows: List[sqlite3.Row]) -> Dict[str, sqlite3.Row]:
-    by_player: Dict[str, List[sqlite3.Row]] = defaultdict(list)
-    for row in rows:
-        by_player[str(row["player_id"])].append(row)
-    selected: Dict[str, sqlite3.Row] = {}
-    for pid, group in by_player.items():
-        aggregate = [r for r in group if is_aggregate_team(row_get(r, "team"))]
-        candidates = aggregate or group
-        selected[pid] = max(candidates, key=lambda r: (as_float(row_get(r, "g")) or 0, as_float(row_get(r, "mp")) or as_float(row_get(r, "mp_per_game")) or 0))
-    return selected
-
-
 def parse_positions(pos_text: object) -> tuple[str, ...]:
     text = str(pos_text or "").upper()
     compact = re.sub(r"[^A-Z]+", "", text)
@@ -343,83 +342,6 @@ def parse_positions(pos_text: object) -> tuple[str, ...]:
     return tuple(dict.fromkeys(p for p in found if p in POSITIONS))
 
 
-def positions_from_pbp(pbp: Optional[Dict[str, Any]], fallback_pos: object) -> tuple[str, ...]:
-    if pbp:
-        out = []
-        for pos, col in [("PG", "pg_percent"), ("SG", "sg_percent"), ("SF", "sf_percent"), ("PF", "pf_percent"), ("C", "c_percent")]:
-            if (as_float(pbp.get(col)) or 0.0) > 0:
-                out.append(pos)
-        if out:
-            return tuple(out)
-    return parse_positions(fallback_pos)
-
-
-def load_master(root: Path, season: int) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
-    _ = root
-    con = sqlite3.connect(MASTER_SQLITE)
-    con.row_factory = sqlite3.Row
-    tables = {}
-    for table in ["player_season_info", "player_per_game", "player_per_36_min", "advanced", "player_play_by_play"]:
-        rows = con.execute(f"select * from {table} where season = ?", (season,)).fetchall()
-        tables[table] = {pid: dict(row) for pid, row in select_player_rows(rows).items()}
-    info_rows = con.execute("select * from player_info").fetchall()
-    tables["player_info"] = {str(row["player_id"]): dict(row) for row in info_rows}
-    players: Dict[str, Dict[str, Any]] = {}
-    key_index: Dict[str, List[Dict[str, Any]]] = {}
-    player_ids = set().union(*(set(tables[table].keys()) for table in ("player_season_info", "player_per_game", "player_per_36_min", "advanced", "player_play_by_play")))
-    for pid in sorted(player_ids):
-        pg = tables["player_per_game"].get(pid, {})
-        p36 = tables["player_per_36_min"].get(pid, {})
-        info = tables["player_season_info"].get(pid, {})
-        adv = tables["advanced"].get(pid, {})
-        pbp = tables["player_play_by_play"].get(pid, {})
-        identity = tables["player_info"].get(pid, {})
-        name = pg.get("player") or info.get("player") or identity.get("player") or pid
-        def master_per36(per36_col: str, per_game_col: str) -> Optional[float]:
-            direct = as_float(p36.get(per36_col))
-            if direct is not None:
-                return direct
-            per_game_value = as_float(pg.get(per_game_col))
-            mpg = as_float(pg.get("mp_per_game"))
-            return None if per_game_value is None or mpg in (None, 0) else per_game_value * 36.0 / mpg
-
-        features = {
-            "pts_per36": master_per36("pts_per_36_min", "pts_per_game"),
-            "fga_per36": master_per36("fga_per_36_min", "fga_per_game"),
-            "fg_pct": as_float(pg.get("fg_percent")),
-            "x3pa_per36": master_per36("x3pa_per_36_min", "x3pa_per_game"),
-            "x3p_pct": as_float(pg.get("x3p_percent")),
-            "fta_per36": master_per36("fta_per_36_min", "fta_per_game"),
-            "ft_pct": as_float(pg.get("ft_percent")),
-            "ast_per36": master_per36("ast_per_36_min", "ast_per_game"),
-            "orb_per36": master_per36("orb_per_36_min", "orb_per_game"),
-            "drb_per36": master_per36("drb_per_36_min", "drb_per_game"),
-            "stl_per36": master_per36("stl_per_36_min", "stl_per_game"),
-            "blk_per36": master_per36("blk_per_36_min", "blk_per_game"),
-            "tov_per36": master_per36("tov_per_36_min", "tov_per_game"),
-            "pf_per36": master_per36("pf_per_36_min", "pf_per_game"),
-            "height_inches": as_float(identity.get("ht_in_in")),
-            "weight_pounds": as_float(identity.get("wt")),
-        }
-        positions = positions_from_pbp(pbp, info.get("pos") or pg.get("pos"))
-        row = {
-            "player_id": pid,
-            "player": name,
-            "team": pg.get("team") or info.get("team") or "",
-            "positions": positions,
-            "features": features,
-            "games": as_float(pg.get("g")),
-            "minutes_per_game": as_float(pg.get("mp_per_game")),
-            "height_inches": as_float(identity.get("ht_in_in")),
-            "weight_pounds": as_float(identity.get("wt")),
-        }
-        players[pid] = row
-        for key in person_name_keys(name):
-            key_index.setdefault(key, []).append(row)
-    con.close()
-    return players, key_index
-
-
 def live_features(stats: Dict[str, str]) -> Dict[str, Optional[float]]:
     minutes = as_float(stats.get("Minutes"))
     return {
@@ -428,6 +350,7 @@ def live_features(stats: Dict[str, str]) -> Dict[str, Optional[float]]:
         "fg_pct": safe_div(as_float(stats.get("Field Goals Made")), as_float(stats.get("Field Goals Attempted"))),
         "x3pa_per36": per36(as_float(stats.get("Three Pointers Attempted")), minutes),
         "x3p_pct": safe_div(as_float(stats.get("Three Pointers Made")), as_float(stats.get("Three Pointers Attempted"))),
+        "e_fg_percent": safe_div((as_float(stats.get("Field Goals Made")) or 0.0) + 0.5 * (as_float(stats.get("Three Pointers Made")) or 0.0), as_float(stats.get("Field Goals Attempted"))),
         "fta_per36": per36(as_float(stats.get("Free Throws Attempted")), minutes),
         "ft_pct": safe_div(as_float(stats.get("Free Throws Made")), as_float(stats.get("Free Throws Attempted"))),
         "ast_per36": per36(as_float(stats.get("Assists")), minutes),
@@ -437,6 +360,8 @@ def live_features(stats: Dict[str, str]) -> Dict[str, Optional[float]]:
         "blk_per36": per36(as_float(stats.get("Blocks")), minutes),
         "tov_per36": per36(as_float(stats.get("Turnovers")), minutes),
         "pf_per36": per36(as_float(stats.get("Fouls")), minutes),
+        "games": as_float(stats.get("Games") or stats.get("G")),
+        "mp_per_game": None,
     }
 
 
@@ -471,45 +396,231 @@ def live_vitals(stats: Dict[str, str], master: Dict[str, Any]) -> Dict[str, Opti
     }
 
 
-def match_live_player(label: str, key_index: Dict[str, List[Dict[str, Any]]], vitals: Dict[str, Optional[float]] | None = None) -> Optional[Dict[str, Any]]:
-    candidates: list[Dict[str, Any]] = []
-    seen: set[str] = set()
-    for key in person_name_keys(label):
-        for row in key_index.get(key, ()):
-            pid = str(row.get("player_id") or "")
-            if pid in seen:
-                continue
-            seen.add(pid)
-            candidates.append(row)
-    tokens = tuple(token for token in name_tokens(label) if token not in _NAME_SUFFIXES)
-    if len(tokens) == 2:
-        for key in person_name_keys(f"{tokens[1]} {tokens[0]}"):
-            for row in key_index.get(key, ()):
-                pid = str(row.get("player_id") or "")
-                if pid in seen:
-                    continue
-                seen.add(pid)
-                candidates.append(row)
-    if not candidates:
-        return None
-    if len(candidates) == 1:
-        return candidates[0]
-    return min(candidates, key=lambda row: _vital_match_distance(vitals or {}, row))
+def _feature_columns_sql() -> str:
+    return ",\n                ".join(f'"{column}" REAL' for column in (*VITAL_COLUMNS, *FEATURES))
 
 
-def _vital_match_distance(live: Dict[str, Optional[float]], master: Dict[str, Any]) -> tuple[float, int, str]:
+def _candidate_pool_insert_sql() -> str:
+    columns = ("run_id", "player_index", "player_label", "master_player", "master_player_id", "position", *VITAL_COLUMNS, *FEATURES)
+    quoted = ", ".join(f'"{column}"' for column in columns)
+    placeholders = ", ".join("?" for _ in columns)
+    return f"INSERT INTO candidate_pool ({quoted}) VALUES ({placeholders})"
+
+
+def _candidate_pool_values(row: dict[str, Any]) -> tuple[Any, ...]:
+    feature_payload = row.get("features", {}) if isinstance(row.get("features"), dict) else {}
+    vital_payload = row.get("vitals", {}) if isinstance(row.get("vitals"), dict) else {}
+    return (
+        row.get("run_id"),
+        row.get("player_index"),
+        row.get("player_label"),
+        row.get("master_player"),
+        row.get("master_player_id"),
+        row.get("position"),
+        *(vital_payload.get(column, row.get(column)) for column in VITAL_COLUMNS),
+        *(feature_payload.get(feature, row.get(feature)) for feature in FEATURES),
+    )
+
+
+def _table_name(connection: sqlite3.Connection, sheet: str) -> str:
+    row = connection.execute("SELECT table_name FROM workbook_tables WHERE sheet_name = ?", (sheet,)).fetchone()
+    if row is None:
+        raise KeyError(f"workbook sheet not found: {sheet}")
+    return str(row[0])
+
+
+def _sheet_rows(connection: sqlite3.Connection, sheet: str) -> list[dict[str, Any]]:
+    table = _table_name(connection, sheet)
+    connection.row_factory = sqlite3.Row
+    return [dict(row) for row in connection.execute(f'SELECT * FROM "{table}"')]
+
+
+def _player_team_key(row: dict[str, Any]) -> tuple[int, str, str]:
+    return (int(row.get("season") or 0), str(row.get("player_id") or "").strip().upper(), str(row.get("team") or row.get("tm") or "").strip().upper())
+
+
+@lru_cache(maxsize=1)
+def _master_feature_index() -> dict[str, tuple[dict[str, Any], ...]]:
+    if not MASTER_SQLITE.is_file():
+        return {}
+    with sqlite3.connect(MASTER_SQLITE) as connection:
+        player_info = {str(row.get("player_id") or "").strip().upper(): row for row in _sheet_rows(connection, "Player Info")}
+        season_rows = _sheet_rows(connection, "Player Season Info")
+        per_game = {_player_team_key(row): row for row in _sheet_rows(connection, "Player Per Game")}
+        per_36 = {_player_team_key(row): row for row in _sheet_rows(connection, "Player Per 36 min")}
+        per_100 = {_player_team_key(row): row for row in _sheet_rows(connection, "Player Per 100 Poss")}
+        advanced = {_player_team_key(row): row for row in _sheet_rows(connection, "Advanced")}
+        shooting = {_player_team_key(row): row for row in _sheet_rows(connection, "Player Shooting")}
+        team_summary = {(int(row.get("season") or 0), str(row.get("abbreviation") or "").strip().upper()): row for row in _sheet_rows(connection, "Team Summaries")}
+        all_star = {(int(row.get("season") or 0), str(row.get("player_id") or "").strip().upper()) for row in _sheet_rows(connection, "All Star Selections")}
+        all_teams = _sheet_rows(connection, "All Teams")
+        award_rows = _sheet_rows(connection, "Player Award Shares")
+        vote_rows = _sheet_rows(connection, "All team Voting")
+
+    all_team_context: dict[tuple[int, str], dict[str, float]] = {}
+    for row in all_teams:
+        key = (int(row.get("season") or 0), str(row.get("player_id") or "").strip().upper())
+        typ = str(row.get("type") or "").upper()
+        number = as_float(row.get("number_tm")) or 0.0
+        if "NBA" in typ:
+            all_team_context.setdefault(key, {})["all_nba"] = max(all_team_context.setdefault(key, {}).get("all_nba", 0.0), max(1.0, 4.0 - number))
+        if "DEF" in typ:
+            all_team_context.setdefault(key, {})["all_defense"] = max(all_team_context.setdefault(key, {}).get("all_defense", 0.0), max(1.0, 3.0 - number))
+
+    award_context: dict[tuple[int, str], dict[str, float]] = {}
+    for row in award_rows:
+        key = (int(row.get("season") or 0), str(row.get("player_id") or "").strip().upper())
+        share = as_float(row.get("share"))
+        if share is None:
+            continue
+        bucket = award_context.setdefault(key, {})
+        bucket["award_share"] = max(bucket.get("award_share", 0.0), share)
+        award = str(row.get("award") or "").upper()
+        if "MVP" in award and "FINAL" not in award:
+            bucket["mvp_share"] = max(bucket.get("mvp_share", 0.0), share)
+        if "DPOY" in award or "DEFENSIVE" in award:
+            bucket["dpoy_share"] = max(bucket.get("dpoy_share", 0.0), share)
+    for row in vote_rows:
+        key = (int(row.get("season") or 0), str(row.get("player_id") or "").strip().upper())
+        share = as_float(row.get("share"))
+        if share is not None:
+            award_context.setdefault(key, {})["all_team_vote_share"] = max(award_context.setdefault(key, {}).get("all_team_vote_share", 0.0), share)
+
+    by_name: dict[str, list[dict[str, Any]]] = {}
+    for row in season_rows:
+        season = int(row.get("season") or 0)
+        player_id = str(row.get("player_id") or "").strip().upper()
+        team = str(row.get("team") or "").strip().upper()
+        if not season or not player_id or not team or (len(team) == 3 and team[0].isdigit() and team[1:] == "TM"):
+            continue
+        key = (season, player_id, team)
+        identity = player_info.get(player_id, {})
+        features = _sql_feature_values(
+            identity=identity,
+            per_game=per_game.get(key, {}),
+            per_36=per_36.get(key, {}),
+            per_100=per_100.get(key, {}),
+            advanced=advanced.get(key, {}),
+            shooting=shooting.get(key, {}),
+            team_summary=team_summary.get((season, team), {}),
+            awards={
+                "all_star": 1.0 if (season, player_id) in all_star else None,
+                **all_team_context.get((season, player_id), {}),
+                **award_context.get((season, player_id), {}),
+            },
+        )
+        positions = parse_positions(row.get("pos") or identity.get("pos"))
+        candidate = {
+            "player": row.get("player") or identity.get("player") or player_id,
+            "player_id": player_id,
+            "season": season,
+            "team": team,
+            "positions": positions,
+            "features": features,
+        }
+        for name_key in _person_name_keys(candidate["player"], player_id):
+            by_name.setdefault(name_key, []).append(candidate)
+    return {key: tuple(rows) for key, rows in by_name.items()}
+
+
+def _sql_feature_values(*, identity: dict[str, Any], per_game: dict[str, Any], per_36: dict[str, Any], per_100: dict[str, Any], advanced: dict[str, Any], shooting: dict[str, Any], team_summary: dict[str, Any], awards: dict[str, Any]) -> dict[str, Optional[float]]:
+    def per36(per36_col: str, per_game_col: str) -> Optional[float]:
+        direct = as_float(per_36.get(per36_col))
+        if direct is not None:
+            return direct
+        per_game_value = as_float(per_game.get(per_game_col))
+        minutes = as_float(per_game.get("mp_per_game"))
+        if per_game_value is None:
+            return None
+        if minutes in (None, 0):
+            return per_game_value
+        return per_game_value * 36.0 / minutes
+
+    values: dict[str, Optional[float]] = {
+        "pts_per36": per36("pts_per_36_min", "pts_per_game"),
+        "fga_per36": per36("fga_per_36_min", "fga_per_game"),
+        "fg_pct": as_float(per_game.get("fg_percent")),
+        "x3pa_per36": per36("x3pa_per_36_min", "x3pa_per_game"),
+        "x3p_pct": as_float(per_game.get("x3p_percent")),
+        "e_fg_percent": as_float(per_100.get("e_fg_percent")) or as_float(per_game.get("e_fg_percent")),
+        "fta_per36": per36("fta_per_36_min", "fta_per_game"),
+        "ft_pct": as_float(per_game.get("ft_percent")),
+        "ast_per36": per36("ast_per_36_min", "ast_per_game"),
+        "orb_per36": per36("orb_per_36_min", "orb_per_game"),
+        "drb_per36": per36("drb_per_36_min", "drb_per_game"),
+        "stl_per36": per36("stl_per_36_min", "stl_per_game"),
+        "blk_per36": per36("blk_per_36_min", "blk_per_game"),
+        "tov_per36": per36("tov_per_36_min", "tov_per_game"),
+        "pf_per36": per36("pf_per_36_min", "pf_per_game"),
+        "games": as_float(per_game.get("g")),
+        "mp_per_game": as_float(per_game.get("mp_per_game")),
+        "pts_per100": as_float(per_100.get("pts_per_100_poss")),
+        "fga_per100": as_float(per_100.get("fga_per_100_poss")),
+        "x3pa_per100": as_float(per_100.get("x3pa_per_100_poss")),
+        "fta_per100": as_float(per_100.get("fta_per_100_poss")),
+        "ast_per100": as_float(per_100.get("ast_per_100_poss")),
+        "orb_per100": as_float(per_100.get("orb_per_100_poss")),
+        "drb_per100": as_float(per_100.get("drb_per_100_poss")),
+        "trb_per100": as_float(per_100.get("trb_per_100_poss")),
+        "stl_per100": as_float(per_100.get("stl_per_100_poss")),
+        "blk_per100": as_float(per_100.get("blk_per_100_poss")),
+        "tov_per100": as_float(per_100.get("tov_per_100_poss")),
+        "pf_per100": as_float(per_100.get("pf_per_100_poss")),
+        "player_o_rtg": as_float(per_100.get("o_rtg")),
+        "player_d_rtg": as_float(per_100.get("d_rtg")),
+        "height_inches": as_float(identity.get("ht_in_in")),
+        "weight_pounds": as_float(identity.get("wt")),
+    }
+    for column in (
+        "per", "ts_percent", "x3p_ar", "f_tr", "orb_percent", "drb_percent", "trb_percent", "ast_percent", "stl_percent", "blk_percent", "tov_percent", "usg_percent", "ows", "dws", "ws", "ws_48", "obpm", "dbpm", "bpm", "vorp",
+    ):
+        values[column] = as_float(advanced.get(column))
+    for column in (
+        "avg_dist_fga", "percent_fga_from_x2p_range", "percent_fga_from_x0_3_range", "percent_fga_from_x3_10_range", "percent_fga_from_x10_16_range", "percent_fga_from_x16_3p_range", "percent_fga_from_x3p_range", "fg_percent_from_x2p_range", "fg_percent_from_x0_3_range", "fg_percent_from_x3_10_range", "fg_percent_from_x10_16_range", "fg_percent_from_x16_3p_range", "fg_percent_from_x3p_range", "percent_assisted_x2p_fg", "percent_assisted_x3p_fg", "percent_dunks_of_fga", "num_of_dunks", "percent_corner_3s_of_3pa", "corner_3_point_percent",
+    ):
+        values[column] = as_float(shooting.get(column))
+    for source, target in (
+        ("o_rtg", "team_o_rtg"), ("d_rtg", "team_d_rtg"), ("n_rtg", "team_n_rtg"), ("pace", "team_pace"), ("srs", "team_srs"), ("ts_percent", "team_ts_percent"), ("x3p_ar", "team_x3p_ar"), ("e_fg_percent", "team_e_fg_percent"), ("tov_percent", "team_tov_percent"), ("orb_percent", "team_orb_percent"), ("drb_percent", "team_drb_percent"), ("opp_e_fg_percent", "team_opp_e_fg_percent"),
+    ):
+        values[target] = as_float(team_summary.get(source))
+    for column in ("all_star", "all_nba", "all_defense", "award_share", "mvp_share", "dpoy_share", "all_team_vote_share"):
+        values[column] = as_float(awards.get(column))
+    return values
+
+
+def _master_features_for_live(stats: dict[str, str], positions: tuple[str, ...]) -> dict[str, Any]:
+    index = _master_feature_index()
+    matches: list[dict[str, Any]] = []
+    for name_key in _person_name_keys(stats.get("player_label")):
+        matches.extend(index.get(name_key, ()))
+    if positions:
+        matches = [row for row in matches if not row.get("positions") or set(positions).intersection(row.get("positions", ())) ]
+    if not matches:
+        return {}
+    live = live_features(stats)
+    scored: list[tuple[float, dict[str, Any]]] = []
+    scales = {feature: (0.0, 1.0) for feature in FEATURES}
+    for row in matches:
+        dist, common = _feature_distance(live, row["features"], scales, features=("pts_per36", "fga_per36", "fg_pct", "x3pa_per36", "x3p_pct", "fta_per36", "ft_pct", "ast_per36", "orb_per36", "drb_per36", "stl_per36", "blk_per36", "tov_per36", "pf_per36"))
+        if dist is not None and common >= 3:
+            scored.append((dist, row))
+    if scored:
+        return min(scored, key=lambda item: item[0])[1]
+    return matches[0]
+
+
+def _feature_distance(a: dict[str, Optional[float]], b: dict[str, Optional[float]], scales: dict[str, tuple[float, float]], *, features: tuple[str, ...]) -> tuple[Optional[float], int]:
     parts: list[float] = []
-    live_height = as_float(live.get("height_inches"))
-    master_height = as_float(master.get("height_inches"))
-    if live_height is not None and master_height is not None:
-        parts.append(((live_height - master_height) / 2.0) ** 2)
-    live_weight = as_float(live.get("weight_pounds"))
-    master_weight = as_float(master.get("weight_pounds"))
-    if live_weight is not None and master_weight is not None:
-        parts.append(((live_weight - master_weight) / 12.0) ** 2)
+    for feature in features:
+        av = a.get(feature)
+        bv = b.get(feature)
+        if av is None or bv is None:
+            continue
+        scale = scales.get(feature, (0.0, 1.0))[1] or 1.0
+        parts.append(((float(av) - float(bv)) / scale) ** 2)
     if not parts:
-        return (0.0, 0, str(master.get("player_id") or ""))
-    return (math.sqrt(sum(parts) / len(parts)), -len(parts), str(master.get("player_id") or ""))
+        return None, 0
+    return math.sqrt(sum(parts) / len(parts)), len(parts)
 
 
 def _stored_snapshot_rows(snapshot_id: str) -> tuple[dict[int, dict[str, str]], dict[int, dict[str, str]], dict[int, dict[str, str]]]:
@@ -540,7 +651,7 @@ def _source_export_rows(root: Path, source_id: str) -> tuple[dict[int, dict[str,
     return _stored_snapshot_rows(source_id)
 
 
-def load_candidates(root: Path, key_index: Dict[str, List[Dict[str, Any]]], runs: Sequence[str] | None = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str]]:
+def load_candidates(root: Path, runs: Sequence[str] | None = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str]]:
     candidates: List[Dict[str, Any]] = []
     match_rows: List[Dict[str, Any]] = []
     fieldnames: list[str] = []
@@ -552,18 +663,17 @@ def load_candidates(root: Path, key_index: Dict[str, List[Dict[str, Any]]], runs
             fieldnames = [f"Attribute::{c}" for c in attr_fields] + [f"Tendency::{c}" for c in tend_fields]
         for idx, stats in stats_rows.items():
             label = stats.get("player_label", "")
-            match_vitals = live_vitals(stats, {})
-            master = match_live_player(label, key_index, match_vitals)
+            positions = parse_positions(stats.get("primary_position"))
             match_rows.append({
                 "run_id": run_id,
                 "player_index": idx,
                 "live_player_label": label,
-                "matched": master is not None,
-                "master_player": "" if master is None else master["player"],
-                "master_player_id": "" if master is None else master["player_id"],
-                "positions": "" if master is None else ";".join(master["positions"]),
+                "matched": bool(positions),
+                "master_player": label,
+                "master_player_id": str(idx),
+                "positions": ";".join(positions),
             })
-            if master is None or not master["positions"]:
+            if not positions:
                 continue
             fields: Dict[str, float] = {}
             for col, val in attrs_rows.get(idx, {}).items():
@@ -578,155 +688,25 @@ def load_candidates(root: Path, key_index: Dict[str, List[Dict[str, Any]]], runs
                 v = as_float(val)
                 if v is not None:
                     fields[f"Tendency::{col}"] = v
-            feats = live_features(stats)
-            vitals = live_vitals(stats, master)
+            master = _master_features_for_live(stats, positions)
+            feats = {**live_features(stats), **(master.get("features") or {})}
+            vitals = live_vitals(stats, {"height_inches": feats.get("height_inches"), "weight_pounds": feats.get("weight_pounds")})
             features_with_body = {**feats, "height_inches": vitals.get("height_inches"), "weight_pounds": vitals.get("weight_pounds")}
-            for pos in master["positions"]:
+            master_player = str(master.get("player") or label)
+            master_player_id = str(master.get("player_id") or idx)
+            for pos in positions:
                 candidates.append({
                     "run_id": run_id,
                     "player_index": idx,
                     "player_label": label,
-                    "master_player": master["player"],
-                    "master_player_id": master["player_id"],
+                    "master_player": master_player,
+                    "master_player_id": master_player_id,
                     "position": pos,
                     "features": features_with_body,
                     "vitals": vitals,
                     "fields": fields,
                 })
     return candidates, match_rows, fieldnames
-
-
-def scale_by_position(candidates: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, Tuple[float, float]]]:
-    out: Dict[str, Dict[str, Tuple[float, float]]] = {}
-    for pos in POSITIONS:
-        rows = [c for c in candidates if c["position"] == pos]
-        pos_scales = {}
-        for feat in (*FEATURES, *BODY_FEATURES):
-            vals = sorted(float(c["features"][feat]) for c in rows if c["features"].get(feat) is not None and math.isfinite(float(c["features"][feat])))
-            if not vals:
-                pos_scales[feat] = (0.0, 1.0)
-                continue
-            med = median_float(vals)
-            mean = sum(vals) / len(vals)
-            var = sum((v - mean) ** 2 for v in vals) / max(1, len(vals) - 1)
-            scale = math.sqrt(var) or 1.0
-            pos_scales[feat] = (med, scale)
-        out[pos] = pos_scales
-    return out
-
-
-def distance(a: Dict[str, Optional[float]], b: Dict[str, Optional[float]], scales: Dict[str, Tuple[float, float]], features: Sequence[str] = FEATURES) -> Tuple[Optional[float], int]:
-    parts = []
-    for feat in features:
-        av = a.get(feat)
-        bv = b.get(feat)
-        if av is None or bv is None:
-            continue
-        scale = scales.get(feat, (0.0, 1.0))[1] or 1.0
-        parts.append(((float(av) - float(bv)) / scale) ** 2)
-    if len(parts) < min(6, len(tuple(features))):
-        return None, len(parts)
-    return math.sqrt(sum(parts) / len(parts)), len(parts)
-
-
-def nearest_neighbors(target_features: Dict[str, Optional[float]], pos: str, candidates_by_pos: Dict[str, List[Dict[str, Any]]], scales: Dict[str, Dict[str, Tuple[float, float]]], *, features: Sequence[str] = FEATURES, exclude_player_id: str = "", exclude_run: str = "", k: int = 10) -> List[Dict[str, Any]]:
-    rows = []
-    for c in candidates_by_pos.get(pos, []):
-        if exclude_player_id and c["master_player_id"] == exclude_player_id:
-            continue
-        if exclude_run and c["run_id"] == exclude_run:
-            continue
-        dist, common = distance(target_features, c["features"], scales[pos], features)
-        if dist is None:
-            continue
-        rows.append({"candidate": c, "distance": dist, "common_features": common})
-    rows.sort(key=lambda r: r["distance"])
-    return rows[:k]
-
-
-def features_for_field(field_key: str) -> tuple[str, ...]:
-    key = identity(field_key)
-    if "3PT" in key or "3POINT" in key or "THREE" in key:
-        return ("x3pa_per36", "x3p_pct", "fga_per36", "pts_per36")
-    if "FREE" in key or "FOUL" in key or "DRAW" in key:
-        return ("fta_per36", "ft_pct", "pts_per36")
-    if "PASS" in key or "ASSIST" in key or "VISION" in key or "TOUCH" in key:
-        return ("ast_per36", "tov_per36")
-    if "REBOUND" in key or "BOXOUT" in key or "PUTBACK" in key:
-        return ("orb_per36", "drb_per36", "height_inches", "weight_pounds")
-    if "STEAL" in key or "INTERCEPT" in key:
-        return ("stl_per36", "pf_per36")
-    if "BLOCK" in key or "INTERIORDEFENSE" in key or "HELPDEFENSE" in key:
-        return ("blk_per36", "pf_per36", "drb_per36", "height_inches", "weight_pounds")
-    if "DUNK" in key or "LAYUP" in key or "CLOSE" in key or "POST" in key:
-        return ("pts_per36", "fga_per36", "fg_pct", "fta_per36", "height_inches", "weight_pounds")
-    if "SHOT" in key or "JUMPER" in key or "MIDRANGE" in key or "FADE" in key:
-        return ("pts_per36", "fga_per36", "fg_pct")
-    if "BALL" in key or "HANDLE" in key:
-        return ("ast_per36", "tov_per36", "pts_per36")
-    if "DEFENSE" in key or "LATERAL" in key:
-        return ("stl_per36", "blk_per36", "pf_per36")
-    return FEATURES
-
-
-def build_irl_neighbors(master_players: Dict[str, Dict[str, Any]], candidates: List[Dict[str, Any]], scales: Dict[str, Dict[str, Tuple[float, float]]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    by_pos: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-    for c in candidates:
-        by_pos[c["position"]].append(c)
-    neighbor_rows: List[Dict[str, Any]] = []
-    suggestion_rows: List[Dict[str, Any]] = []
-    fields_by_features_by_pos: dict[str, dict[tuple[str, ...], list[str]]] = {}
-    for pos, pos_candidates in by_pos.items():
-        all_fields = sorted(set().union(*(set(c["fields"].keys()) for c in pos_candidates))) if pos_candidates else []
-        grouped: dict[tuple[str, ...], list[str]] = defaultdict(list)
-        for field_key in all_fields:
-            grouped[features_for_field(field_key)].append(field_key)
-        fields_by_features_by_pos[pos] = grouped
-    for player in master_players.values():
-        for pos in player["positions"]:
-            neigh = nearest_neighbors(player["features"], pos, by_pos, scales, k=10)
-            for rank, n in enumerate(neigh, 1):
-                c = n["candidate"]
-                neighbor_rows.append({
-                    "target_player": player["player"],
-                    "target_player_id": player["player_id"],
-                    "target_team": player["team"],
-                    "position": pos,
-                    "neighbor_rank": rank,
-                    "distance": round(n["distance"], 6),
-                    "common_features": n["common_features"],
-                    "neighbor_run_id": c["run_id"],
-                    "neighbor_player_index": c["player_index"],
-                    "neighbor_live_label": c["player_label"],
-                    "neighbor_master_player": c["master_player"],
-                    "neighbor_master_player_id": c["master_player_id"],
-                })
-            if not fields_by_features_by_pos.get(pos):
-                continue
-            for section_features, field_keys in fields_by_features_by_pos.get(pos, {}).items():
-                section_neighbors = nearest_neighbors(player["features"], pos, by_pos, scales, features=section_features, k=5)
-                top5 = [n["candidate"] for n in section_neighbors]
-                if not top5:
-                    continue
-                for field_key in field_keys:
-                    vals = [float(c["fields"][field_key]) for c in top5 if field_key in c["fields"]]
-                    if not vals:
-                        continue
-                    kind, field = field_key.split("::", 1)
-                    top_with_field = next((c for c in top5 if field_key in c["fields"]), top5[0])
-                    suggestion_rows.append({
-                        "target_player": player["player"],
-                        "target_player_id": player["player_id"],
-                        "target_team": player["team"],
-                        "position": pos,
-                        "Type": kind,
-                        "Input Field": field,
-                        "suggested_top1": int(round(top_with_field["fields"].get(field_key, median_float(vals)))),
-                        "suggested_top5_median": round(median_float(vals), 4),
-                        "neighbor_count": len(vals),
-                        "top_neighbor": top_with_field["player_label"],
-                    })
-    return neighbor_rows, suggestion_rows
 
 
 
@@ -751,10 +731,12 @@ def write_model_database(
     model_path.parent.mkdir(parents=True, exist_ok=True)
     if model_path.exists():
         model_path.unlink()
+    feature_columns_sql = _feature_columns_sql()
+    insert_sql = _candidate_pool_insert_sql()
     with sqlite3.connect(model_path) as connection:
         connection.execute("PRAGMA journal_mode=WAL")
         connection.executescript(
-            """
+            f"""
             CREATE TABLE candidate_pool (
                 run_id TEXT NOT NULL,
                 player_index INTEGER NOT NULL,
@@ -762,24 +744,7 @@ def write_model_database(
                 master_player TEXT NOT NULL,
                 master_player_id TEXT NOT NULL,
                 position TEXT NOT NULL,
-                height_inches REAL,
-                height_cm REAL,
-                weight_pounds REAL,
-                weight_kg REAL,
-                pts_per36 REAL,
-                fga_per36 REAL,
-                fg_pct REAL,
-                x3pa_per36 REAL,
-                x3p_pct REAL,
-                fta_per36 REAL,
-                ft_pct REAL,
-                ast_per36 REAL,
-                orb_per36 REAL,
-                drb_per36 REAL,
-                stl_per36 REAL,
-                blk_per36 REAL,
-                tov_per36 REAL,
-                pf_per36 REAL
+                {feature_columns_sql}
             );
             CREATE TABLE player_name_matches (
                 run_id TEXT NOT NULL,
@@ -819,8 +784,8 @@ def write_model_database(
             """
         )
         connection.executemany(
-            "INSERT INTO candidate_pool VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ((row.get("run_id"), row.get("player_index"), row.get("player_label"), row.get("master_player"), row.get("master_player_id"), row.get("position"), *(row.get(column) for column in VITAL_COLUMNS), *(row.get(feature) for feature in FEATURES)) for row in candidate_rows),
+            insert_sql,
+            (_candidate_pool_values(row) for row in candidate_rows),
         )
         connection.executemany(
             "INSERT INTO player_name_matches VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -843,7 +808,6 @@ def write_model_database(
 def write_pool_database(
     root: Path,
     *,
-    season: int,
     runs: Sequence[str],
     candidates: Sequence[Dict[str, Any]],
     match_rows: Sequence[Dict[str, Any]],
@@ -853,10 +817,12 @@ def write_pool_database(
     db_path = pool_database_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
     signature = source_signature(root, runs)
+    feature_columns_sql = _feature_columns_sql()
+    insert_sql = _candidate_pool_insert_sql()
     with sqlite3.connect(db_path) as connection:
         connection.execute("PRAGMA journal_mode=WAL")
         connection.executescript(
-            """
+            f"""
             DROP TABLE IF EXISTS pool_runs;
             DROP TABLE IF EXISTS player_name_matches;
             DROP TABLE IF EXISTS candidate_pool;
@@ -885,24 +851,7 @@ def write_pool_database(
                 master_player TEXT NOT NULL,
                 master_player_id TEXT NOT NULL,
                 position TEXT NOT NULL,
-                height_inches REAL,
-                height_cm REAL,
-                weight_pounds REAL,
-                weight_kg REAL,
-                pts_per36 REAL,
-                fga_per36 REAL,
-                fg_pct REAL,
-                x3pa_per36 REAL,
-                x3p_pct REAL,
-                fta_per36 REAL,
-                ft_pct REAL,
-                ast_per36 REAL,
-                orb_per36 REAL,
-                drb_per36 REAL,
-                stl_per36 REAL,
-                blk_per36 REAL,
-                tov_per36 REAL,
-                pf_per36 REAL
+                {feature_columns_sql}
             );
             CREATE TABLE candidate_fields (
                 run_id TEXT NOT NULL,
@@ -944,22 +893,7 @@ def write_pool_database(
             ),
         )
         for candidate in candidates:
-            features = candidate["features"]
-            connection.execute(
-                """
-                INSERT INTO candidate_pool VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    candidate["run_id"],
-                    int(candidate["player_index"]),
-                    candidate["player_label"],
-                    candidate["master_player"],
-                    candidate["master_player_id"],
-                    candidate["position"],
-                    *(candidate.get("vitals", {}).get(column) for column in VITAL_COLUMNS),
-                    *(features.get(feature) for feature in FEATURES),
-                ),
-            )
+            connection.execute(insert_sql, _candidate_pool_values(candidate))
             for field_key, value in candidate["fields"].items():
                 field_type, input_field = field_key.split("::", 1)
                 connection.execute(
@@ -967,7 +901,6 @@ def write_pool_database(
                     (candidate["run_id"], int(candidate["player_index"]), candidate["position"], field_type, input_field, float(value)),
                 )
         manifest = {
-            "season": str(season),
             "source_runs": json.dumps(list(runs)),
             "run_file_signature": json.dumps(signature, sort_keys=True),
             "model_path": str(model_path),
@@ -1052,7 +985,7 @@ def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None
         for section_groups in grouped.values()
         for group_entries in section_groups.values()
         for entry in group_entries
-        if str(entry.normalized_name).upper() in {"HEIGHTCM", "WEIGHT", "WEIGHTKG"}
+        if str(entry.normalized_name).upper() in {"HEIGHT", "WEIGHT", "WEIGHTKG"}
     }
     attribute_entries = [entry for group_entries in grouped.get("Attributes", {}).values() for entry in group_entries]
     tendency_entries = [entry for group_entries in grouped.get("Tendencies", {}).values() for entry in group_entries]
@@ -1097,16 +1030,18 @@ def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None
                 stat_id = _raw_int(model.read_entry_value(entry, index=player.index))
                 break
         stat_row["current_year_stat_id"] = "" if stat_id is None else stat_id
-        height_cm_entry = vital_entries.get("HEIGHTCM")
+        height_entry = vital_entries.get("HEIGHT")
         weight_entry = vital_entries.get("WEIGHT")
         weight_kg_entry = vital_entries.get("WEIGHTKG")
-        stat_row["height_cm"] = "" if height_cm_entry is None else _display(model.read_entry_value(height_cm_entry, index=player.index))
-        height_cm = as_float(stat_row.get("height_cm"))
-        stat_row["height_inches"] = "" if height_cm is None else round(height_cm / 2.54, 4)
+        stat_row["height_inches"] = "" if height_entry is None else _display(model.read_entry_value(height_entry, index=player.index))
         stat_row["weight_pounds"] = "" if weight_entry is None else _display(model.read_entry_value(weight_entry, index=player.index))
         stat_row["weight_kg"] = "" if weight_kg_entry is None else _display(model.read_entry_value(weight_kg_entry, index=player.index))
-        for entry in stat_detail_entries:
-            stat_row[entry.display_name] = _display(model.read_entry_value(entry, index=player.index, stat_selector=selector))
+        if stat_id is not None and stat_id > 0 and stat_id != 0xFFFF:
+            for entry in stat_detail_entries:
+                stat_row[entry.display_name] = _display(model.read_entry_value(entry, index=player.index, stat_selector=selector))
+        else:
+            for entry in stat_detail_entries:
+                stat_row[entry.display_name] = ""
         stats_rows.append(stat_row)
         completed_units += 1
         emit_progress(f"Captured stats for {progress_slot}/{len(players)} loaded team-slot players...")
@@ -1165,7 +1100,7 @@ def add_current_roster_to_player_generation_pool(model: Any, *, season: int = 20
 
 def sync_player_generation_pool(request: PlayerGenerationPoolRequest | None = None, *, progress_callback: Any | None = None) -> dict[str, Any]:
     """Ensure the Player Generator SQL pool and latest neighbor artifact match complete run exports."""
-    total_steps = 7
+    total_steps = 4
 
     def emit_progress(step: int, message: str) -> None:
         if progress_callback is not None:
@@ -1174,12 +1109,11 @@ def sync_player_generation_pool(request: PlayerGenerationPoolRequest | None = No
     emit_progress(0, "Checking player pool sources...")
     normalized = (request or PlayerGenerationPoolRequest()).normalized()
     root = normalized.root
-    season = normalized.season
     force = normalized.force
     runs = pool_source_ids(root)
     if not runs:
         raise FileNotFoundError("no player pool sources found; use Add Current Roster to Pool SQL from the editor")
-    if not force and _pool_is_current(root, season, runs):
+    if not force and _pool_is_current(root, runs):
         manifest = _pool_manifest_values(pool_database_path())
         emit_progress(total_steps, "Player generation pool already current.")
         return {
@@ -1193,16 +1127,9 @@ def sync_player_generation_pool(request: PlayerGenerationPoolRequest | None = No
 
     model_path = position_stat_neighbor_model_path(runs).resolve()
     model_path.parent.mkdir(parents=True, exist_ok=True)
-    emit_progress(1, f"Loading NBA Master for season {season}...")
-    master_players, key_index = load_master(root, season)
-    emit_progress(2, f"Loading {len(runs)} player pool source(s)...")
-    candidates, match_rows, fieldnames = load_candidates(root, key_index, runs)
-    emit_progress(3, f"Scaling {len(candidates)} candidate position rows...")
-    scales = scale_by_position(candidates)
-    emit_progress(4, "Building same-position neighbor suggestions...")
-    neighbor_rows, suggestion_rows = build_irl_neighbors(master_players, candidates, scales)
-
-    emit_progress(5, "Preparing candidate model rows...")
+    emit_progress(1, f"Loading {len(runs)} player pool source(s)...")
+    candidates, match_rows, fieldnames = load_candidates(root, runs)
+    emit_progress(2, "Preparing candidate model rows...")
     candidate_rows = []
     for c in candidates:
         row = {
@@ -1223,35 +1150,29 @@ def sync_player_generation_pool(request: PlayerGenerationPoolRequest | None = No
         "output_dir": str(model_path),
         "model_sqlite": str(model_path),
         "pool_sqlite": str(pool_database_path()),
-        "season": season,
-        "source_master_sqlite": str(MASTER_SQLITE.resolve()),
         "source_runs": [str((root / RUNS_DIR / run).resolve()) for run in runs],
         "rule": "same-position stat-profile neighbors only; no position weights; no cross-position blending",
         "features": list(FEATURES),
         "vital_columns": list(VITAL_COLUMNS),
-        "target_players": len(master_players),
         "live_rows": len(match_rows),
         "matched_live_rows": sum(1 for r in match_rows if r["matched"]),
         "candidate_rows": len({(c["run_id"], c["player_index"]) for c in candidates}),
         "candidate_position_rows": len(candidates),
         "candidate_rows_by_position": {pos: sum(1 for c in candidates if c["position"] == pos) for pos in POSITIONS},
-        "neighbor_rows": len(neighbor_rows),
-        "suggested_field_rows": len(suggestion_rows),
         "created_files": [model_path.name],
         "status": f"Rebuilt player generation pool from {len(runs)} runs.",
     }
-    emit_progress(6, "Writing player pool neighbor SQLite...")
+    emit_progress(3, "Writing player pool SQLite...")
     write_model_database(
         model_path,
         manifest=manifest,
         candidate_rows=candidate_rows,
         match_rows=match_rows,
-        neighbor_rows=neighbor_rows,
-        suggestion_rows=suggestion_rows,
+        neighbor_rows=(),
+        suggestion_rows=(),
     )
     pool_manifest = write_pool_database(
         root,
-        season=season,
         runs=runs,
         candidates=candidates,
         match_rows=match_rows,
@@ -1263,13 +1184,13 @@ def sync_player_generation_pool(request: PlayerGenerationPoolRequest | None = No
     return manifest
 
 
-def ensure_player_generation_pool_current(*, root: Path | None = None, season: int = 2026, force: bool = False, progress_callback: Any | None = None) -> dict[str, Any]:
-    return sync_player_generation_pool(PlayerGenerationPoolRequest(season=season, root=_REPO_ROOT if root is None else Path(root), force=force), progress_callback=progress_callback)
+def ensure_player_generation_pool_current(*, root: Path | None = None, force: bool = False, progress_callback: Any | None = None) -> dict[str, Any]:
+    return sync_player_generation_pool(PlayerGenerationPoolRequest(root=_REPO_ROOT if root is None else Path(root), force=force), progress_callback=progress_callback)
 
 
-def build_position_stat_neighbor_model(root: Path, *, season: int = 2026, force: bool = False) -> dict[str, Any]:
+def build_position_stat_neighbor_model(root: Path, *, force: bool = False) -> dict[str, Any]:
     """Backward-compatible API for old callers; program workflow uses sync_player_generation_pool."""
-    return ensure_player_generation_pool_current(root=root, season=season, force=force)
+    return ensure_player_generation_pool_current(root=root, force=force)
 
 
 def next_output_dir(root: Path) -> Path:
@@ -1282,50 +1203,3 @@ def next_output_dir(root: Path) -> Path:
                 nums.append(int(suffix))
     return base / f"{OUT_PREFIX}{max(nums, default=0) + 1:03d}"
 
-
-def write_readme(out_dir: Path, manifest: Dict[str, Any]) -> None:
-    text = f"""# Position stat-neighbor 2K model
-
-This artifact implements the current modeling rule:
-
-```text
-If a 2K player's in-game sim stats align with an IRL player's stats, then that 2K player's attributes/tendencies are evidence for the IRL player's values.
-```
-
-Position buckets are strict: PG compares only to PG, SG only to SG, SF only to SF, PF only to PF, C only to C. No position weights or cross-position blending are used.
-
-## Files
-
-- `candidate_pool.csv` — 2K run players expanded into exact position buckets.
-- `player_name_matches.csv` — live labels matched to NBA Master names.
-- `irl_to_2k_neighbors.csv` — nearest 2K stat-profile matches for every NBA Master target player/position.
-- `suggested_field_values.csv` — suggested 2K field values from nearest same-position stat-profile matches.
-- `manifest.json` — source and summary.
-
-## Summary
-
-- Target season: {manifest['season']}.
-- NBA Master target players: {manifest['target_players']}.
-- Candidate rows: {manifest['candidate_rows']}.
-- Candidate position-expanded rows: {manifest['candidate_position_rows']}.
-- Matched live rows: {manifest['matched_live_rows']} / {manifest['live_rows']}.
-- Neighbor rows: {manifest['neighbor_rows']}.
-- Suggested field rows: {manifest['suggested_field_rows']}.
-"""
-    (out_dir / "README.md").write_text(text, encoding="utf-8")
-
-
-
-__all__ = [
-    "PlayerGenerationPoolRequest",
-    "build_position_stat_neighbor_model",
-    "complete_run_ids",
-    "ensure_player_generation_pool_current",
-    "add_current_roster_to_player_generation_pool",
-    "capture_active_roster_pool_rows",
-    "player_pool_dir",
-    "pool_database_path",
-    "pool_source_ids",
-    "position_stat_neighbor_model_path",
-    "sync_player_generation_pool",
-]

@@ -49,24 +49,37 @@ def import_team_offsets(model: Any, *, team_limit: int | None = 30) -> TeamOffse
     """Read Franchise Manager import data from authored Teams offsets.
 
     This is a read/import bridge only. It does not simulate games and does not
-    guess missing offsets. If required standings offsets are not active for the
-    selected game target, it raises with the exact missing offset names.
+    guess missing offsets. Missing fields are skipped so Franchise Manager can
+    still use the live Teams data that is currently authored.
     """
     entries = _team_entries_by_name(model)
-    _require_offsets(entries, tuple(_STANDINGS_FIELDS.values()))
     teams = tuple(model.scan_records("Teams", limit=team_limit))
     standings_payload: dict[str, dict[str, int]] = {}
     team_stats_payload: dict[str, dict[str, int]] = {}
     for team in teams:
         team_key = _team_payload_key(team)
-        standings_payload[team_key] = {
-            payload_name: _read_int(model, entries[offset_name], team.index)
-            for payload_name, offset_name in _STANDINGS_FIELDS.items()
-        }
-        team_stats_payload[team_key] = {
-            payload_name: _read_int(model, entries[offset_name], team.index) if offset_name in entries else 0
-            for payload_name, offset_name in _TEAM_STAT_FIELDS.items()
-        }
+
+        standings_row: dict[str, int] = {}
+        for payload_name, offset_name in _STANDINGS_FIELDS.items():
+            entry = entries.get(_field_identity(offset_name))
+            if entry is None:
+                continue
+            value = _read_optional_int(model, entry, team.index)
+            if value is not None:
+                standings_row[payload_name] = value
+        if standings_row:
+            standings_payload[team_key] = standings_row
+
+        team_stats_row: dict[str, int] = {}
+        for payload_name, offset_name in _TEAM_STAT_FIELDS.items():
+            entry = entries.get(_field_identity(offset_name))
+            if entry is None:
+                continue
+            value = _read_optional_int(model, entry, team.index)
+            if value is not None:
+                team_stats_row[payload_name] = value
+        if team_stats_row:
+            team_stats_payload[team_key] = team_stats_row
     return TeamOffsetImportResult(standings_payload=standings_payload, team_stats_payload=team_stats_payload)
 
 
@@ -81,16 +94,19 @@ def _team_entries_by_name(model: Any) -> dict[str, FieldEntry]:
     return entries
 
 
-def _require_offsets(entries: dict[str, FieldEntry], names: tuple[str, ...]) -> None:
-    missing = tuple(name for name in names if _field_identity(name) not in entries)
-    if missing:
-        raise RuntimeError("missing active Teams offsets for Franchise import: " + ", ".join(missing))
-
-
 def _read_int(model: Any, entry: FieldEntry, index: int) -> int:
+    value = _read_optional_int(model, entry, index)
+    if value is None:
+        raise ValueError(f"Teams offset {entry.normalized_name} for row {index} is not numeric")
+    return value
+
+
+def _read_optional_int(model: Any, entry: FieldEntry, index: int) -> int | None:
     value = model.read_entry_value(entry, index=index).get("raw_value")
     if value in (None, ""):
         value = model.read_entry_value(entry, index=index).get("display_value")
+    if value in (None, ""):
+        return None
     try:
         return int(float(str(value).replace(",", "")))
     except Exception as exc:

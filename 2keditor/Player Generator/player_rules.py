@@ -38,10 +38,9 @@ def derive_player_profile_values(evidence: PlayerEvidence) -> PlayerProfileResul
     _add_profile(values, "Vitals/FIRSTNAME", first, "profile_sql_identity", "player_info.player")
     _add_profile(values, "Vitals/LASTNAME", last, "profile_sql_identity", "player_info.player")
 
-    height_inches = _float(evidence.identity.get("ht_in_in"))
-    height_cm = None if height_inches is None else int(round(height_inches * 2.54))
+    height = _int_round(evidence.identity.get("ht_in_in"))
     weight = _int_round(evidence.identity.get("wt"))
-    _add_profile(values, "Vitals/HEIGHTCM", height_cm, "profile_sql_bio_cm", "player_info.ht_in_in")
+    _add_profile(values, "Vitals/HEIGHT", height, "profile_sql_bio", "player_info.ht_in_in")
     _add_profile(values, "Vitals/WEIGHT", weight, "profile_sql_bio", "player_info.wt")
 
     positions = select_positions_from_evidence(evidence.play_by_play, evidence.season_info.get("pos") or evidence.identity.get("pos"))

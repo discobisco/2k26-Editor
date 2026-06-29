@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -143,8 +144,10 @@ class FranchiseManagerFacade:
         stop = store.next_stop(season)
         stop_id = stop[0] if stop else None
         imported = import_team_offsets(model, team_limit=team_limit)
-        store.import_2k_data(ImportedSnapshot(season=season, stop_id=stop_id, kind=ImportedDataKind.STANDINGS, payload=imported.standings_payload))
-        store.import_2k_data(ImportedSnapshot(season=season, stop_id=stop_id, kind=ImportedDataKind.TEAM_STATS, payload=imported.team_stats_payload))
+        if imported.standings_payload:
+            store.import_2k_data(ImportedSnapshot(season=season, stop_id=stop_id, kind=ImportedDataKind.STANDINGS, payload=imported.standings_payload))
+        if imported.team_stats_payload:
+            store.import_2k_data(ImportedSnapshot(season=season, stop_id=stop_id, kind=ImportedDataKind.TEAM_STATS, payload=imported.team_stats_payload))
         return self.get_league_dashboard(status=f"Imported 2K team offsets: {imported.standings_rows} standings rows, {imported.team_stat_rows} team stat rows.")
 
     def import_manual_league_snapshot_file(self, path: str | Path, *, resolve_stop: bool = False) -> LeagueDashboardView:
@@ -176,6 +179,34 @@ class FranchiseManagerFacade:
             ),
         ))
         status = f"Imported manual league snapshot: {len(standings_payload)} standings rows, {len(team_stats_payload)} team stat rows."
+        if resolve_stop and stop_id is not None:
+            status += " Resolved current stop."
+        return self.get_league_dashboard(status=status)
+
+    def import_manual_standings_text(self, text: str, *, resolve_stop: bool = False) -> LeagueDashboardView:
+        store = self._require_store()
+        season = self._current_season()
+        stop = store.next_stop(season)
+        stop_id = stop[0] if stop else None
+        standings_payload = _manual_standings_payload_from_text(text)
+        store.import_2k_data(ImportedSnapshot(season=season, stop_id=stop_id, kind=ImportedDataKind.STANDINGS, payload=standings_payload))
+        if resolve_stop and stop_id is not None:
+            store.resolve_stop(stop_id)
+        store.add_reason_logs((
+            ReasonLog(
+                season=season,
+                team_id="LEAGUE",
+                actor="import",
+                message=f"Imported manual standings text: {len(standings_payload)} standings rows.",
+                action="manual_standings_import",
+                evidence={
+                    "standings_rows": len(standings_payload),
+                    "stop_id": stop_id,
+                    "resolved_stop": bool(resolve_stop and stop_id is not None),
+                },
+            ),
+        ))
+        status = f"Imported manual standings text: {len(standings_payload)} standings rows."
         if resolve_stop and stop_id is not None:
             status += " Resolved current stop."
         return self.get_league_dashboard(status=status)
@@ -282,28 +313,53 @@ class FranchiseManagerFacade:
     def _snapshot_from_latest_standings(self, season: int) -> LeagueSnapshotView:
         snapshots = self.store.snapshots_for_season(season) if self.store is not None else ()
         standings = next((snapshot.payload for snapshot in reversed(snapshots) if snapshot.kind == ImportedDataKind.STANDINGS), {})
-        rows: list[tuple[str, int, int]] = []
+        team_stats = next((snapshot.payload for snapshot in reversed(snapshots) if snapshot.kind == ImportedDataKind.TEAM_STATS), {})
+        rows: list[tuple[str, int | None, int | None]] = []
         for team_id, values in standings.items():
             if isinstance(values, dict):
-                rows.append((str(team_id), int(values.get("wins", 0) or 0), int(values.get("losses", 0) or 0)))
-        rows.sort(key=lambda row: (row[1] / max(1, row[1] + row[2]), row[1]), reverse=True)
-        if not rows:
+                wins = _optional_int(values.get("wins"))
+                losses = _optional_int(values.get("losses"))
+                if wins is not None or losses is not None:
+                    rows.append((str(team_id), wins, losses))
+        rows.sort(key=lambda row: _standings_sort_key(row[1], row[2]), reverse=True)
+        if rows:
+            formatted = tuple(_format_standings_row(team, wins, losses) for team, wins, losses in rows)
             return LeagueSnapshotView(
-                standings_summary=("No standings imported.",),
-                top_teams=("No standings imported.",),
-                worst_teams=("No standings imported.",),
-                mvp_race=("No award data imported.",),
-                rookie_race=("No rookie data imported.",),
-                championship_favorites=("No favorites until standings are imported.",),
+                standings_summary=formatted[:8],
+                top_teams=formatted[:3],
+                worst_teams=tuple(reversed(formatted[-3:])),
+                mvp_race=("Award data not imported yet.",),
+                rookie_race=("Rookie data not imported yet.",),
+                championship_favorites=formatted[:3],
             )
-        formatted = tuple(f"{team}: {wins}-{losses}" for team, wins, losses in rows)
+
+        stat_rows: list[tuple[str, int | None, int | None, int | None]] = []
+        for team_id, values in team_stats.items():
+            if isinstance(values, dict):
+                points = _optional_int(values.get("points") or values.get("POINTS"))
+                allowed = _optional_int(values.get("points_allowed") or values.get("PA"))
+                diff = None if points is None or allowed is None else points - allowed
+                if points is not None or allowed is not None:
+                    stat_rows.append((str(team_id), points, allowed, diff))
+        stat_rows.sort(key=lambda row: row[3] if row[3] is not None else row[1] if row[1] is not None else -10**9, reverse=True)
+        if stat_rows:
+            formatted = tuple(_format_team_stat_row(team, points, allowed, diff) for team, points, allowed, diff in stat_rows)
+            return LeagueSnapshotView(
+                standings_summary=formatted[:8],
+                top_teams=formatted[:3],
+                worst_teams=tuple(reversed(formatted[-3:])),
+                mvp_race=("Award data not imported yet.",),
+                rookie_race=("Rookie data not imported yet.",),
+                championship_favorites=formatted[:3],
+            )
+
         return LeagueSnapshotView(
-            standings_summary=formatted[:8],
-            top_teams=formatted[:3],
-            worst_teams=tuple(reversed(formatted[-3:])),
-            mvp_race=("No MVP race import yet.",),
-            rookie_race=("No rookie race import yet.",),
-            championship_favorites=formatted[:3],
+            standings_summary=("Import standings or team stats to populate the snapshot.",),
+            top_teams=("Import standings or team stats to rank teams.",),
+            worst_teams=("Import standings or team stats to rank teams.",),
+            mvp_race=("Award data not imported yet.",),
+            rookie_race=("Rookie data not imported yet.",),
+            championship_favorites=("Import standings or team stats to rank favorites.",),
         )
 
     def _require_store(self) -> FranchiseStore:
@@ -328,6 +384,7 @@ class FranchiseManagerFacade:
     AdvancePhase = advance_phase
     Import2KDataFromOffsets = import_2k_data_from_offsets
     ImportManualLeagueSnapshotFile = import_manual_league_snapshot_file
+    ImportManualStandingsText = import_manual_standings_text
     GenerateDraftClass = generate_draft_class
     RunOwnerEvaluations = run_owner_evaluations
     RunGMEvaluations = run_gm_evaluations
@@ -339,6 +396,46 @@ class FranchiseManagerFacade:
     GetGMReport = get_gm_report
     GetDraftReport = get_draft_report
     GetHistoryReport = get_history_report
+
+
+def _optional_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(float(str(value).replace(",", "")))
+    except Exception:
+        return None
+
+
+def _standings_sort_key(wins: int | None, losses: int | None) -> tuple[float, int, int]:
+    safe_wins = wins or 0
+    safe_losses = losses or 0
+    if wins is not None and losses is not None:
+        return (safe_wins / max(1, safe_wins + safe_losses), safe_wins, -safe_losses)
+    if wins is not None:
+        return (safe_wins, safe_wins, 0)
+    return (-safe_losses, 0, -safe_losses)
+
+
+def _format_standings_row(team: str, wins: int | None, losses: int | None) -> str:
+    if wins is not None and losses is not None:
+        return f"{team}: {wins}-{losses}"
+    if wins is not None:
+        return f"{team}: {wins}W"
+    if losses is not None:
+        return f"{team}: {losses}L"
+    return team
+
+
+def _format_team_stat_row(team: str, points: int | None, allowed: int | None, diff: int | None) -> str:
+    pieces: list[str] = []
+    if points is not None:
+        pieces.append(f"PF {points}")
+    if allowed is not None:
+        pieces.append(f"PA {allowed}")
+    if diff is not None:
+        pieces.append(f"Diff {diff:+d}")
+    return f"{team}: {', '.join(pieces)}" if pieces else team
 
 
 def _manual_snapshot_payload_from_json(path: Path) -> tuple[dict[str, dict[str, int]], dict[str, dict[str, int]]]:
@@ -360,6 +457,46 @@ def _manual_snapshot_payload_from_json(path: Path) -> tuple[dict[str, dict[str, 
     if not isinstance(team_stats_raw, dict):
         raise ValueError("manual league snapshot team_stats must be an object when provided")
     return standings, _coerce_nested_int_payload(team_stats_raw, object_name="team_stats")
+
+
+def _manual_standings_payload_from_text(text: str) -> dict[str, dict[str, int]]:
+    standings: dict[str, dict[str, int]] = {}
+    for line_number, raw_line in enumerate(str(text or "").splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parsed = _parse_manual_standings_line(line)
+        if parsed is None:
+            lowered = line.lower()
+            if line_number == 1 and "team" in lowered and ("win" in lowered or "w" in lowered) and ("loss" in lowered or "l" in lowered):
+                continue
+            raise ValueError(f"manual standings line {line_number} must be 'Team, Wins, Losses' or 'Team 44-12': {raw_line!r}")
+        team_key, wins, losses = parsed
+        if not team_key:
+            raise ValueError(f"manual standings line {line_number} contains a blank team name")
+        if team_key in standings:
+            raise ValueError(f"manual standings line {line_number} duplicates team: {team_key}")
+        standings[team_key] = {"wins": wins, "losses": losses}
+    if not standings:
+        raise ValueError("manual standings text did not contain any team rows")
+    return standings
+
+
+def _parse_manual_standings_line(line: str) -> tuple[str, int, int] | None:
+    if "," in line or "\t" in line:
+        cells = [cell.strip() for cell in re.split(r"[,\t]+", line) if cell.strip()]
+        if len(cells) >= 3:
+            try:
+                return " ".join(cells[:-2]), _coerce_int(cells[-2], field_name="wins"), _coerce_int(cells[-1], field_name="losses")
+            except ValueError:
+                return None
+    match = re.match(r"^(.+?)\s*[:;,\-]?\s+(\d+)\s*[-/]\s*(\d+)\s*$", line)
+    if match:
+        return match.group(1).strip(), _coerce_int(match.group(2), field_name="wins"), _coerce_int(match.group(3), field_name="losses")
+    match = re.match(r"^(.+?)\s+(\d+)\s+(\d+)\s*$", line)
+    if match:
+        return match.group(1).strip(), _coerce_int(match.group(2), field_name="wins"), _coerce_int(match.group(3), field_name="losses")
+    return None
 
 
 def _coerce_standings_payload(raw: dict[Any, Any]) -> dict[str, dict[str, int]]:

@@ -66,6 +66,11 @@ class ImportedDataKind(StrEnum):
     TRADES = "trades"
     AWARDS = "awards"
     CONTRACTS = "contracts"
+    DRAFT_PICKS = "draft_picks"
+    FINANCES = "finances"
+    STAFF = "staff"
+    FACILITIES = "facilities"
+    OBJECTIVES = "objectives"
     PLAYOFF_RESULTS = "playoff_results"
 
 

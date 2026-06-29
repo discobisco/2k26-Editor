@@ -32,6 +32,7 @@ class OffsetSchemaError(RuntimeError):
 
 BASE_POINTER_SIZE_KEY_MAP: dict[str, str | None] = {
     "Player": "playerSize",
+    "DraftClass": "draftClassSize",
     "Team": "teamSize",
     "Staff": "staffSize",
     "Stadium": "stadiumSize",
@@ -51,6 +52,7 @@ _LEAGUE_OFFSETS_FILE = "offsets_league.json"
 _DROPDOWNS_FILE = "dropdowns.json"
 _SUPER_TYPE_OFFSETS_FILES: dict[str, str] = {
     "Players": "offsets_players.json",
+    "Draft Class": "offsets_players.json",
     "Teams": "offsets_teams.json",
     "Staff": "offsets_staff.json",
     "Stadiums": "offsets_stadiums.json",
@@ -299,9 +301,10 @@ def get_editor_layout_for_super(super_type: str) -> dict[str, object]:
     """Return the owning offsets file's authored structure directly."""
     target_super = str(super_type or "").strip()
     source_file = _SUPER_TYPE_OFFSETS_FILES[target_super]
+    layout_super = "Players" if target_super == "Draft Class" else target_super
     raw_domain = _load_offsets_resource(source_file)
-    layout = cast(dict[str, object], raw_domain[target_super])
-    dropdowns = _load_offsets_resource(_DROPDOWNS_FILE).get(target_super)
+    layout = cast(dict[str, object], raw_domain[layout_super])
+    dropdowns = _load_offsets_resource(_DROPDOWNS_FILE).get(layout_super)
     if not isinstance(dropdowns, dict):
         return layout
     for section, dropdown_groups in dropdowns.items():

@@ -13,13 +13,10 @@ from nba2k_editor.core.field_io import (
     _ADDRESS_DROPDOWN_TYPES,
     _display_to_raw_value,
     _field_address,
-    _field_offset,
     _id_prefixed_option,
     _implemented_payload,
-    _numeric_width,
     _raw_to_display_value,
     _read_authored_value,
-    _string_length,
     _type_key,
     _write_authored_value,
 )
@@ -40,6 +37,7 @@ from nba2k_editor.models.schema import (
 
 _DOMAIN_BASE_KEYS: dict[str, str] = {
     "Players": "Player",
+    "Draft Class": "DraftClass",
     "Teams": "Team",
     "Staff": "Staff",
     "Stadiums": "Stadium",
@@ -49,7 +47,8 @@ _DOMAIN_BASE_KEYS: dict[str, str] = {
     "Shoes": "Shoes",
 }
 
-EDITOR_DOMAINS: tuple[str, ...] = tuple(_DOMAIN_BASE_KEYS)
+EDITOR_DOMAINS: tuple[str, ...] = tuple(domain for domain in _DOMAIN_BASE_KEYS if domain != "Draft Class")
+_MODEL_DOMAINS: tuple[str, ...] = tuple(_DOMAIN_BASE_KEYS)
 
 _SPARSE_SCAN_INVALID_STREAKS: dict[str, int] = {
     "NBA Records": 12,
@@ -57,6 +56,7 @@ _SPARSE_SCAN_INVALID_STREAKS: dict[str, int] = {
 
 _LABEL_FIELD_NAMES: dict[str, tuple[str, ...]] = {
     "Players": ("FIRSTNAME", "LASTNAME"),
+    "Draft Class": ("FIRSTNAME", "LASTNAME"),
     "Teams": ("CITYNAME", "TEAMNAME"),
     "Staff": ("FIRSTNAME", "LASTNAME"),
     "Stadiums": ("ARENANAME", "CITYNAME"),
@@ -67,6 +67,8 @@ _LABEL_FIELD_NAMES: dict[str, tuple[str, ...]] = {
 }
 
 PLAYER_TEAM_FILTER_ALL = "All Players"
+PLAYER_TEAM_FILTER_BASE_TEAMS = "Teams 0-29"
+PLAYER_TEAM_FILTER_DRAFT_CLASS = "Draft Class"
 
 
 def _plausible_record_name_part(value: object) -> bool:
@@ -74,10 +76,6 @@ def _plausible_record_name_part(value: object) -> bool:
     if len(text) < 2:
         return False
     return any(char.isalpha() for char in text) and all(char.isalpha() or char in " .'-" for char in text)
-
-
-def _label_has_letter(labels: list[str]) -> bool:
-    return any(any(char.isalpha() for char in str(label)) for label in labels)
 
 
 def _valid_nba_record_label_values(values: list[Any]) -> bool:
@@ -181,9 +179,9 @@ class EditorDataModel:
         self.offsets = offsets_api
         self.target_executable = selected_target
         self.last_status = "not attached"
-        self.loaded_items: dict[str, dict[str, RecordListItem]] = {domain: {} for domain in EDITOR_DOMAINS}
-        self.selected_items: dict[str, RecordListItem | None] = {domain: None for domain in EDITOR_DOMAINS}
-        self.domain_statuses: dict[str, str] = {domain: self.runtime_status_text() for domain in EDITOR_DOMAINS}
+        self.loaded_items: dict[str, dict[str, RecordListItem]] = {domain: {} for domain in _MODEL_DOMAINS}
+        self.selected_items: dict[str, RecordListItem | None] = {domain: None for domain in _MODEL_DOMAINS}
+        self.domain_statuses: dict[str, str] = {domain: self.runtime_status_text() for domain in _MODEL_DOMAINS}
         self.refresh_events: queue.Queue[tuple[str, str]] = queue.Queue()
         self.refresh_thread: threading.Thread | None = None
         self._history_screen_rows: dict[tuple[str, str], list[dict[str, str]]] = {}
@@ -280,10 +278,10 @@ class EditorDataModel:
         self._field_context_cache.clear()
         self._field_lookup_cache.clear()
         self._player_team_pointer_cache.clear()
-        self.loaded_items = {domain: {} for domain in EDITOR_DOMAINS}
-        self.selected_items = {domain: None for domain in EDITOR_DOMAINS}
+        self.loaded_items = {domain: {} for domain in _MODEL_DOMAINS}
+        self.selected_items = {domain: None for domain in _MODEL_DOMAINS}
         self.last_status = self.runtime_status_text()
-        self.domain_statuses = {domain: self.last_status for domain in EDITOR_DOMAINS}
+        self.domain_statuses = {domain: self.last_status for domain in _MODEL_DOMAINS}
 
     def domain_status(self, domain: str) -> str:
         return self.domain_statuses.get(domain, self.runtime_status_text())
@@ -295,7 +293,7 @@ class EditorDataModel:
         return len(self.loaded_items[domain])
 
     def player_team_filter_options(self) -> tuple[str, ...]:
-        return (PLAYER_TEAM_FILTER_ALL, *self.domain_item_labels("Teams"))
+        return (PLAYER_TEAM_FILTER_ALL, PLAYER_TEAM_FILTER_BASE_TEAMS, PLAYER_TEAM_FILTER_DRAFT_CLASS, *self.domain_item_labels("Teams"))
 
     def _team_player_slot_entries(self) -> list[tuple[int, FieldEntry]]:
         entries: list[tuple[int, FieldEntry]] = []
@@ -351,10 +349,43 @@ class EditorDataModel:
             self._player_team_pointer_cache[item.index] = self._read_player_current_team_pointer(item)
         return self._player_team_pointer_cache[item.index]
 
+    def _base_team_items(self) -> tuple[RecordListItem, ...]:
+        return tuple(
+            team
+            for team in self.loaded_items.get("Teams", {}).values()
+            if 0 <= int(team.index) <= 29
+        )
+
+    def _base_team_player_items(self) -> dict[str, RecordListItem]:
+        rows = self.player_roster_slot_items_for_team_items(self._base_team_items())
+        players: dict[str, RecordListItem] = {}
+        for player, _placement in rows:
+            players.setdefault(player.display_label, player)
+        return players
+
+    def _ensure_draft_class_items_loaded(self) -> None:
+        if self.loaded_items.get("Draft Class"):
+            return
+        self.refresh_domain_items("Draft Class")
+
+    def _player_filter_items(self, selected_team_label: str | None) -> dict[str, RecordListItem]:
+        selected = str(selected_team_label or "").strip()
+        if selected == PLAYER_TEAM_FILTER_BASE_TEAMS:
+            return self._base_team_player_items()
+        if selected == PLAYER_TEAM_FILTER_DRAFT_CLASS:
+            self._ensure_draft_class_items_loaded()
+            return self.loaded_items.get("Draft Class", {})
+        return self.loaded_items.get("Players", {})
+
+    def player_items_for_team_filter(self, selected_team_label: str | None) -> dict[str, RecordListItem]:
+        return self._player_filter_items(selected_team_label)
+
     def player_item_labels_for_team_filter(self, selected_team_label: str | None, search_text: str | None = None) -> list[str]:
         selected = str(selected_team_label or "").strip()
         query = str(search_text or "").strip().lower()
-        if not selected or selected == PLAYER_TEAM_FILTER_ALL:
+        if selected in {PLAYER_TEAM_FILTER_BASE_TEAMS, PLAYER_TEAM_FILTER_DRAFT_CLASS}:
+            labels = list(self._player_filter_items(selected))
+        elif not selected or selected == PLAYER_TEAM_FILTER_ALL:
             labels = self.domain_item_labels("Players")
         else:
             team = self.loaded_items["Teams"].get(selected)
@@ -483,6 +514,13 @@ class EditorDataModel:
 
     def select_item_by_label(self, domain: str, selected_label: str | None) -> RecordListItem | None:
         selected = str(selected_label or "")
+        if domain == "Players" and selected and selected not in self.loaded_items["Players"]:
+            self._ensure_draft_class_items_loaded()
+            draft_item = self.loaded_items.get("Draft Class", {}).get(selected)
+            if draft_item is not None:
+                self.selected_items[domain] = draft_item
+                self.selected_items["Draft Class"] = draft_item
+                return draft_item
         self.selected_items[domain] = self.loaded_items[domain].get(selected)
         return self.selected_items[domain]
 
@@ -591,26 +629,6 @@ class EditorDataModel:
                 values[label] = self._read_named_value_at_record_address(domain, record_addr, candidates)
         return values
 
-    def _packed_record_summary_stride(self, domain: str) -> int:
-        max_end = 0
-        for _label, candidates in self._record_summary_specs(domain):
-            for name in candidates:
-                entry = self._field_by_normalized_name(domain, name)
-                if entry is None:
-                    continue
-                payload = self._field_version_payload(entry.field)
-                offset = _field_offset(payload)
-                type_key = _type_key(payload)
-                if type_key in {"string", "wstring"}:
-                    width = _string_length(payload)
-                elif type_key == "float":
-                    width = 4
-                else:
-                    width = _numeric_width(payload)
-                max_end = max(max_end, offset + width)
-                break
-        return max(1, (max_end + 7) // 8 * 8)
-
     def selected_record_summary_values(self, domain: str) -> dict[str, str]:
         return self._record_summary_values_for_item(domain, self.selected_items[domain])
 
@@ -622,15 +640,12 @@ class EditorDataModel:
         history_type: int | None = None,
         record_row_start: int | None = None,
         record_row_count: int | None = None,
-        record_row_stride: int | None = None,
     ) -> list[dict[str, str]]:
         rows: list[dict[str, str]] = []
         if domain == "NBA Records" and record_row_start is not None:
-            base = self.domain_base(domain)
-            row_stride = int(record_row_stride) if record_row_stride is not None else self._packed_record_summary_stride(domain)
             max_rows = min(limit, int(record_row_count) if record_row_count is not None else limit)
             for offset in range(max_rows):
-                record_addr = base + (int(record_row_start) + offset) * row_stride
+                record_addr = self.record_address(domain, int(record_row_start) + offset)
                 rows.append(self._record_summary_values_for_address(domain, record_addr, offset + 1))
             return rows
 
@@ -728,7 +743,8 @@ class EditorDataModel:
 
     def selected_player_detail_values(self) -> dict[str, str]:
         item = self.selected_items["Players"]
-        return {label: self._read_named_value("Players", item, candidates) for label, candidates in PLAYER_DETAIL_FIELD_SPECS}
+        read_domain = item.domain if item is not None and item.domain == "Draft Class" else "Players"
+        return {label: self._read_named_value(read_domain, item, candidates) for label, candidates in PLAYER_DETAIL_FIELD_SPECS}
 
     def selected_team_summary_values(self) -> dict[str, str]:
         item = self.selected_items["Teams"]
@@ -755,6 +771,23 @@ class EditorDataModel:
             except Exception:
                 failed += 1
         return saved, failed
+
+    def _record_data_entry(self) -> FieldEntry:
+        entry = self._field_by_normalized_name("NBA Records", "DATA")
+        if entry is None:
+            raise KeyError("NBA Records DATA field is missing")
+        return entry
+
+    def save_record_data_values(self, values_by_index: dict[int, Any]) -> int:
+        entry = self._record_data_entry()
+        saved = 0
+        for index, value in values_by_index.items():
+            self.write_entry_value(entry, index=int(index), value=value)
+            saved += 1
+        return saved
+
+    def zero_record_data_values(self, indexes: Iterable[int]) -> int:
+        return self.save_record_data_values({int(index): 0 for index in indexes})
 
     def selected_detail_title(self, domain: str, label: str) -> str:
         item = self.selected_items[domain]
@@ -876,8 +909,6 @@ class EditorDataModel:
         return " ".join(labels)
 
     def _valid_label_values(self, domain: str, record_addr: int, values: list[Any], labels: list[str]) -> bool:
-        if domain == "Players":
-            return bool(labels) and _label_has_letter(labels)
         if domain == "NBA Records":
             return _valid_nba_record_label_values(values)
         if domain == "NBA History":
@@ -893,10 +924,17 @@ class EditorDataModel:
             return any(_has_alpha_text(value) for value in values)
         return bool(labels)
 
+    def _domain_record_count_limit(self, domain: str) -> int | None:
+        try:
+            count = int(self._base_pointer_entry(self._domain_base_key(domain)).get("record_count") or 0)
+        except Exception:
+            return None
+        return count if count > 0 else None
+
     def scan_records(self, domain: str, *, limit: int | None = None) -> list[RecordListItem]:
         if not self.memory.hproc or not self.memory.base_addr:
             raise RuntimeError(f"not attached to {self.target_executable}")
-        explicit_limit = int(limit) if limit is not None else None
+        explicit_limit = int(limit) if limit is not None else self._domain_record_count_limit(domain)
         base = self.domain_base(domain)
         stride = self.domain_stride(domain)
         label_entries = self._label_entries(domain)
@@ -982,6 +1020,11 @@ class EditorDataModel:
     def export_player_roster_snapshot(self, *, limit: int | None = None, progress_callback: Any | None = None) -> dict[str, Any]:
         return self.export_player_roster_snapshot_for_items(self.scan_records("Players", limit=limit), progress_callback=progress_callback)
 
+    def _read_player_snapshot_entry_value(self, item: RecordListItem, entry: FieldEntry) -> dict[str, Any]:
+        if item.domain == "Draft Class":
+            return self._read_field_at_record_address("Draft Class", item.address, entry.field)
+        return self.read_entry_value(entry, index=item.index)
+
     def export_player_roster_snapshot_for_items(
         self,
         items: Iterable[RecordListItem],
@@ -1002,7 +1045,7 @@ class EditorDataModel:
         for current, (item, placement) in enumerate(zip(selected_items, selected_placements), start=1):
             fields: dict[str, dict[str, Any]] = {}
             for entry in entries:
-                value = self.read_entry_value(entry, index=item.index)
+                value = self._read_player_snapshot_entry_value(item, entry)
                 fields[f"{entry.section}/{entry.normalized_name}"] = {
                     "display_value": _json_safe_roster_value(value.get("display_value")),
                     "raw_value": _json_safe_roster_value(value.get("raw_value")),
@@ -1015,7 +1058,7 @@ class EditorDataModel:
                 progress_callback(current, total, f"Exporting roster: {current}/{total} players")
         return {
             "target_executable": self.target_executable,
-            "domain": "Players",
+            "domain": "Draft Class" if selected_items and all(item.domain == "Draft Class" for item in selected_items) else "Players",
             "mode": mode,
             "record_count": len(records),
             "records": records,
@@ -1063,7 +1106,8 @@ class EditorDataModel:
         if not isinstance(records, list):
             raise ValueError("player roster snapshot is missing records")
         target_records = records[:limit]
-        target_indices = tuple(item.index for item in target_items) if target_items is not None else None
+        target_item_tuple = tuple(target_items) if target_items is not None else None
+        target_indices = tuple(item.index for item in target_item_tuple) if target_item_tuple is not None else None
         slot_target_indices: dict[tuple[object, str], int] = {}
         if target_indices is None:
             for player, placement in self.player_roster_slot_items_for_team_items(self.loaded_items.get("Teams", {}).values()):
@@ -1093,7 +1137,10 @@ class EditorDataModel:
                 if current > len(target_indices):
                     skipped += len(fields)
                     continue
+                target_item = target_item_tuple[current - 1] if target_item_tuple is not None else None
                 index = target_indices[current - 1]
+                target_domain = target_item.domain if target_item is not None else "Players"
+                target_record_addr = target_item.address if target_item is not None else None
             elif has_team_slot:
                 slot_key = _field_identity(str(row.get("team_slot_field") or f"PLAYER{row.get('team_slot')}"))
                 index = None
@@ -1110,6 +1157,8 @@ class EditorDataModel:
                 if index is None:
                     skipped += len(fields)
                     continue
+                target_domain = "Players"
+                target_record_addr = None
             else:
                 index_value = row.get("index")
                 if index_value is None:
@@ -1120,6 +1169,8 @@ class EditorDataModel:
                 except Exception:
                     skipped += 1
                     continue
+                target_domain = "Players"
+                target_record_addr = None
             for key, payload in fields.items():
                 entry = entries.get(str(key))
                 if entry is None:
@@ -1128,7 +1179,10 @@ class EditorDataModel:
                 value = self._snapshot_write_value(row, entry, payload)
                 attempted += 1
                 try:
-                    self.write_entry_value(entry, index=index, value=value)
+                    if target_domain == "Draft Class" and target_record_addr is not None:
+                        self._write_field_at_record_address("Draft Class", int(target_record_addr), entry.field, value)
+                    else:
+                        self.write_entry_value(entry, index=index, value=value)
                     succeeded += 1
                 except Exception:
                     failed += 1
