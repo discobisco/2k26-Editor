@@ -20,6 +20,7 @@ _OPTIONAL_TEAM_CONTEXT_SHEETS: tuple[str, ...] = (
     "Opponent Stats Per Game",
     "Opponent Stats Per 100 Poss",
 )
+_MULTI_TEAM_MARKERS = {"TOT", "2TM", "3TM", "4TM", "5TM"}
 
 
 @dataclass(frozen=True)
@@ -96,14 +97,13 @@ def _multi_team_primary_teams(rows: tuple[dict[str, Any], ...]) -> dict[str, str
         if _is_multi_team_marker(team):
             saw_multi.add(player_id)
             continue
-        if player_id in saw_multi:
-            primary.setdefault(player_id, team)
-    return primary
+        primary.setdefault(player_id, team)
+    return {player_id: team for player_id, team in primary.items() if player_id in saw_multi}
 
 
 def _is_multi_team_marker(team: object) -> bool:
     text = str(team or "").strip().upper()
-    return len(text) == 3 and text[0].isdigit() and text[1:] == "TM"
+    return text in _MULTI_TEAM_MARKERS or (len(text) == 3 and text[0].isdigit() and text[1:] == "TM")
 
 
 def _same(left: Any, right: str) -> bool:

@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import unittest
 from collections import OrderedDict
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 from nba2k_editor.core.field_io import _display_to_raw_value, _raw_to_display_value
 from nba2k_editor.models.data_model import EDITOR_DOMAINS, EditorDataModel, PLAYER_TEAM_FILTER_BASE_TEAMS
 from nba2k_editor.models.schema import FieldEntry, RecordListItem
-from nba2k_editor.ui.dpg_editor import DpgEditorApp, PLAYER_ROSTER_EXPORT_MODES
+from nba2k_editor.ui.qt_app import QtEditorApp, PLAYER_ROSTER_EXPORT_MODES
 
 
 class RosterSlotModel(EditorDataModel):
@@ -27,6 +29,11 @@ class RosterSlotModel(EditorDataModel):
             self.player_c.display_label: self.player_c,
         }
         self.loaded_items["Draft Class"] = {self.draft_player.display_label: self.draft_player}
+        self.loaded_items.setdefault("NBA History", {})
+        self.loaded_items.setdefault("NBA Records", {})
+        self.selected_items = {domain: None for domain in self.loaded_items}
+        self.domain_statuses = {domain: "loaded" for domain in self.loaded_items}
+        self.memory = type("Memory", (), {"hproc": None})()
         self.slot_entries = [
             FieldEntry("Teams", "Team Players", "Team Players", 0, {"normalized_name": "PLAYER10"}),
             FieldEntry("Teams", "Team Players", "Team Players", 1, {"normalized_name": "PLAYER1"}),
@@ -172,7 +179,7 @@ class PlayerRosterSnapshotExportTests(unittest.TestCase):
 
     def test_draft_class_is_roster_snapshot_mode_and_routes_to_draft_items(self) -> None:
         model = RosterSlotModel()
-        app = DpgEditorApp(model)
+        app = QtEditorApp(model)
 
         mode, items, placements = app._player_roster_export_items("Draft Class")
 
@@ -180,6 +187,24 @@ class PlayerRosterSnapshotExportTests(unittest.TestCase):
         self.assertEqual("Draft Class", mode)
         self.assertEqual([model.draft_player], items)
         self.assertIsNone(placements)
+
+    def test_export_snapshot_starts_background_operation(self) -> None:
+        model = RosterSlotModel()
+        app = QtEditorApp(model)
+        with TemporaryDirectory() as temp_dir:
+            app.roster_mode_combo.setCurrentText("Draft Class")
+            app.roster_folder_input.setText(temp_dir)
+            app.roster_file_input.setText("snapshot.json")
+
+            app._export_player_roster_snapshot()
+
+            self.assertIsNotNone(app.operation_thread)
+            operation_thread = app.operation_thread
+            assert operation_thread is not None
+            operation_thread.join(timeout=5)
+            app._poll_background_operation()
+            self.assertFalse(operation_thread.is_alive())
+            self.assertTrue((Path(temp_dir) / "snapshot.json").exists())
 
     def test_apply_uses_target_team_address_without_replaying_team_slot(self) -> None:
         model = RosterSlotModel()

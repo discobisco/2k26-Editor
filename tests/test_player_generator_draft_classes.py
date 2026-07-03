@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from collections import Counter
 from importlib import import_module
 from pathlib import Path
 
@@ -12,6 +13,7 @@ if str(GENERATOR_DIR) not in sys.path:
     sys.path.insert(0, str(GENERATOR_DIR))
 
 player_generator = import_module("player_generator")
+contracts = import_module("contracts")
 DraftClassMode = player_generator.DraftClassMode
 
 
@@ -46,6 +48,20 @@ class PlayerGeneratorDraftClassTests(unittest.TestCase):
         self.assertNotEqual(draft_pick_ids, rookie_year_ids)
         self.assertIn("jordami01", rookie_year_ids)
         self.assertNotIn("abdulka01", rookie_year_ids)
+
+    def test_1947_tot_rows_collapse_to_one_context_key_per_player(self) -> None:
+        context = player_generator.season_context_index(
+            contracts.GeneratorInputContract(
+                season=1947,
+                source_root=GENERATOR_DIR / "NBA Player Data",
+                output_target=contracts.OutputTarget.PREVIEW,
+            )
+        )
+
+        player_id_counts = Counter(player_id for player_id, _team in context.player_keys())
+
+        self.assertEqual([], [player_id for player_id, count in player_id_counts.items() if count > 1])
+        self.assertEqual(("GRENEAL01N", "TCB"), next(key for key in context.player_keys() if key[0] == "GRENEAL01N"))
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 from nba2k_editor.entrypoints.runtime_cleanup import delete_runtime_cache_dirs
 from nba2k_editor.models.data_model import EditorDataModel, verify_edits
-from nba2k_editor.ui.dpg_editor import DpgEditorApp
+from nba2k_editor.ui.qt_app import QtEditorApp
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -25,12 +25,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.verify_edits:
         print(json.dumps(verify_edits(target_executable=args.target), sort_keys=True), flush=True)
         return 0
-    DpgEditorApp(EditorDataModel(target_executable=args.target)).run(load_on_start=not args.no_load_on_start)
+    QtEditorApp(EditorDataModel(target_executable=args.target)).run(load_on_start=not args.no_load_on_start)
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
 
 
 __all__ = ["build_parser", "main"]

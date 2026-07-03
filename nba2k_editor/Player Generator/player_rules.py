@@ -72,8 +72,12 @@ def derive_player_rule_values(evidence: PlayerEvidence) -> PlayerRuleResult:
     if not positions.primary:
         return PlayerRuleResult(values={})
 
-    model = load_latest_stat_neighbor_model()
-    suggestions = model.suggestions_for_evidence(evidence=evidence, position=positions.primary)
+    try:
+        model = load_latest_stat_neighbor_model()
+    except FileNotFoundError:
+        suggestions = {}
+    else:
+        suggestions = model.suggestions_for_evidence(evidence=evidence, position=positions.primary)
     values: dict[str, RuleValue] = {
         key: RuleValue(value=suggestion.value, source_rule=suggestion.source_rule, evidence_keys=suggestion.evidence_keys)
         for key, suggestion in suggestions.items()

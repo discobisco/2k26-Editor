@@ -35,7 +35,7 @@ def _player_generator_modules() -> list[str]:
         if path.stem != "__init__"
     )
     # Both forms are needed:
-    # - dpg_editor imports nba2k_editor.Player Generator.display dynamically.
+    # - qt_app imports nba2k_editor.Player Generator.display dynamically.
     # - display.py then puts the folder on sys.path and imports contracts/etc.
     return [*(f"nba2k_editor.Player Generator.{stem}" for stem in stems), *stems]
 
@@ -50,19 +50,30 @@ for item in (
     _existing_file(player_data_dir / "README.md", "nba2k_editor\\Player Generator\\NBA Player Data"),
     _existing_file(player_data_dir / "Team Logos.txt", "nba2k_editor\\Player Generator\\NBA Player Data"),
     _existing_file(player_data_dir / "Player Portraits.txt", "nba2k_editor\\Player Generator\\NBA Player Data"),
-    _existing_file(package_root / "franchise_manager.sqlite", "nba2k_editor"),
 ):
     if item is not None:
         datas.append(item)
 
 
 hiddenimports = [
-    "dearpygui.dearpygui",
     "nba2k_editor.entrypoints.gui",
     "nba2k_editor.entrypoints.runtime_cleanup",
     "nba2k_editor.models.data_model",
-    "nba2k_editor.ui.dpg_editor",
-    "nba2k_editor.ui.theme",
+    "nba2k_editor.ui.qt_app",
+    "nba2k_editor.ui.qt_theme",
+    "nba2k_editor.ui.qt_state",
+    "nba2k_editor.ui.qt_widgets",
+    "nba2k_editor.ui.qt_workers",
+    "nba2k_editor.ui.qt_screens",
+    "PyQt6",
+    "PyQt6.QtCore",
+    "PyQt6.QtGui",
+    "PyQt6.QtWidgets",
+    "nba2k_editor.franchise",
+    "nba2k_editor.franchise.display",
+    "nba2k_editor.franchise.models",
+    "nba2k_editor.franchise.service",
+    "nba2k_editor.franchise.store",
     *_player_generator_modules(),
 ]
 

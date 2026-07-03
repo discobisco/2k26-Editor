@@ -5,9 +5,9 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from nba2k_editor.models.data_model import EditorDataModel, PLAYER_TEAM_FILTER_ALL
+from nba2k_editor.models.data_model import EDITOR_DOMAINS, EditorDataModel, PLAYER_TEAM_FILTER_ALL
 from nba2k_editor.models.schema import FieldEntry, RecordListItem
-from nba2k_editor.ui.dpg_editor import DpgEditorApp
+from nba2k_editor.ui.qt_app import QtEditorApp
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "nba2k_editor" / "Player Generator"))
@@ -117,30 +117,32 @@ class PlayerSeasonStatDisplayTests(unittest.TestCase):
     def test_player_list_sync_does_not_call_season_stat_filter(self) -> None:
         model = SeasonStatModel({"CURRENTYEARSTATID": 65535, "STATSID1": 0, "STATSID2": 65535})
         player = RecordListItem("Players", 0, 0x1000, "No Stat Player")
-        model.loaded_items = {"Players": {player.display_label: player}, "Teams": {}, "Draft Class": {}}
-        model.selected_items = {"Players": player, "Teams": None, "Draft Class": None}
+        model.loaded_items = {domain: {} for domain in EDITOR_DOMAINS}
+        model.loaded_items["Players"] = {player.display_label: player}
+        model.selected_items = {domain: None for domain in EDITOR_DOMAINS}
+        model.selected_items["Players"] = player
         model.domain_status = lambda _domain: "loaded 1 players"  # type: ignore[method-assign]
 
         def fail_if_player_list_uses_season_options(_index: int) -> list[str]:
             raise AssertionError("player list must not use season-stat options")
 
         model.player_season_stat_id_options = fail_if_player_list_uses_season_options  # type: ignore[method-assign]
-        app = DpgEditorApp(model)
+        model.target_executable = "NBA2K26.exe"
+        model.memory = type("Memory", (), {"hproc": None})()
+        model.domain_statuses = {"Players": "loaded 1 players", "Teams": "loaded"}
+        model.team_summary_labels = lambda: ("Team Name", "City Name", "City Abbrev")  # type: ignore[method-assign]
+        model.runtime_status_text = lambda: "not attached"  # type: ignore[method-assign]
+        model.selected_item = lambda domain: model.selected_items.get(domain)  # type: ignore[method-assign]
+        model.selected_detail_title = lambda domain, label: ""  # type: ignore[method-assign]
+        model.selected_record_address_text = lambda domain: "--"  # type: ignore[method-assign]
+        model.selected_team_summary_values = lambda: {}  # type: ignore[method-assign]
+        app = QtEditorApp(model)
         app._update_detail_panel = lambda *_args: None  # type: ignore[method-assign]
-        dpg = PlayerListDpg(
-            {
-                app._player_team_filter_tag(),
-                app._player_search_tag(),
-                app._count_tag("Players"),
-                app._status_tag("Players"),
-                app._list_content_tag("Players"),
-            }
-        )
 
-        app._sync_player_list(dpg)
+        app._sync_player_list()
 
-        self.assertEqual("Players: 1", dpg.values[app._count_tag("Players")])
-        self.assertEqual(["[0] No Stat Player"], dpg.selectables)
+        self.assertEqual("Players: 1", app.count_labels["Players"].text())
+        self.assertEqual(["[0] No Stat Player"], [app.domain_lists["Players"].item(index).text() for index in range(app.domain_lists["Players"].count())])
 
     def test_selected_stat_detail_rejects_no_stat_season_ids(self) -> None:
         model = SeasonStatModel({"CURRENTYEARSTATID": 65535, "STATSID1": 0, "STATSID2": 42})

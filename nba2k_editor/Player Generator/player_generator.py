@@ -32,6 +32,7 @@ _PLAYER_PER_100_SHEET = "Player Per 100 Poss"
 _PLAYER_ADVANCED_SHEET = "Advanced"
 _PLAYER_SHOOTING_SHEET = "Player Shooting"
 _PLAYER_PLAY_BY_PLAY_SHEET = "Player Play by Play"
+_MULTI_TEAM_MARKERS = {"TOT", "2TM", "3TM", "4TM", "5TM"}
 _TEAM_STATS_PER_GAME_SHEET = "Team Stats Per Game"
 _TEAM_STATS_PER_100_SHEET = "Team Stats Per 100 Pos"
 _TEAM_SUMMARY_SHEET = "Team Summaries"
@@ -351,7 +352,7 @@ def _rookie_year_sort_key(
     evidence = context.evidence_for(player_id=player_id, team=team)
     player_name = str(evidence.identity.get("player") or player_id).strip().upper()
     if draft_row is None:
-        raise ValueError(f"rookie-year row has no draft pick evidence: {player_id}")
+        return (1, 9999, 9999, player_name)
     overall, round_number, _ = _draft_pick_sort_key(draft_row)
     return (0, overall, round_number, player_name)
 
@@ -659,7 +660,7 @@ def _valid_multi_team_shares(multi_team_shares: object) -> tuple[dict[str, Any],
 
 def _is_multi_team_marker(team: object) -> bool:
     text = str(team or "").strip().upper()
-    return len(text) == 3 and text[0].isdigit() and text[1:] == "TM"
+    return text in _MULTI_TEAM_MARKERS or (len(text) == 3 and text[0].isdigit() and text[1:] == "TM")
 
 
 def _canonical_team_for_player(player_id: str, team: str, primary_by_player_id: dict[str, str]) -> str:
@@ -698,9 +699,8 @@ def _multi_team_primary_teams(database: Path, season: int) -> dict[str, str]:
         if _is_multi_team_marker(team):
             saw_multi.add(player_id)
             continue
-        if player_id in saw_multi:
-            primary.setdefault(player_id, team)
-    return primary
+        primary.setdefault(player_id, team)
+    return {player_id: team for player_id, team in primary.items() if player_id in saw_multi}
 
 
 def _multi_team_stat_shares(database: Path, season: int, primary_by_player_id: dict[str, str]) -> dict[str, tuple[dict[str, Any], ...]]:

@@ -167,7 +167,7 @@
           "chain": []
         },
         "TeamHistory": {
-          "address": 5336537040,
+          "address": 1336537040,
           "chain": []
         },
         "NBAHistory": {
@@ -198,7 +198,7 @@
         "draftClassSize": 2264,
         "draftClassCount": 150,
         "draftClassBodyOffset": 8,
-        "recordSize": 152,
+        "recordSize": 64,
         "historySize": 168,
         "hallOfFameSize": 108
       }

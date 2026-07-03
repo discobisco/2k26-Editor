@@ -46,7 +46,7 @@ def _windows_project_python(project_root: Path) -> Path:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="launch_editor.py",
-        description="Launch the rebuilt NBA2K Dear PyGui editor from the repository root.",
+        description="Launch the rebuilt NBA2K PyQt6 editor from the repository root.",
     )
     parser.add_argument("--target", default="auto", help="game executable to attach; default auto-detects the running NBA2K process")
     parser.add_argument("--verify-edits", action="store_true", help="perform the explicit live player/team/staff write proof")
@@ -93,4 +93,4 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

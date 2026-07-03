@@ -309,6 +309,22 @@ def player_numeric_bounds(category_name: str, field_name: str, length_bits: int)
     return 0, (1 << bits) - 1 if bits else 0
 
 
+BOX_PLUS_MINUS_BIAS = 0x8000
+BOX_PLUS_MINUS_NEGATIVE_THRESHOLD = 0x4000
+
+
+def convert_raw_to_box_plus_minus(raw: object) -> int:
+    """Convert NBA2K season-stat +/- storage into signed display value."""
+    value = to_int(raw)
+    return value - BOX_PLUS_MINUS_BIAS if value >= BOX_PLUS_MINUS_NEGATIVE_THRESHOLD else value
+
+
+def convert_box_plus_minus_to_raw(display_value: object) -> int:
+    """Convert signed +/- display value into NBA2K season-stat storage."""
+    value = to_int(display_value)
+    return value + BOX_PLUS_MINUS_BIAS if value < 0 else value
+
+
 def to_int(value: Any) -> int:
     """Convert strings or numeric values to an integer, accepting hex strings."""
     if isinstance(value, str):
@@ -352,6 +368,8 @@ __all__ = [
     "convert_body_scale_display_to_raw",
     "convert_minmax_potential_to_raw",
     "convert_raw_to_minmax_potential",
+    "convert_raw_to_box_plus_minus",
+    "convert_box_plus_minus_to_raw",
     "normalize_weight_value",
     "raw_height_to_inches",
     "clamp_height_inches",

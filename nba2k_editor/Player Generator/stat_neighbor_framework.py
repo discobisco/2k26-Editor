@@ -106,6 +106,7 @@ FEATURES: tuple[str, ...] = (
 BODY_FEATURES: tuple[str, ...] = ("height_inches", "weight_pounds")
 _MODEL_PREFIX = "POSITION_STAT_NEIGHBOR_MODEL_"
 _SUGGESTIONS_FILE = "suggested_field_values.csv"
+_TOP_FIVE_RANK_WEIGHTS: tuple[float, ...] = (0.54, 0.25, 0.15, 0.05, 0.01)
 @dataclass(frozen=True)
 class NeighborFieldSuggestion:
     field_key: str
@@ -168,19 +169,29 @@ class StatNeighborModel:
                 if not top:
                     continue
                 field_values = [float(candidate["fields"][field_key]) for candidate in top]
+                weighted_value = _rank_weighted_top_values(field_values)
                 values[field_key] = NeighborFieldSuggestion(
                     field_key=field_key,
-                    value=int(round(median(field_values))),
-                    source_rule="position_stat_neighbor_section_top5_median",
+                    value=int(round(weighted_value)),
+                    source_rule="position_stat_neighbor_section_top5_weighted",
                     evidence_keys=(
                         relpath,
                         f"position={pos}",
                         f"section_features={','.join(section_features)}",
                         f"neighbor_count={len(field_values)}",
+                        "rank_weights=54,25,15,5,1",
                         f"top_neighbor={top[0].get('player_label')}",
                     ),
                 )
         return values
+
+
+def _rank_weighted_top_values(values: list[float]) -> float:
+    weights = _TOP_FIVE_RANK_WEIGHTS[: len(values)]
+    total_weight = sum(weights)
+    if total_weight <= 0.0:
+        return 0.0
+    return sum(value * weight for value, weight in zip(values, weights)) / total_weight
 
 
 def select_positions_from_evidence(play_by_play: dict[str, Any], fallback_pos: object = None) -> PositionSelection:

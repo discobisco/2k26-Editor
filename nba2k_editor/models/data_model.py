@@ -160,7 +160,19 @@ def _json_safe_roster_value(value: Any) -> Any:
     return value
 
 
+def _json_safe_dataset_value(value: Any) -> Any:
+    if isinstance(value, (bytes, bytearray)):
+        return list(bytes(value))
+    if isinstance(value, tuple):
+        return [_json_safe_dataset_value(item) for item in value]
+    if isinstance(value, list):
+        return [_json_safe_dataset_value(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _json_safe_dataset_value(item) for key, item in value.items()}
+    return value
+
 class EditorDataModel:
+
     """Index-based backend model over offsets metadata and GameMemory reads/writes."""
 
     def __init__(
@@ -291,6 +303,68 @@ class EditorDataModel:
 
     def domain_item_count(self, domain: str) -> int:
         return len(self.loaded_items[domain])
+
+    def app_dataset_snapshot(self, domains: Iterable[str] | None = None) -> dict[str, Any]:
+        """Return the model-owned loaded app dataset for app-integrated consumers.
+
+        This is intentionally a backend/data-model contract, not a Franchise
+        Manager private snapshot. It exposes the same loaded records and
+        model-read field values that the editor screens use.
+        """
+        selected_domains = tuple(domains) if domains is not None else _MODEL_DOMAINS
+        return {
+            "target_executable": self.target_executable,
+            "runtime_status": self.runtime_status_text(),
+            "domains": {domain: self.domain_dataset_snapshot(domain) for domain in selected_domains},
+        }
+
+    def domain_dataset_snapshot(self, domain: str) -> dict[str, Any]:
+        records: list[dict[str, Any]] = []
+        items = tuple(self.loaded_items.get(domain, {}).values())
+        if not items:
+            return {"count": 0, "records": records}
+        grouped = self.grouped_fields(domain)
+        for item in items:
+            sections: list[dict[str, Any]] = []
+            for section, groups in grouped.items():
+                section_groups: list[dict[str, Any]] = []
+                for group, entries in groups.items():
+                    fields: list[dict[str, Any]] = []
+                    for entry in entries:
+                        field_payload: dict[str, Any] = {
+                            "section": entry.section,
+                            "group": entry.group,
+                            "normalized_name": entry.normalized_name,
+                            "display_name": entry.display_name,
+                        }
+                        try:
+                            value = self.read_entry_value(entry, index=item.index)
+                        except Exception as exc:
+                            field_payload.update({"available": False, "error": str(exc)})
+                        else:
+                            field_payload.update(
+                                {
+                                    "available": True,
+                                    "display_value": _json_safe_dataset_value(value.get("display_value")),
+                                    "raw_value": _json_safe_dataset_value(value.get("raw_value")),
+                                    "writeable": bool(value.get("writeable")),
+                                    "value_behavior": str(value.get("value_behavior") or ""),
+                                }
+                            )
+                        fields.append(field_payload)
+                    section_groups.append({"label": str(group), "fields": fields})
+                sections.append({"label": str(section), "groups": section_groups})
+            records.append(
+                {
+                    "domain": item.domain,
+                    "index": int(item.index),
+                    "address": int(item.address),
+                    "label": str(item.label),
+                    "display_label": item.display_label,
+                    "sections": sections,
+                }
+            )
+        return {"count": len(records), "records": records}
 
     def player_team_filter_options(self) -> tuple[str, ...]:
         return (PLAYER_TEAM_FILTER_ALL, PLAYER_TEAM_FILTER_BASE_TEAMS, PLAYER_TEAM_FILTER_DRAFT_CLASS, *self.domain_item_labels("Teams"))
@@ -972,7 +1046,10 @@ class EditorDataModel:
         for groups in self.grouped_fields("Players").values():
             for entries in groups.values():
                 for entry in entries:
-                    value = self._player_editor_reset_value(entry)
+                    if stat_selector is not None and _is_player_selected_stat_detail_entry(entry):
+                        value = self._player_editor_stat_detail_reset_value(entry)
+                    else:
+                        value = self._player_editor_reset_value(entry)
                     if value is None:
                         continue
                     attempted += 1
@@ -982,6 +1059,17 @@ class EditorDataModel:
                     except Exception:
                         failed += 1
         return {"attempted": attempted, "succeeded": succeeded, "failed": failed}
+
+    def _player_editor_stat_detail_reset_value(self, entry: FieldEntry) -> int | None:
+        if entry.domain != "Players" or not _is_player_selected_stat_detail_entry(entry):
+            return None
+        normalized = str(entry.normalized_name).upper()
+        if normalized == "ISUSED":
+            return None
+        payload = self._field_version_payload(entry.field)
+        if not payload:
+            return None
+        return 0
 
     def _player_editor_reset_value(self, entry: FieldEntry) -> int | str | None:
         if entry.domain != "Players":
@@ -999,9 +1087,25 @@ class EditorDataModel:
             return 0
         if entry.section == "Badges":
             return 0
-        if _is_player_season_id_selector_entry(entry):
-            return 65535
         return None
+
+    def set_all_players_stat_ids_to_no_stats(
+        self,
+        *,
+        player_items: Iterable[RecordListItem] | None = None,
+        progress_callback: Any | None = None,
+    ) -> dict[str, int]:
+        items = tuple(player_items) if player_items is not None else tuple(self.loaded_items.get("Players", {}).values())
+        selector_entries = tuple(self._player_season_id_selector_entries(_STAT_ROLE_SELECTOR))
+        total = len(items) * len(selector_entries)
+        written = 0
+        for item in items:
+            for entry in selector_entries:
+                self.write_entry_value(entry, index=item.index, value=65535)
+                written += 1
+                if progress_callback is not None:
+                    progress_callback(written, total, f"Setting player stat IDs: {written}/{total}")
+        return {"players": len(items), "stat_id_fields": len(selector_entries), "written": written}
 
     def export_player_roster_snapshot(self, *, limit: int | None = None, progress_callback: Any | None = None) -> dict[str, Any]:
         return self.export_player_roster_snapshot_for_items(self.scan_records("Players", limit=limit), progress_callback=progress_callback)

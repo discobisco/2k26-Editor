@@ -7,11 +7,13 @@ from typing import Any
 from nba2k_editor.core import offsets as offsets_mod
 from nba2k_editor.core.conversions import (
     convert_body_scale_display_to_raw,
+    convert_box_plus_minus_to_raw,
     convert_injury_duration_days_to_raw,
     convert_potential_to_raw,
     convert_rating_to_raw,
     convert_rating_to_tendency_raw,
     convert_raw_to_body_scale_display,
+    convert_raw_to_box_plus_minus,
     convert_raw_to_injury_duration_days,
     convert_raw_to_potential,
     convert_raw_to_rating,
@@ -296,6 +298,8 @@ def _raw_to_display_value(section: str, field: dict[str, Any], payload: dict[str
         return convert_raw_to_body_scale_display(raw_value, length_bits)
     if "scale" in payload:
         return float(raw_value) * float(payload.get("scale") or 1)
+    if _field_identity(field.get("normalized_name")) == "BOX" and "+/-" in field_name:
+        return convert_raw_to_box_plus_minus(raw_value)
     if field_id == "POTENTIAL":
         return convert_raw_to_potential(to_int(raw_value), length_bits)
     if field_id in _PLAYER_ZERO_TO_100_FIELD_IDS:
@@ -339,6 +343,8 @@ def _display_to_raw_value(section: str, field: dict[str, Any], payload: dict[str
     if "scale" in payload:
         scale = float(payload.get("scale") or 1)
         return float(value) / scale if scale else value
+    if _field_identity(field.get("normalized_name")) == "BOX" and "+/-" in field_name:
+        return convert_box_plus_minus_to_raw(value)
     if field_id == "POTENTIAL":
         return convert_potential_to_raw(float(value), length_bits)
     if field_id in _PLAYER_ZERO_TO_100_FIELD_IDS:

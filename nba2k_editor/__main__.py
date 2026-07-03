@@ -11,7 +11,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m nba2k_editor")
     parser.add_argument("--version", action="version", version=f"nba2k_editor {__version__}")
     subparsers = parser.add_subparsers(dest="command")
-    subparsers.add_parser("gui", add_help=False, help="open the Dear PyGui editor")
+    subparsers.add_parser("gui", add_help=False, help="open the PyQt6 editor")
     return parser
 
 
@@ -25,4 +25,4 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

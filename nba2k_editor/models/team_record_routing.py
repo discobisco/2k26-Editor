@@ -97,3 +97,18 @@ def team_record_rows(model: Any, item: Any, section: str, stat: str) -> list[dic
         record_row_start=int(start_index) + int(row_start),
         record_row_count=row_count,
     )
+
+
+def team_record_indexes(model: Any, item: Any) -> list[int]:
+    entry = _selected_record_source_entry(model, role="team_record_start", target_domain="NBA Records")
+    if entry is None:
+        return []
+    source = _selected_record_source(entry.field) or {}
+    start_index = _team_record_start_index(source, item)
+    if start_index is None:
+        return []
+    row_count = int(source.get("row_count") or TEAM_RECORD_BLOCK_SIZE)
+    row_count = min(row_count, TEAM_RECORD_BLOCK_SIZE)
+    if row_count <= 0:
+        return []
+    return [int(start_index) + offset for offset in range(row_count)]

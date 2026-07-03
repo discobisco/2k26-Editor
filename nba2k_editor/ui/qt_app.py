@@ -1,0 +1,1762 @@
+from __future__ import annotations
+
+import json
+import threading
+from dataclasses import dataclass, field
+from importlib import import_module
+from pathlib import Path
+from typing import Any, Callable, Iterable
+
+from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QDialog,
+    QFormLayout,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QStackedWidget,
+    QSplitter,
+    QTabWidget,
+    QTableWidget,
+    QTableWidgetItem,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
+from nba2k_editor.models.data_model import (
+    EDITOR_DOMAINS,
+    PLAYER_TEAM_FILTER_ALL,
+    PLAYER_TEAM_FILTER_BASE_TEAMS,
+    PLAYER_TEAM_FILTER_DRAFT_CLASS,
+    EditorDataModel,
+    FieldEntry,
+    RecordListItem,
+    verify_edits,
+)
+from nba2k_editor.models.team_record_routing import team_record_indexes
+APP_TITLE = "Offline Player Data Editor"
+APP_VIEWPORT_WIDTH = 1600
+APP_VIEWPORT_HEIGHT = 900
+PLAYER_GENERATOR_SCREEN = "Player Generator"
+FRANCHISE_MANAGER_SCREEN = "Franchise Manager"
+TARGET_CHOICES: tuple[str, ...] = ("NBA 2K22", "NBA 2K23", "NBA 2K24", "NBA 2K25", "NBA 2K26")
+PLAYER_ROSTER_EXPORT_MODES: tuple[str, ...] = (
+    "Full Loaded Roster",
+    "Draft Class",
+    "Players From Team Range",
+    "Players From Single Team",
+    "Selected Players",
+)
+PLAYER_ROSTER_EXPORTS_DIR = Path("outputs") / "exports"
+PLAYER_ROSTER_DEFAULT_EXPORT_FILE = "player_roster_snapshot.json"
+
+HISTORY_SIDE_NAV: tuple[str, ...] = ("Season Awards", "Past Champions", "League Leaders", "Hall of Famers")
+HISTORY_AWARD_TABS: tuple[str, ...] = (
+    "Most Valuable Player",
+    "Rookie of the Year",
+    "Sixth Man of the Year",
+    "Defensive Player",
+    "Most Improved Player",
+    "KIA Clutch Player of the Year",
+    "All-NBA 1st Team",
+    "All-NBA 2nd Team",
+    "All-NBA 3rd Team",
+    "All-Defensive 1st Team",
+    "All-Defensive 2nd Team",
+    "All-Rookie 1st Team",
+    "All-Rookie 2nd Team",
+    "Coach of the Year",
+)
+RECORD_SIDE_NAV: tuple[str, ...] = ("Single Game (Regular)", "Single Game (Playoffs)", "Season", "Career")
+RECORD_BASE_STAT_TABS: tuple[str, ...] = (
+    "Points",
+    "FG Made",
+    "3PT Made",
+    "FT Made",
+    "Rebounds",
+    "Assists",
+    "Blocks",
+    "Steals",
+    "Minutes",
+    "Turnovers",
+)
+RECORD_EXTENDED_STAT_TABS: tuple[str, ...] = (
+    *RECORD_BASE_STAT_TABS,
+    "PPG",
+    "FG%",
+    "3PT%",
+    "FT%",
+    "RPG",
+    "APG",
+    "BPG",
+    "SPG",
+    "MPG",
+    "Games Played",
+    "Fouls",
+    "40+ Point Games",
+    "50+ Point Games",
+    "60+ Point Games",
+    "Triple Doubles",
+)
+RECORD_SECTION_STAT_TABS: dict[str, tuple[str, ...]] = {
+    "Single Game (Regular)": RECORD_BASE_STAT_TABS,
+    "Single Game (Playoffs)": RECORD_BASE_STAT_TABS,
+    "Season": RECORD_EXTENDED_STAT_TABS,
+    "Career": RECORD_EXTENDED_STAT_TABS,
+}
+HISTORY_SECTION_TABS: dict[str, tuple[str, ...]] = {
+    "Season Awards": HISTORY_AWARD_TABS,
+    "Past Champions": ("NBA Championship", "FMVP"),
+    "League Leaders": ("Points/Game", "Rebounds/Game", "Assists/Game", "Steals/Game", "Blocks/Game", "Minutes/Game"),
+    "Hall of Famers": ("All Hall of Famers",),
+}
+RECORD_SECTION_ROW_LAYOUT: dict[str, tuple[int, int]] = {
+    "Single Game (Regular)": (0, 5),
+    "Single Game (Playoffs)": (50, 5),
+    "Season": (100, 10),
+    "Career": (350, 100),
+}
+HISTORY_AWARD_TYPES: dict[str, int] = {
+    "Most Valuable Player": 8,
+    "Rookie of the Year": 9,
+    "Sixth Man of the Year": 10,
+    "Defensive Player": 11,
+    "Most Improved Player": 12,
+    "KIA Clutch Player of the Year": 13,
+    "All-NBA 1st Team": 14,
+    "All-NBA 2nd Team": 15,
+    "All-NBA 3rd Team": 16,
+    "All-Defensive 1st Team": 17,
+    "All-Defensive 2nd Team": 18,
+    "All-Rookie 1st Team": 19,
+    "All-Rookie 2nd Team": 20,
+    "Coach of the Year": 21,
+}
+HISTORY_SECTION_DEFAULT_TYPES: dict[str, int | None] = {
+    "Season Awards": 8,
+    "Past Champions": 1,
+    "League Leaders": 2,
+    "Hall of Famers": None,
+}
+HISTORY_SECTION_TAB_TYPES: dict[str, dict[str, int | None]] = {
+    "Past Champions": {"NBA Championship": 1, "FMVP": 1},
+    "League Leaders": {
+        "Points/Game": 2,
+        "Rebounds/Game": 3,
+        "Assists/Game": 4,
+        "Steals/Game": 5,
+        "Blocks/Game": 6,
+        "Minutes/Game": 7,
+    },
+    "Hall of Famers": {"All Hall of Famers": None},
+}
+DOMAIN_LABELS: dict[str, str] = {"Stadiums": "Stadium"}
+
+
+@dataclass
+class EditorUiState:
+    current_screen: str = "Home"
+    history_section: str = "Season Awards"
+    history_award: str = "Most Valuable Player"
+    history_tabs: dict[str, str] = field(default_factory=lambda: {section: tabs[0] for section, tabs in HISTORY_SECTION_TABS.items()})
+    record_section: str = "Single Game (Regular)"
+    record_stat: str = "Points"
+    team_record_section: str = "Single Game (Regular)"
+    team_record_stat: str = "Points"
+    player_team_filter: str = "All Players"
+    player_search_text: str = ""
+    player_roster_export_folder: str = str(PLAYER_ROSTER_EXPORTS_DIR)
+    player_roster_snapshot_filename: str = PLAYER_ROSTER_DEFAULT_EXPORT_FILE
+    player_roster_export_mode: str = PLAYER_ROSTER_EXPORT_MODES[0]
+    player_roster_team_start: str = "0"
+    player_roster_team_end: str = "29"
+    selected_item_labels: dict[str, set[str]] = field(default_factory=dict)
+    selection_anchors: dict[str, str | None] = field(default_factory=dict)
+    dirty_rows: set[str] = field(default_factory=set)
+    open_rows: dict[str, Any] = field(default_factory=dict)
+    row_raw_values: dict[str, Any] = field(default_factory=dict)
+    player_season_stat_id_selection: dict[tuple[str, int, str], str] = field(default_factory=dict)
+    operation_cancel_requested: bool = False
+
+from nba2k_editor.ui.qt_theme import apply_qt_theme
+from nba2k_editor.ui.qt_widgets import DetailRow, EditableFieldRow, NavButton, OperationDialog, RecordListWidget, configure_output_text, configure_table
+
+NAV_ORDER: tuple[str, ...] = (
+    "Players",
+    "Teams",
+    PLAYER_GENERATOR_SCREEN,
+    FRANCHISE_MANAGER_SCREEN,
+    "NBA History",
+    "NBA Records",
+    "Staff",
+    "Stadiums",
+    "Jerseys",
+    "Shoes",
+)
+APP_SCREENS: tuple[str, ...] = ("Home", *EDITOR_DOMAINS, PLAYER_GENERATOR_SCREEN, FRANCHISE_MANAGER_SCREEN)
+_QT_APPLICATION: QApplication | None = None
+
+
+class _OperationCancelled(Exception):
+    pass
+
+
+def _target_executable(label: str) -> str:
+    digits = "".join(ch for ch in label if ch.isdigit())[-2:] or "26"
+    return f"NBA2K{digits}.exe"
+
+
+def _ensure_qapplication() -> QApplication:
+    global _QT_APPLICATION
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
+    _QT_APPLICATION = app
+    return app
+
+
+class QtEditorApp(QMainWindow):
+    def __new__(cls, *args: object, **kwargs: object) -> "QtEditorApp":
+        _ensure_qapplication()
+        return super().__new__(cls)
+
+    def __init__(self, model: EditorDataModel) -> None:
+        super().__init__()
+        apply_qt_theme(_ensure_qapplication())
+        self.model = model
+        self.state = EditorUiState()
+        self.setWindowTitle(APP_TITLE)
+        self.resize(APP_VIEWPORT_WIDTH, APP_VIEWPORT_HEIGHT)
+        self.stack = QStackedWidget(self)
+        self.nav_buttons: dict[str, NavButton] = {}
+        self.screen_widgets: dict[str, QWidget] = {}
+        self.domain_lists: dict[str, RecordListWidget] = {}
+        self.status_labels: dict[str, QLabel] = {}
+        self.count_labels: dict[str, QLabel] = {}
+        self.dashboard_metric_labels: dict[str, QLabel] = {}
+        self.generator_metric_labels: dict[str, QLabel] = {}
+        self.detail_titles: dict[str, QLabel] = {}
+        self.detail_addresses: dict[str, QLabel] = {}
+        self.player_detail_rows: dict[str, DetailRow] = {}
+        self.table_row_items: dict[str, list[RecordListItem]] = {}
+        self.editor_stat_selectors: dict[tuple[str, int, str], QComboBox] = {}
+        self.team_summary_inputs: dict[str, QLineEdit] = {}
+        self.player_filter_combo: QComboBox | None = None
+        self.player_search_input: QLineEdit | None = None
+        self.operation_dialog: OperationDialog | None = None
+        self.operation_thread: threading.Thread | None = None
+        self.operation_events: list[tuple[str, Any]] = []
+        self.operation_events_lock = threading.Lock()
+        self.player_generator_display = import_module("nba2k_editor.Player Generator.display")
+        self.player_generator_state = self.player_generator_display.empty_generator_display_state()
+        self.franchise_display = import_module("nba2k_editor.ui.franchise_screen")
+        self.franchise_state = self.franchise_display.empty_franchise_display_state()
+        self.generator_text: QTextEdit | None = None
+        self.generator_year_combo: QComboBox | None = None
+        self.generator_source_team_combo: QComboBox | None = None
+        self.generator_player_combo: QComboBox | None = None
+        self.franchise_text: QTextEdit | None = None
+        self._build_ui()
+        self.scan_timer = QTimer(self)
+        self.scan_timer.timeout.connect(self._poll_background_scan)
+        self.operation_timer = QTimer(self)
+        self.operation_timer.timeout.connect(self._poll_background_operation)
+
+    @property
+    def generator_display_state(self) -> Any:
+        return self.player_generator_state
+
+    @generator_display_state.setter
+    def generator_display_state(self, value: Any) -> None:
+        self.player_generator_state = value
+
+    def _generator_display_module(self) -> Any:
+        return self.player_generator_display
+
+    def _display_label(self, domain: str) -> str:
+        return DOMAIN_LABELS.get(domain, domain)
+
+    def _sidebar_label(self, screen: str) -> str:
+        return {
+            "Home": "▦  Dashboard",
+            "Players": "⌕  Players",
+            "Teams": "⌘  Teams",
+            PLAYER_GENERATOR_SCREEN: "◇  Player Gen",
+            FRANCHISE_MANAGER_SCREEN: "▤  Franchise",
+            "NBA History": "◷  NBA History",
+            "NBA Records": "▥  NBA Records",
+            "Staff": "♙  Staff",
+            "Stadiums": "⌂  Stadium",
+            "Jerseys": "▣  Jerseys",
+            "Shoes": "◈  Shoes",
+        }.get(screen, self._display_label(screen))
+
+    def _game_status_text(self) -> str:
+        return self.model.runtime_status_text()
+
+    def _build_ui(self) -> None:
+        root = QWidget(self)
+        root.setObjectName("EditorRoot")
+        layout = QHBoxLayout(root)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(6)
+        nav_widget = QWidget()
+        nav_widget.setObjectName("Sidebar")
+        nav_widget.setFixedWidth(152)
+        nav = QVBoxLayout(nav_widget)
+        nav.setContentsMargins(0, 0, 4, 0)
+        nav.setSpacing(4)
+        brand = QHBoxLayout()
+        brand.setContentsMargins(6, 8, 6, 8)
+        logo = QLabel("2K")
+        logo.setObjectName("AppLogo")
+        brand_text = QVBoxLayout()
+        brand_title = QLabel("NBA2K EDITOR")
+        brand_title.setObjectName("SidebarTitle")
+        brand_subtitle = QLabel("DATA TOOL")
+        brand_subtitle.setObjectName("SidebarSubtitle")
+        brand_text.addWidget(brand_title)
+        brand_text.addWidget(brand_subtitle)
+        brand.addWidget(logo)
+        brand.addLayout(brand_text, 1)
+        nav.addLayout(brand)
+        section = QLabel("MAIN")
+        section.setObjectName("SidebarSection")
+        nav.addWidget(section)
+        nav.addWidget(NavButton(self._sidebar_label("Home"), lambda: self._show_screen("Home")))
+        self.nav_buttons["Home"] = nav.itemAt(2).widget()  # type: ignore[assignment]
+        for screen in NAV_ORDER:
+            if screen in APP_SCREENS:
+                button = NavButton(self._sidebar_label(screen), lambda checked=False, s=screen: self._show_screen(s))
+                self.nav_buttons[screen] = button
+                nav.addWidget(button)
+        nav.addStretch(1)
+        footer = QLabel("● Local session")
+        footer.setObjectName("SidebarFooter")
+        nav.addWidget(footer)
+        layout.addWidget(nav_widget, 0)
+        layout.addWidget(self.stack, 1)
+        self.setCentralWidget(root)
+        self._add_screen("Home", self._build_home_screen())
+        for screen in APP_SCREENS:
+            if screen == "Home":
+                continue
+            self._add_screen(screen, self._build_domain_screen(screen))
+        self._show_screen("Home")
+
+    def _add_screen(self, screen: str, widget: QWidget) -> None:
+        if widget.layout() is not None:
+            widget.layout().setContentsMargins(0, 0, 0, 0)
+            widget.layout().setSpacing(6)
+        self.screen_widgets[screen] = widget
+        self.stack.addWidget(widget)
+
+    def _add_split_body(self, layout: QVBoxLayout, left: QWidget, right: QWidget, *, left_width: int = 420) -> None:
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setChildrenCollapsible(False)
+        splitter.addWidget(left)
+        splitter.addWidget(right)
+        splitter.setSizes([left_width, max(700, APP_VIEWPORT_WIDTH - left_width - 220)])
+        layout.addWidget(splitter, 1)
+
+    def _show_screen(self, screen: str) -> None:
+        self.state.current_screen = screen
+        widget = self.screen_widgets.get(screen)
+        if widget is not None:
+            self.stack.setCurrentWidget(widget)
+        for name, button in self.nav_buttons.items():
+            button.setChecked(name == screen)
+        if screen == PLAYER_GENERATOR_SCREEN:
+            self._refresh_player_generator_display()
+        if screen == FRANCHISE_MANAGER_SCREEN:
+            self._refresh_franchise_manager()
+        if screen == "NBA Records":
+            self._show_record_screen_rows()
+
+    def _build_home_screen(self) -> QWidget:
+        widget = QWidget()
+        widget.setObjectName("DashboardScreen")
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(12)
+
+        header = QHBoxLayout()
+        heading = QVBoxLayout()
+        eyebrow = QLabel("COMMAND CENTER")
+        eyebrow.setObjectName("DashboardEyebrow")
+        title = QLabel("DASHBOARD")
+        title.setObjectName("DashboardTitle")
+        heading.addWidget(eyebrow)
+        heading.addWidget(title)
+        header.addLayout(heading, 1)
+        self.home_status = QLabel("Using packaged offsets.")
+        self.home_status.setObjectName("DashboardStatus")
+        self.home_target_status = QLabel(self._game_status_text())
+        self.home_target_status.setObjectName("LiveStatusChip")
+        target = QComboBox()
+        target.addItems(TARGET_CHOICES)
+        target.currentTextChanged.connect(lambda text: self._set_target(text))
+        header.addWidget(QLabel("Target"))
+        header.addWidget(target)
+        header.addWidget(QPushButton("Attach", clicked=lambda: self._attach()))
+        header.addWidget(QPushButton("Attach + Load All", clicked=lambda: self._attach_and_load_all()))
+        header.addWidget(self.home_status)
+        header.addWidget(self.home_target_status)
+        layout.addLayout(header)
+
+        metrics = QGridLayout()
+        metrics.setHorizontalSpacing(8)
+        metrics.setVerticalSpacing(8)
+        for column, (key, label) in enumerate((
+            ("domains", "Loaded Domains"),
+            ("players", "Loaded Players"),
+            ("teams", "Loaded Teams"),
+            ("records", "Loaded Records"),
+        )):
+            card, value_label = self._build_dashboard_metric_card("0", label)
+            self.dashboard_metric_labels[key] = value_label
+            metrics.addWidget(card, 0, column)
+        layout.addLayout(metrics)
+
+        body = QHBoxLayout()
+        body.setSpacing(10)
+        body.addWidget(self._build_dashboard_navigation_panel(), 0)
+        body.addWidget(self._build_dashboard_updates_panel(), 2)
+        body.addWidget(self._build_dashboard_side_panel(), 1)
+        layout.addLayout(body, 1)
+
+        self._refresh_dashboard_metrics()
+        return widget
+
+    def _build_dashboard_metric_card(self, value: str, label: str) -> tuple[QWidget, QLabel]:
+        card = QWidget()
+        card.setObjectName("MetricCard")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(14, 10, 14, 10)
+        value_label = QLabel(value)
+        value_label.setObjectName("MetricValue")
+        caption = QLabel(label)
+        caption.setObjectName("MetricCaption")
+        layout.addWidget(value_label)
+        layout.addWidget(caption)
+        return card, value_label
+
+    def _build_dashboard_navigation_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("DashboardPanel")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(7)
+        heading = QLabel("NAVIGATE")
+        heading.setObjectName("PanelEyebrow")
+        layout.addWidget(heading)
+        for label, screen in (
+            ("◇  Player Gen", PLAYER_GENERATOR_SCREEN),
+            ("⌕  Players", "Players"),
+            ("⌘  Teams", "Teams"),
+            ("◷  NBA History", "NBA History"),
+            ("▥  NBA Records", "NBA Records"),
+            ("▤  Franchise", FRANCHISE_MANAGER_SCREEN),
+        ):
+            button = QPushButton(label, clicked=lambda checked=False, s=screen: self._show_screen(s))
+            button.setObjectName("DashboardLinkButton")
+            layout.addWidget(button)
+        layout.addStretch(1)
+        return panel
+
+    def _build_dashboard_updates_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("DashboardPanel")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(8)
+        header = QHBoxLayout()
+        title_box = QVBoxLayout()
+        eyebrow = QLabel("APP UPDATES")
+        eyebrow.setObjectName("PanelEyebrow")
+        title = QLabel("What's New")
+        title.setObjectName("PanelTitle")
+        title_box.addWidget(eyebrow)
+        title_box.addWidget(title)
+        header.addLayout(title_box, 1)
+        header.addWidget(QPushButton("Refresh Lists", clicked=lambda: self._attach_and_load_all()))
+        layout.addLayout(header)
+        for badge, title_text, body in (
+            ("FEATURE", "Players", "Roster list, team filter, selected-player details, and editor launch."),
+            ("FEATURE", "Records / History", "Loaded rows render into editable Records and selectable History tables."),
+            ("UPDATE", "Player Generator", "Generate, preview, and import through the existing generator display state."),
+            ("UPDATE", "Franchise Manager", "Franchise runs against the same loaded app dataset instead of a private mini-snapshot."),
+        ):
+            layout.addWidget(self._build_dashboard_update_item(badge, title_text, body))
+        layout.addStretch(1)
+        return panel
+
+    def _build_dashboard_update_item(self, badge: str, title: str, body: str) -> QWidget:
+        item = QWidget()
+        item.setObjectName("UpdateItem")
+        layout = QVBoxLayout(item)
+        layout.setContentsMargins(10, 8, 10, 8)
+        label = QLabel(badge)
+        label.setObjectName("UpdateBadge")
+        label.setFixedWidth(58)
+        title_label = QLabel(title)
+        title_label.setObjectName("UpdateTitle")
+        body_label = QLabel(body)
+        body_label.setObjectName("UpdateBody")
+        body_label.setWordWrap(True)
+        layout.addWidget(label)
+        layout.addWidget(title_label)
+        layout.addWidget(body_label)
+        return item
+
+    def _build_dashboard_side_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("DashboardSideColumn")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        progress = QWidget()
+        progress.setObjectName("DashboardPanel")
+        progress_layout = QVBoxLayout(progress)
+        progress_layout.setContentsMargins(12, 10, 12, 12)
+        heading = QLabel("PROGRESSION")
+        heading.setObjectName("PanelEyebrow")
+        progress_layout.addWidget(heading)
+        progress_layout.addWidget(QLabel("Load domains with Attach + Load All to populate editor lists."))
+        progress_layout.addStretch(1)
+        recent = QWidget()
+        recent.setObjectName("DashboardPanel")
+        recent_layout = QVBoxLayout(recent)
+        recent_layout.setContentsMargins(12, 10, 12, 12)
+        recent_heading = QLabel("CURRENT TARGET")
+        recent_heading.setObjectName("PanelEyebrow")
+        recent_layout.addWidget(recent_heading)
+        recent_layout.addWidget(QLabel(self._game_status_text()))
+        recent_layout.addStretch(1)
+        layout.addWidget(progress, 1)
+        layout.addWidget(recent, 1)
+        return panel
+
+    def _build_domain_screen(self, domain: str) -> QWidget:
+        if domain == "Players":
+            return self._build_players_screen()
+        if domain == "Teams":
+            return self._build_teams_screen()
+        if domain == "NBA History":
+            return self._build_history_screen()
+        if domain == "NBA Records":
+            return self._build_records_screen()
+        if domain == PLAYER_GENERATOR_SCREEN:
+            return self._build_player_generator_screen()
+        if domain == FRANCHISE_MANAGER_SCREEN:
+            return self._build_franchise_manager_screen()
+        return self._build_generic_domain_screen(domain)
+
+    def _base_domain_screen(self, domain: str) -> tuple[QWidget, QVBoxLayout]:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(6)
+        header.addWidget(QLabel(self._display_label(domain)))
+        count = QLabel(f"{self._display_label(domain)}: 0")
+        status = QLabel(self._game_status_text())
+        self.count_labels[domain] = count
+        self.status_labels[domain] = status
+        header.addWidget(count)
+        header.addWidget(status, 1)
+        header.addWidget(QPushButton("Refresh", clicked=lambda: self._attach_and_scan((domain,))))
+        layout.addLayout(header)
+        return widget, layout
+
+    def _build_generic_domain_screen(self, domain: str) -> QWidget:
+        widget, layout = self._base_domain_screen(domain)
+        record_list = RecordListWidget(lambda label, selected, d=domain: self._select_item_label(d, label, selected))
+        self.domain_lists[domain] = record_list
+        detail_widget = QWidget()
+        detail = QVBoxLayout(detail_widget)
+        detail.setContentsMargins(6, 0, 0, 0)
+        detail.setSpacing(6)
+        title = QLabel(f"Select a {self._display_label(domain).lower()}")
+        address = QLabel("--")
+        self.detail_titles[domain] = title
+        self.detail_addresses[domain] = address
+        detail.addWidget(title)
+        detail.addWidget(QLabel("Record address"))
+        detail.addWidget(address)
+        detail.addWidget(QPushButton(f"Edit {self._display_label(domain)}", clicked=lambda d=domain: self._open_selected(d)))
+        detail.addStretch(1)
+        self._add_split_body(layout, record_list, detail_widget, left_width=430)
+        return widget
+
+    def _build_players_screen(self) -> QWidget:
+        widget, layout = self._base_domain_screen("Players")
+        controls = QHBoxLayout()
+        player_filter_combo = QComboBox()
+        player_filter_combo.addItems(list(self.model.player_team_filter_options()))
+        player_filter_combo.currentTextChanged.connect(self._set_player_team_filter)
+        player_search_input = QLineEdit()
+        player_search_input.setPlaceholderText("Search players")
+        player_search_input.textChanged.connect(self._set_player_search_text)
+        self.player_filter_combo = player_filter_combo
+        self.player_search_input = player_search_input
+        controls.addWidget(QLabel("Team"))
+        controls.addWidget(player_filter_combo)
+        controls.addWidget(QLabel("Search"))
+        controls.addWidget(player_search_input)
+        layout.addLayout(controls)
+        record_list = RecordListWidget(lambda label, selected: self._select_item_label("Players", label, selected))
+        self.domain_lists["Players"] = record_list
+        detail_widget = QWidget()
+        detail = QVBoxLayout(detail_widget)
+        detail.setContentsMargins(6, 0, 0, 0)
+        detail.setSpacing(6)
+        title = QLabel("Select a player")
+        address = QLabel("--")
+        self.detail_titles["Players"] = title
+        self.detail_addresses["Players"] = address
+        detail.addWidget(title)
+        detail.addWidget(QLabel("Record address"))
+        detail.addWidget(address)
+        for label in self.model.player_detail_labels():
+            row = DetailRow(label)
+            self.player_detail_rows[label] = row
+            detail.addWidget(row)
+        detail.addWidget(QPushButton("Edit Player", clicked=lambda: self._open_selected("Players")))
+        detail.addWidget(QPushButton("Set All Loaded Current Stat IDs To 65535", clicked=self._set_all_players_stat_ids_to_no_stats))
+        detail.addWidget(self._build_roster_snapshot_box())
+        detail.addStretch(1)
+        self._add_split_body(layout, record_list, detail_widget, left_width=520)
+        return widget
+
+    def _build_roster_snapshot_box(self) -> QWidget:
+        box = QGroupBox("Player Roster Snapshot")
+        form = QFormLayout(box)
+        self.roster_folder_input = QLineEdit(self.state.player_roster_export_folder)
+        self.roster_file_input = QLineEdit(self.state.player_roster_snapshot_filename)
+        self.roster_mode_combo = QComboBox()
+        self.roster_mode_combo.addItems(PLAYER_ROSTER_EXPORT_MODES)
+        self.roster_start_input = QLineEdit(self.state.player_roster_team_start)
+        self.roster_end_input = QLineEdit(self.state.player_roster_team_end)
+        form.addRow("Folder", self.roster_folder_input)
+        form.addRow("File", self.roster_file_input)
+        form.addRow("Mode", self.roster_mode_combo)
+        form.addRow("Team Start", self.roster_start_input)
+        form.addRow("Team End", self.roster_end_input)
+        buttons = QHBoxLayout()
+        buttons.addWidget(QPushButton("Export Snapshot", clicked=self._export_player_roster_snapshot))
+        buttons.addWidget(QPushButton("Apply Snapshot", clicked=self._apply_player_roster_snapshot))
+        form.addRow(buttons)
+        return box
+
+    def _build_teams_screen(self) -> QWidget:
+        widget, layout = self._base_domain_screen("Teams")
+        record_list = RecordListWidget(lambda label, selected: self._select_item_label("Teams", label, selected))
+        self.domain_lists["Teams"] = record_list
+        detail_widget = QWidget()
+        detail = QVBoxLayout(detail_widget)
+        detail.setContentsMargins(6, 0, 0, 0)
+        detail.setSpacing(6)
+        title = QLabel("Select a team")
+        address = QLabel("--")
+        self.detail_titles["Teams"] = title
+        self.detail_addresses["Teams"] = address
+        detail.addWidget(title)
+        detail.addWidget(QLabel("Record address"))
+        detail.addWidget(address)
+        for label in self.model.team_summary_labels():
+            edit = QLineEdit()
+            self.team_summary_inputs[label] = edit
+            row = QHBoxLayout()
+            row.addWidget(QLabel(label))
+            row.addWidget(edit)
+            detail.addLayout(row)
+        detail.addWidget(QPushButton("Save Team Summary", clicked=self._save_team_summary))
+        detail.addWidget(QPushButton("Edit Team", clicked=lambda: self._open_selected("Teams")))
+        detail.addWidget(QPushButton("Zero All Team Record Data", clicked=self._zero_all_team_record_data_values))
+        detail.addStretch(1)
+        self._add_split_body(layout, record_list, detail_widget, left_width=430)
+        return widget
+
+    def _build_history_screen(self) -> QWidget:
+        widget, layout = self._base_domain_screen("NBA History")
+        controls = QHBoxLayout()
+        section = QComboBox()
+        section.addItems(HISTORY_SIDE_NAV)
+        tab = QComboBox()
+        tab.addItems(HISTORY_SECTION_TABS[self.state.history_section])
+        section.currentTextChanged.connect(lambda value: self._set_history_section(value, tab))
+        tab.currentTextChanged.connect(lambda value: self._set_history_tab(value))
+        controls.addWidget(section)
+        controls.addWidget(tab)
+        controls.addWidget(QPushButton("Load Rows", clicked=self._load_history_screen_rows))
+        controls.addWidget(QPushButton("Edit Selected History Row", clicked=lambda: self._open_selected("NBA History")))
+        layout.addLayout(controls)
+        self.history_table = QTableWidget(0, 0)
+        configure_table(self.history_table)
+        self.history_table.itemSelectionChanged.connect(lambda: self._select_table_row("NBA History", self.history_table))
+        layout.addWidget(self.history_table, 1)
+        return widget
+
+    def _build_records_screen(self) -> QWidget:
+        widget, layout = self._base_domain_screen("NBA Records")
+        controls = QHBoxLayout()
+        section = QComboBox()
+        section.addItems(RECORD_SIDE_NAV)
+        stat = QComboBox()
+        stat.addItems(RECORD_SECTION_STAT_TABS[self.state.record_section])
+        section.currentTextChanged.connect(lambda value: self._set_record_section(value, stat))
+        stat.currentTextChanged.connect(lambda value: self._set_record_stat(value))
+        controls.addWidget(section)
+        controls.addWidget(stat)
+        controls.addWidget(QPushButton("Load Rows", clicked=self._show_record_screen_rows))
+        controls.addWidget(QPushButton("Save Data Values", clicked=self._save_record_data_values))
+        controls.addWidget(QPushButton("Zero Data Values", clicked=self._zero_record_data_values))
+        controls.addWidget(QPushButton("Edit Selected Record", clicked=lambda: self._open_selected("NBA Records")))
+        layout.addLayout(controls)
+        self.record_table = QTableWidget(0, 0)
+        configure_table(self.record_table, editable=True)
+        self.record_table.itemSelectionChanged.connect(lambda: self._select_table_row("NBA Records", self.record_table))
+        layout.addWidget(self.record_table, 1)
+        return widget
+
+    def _build_player_generator_screen(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        generator_metrics = QGridLayout()
+        generator_metrics.setHorizontalSpacing(8)
+        generator_metrics.setVerticalSpacing(8)
+        for column, (key, label) in enumerate((
+            ("source", "Source Loaded"),
+            ("options", "Source Players"),
+            ("generated", "Players Generated"),
+            ("columns", "Generated Columns"),
+        )):
+            card, value_label = self._build_dashboard_metric_card("0", label)
+            self.generator_metric_labels[key] = value_label
+            generator_metrics.addWidget(card, 0, column)
+        layout.addLayout(generator_metrics)
+        selectors = QHBoxLayout()
+        year_combo = QComboBox()
+        source_team_combo = QComboBox()
+        player_combo = QComboBox()
+        year_combo.currentTextChanged.connect(lambda _value: self._refresh_player_generator_dropdowns())
+        source_team_combo.currentTextChanged.connect(lambda _value: self._refresh_player_generator_dropdowns())
+        player_combo.currentTextChanged.connect(lambda _value: self._refresh_player_generator_dropdowns())
+        self.generator_year_combo = year_combo
+        self.generator_source_team_combo = source_team_combo
+        self.generator_player_combo = player_combo
+        selectors.addWidget(QLabel("Season"))
+        selectors.addWidget(year_combo)
+        selectors.addWidget(QLabel("Source Team"))
+        selectors.addWidget(source_team_combo)
+        selectors.addWidget(QLabel("Player"))
+        selectors.addWidget(player_combo, 1)
+        layout.addLayout(selectors)
+        buttons = QHBoxLayout()
+        buttons.addWidget(QPushButton("Load Source", clicked=self._load_player_generator_source))
+        buttons.addWidget(QPushButton("Add Current Roster to Pool SQL", clicked=self._add_current_roster_to_player_pool))
+        buttons.addWidget(QPushButton("Sync Player Pool SQL", clicked=self._sync_player_generator_pool))
+        buttons.addWidget(QPushButton("Display Preview", clicked=self._display_generator_preview))
+        buttons.addWidget(QPushButton("Import Generated Players", clicked=self._import_generator_to_game_display))
+        buttons.addWidget(QPushButton("Import Matched Names", clicked=lambda: self._import_generator_to_game_display(match_existing_player_names=True)))
+        layout.addLayout(buttons)
+        generator_text = QTextEdit()
+        generator_text.setReadOnly(True)
+        configure_output_text(generator_text)
+        self.generator_text = generator_text
+        layout.addWidget(generator_text, 1)
+        return widget
+
+    def _build_franchise_manager_screen(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        buttons = QHBoxLayout()
+        self.franchise_action_input = QLineEdit("1")
+        buttons.addWidget(QPushButton("Use Full Loaded App Data", clicked=lambda: self._refresh_franchise_manager(background=True)))
+        buttons.addWidget(QLabel("Action #"))
+        buttons.addWidget(self.franchise_action_input)
+        buttons.addWidget(QPushButton("Apply Trade", clicked=lambda: self._apply_franchise_action("trade")))
+        buttons.addWidget(QPushButton("Apply Signing", clicked=lambda: self._apply_franchise_action("signing")))
+        buttons.addWidget(QPushButton("Apply Draft", clicked=lambda: self._apply_franchise_action("draft")))
+        buttons.addWidget(QPushButton("Apply Roster", clicked=lambda: self._apply_franchise_action("roster")))
+        layout.addLayout(buttons)
+        franchise_text = QTextEdit()
+        franchise_text.setReadOnly(True)
+        configure_output_text(franchise_text)
+        self.franchise_text = franchise_text
+        layout.addWidget(franchise_text, 1)
+        return widget
+
+    def _set_target(self, selected: str) -> None:
+        self.model.select_target_executable(_target_executable(str(selected)))
+        self.state.selected_item_labels.clear()
+        self.state.selection_anchors.clear()
+        self._refresh_status_labels()
+        for domain, record_list in self.domain_lists.items():
+            record_list.set_labels([])
+            self._set_count(domain, f"{self._display_label(domain)}: 0")
+        self._sync_player_team_filter()
+        self._sync_player_list()
+        self._update_detail_panel("Teams")
+
+    def _refresh_status_labels(self) -> None:
+        status = self._game_status_text()
+        self.home_status.setText("Using packaged offsets.")
+        self.home_target_status.setText(status)
+        for label in self.status_labels.values():
+            label.setText(status)
+        self._refresh_dashboard_metrics()
+
+    def _refresh_dashboard_metrics(self) -> None:
+        if not self.dashboard_metric_labels:
+            return
+        domain_counts = {domain: self.model.domain_item_count(domain) for domain in EDITOR_DOMAINS}
+        loaded_domains = sum(1 for domain in EDITOR_DOMAINS if domain_counts.get(domain, 0) > 0)
+        total_domains = max(1, len(EDITOR_DOMAINS))
+        metrics = {
+            "domains": f"{loaded_domains} / {total_domains}",
+            "teams": f"{domain_counts.get('Teams', 0)} / 30",
+            "players": str(domain_counts.get("Players", 0)),
+            "records": str(domain_counts.get("NBA Records", 0)),
+        }
+        for key, value in metrics.items():
+            if key in self.dashboard_metric_labels:
+                self.dashboard_metric_labels[key].setText(value)
+
+    def _attach(self) -> None:
+        self.model.attach()
+        self._refresh_status_labels()
+
+    def _attach_and_scan(self, domains: tuple[str, ...]) -> None:
+        self._start_background_scan(domains)
+
+    def _attach_and_load_all(self) -> None:
+        self._start_background_scan(EDITOR_DOMAINS)
+
+    def _scan_domains_for_request(self, domains: tuple[str, ...]) -> tuple[str, ...]:
+        expanded: list[str] = []
+        for domain in domains:
+            if domain not in expanded:
+                expanded.append(domain)
+            if domain == "Players" and "Draft Class" not in expanded:
+                expanded.append("Draft Class")
+        return tuple(expanded)
+
+    def _start_background_scan(self, domains: tuple[str, ...]) -> None:
+        scan_domains = self._scan_domains_for_request(domains)
+        if not self.model.start_background_refresh(scan_domains):
+            self.home_target_status.setText("Scan already running...")
+            return
+        self.home_target_status.setText("Loading record lists...")
+        for domain in scan_domains:
+            if domain in self.status_labels:
+                self.status_labels[domain].setText("Queued for scan...")
+
+    def _poll_background_scan(self) -> None:
+        events = self.model.pop_refresh_events() if hasattr(self.model, "pop_refresh_events") else []
+        for event, value in events:
+            if event == "start":
+                domain = str(value)
+                if domain in self.status_labels:
+                    self.status_labels[domain].setText("Loading records...")
+            elif event == "domain":
+                domain = str(value)
+                if domain == "Players":
+                    self._sync_player_team_filter()
+                    self._sync_player_list()
+                elif domain == "NBA History":
+                    self._show_history_screen_rows()
+                elif domain == "NBA Records":
+                    self._show_record_screen_rows()
+                elif domain in self.domain_lists:
+                    self._sync_domain_list(domain)
+            elif event == "error":
+                self.home_target_status.setText(str(value))
+            elif event in {"status", "done"}:
+                self._refresh_status_labels()
+        if events:
+            self._refresh_status_labels()
+
+    def _set_count(self, domain: str, text: str) -> None:
+        if domain in self.count_labels:
+            self.count_labels[domain].setText(text)
+
+    def _sync_domain_list(self, domain: str) -> None:
+        labels = self.model.domain_item_labels(domain)
+        self._set_count(domain, f"{self._display_label(domain)}: {self.model.domain_item_count(domain)}")
+        if domain in self.status_labels:
+            self.status_labels[domain].setText(self.model.domain_status(domain))
+        if domain == "NBA History":
+            self._show_history_screen_rows()
+            self._refresh_dashboard_metrics()
+            return
+        if domain == "NBA Records":
+            self._show_record_screen_rows()
+            self._refresh_dashboard_metrics()
+            return
+        selected = self.state.selected_item_labels.get(domain, set())
+        if domain in self.domain_lists:
+            self.domain_lists[domain].set_labels(labels, selected)
+        self._update_detail_panel(domain)
+        self._refresh_dashboard_metrics()
+
+    def _sync_player_team_filter(self) -> None:
+        if self.player_filter_combo is None:
+            return
+        options = list(self.model.player_team_filter_options())
+        current = self.state.player_team_filter if self.state.player_team_filter in options else (options[0] if options else PLAYER_TEAM_FILTER_ALL)
+        self.player_filter_combo.blockSignals(True)
+        self.player_filter_combo.clear()
+        self.player_filter_combo.addItems(options)
+        self.player_filter_combo.setCurrentText(current)
+        self.player_filter_combo.blockSignals(False)
+        self.state.player_team_filter = current
+
+    def _sync_player_list(self) -> None:
+        labels = self.model.player_item_labels_for_team_filter(self.state.player_team_filter, self.state.player_search_text)
+        self._set_count("Players", f"Players: {len(labels)}")
+        if "Players" in self.status_labels:
+            self.status_labels["Players"].setText(self.model.domain_status("Players"))
+        selected = self.state.selected_item_labels.get("Players", set())
+        if "Players" in self.domain_lists:
+            self.domain_lists["Players"].set_labels(labels, selected)
+        self._update_detail_panel("Players")
+        self._refresh_dashboard_metrics()
+
+    def _select_item_label(self, domain: str, label: str, selected: bool) -> None:
+        selected_set = self.state.selected_item_labels.setdefault(domain, set())
+        if selected:
+            selected_set.add(label)
+            self.model.select_item_by_label(domain, label)
+        else:
+            selected_set.discard(label)
+            if not selected_set:
+                self.model.select_item_by_label(domain, None)
+        self._update_detail_panel(domain)
+
+    def _set_player_team_filter(self, value: str) -> None:
+        self.state.player_team_filter = value or PLAYER_TEAM_FILTER_ALL
+        self._sync_player_list()
+
+    def _set_player_search_text(self, value: str) -> None:
+        self.state.player_search_text = value
+        self._sync_player_list()
+
+    def _update_detail_panel(self, domain: str) -> None:
+        item = self.model.selected_item(domain) if hasattr(self.model, "selected_item") else None
+        title = self.detail_titles.get(domain)
+        address = self.detail_addresses.get(domain)
+        if title is not None:
+            title.setText(self.model.selected_detail_title(domain, self._display_label(domain)) if item is not None else f"Select a {self._display_label(domain).lower()}")
+        if address is not None:
+            address.setText(self.model.selected_record_address_text(domain) if item is not None and hasattr(self.model, "selected_record_address_text") else "--")
+        if domain == "Teams" and item is not None:
+            for label, value in self.model.selected_team_summary_values().items():
+                if label in self.team_summary_inputs:
+                    self.team_summary_inputs[label].setText(str(value))
+        if domain == "Players" and item is not None:
+            for label, value in self.model.selected_player_detail_values().items():
+                if label in self.player_detail_rows:
+                    self.player_detail_rows[label].set_value(value)
+
+    def _save_team_summary(self) -> None:
+        values = {label: edit.text() for label, edit in self.team_summary_inputs.items()}
+        result = self.model.save_selected_team_summary(values)
+        QMessageBox.information(self, "Team Summary", str(result))
+
+    def _selected_table_item(self, domain: str, table: QTableWidget) -> RecordListItem | None:
+        row = table.currentRow()
+        items = self.table_row_items.get(domain, [])
+        if row < 0 or row >= len(items):
+            return None
+        return items[row]
+
+    def _open_selected(self, domain: str) -> None:
+        item = None
+        if domain == "NBA Records" and hasattr(self, "record_table"):
+            item = self._selected_table_item(domain, self.record_table)
+        else:
+            item = self.model.selected_item(domain)
+        if item is None:
+            QMessageBox.warning(self, "No selection", f"Select a {self._display_label(domain).lower()} first.")
+            return
+        self._open_editor_window(item)
+
+    def _row_key(self, item: RecordListItem, entry: FieldEntry) -> str:
+        return f"{entry.domain}:{item.index}:{entry.ordinal}"
+
+    def _mark_row_dirty(self, row_key: str) -> None:
+        self.state.dirty_rows.add(row_key)
+
+    def _selected_editor_items(self, source: RecordListItem) -> list[RecordListItem]:
+        labels = self.state.selected_item_labels.get(source.domain) or {source.display_label}
+        if source.domain == "Players":
+            items = self.model.player_items_for_team_filter(self.state.player_team_filter)
+        else:
+            items = getattr(self.model, "loaded_items", {}).get(source.domain, {})
+        selected_items = [item for label, item in items.items() if label in labels]
+        return selected_items or [source]
+
+    def _editor_window_label(self, source: RecordListItem) -> str:
+        items = self._selected_editor_items(source)
+        if len(items) > 1:
+            return f"{source.domain} [{len(items)} selected]"
+        return f"{source.domain} [{source.index}] {source.label}"
+
+    def _selected_season_stat_selector(self, entry: FieldEntry, item: RecordListItem) -> str | None:
+        key = (entry.domain, item.index, entry.group)
+        return self.state.player_season_stat_id_selection.get(key)
+
+    def _season_stat_selector_key(self, entry: FieldEntry, item: RecordListItem) -> tuple[str, int, str]:
+        return (entry.domain, item.index, entry.group)
+
+    def _season_stat_selector_options(self, entry: FieldEntry, item: RecordListItem) -> list[str]:
+        return list(self.model.player_season_stat_id_options(item.index))
+
+    def _set_season_stat_selector(self, entry: FieldEntry, item: RecordListItem, selected: str) -> None:
+        self.state.player_season_stat_id_selection[self._season_stat_selector_key(entry, item)] = selected
+
+    def _ensure_season_stat_selector(self, entry: FieldEntry, item: RecordListItem, options: list[str]) -> str | None:
+        if not options:
+            return None
+        current = self._selected_season_stat_selector(entry, item)
+        if current not in options:
+            current = options[0]
+            self._set_season_stat_selector(entry, item, current)
+        return current
+
+    def _row_stat_selector_for_item(self, entry: FieldEntry, item: RecordListItem, source: RecordListItem) -> str | None:
+        selected = self._selected_season_stat_selector(entry, item)
+        if selected is not None:
+            return selected
+        return self._selected_season_stat_selector(entry, source)
+
+    def _refresh_stat_detail_rows(self, source: RecordListItem, group: str, row_widgets: dict[str, EditableFieldRow]) -> None:
+        for row_key, row in row_widgets.items():
+            entry = self.state.open_rows[row_key]
+            if entry.domain != source.domain or entry.group != group or not self.model.is_player_selected_stat_detail_entry(entry):
+                continue
+            try:
+                selector = self._selected_season_stat_selector(entry, source)
+                value_info = self.model.read_entry_value(entry, index=source.index, stat_selector=selector)
+                display = str(value_info.get("display_value", ""))
+                row.current.setText(display)
+                row.new_value.setText(display)
+                row.status.setText("")
+                self.state.dirty_rows.discard(row_key)
+            except Exception as exc:
+                row.current.setText(f"ERROR: {exc}")
+                row.new_value.setText("")
+                row.status.setText(str(exc))
+
+    def _add_season_stat_selector(
+        self,
+        layout: QVBoxLayout,
+        source: RecordListItem,
+        entries: list[FieldEntry],
+        row_widgets: dict[str, EditableFieldRow],
+    ) -> None:
+        detail_entries = [entry for entry in entries if self.model.is_player_selected_stat_detail_entry(entry)]
+        if not detail_entries:
+            return
+        selector_entry = detail_entries[0]
+        options = self._season_stat_selector_options(selector_entry, source)
+        selected = self._ensure_season_stat_selector(selector_entry, source, options)
+        row = QHBoxLayout()
+        combo = QComboBox()
+        combo.addItems(options)
+        if selected is not None:
+            combo.setCurrentText(selected)
+        combo.currentTextChanged.connect(
+            lambda value, entry=selector_entry, item=source, group=selector_entry.group, widgets=row_widgets: (
+                self._set_season_stat_selector(entry, item, value),
+                self._refresh_stat_detail_rows(item, group, widgets),
+            )
+        )
+        self.editor_stat_selectors[self._season_stat_selector_key(selector_entry, source)] = combo
+        row.addWidget(QLabel("Active Season Stat ID"))
+        row.addWidget(combo, 1)
+        layout.addLayout(row)
+
+    def _open_editor_window(self, source: RecordListItem) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle(self._editor_window_label(source))
+        dialog.resize(820, 560)
+        dialog.setMinimumSize(520, 360)
+        layout = QVBoxLayout(dialog)
+        tabs = QTabWidget()
+        row_widgets: dict[str, EditableFieldRow] = {}
+        for section, groups in self.model.grouped_fields(source.domain).items():
+            section_widget = QWidget()
+            section_layout = QVBoxLayout(section_widget)
+            group_tabs = QTabWidget()
+            for group, entries in groups.items():
+                group_widget = QWidget()
+                group_layout = QVBoxLayout(group_widget)
+                self._add_season_stat_selector(group_layout, source, entries, row_widgets)
+                row_entries = [entry for entry in entries if not self.model.is_player_season_id_selector_entry(entry)]
+                for entry in row_entries:
+                    row_key = self._row_key(source, entry)
+                    stat_selector = self._selected_season_stat_selector(entry, source)
+                    try:
+                        value_info = self.model.read_entry_value(entry, index=source.index, stat_selector=stat_selector)
+                        display = str(value_info.get("display_value", ""))
+                    except Exception as exc:
+                        display = f"ERROR: {exc}"
+                    options = self.model.field_options(entry) if hasattr(self.model, "field_options") else []
+                    row = EditableFieldRow(entry.display_name, display, self._mark_row_dirty, row_key, options)
+                    row_widgets[row_key] = row
+                    self.state.open_rows[row_key] = entry
+                    group_layout.addWidget(row)
+                group_layout.addStretch(1)
+                scroll = QScrollArea()
+                scroll.setWidgetResizable(True)
+                scroll.setMinimumSize(360, 220)
+                scroll.setWidget(group_widget)
+                group_tabs.addTab(scroll, str(group))
+            section_layout.addWidget(group_tabs)
+            tabs.addTab(section_widget, str(section))
+        layout.addWidget(tabs, 1)
+        buttons = QHBoxLayout()
+        buttons.addWidget(QPushButton("Save", clicked=lambda: self._save_item_editor(source, row_widgets)))
+        buttons.addWidget(QPushButton("Reset", clicked=lambda: self._reset_item_editor(source, row_widgets)))
+        buttons.addWidget(QPushButton("Close", clicked=dialog.accept))
+        layout.addLayout(buttons)
+        dialog.exec()
+
+    def _save_item_editor(self, source: RecordListItem, row_widgets: dict[str, EditableFieldRow]) -> None:
+        targets = self._selected_editor_items(source)
+        for row_key, row in row_widgets.items():
+            entry = self.state.open_rows[row_key]
+            if row_key not in self.state.dirty_rows and row.value_text() == row.current.text():
+                continue
+            value = row.value_text()
+            succeeded = 0
+            for item in targets:
+                stat_selector = self._row_stat_selector_for_item(entry, item, source)
+                self.model.write_entry_value(entry, index=item.index, value=value, stat_selector=stat_selector)
+                succeeded += 1
+            row.status.setText(f"saved {succeeded} records")
+            self.state.dirty_rows.discard(row_key)
+
+    def _reset_item_editor(self, source: RecordListItem, row_widgets: dict[str, EditableFieldRow]) -> None:
+        targets = self._selected_editor_items(source)
+        results: list[dict[str, int]] = []
+        stat_entry = next(
+            (
+                entry
+                for entry in self.state.open_rows.values()
+                if entry.domain == source.domain and self.model.is_player_selected_stat_detail_entry(entry)
+            ),
+            None,
+        )
+        for item in targets:
+            stat_selector = self._row_stat_selector_for_item(stat_entry, item, source) if stat_entry is not None else None
+            results.append(self.model.reset_player_editor_values(index=item.index, stat_selector=stat_selector))
+        attempted = sum(result.get("attempted", 0) for result in results)
+        succeeded = sum(result.get("succeeded", 0) for result in results)
+        failed = sum(result.get("failed", 0) for result in results)
+        summary = {"players": len(targets), "attempted": attempted, "succeeded": succeeded, "failed": failed}
+        for row in row_widgets.values():
+            row.status.setText(str(summary))
+
+    def _record_row_group(self, section: str, stat: str) -> tuple[int, int]:
+        section_start, row_count = RECORD_SECTION_ROW_LAYOUT.get(section, RECORD_SECTION_ROW_LAYOUT["Single Game (Regular)"])
+        tabs = RECORD_SECTION_STAT_TABS.get(section, RECORD_BASE_STAT_TABS)
+        stat_index = tabs.index(stat) if stat in tabs else 0
+        return section_start + stat_index * row_count, row_count
+
+    def _active_record_row_group(self) -> tuple[int, int]:
+        return self._record_row_group(self.state.record_section, self.state.record_stat)
+
+    def _active_record_indexes(self) -> tuple[int, ...]:
+        start, count = self._active_record_row_group()
+        return tuple(start + index for index in range(count))
+
+    def _all_record_indexes(self) -> tuple[int, ...]:
+        indexes: list[int] = []
+        for section, stats in RECORD_SECTION_STAT_TABS.items():
+            for stat in stats:
+                start, count = self._record_row_group(section, stat)
+                indexes.extend(start + index for index in range(count))
+        return tuple(dict.fromkeys(indexes))
+
+    def _all_team_record_indexes(self) -> tuple[int, ...]:
+        team_items = getattr(self.model, "loaded_items", {}).get("Teams", {}).values()
+        indexes: list[int] = []
+        for team in team_items:
+            indexes.extend(team_record_indexes(self.model, team))
+        return tuple(dict.fromkeys(indexes))
+
+    def _record_data_value(self, row: int) -> str:
+        if not hasattr(self, "record_table"):
+            return ""
+        item = self.record_table.item(row, self.record_table.columnCount() - 1)
+        return "" if item is None else item.text()
+
+    def _save_record_data_values(self) -> None:
+        active_indexes = self._active_record_indexes()
+        visible_count = self.record_table.rowCount() if hasattr(self, "record_table") else len(active_indexes)
+        values = {index: self._record_data_value(row) for row, index in enumerate(active_indexes[:visible_count])}
+        result = self.model.save_record_data_values(values)
+        QMessageBox.information(self, "NBA Records", str(result))
+
+    def _zero_record_data_values(self) -> None:
+        data_entry = self.model._field_by_normalized_name("NBA Records", "DATA")
+        if data_entry is None:
+            QMessageBox.warning(self, "NBA Records", "DATA field is not available for NBA Records.")
+            return
+        indexes = tuple(dict.fromkeys((*self._all_record_indexes(), *self._all_team_record_indexes())))
+        for index in indexes:
+            self.model.write_entry_value(data_entry, index=index, value=0)
+        QMessageBox.information(self, "NBA Records", f"zeroed {len(indexes)} records")
+        self._show_record_screen_rows()
+
+    def _zero_all_team_record_data_values(self) -> None:
+        team = self.model.selected_item("Teams")
+        if team is None:
+            QMessageBox.warning(self, "No selection", "Select a team first.")
+            return
+        indexes = team_record_indexes(self.model, team)
+        data_entry = self.model._field_by_normalized_name("NBA Records", "DATA")
+        if data_entry is None:
+            QMessageBox.warning(self, "Team Records", "DATA field is not available for NBA Records.")
+            return
+        for index in indexes:
+            self.model.write_entry_value(data_entry, index=index, value=0)
+        QMessageBox.information(self, "Team Records", f"zeroed {len(indexes)}/{len(indexes)}")
+
+    def _set_history_section(self, section: str, tab_combo: QComboBox) -> None:
+        self.state.history_section = section
+        tabs = HISTORY_SECTION_TABS[section]
+        tab_combo.blockSignals(True)
+        tab_combo.clear()
+        tab_combo.addItems(tabs)
+        tab_combo.blockSignals(False)
+        self.state.history_tabs[section] = tabs[0]
+        self._show_history_screen_rows()
+
+    def _set_history_tab(self, tab: str) -> None:
+        self.state.history_tabs[self.state.history_section] = tab
+        self._show_history_screen_rows()
+
+    def _history_type_for_tab(self, section: str, tab: str) -> int | None:
+        if section == "Season Awards":
+            return HISTORY_AWARD_TYPES[tab]
+        return HISTORY_SECTION_TAB_TYPES.get(section, {}).get(tab, HISTORY_SECTION_DEFAULT_TYPES.get(section))
+
+    def _active_history_type(self) -> int | None:
+        return self._history_type_for_tab(self.state.history_section, self.state.history_tabs[self.state.history_section])
+
+    def _set_record_section(self, section: str, stat_combo: QComboBox) -> None:
+        self.state.record_section = section
+        stats = RECORD_SECTION_STAT_TABS[section]
+        stat_combo.blockSignals(True)
+        stat_combo.clear()
+        stat_combo.addItems(stats)
+        stat_combo.blockSignals(False)
+        self.state.record_stat = stats[0]
+        self._show_record_screen_rows()
+
+    def _set_record_stat(self, stat: str) -> None:
+        self.state.record_stat = stat
+        self._show_record_screen_rows()
+
+    def _load_history_screen_rows(self) -> None:
+        if getattr(self.model, "domain_item_count")("NBA History") <= 0:
+            self._start_background_scan(("NBA History",))
+            return
+        self._show_history_screen_rows()
+
+    def _history_table_items(self, history_type: int | None) -> list[RecordListItem]:
+        items = list(getattr(self.model, "loaded_items", {}).get("NBA History", {}).values())
+        read_raw_int = getattr(self.model, "_read_named_raw_int", None)
+        if callable(read_raw_int):
+            def season_key(item: RecordListItem) -> int:
+                value = read_raw_int("NBA History", item, "SEASON")
+                return int(str(value)) if value is not None else -1
+
+            if history_type is not None:
+                items = [item for item in items if read_raw_int("NBA History", item, "TYPE") == history_type]
+            items = sorted(items, key=season_key, reverse=True)
+        return items
+
+    def _show_history_screen_rows(self) -> None:
+        tab = self.state.history_tabs[self.state.history_section]
+        history_type = self._active_history_type()
+        try:
+            rows = self.model.refresh_history_screen_rows(self.state.history_section, tab, history_type)
+            self.table_row_items["NBA History"] = self._history_table_items(history_type)
+        except Exception as exc:
+            rows = [{"Status": f"NBA History unavailable: {exc}"}]
+            self.table_row_items["NBA History"] = []
+        self._fill_table(self.history_table, rows)
+
+    def _show_record_screen_rows(self) -> None:
+        start, count = self._active_record_row_group()
+        try:
+            rows = self.model.refresh_record_screen_rows(
+                self.state.record_section,
+                self.state.record_stat,
+                record_row_start=start,
+                record_row_count=count,
+            )
+            self.table_row_items["NBA Records"] = [
+                RecordListItem("NBA Records", index, self.model.record_address("NBA Records", index), f"{self.state.record_section} {self.state.record_stat} #{row + 1}")
+                for row, index in enumerate(self._active_record_indexes())
+            ]
+        except Exception as exc:
+            rows = [{"Status": f"NBA Records unavailable: {exc}"}]
+            self.table_row_items["NBA Records"] = []
+        self._fill_table(self.record_table, rows)
+
+    def _select_table_row(self, domain: str, table: QTableWidget) -> None:
+        item = self._selected_table_item(domain, table)
+        if item is None:
+            return
+        if domain == "NBA Records":
+            return
+        self.model.select_item_by_label(domain, item.display_label)
+        self._update_detail_panel(domain)
+
+    def _fill_table(self, table: QTableWidget, rows: list[dict[str, str]]) -> None:
+        columns: list[str] = []
+        for row in rows:
+            for key in row:
+                if key not in columns:
+                    columns.append(key)
+        table.setColumnCount(len(columns))
+        table.setHorizontalHeaderLabels(columns)
+        table.setRowCount(len(rows))
+        for row_index, row in enumerate(rows):
+            for col_index, column in enumerate(columns):
+                table.setItem(row_index, col_index, QTableWidgetItem(str(row.get(column, ""))))
+
+    def _player_roster_snapshot_path(self) -> Path:
+        self.state.player_roster_export_folder = self.roster_folder_input.text()
+        self.state.player_roster_snapshot_filename = self.roster_file_input.text() or PLAYER_ROSTER_DEFAULT_EXPORT_FILE
+        return Path(self.state.player_roster_export_folder) / self.state.player_roster_snapshot_filename
+
+    def _player_roster_export_mode(self) -> str:
+        self.state.player_roster_export_mode = self.roster_mode_combo.currentText()
+        return self.state.player_roster_export_mode
+
+    def _player_roster_team_range(self) -> tuple[int, int]:
+        self.state.player_roster_team_start = self.roster_start_input.text()
+        self.state.player_roster_team_end = self.roster_end_input.text()
+        return int(self.state.player_roster_team_start), int(self.state.player_roster_team_end)
+
+    def _team_items_by_index_range(self, start: int, end: int) -> list[RecordListItem]:
+        previous = self.model.selected_item("Teams")
+        teams: list[RecordListItem] = []
+        for label in self.model.domain_item_labels("Teams"):
+            item = self.model.select_item_by_label("Teams", label)
+            if item is not None and start <= item.index <= end:
+                teams.append(item)
+        self.model.select_item_by_label("Teams", previous.display_label if previous is not None else None)
+        return teams
+
+    def _team_item_by_label(self, label: str) -> RecordListItem | None:
+        previous = self.model.selected_item("Teams")
+        item = self.model.select_item_by_label("Teams", label)
+        self.model.select_item_by_label("Teams", previous.display_label if previous is not None else None)
+        return item
+
+    def _player_roster_export_items(self, mode: str) -> tuple[str, list[RecordListItem], Iterable[dict[str, Any] | None] | None]:
+        if mode == "Draft Class":
+            return mode, list(self.model.player_items_for_team_filter(PLAYER_TEAM_FILTER_DRAFT_CLASS).values()), None
+        if mode == "Selected Players":
+            selected_labels = self.state.selected_item_labels.get("Players", set())
+            items = [item for label, item in self.model.player_items_for_team_filter(PLAYER_TEAM_FILTER_ALL).items() if label in selected_labels]
+            return mode, items, None
+        if mode in {"Players From Team Range", "Players From Single Team"}:
+            start, end = self._player_roster_team_range()
+            if mode == "Players From Single Team":
+                selected = str(self.state.player_team_filter or "").strip()
+                if not selected or selected == PLAYER_TEAM_FILTER_ALL:
+                    raise ValueError("select a loaded team in the Team dropdown for single-team export")
+                team = self._team_item_by_label(selected)
+                if team is None:
+                    raise ValueError(f"selected team is not loaded: {selected}")
+                teams = [team]
+            else:
+                teams = self._team_items_by_index_range(start, end)
+            roster_rows = self.model.player_roster_slot_items_for_team_items(teams)
+            players = [player for player, _placement in roster_rows]
+            placements = [placement for _player, placement in roster_rows]
+            return mode, players, placements
+        return mode, list(self.model.player_items_for_team_filter(PLAYER_TEAM_FILTER_ALL).values()), None
+
+    def _player_roster_apply_target_items(self, mode: str) -> list[RecordListItem] | None:
+        if mode == "Draft Class":
+            return list(self.model.player_items_for_team_filter(PLAYER_TEAM_FILTER_DRAFT_CLASS).values())
+        if mode == "Selected Players":
+            labels = self.state.selected_item_labels.get("Players", set())
+            return [item for label, item in self.model.player_items_for_team_filter(PLAYER_TEAM_FILTER_ALL).items() if label in labels]
+        return None
+
+    def _export_player_roster_snapshot(self) -> None:
+        mode = self._player_roster_export_mode()
+        path = self._player_roster_snapshot_path()
+        export_mode, items, placements = self._player_roster_export_items(mode)
+        items = list(items)
+        placements = list(placements) if placements is not None else None
+
+        def worker() -> str:
+            snapshot = self.model.export_player_roster_snapshot_for_items(
+                items,
+                mode=export_mode,
+                placements=placements,
+                progress_callback=self._background_operation_progress,
+            )
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
+            return f"Exported {snapshot.get('record_count', len(items))} records to {path}"
+
+        self._start_background_operation("Roster Snapshot Export", worker)
+
+    def _apply_player_roster_snapshot(self) -> None:
+        mode = self._player_roster_export_mode()
+        path = self._player_roster_snapshot_path()
+        target_items = self._player_roster_apply_target_items(mode)
+        target_items = list(target_items) if target_items is not None else None
+
+        def worker() -> str:
+            snapshot = json.loads(path.read_text(encoding="utf-8"))
+            result = self.model.apply_player_roster_snapshot(
+                snapshot,
+                target_items=target_items,
+                progress_callback=self._background_operation_progress,
+            )
+            return f"Roster snapshot apply complete: {result}"
+
+        self._start_background_operation("Roster Snapshot Apply", worker)
+
+    def _raise_if_operation_cancelled(self) -> None:
+        if self.state.operation_cancel_requested:
+            raise _OperationCancelled("operation cancelled")
+
+    def _request_operation_cancel(self) -> None:
+        self.state.operation_cancel_requested = True
+        if self.operation_dialog is not None:
+            self.operation_dialog.message.setText("Cancelling...")
+            self.operation_dialog.cancel_button.setEnabled(False)
+
+    def _push_operation_event(self, event: str, value: Any) -> None:
+        with self.operation_events_lock:
+            self.operation_events.append((event, value))
+
+    def _start_background_operation(self, title: str, worker: Callable[[], str], *, done_callback: Callable[[], None] | None = None) -> None:
+        if self.operation_thread is not None and self.operation_thread.is_alive():
+            QMessageBox.warning(self, title, "Another operation is already running.")
+            return
+        self.state.operation_cancel_requested = False
+        self._show_operation_popup(f"{title}...", progress=0.0, overlay="0%")
+        QApplication.processEvents()
+        if not self.operation_timer.isActive():
+            self.operation_timer.start(50)
+
+        def run_worker() -> None:
+            try:
+                message = worker()
+            except _OperationCancelled:
+                self._push_operation_event("done", (f"{title} cancelled.", "cancelled", done_callback))
+            except Exception as exc:
+                self._push_operation_event("done", (f"{title} failed: {exc}", "failed", done_callback))
+            else:
+                self._push_operation_event("done", (message, "complete", done_callback))
+
+        self.operation_thread = threading.Thread(target=run_worker, name=f"nba2k-editor-{title.lower().replace(' ', '-')}", daemon=True)
+        self.operation_thread.start()
+
+    def _show_operation_popup(self, message: str, *, progress: float = 0.0, overlay: str = "") -> None:
+        if self.operation_dialog is None:
+            self.operation_dialog = OperationDialog(self._request_operation_cancel)
+        total = 100
+        current = int(progress * 100)
+        self.operation_dialog.update_progress(message, current, total, done=overlay in {"complete", "failed", "cancelled"})
+        self.operation_dialog.show()
+
+    def _background_operation_progress(self, current: int, total: int, message: str) -> None:
+        self._raise_if_operation_cancelled()
+        with self.operation_events_lock:
+            self.operation_events.append(("progress", (current, total, message)))
+
+    def _pop_operation_events(self) -> list[tuple[str, Any]]:
+        with self.operation_events_lock:
+            events = list(self.operation_events)
+            self.operation_events.clear()
+            return events
+
+    def _poll_background_operation(self) -> None:
+        for event, value in self._pop_operation_events():
+            if event == "progress":
+                current, total, message = value
+                progress = 1.0 if total <= 0 else max(0.0, min(1.0, current / total))
+                self._show_operation_popup(message, progress=progress, overlay=f"{int(round(progress * 100))}%")
+            elif event == "done":
+                message, overlay, done_callback = value
+                self._show_operation_popup(message, progress=1.0, overlay=overlay)
+                if done_callback is not None:
+                    done_callback()
+                self.state.operation_cancel_requested = False
+
+    def _refresh_player_generator_display(self) -> None:
+        if self.generator_text is not None:
+            self.generator_text.setPlainText(str(self._generator_display_text()))
+        self._refresh_player_generator_metrics()
+
+    def _refresh_player_generator_metrics(self) -> None:
+        if not self.generator_metric_labels:
+            return
+        state = self.player_generator_state
+        metrics = {
+            "source": "Yes" if getattr(state, "source_loaded", False) else "No",
+            "options": str(len(getattr(state, "players", ()) or ())),
+            "generated": str(len(getattr(state, "player_rows", ()) or ())),
+            "columns": str(len(getattr(state, "field_columns", ()) or ())),
+        }
+        for key, value in metrics.items():
+            if key in self.generator_metric_labels:
+                self.generator_metric_labels[key].setText(value)
+
+    def _load_player_generator_source(self) -> None:
+        display = self._generator_display_module()
+
+        def worker() -> str:
+            try:
+                self.player_generator_state = display.load_generator_display_state()
+            except Exception as exc:
+                self.player_generator_state = display.empty_generator_display_state(f"Load failed: {exc}")
+                raise
+            return str(getattr(self.player_generator_state, "status", "Loaded player generator source."))
+
+        self._start_background_operation("Load Player Generator Source", worker, done_callback=self._sync_player_generator_status)
+
+    def _refresh_player_generator_dropdowns(self) -> None:
+        if not getattr(self.player_generator_state, "source_loaded", False):
+            self._sync_player_generator_status()
+            return
+        display = self._generator_display_module()
+        if not hasattr(display, "update_generator_display_selection"):
+            self._sync_player_generator_status()
+            return
+        season = self.generator_year_combo.currentText() if self.generator_year_combo is not None else getattr(self.player_generator_state, "selected_season", "")
+        source_team = self.generator_source_team_combo.currentText() if self.generator_source_team_combo is not None else getattr(self.player_generator_state, "selected_source_team", "")
+        selected_player = self.generator_player_combo.currentText() if self.generator_player_combo is not None else getattr(self.player_generator_state, "selected_player", "")
+        try:
+            state = display.update_generator_display_selection(
+                self.player_generator_state,
+                selected_season=season or None,
+                selected_source_team=source_team or None,
+            )
+            if selected_player in getattr(state, "players", ()):
+                state = display.update_generator_display_selection(state, selected_player=selected_player)
+            self.player_generator_state = state
+        except Exception as exc:
+            self.player_generator_state = display.empty_generator_display_state(f"Selection failed: {exc}")
+        self._sync_player_generator_status()
+
+    def _display_generator_preview(self) -> None:
+        display = self._generator_display_module()
+        if hasattr(display, "generate_generator_preview_display_state"):
+            if getattr(self.player_generator_state, "source_loaded", False):
+                self._refresh_player_generator_dropdowns()
+            state_snapshot = self.player_generator_state
+
+            def worker() -> str:
+                try:
+                    state = state_snapshot
+                    if not getattr(state, "source_loaded", False):
+                        state = display.load_generator_display_state()
+                    self.player_generator_state = display.generate_generator_preview_display_state(state)
+                except Exception as exc:
+                    self.player_generator_state = display.empty_generator_display_state(f"Preview failed: {exc}")
+                    raise
+                return str(getattr(self.player_generator_state, "status", "Preview generated."))
+
+            self._start_background_operation("Display Player Generator Preview", worker, done_callback=self._sync_player_generator_status)
+
+    def _sync_player_generator_pool(self) -> None:
+        display = self._generator_display_module()
+        if hasattr(display, "sync_generator_pool_display_state"):
+            if getattr(self.player_generator_state, "source_loaded", False):
+                self._refresh_player_generator_dropdowns()
+            state_snapshot = self.player_generator_state
+
+            def worker() -> str:
+                try:
+                    state = state_snapshot
+                    if not getattr(state, "source_loaded", False):
+                        state = display.load_generator_display_state()
+                    self.player_generator_state = display.sync_generator_pool_display_state(state, progress_callback=self._background_operation_progress)
+                except Exception as exc:
+                    self.player_generator_state = display.empty_generator_display_state(f"Pool SQL sync failed: {exc}")
+                    raise
+                return str(getattr(self.player_generator_state, "status", "Player pool SQL sync complete."))
+
+            self._start_background_operation("Sync Player Pool SQL", worker, done_callback=self._sync_player_generator_status)
+
+    def _add_current_roster_to_player_pool(self) -> None:
+        display = self._generator_display_module()
+        if hasattr(display, "add_current_roster_to_pool_display_state"):
+            if getattr(self.player_generator_state, "source_loaded", False):
+                self._refresh_player_generator_dropdowns()
+            state_snapshot = self.player_generator_state
+
+            def worker() -> str:
+                try:
+                    state = state_snapshot
+                    if not getattr(state, "source_loaded", False):
+                        state = display.load_generator_display_state()
+                    self.player_generator_state = display.add_current_roster_to_pool_display_state(self.model, state, progress_callback=self._background_operation_progress)
+                except Exception as exc:
+                    self.player_generator_state = display.empty_generator_display_state(f"Add to pool SQL failed: {exc}")
+                    raise
+                return str(getattr(self.player_generator_state, "status", "Added current roster to pool SQL."))
+
+            self._start_background_operation("Add Current Roster to Pool SQL", worker, done_callback=self._sync_player_generator_status)
+
+    def _import_generator_to_game_display(self, *, match_existing_player_names: bool = False) -> None:
+        display = self._generator_display_module()
+        if hasattr(display, "import_generator_to_game_display_state"):
+            self._refresh_player_generator_dropdowns()
+            state_snapshot = self.player_generator_state
+
+            def worker() -> str:
+                try:
+                    self.player_generator_state = display.import_generator_to_game_display_state(
+                        self.model,
+                        state_snapshot,
+                        match_existing_player_names=match_existing_player_names,
+                        progress_callback=self._background_operation_progress,
+                    )
+                except Exception as exc:
+                    self.player_generator_state = display.empty_generator_display_state(f"Import failed: {exc}")
+                    raise
+                return str(getattr(self.player_generator_state, "status", "Import complete."))
+
+            self._start_background_operation("Import Generated Players", worker, done_callback=self._sync_player_generator_status)
+
+    def _generator_grid_text(self) -> str:
+        return str(getattr(self.player_generator_state, "player_rows", ""))
+
+    def _generator_source_options_text(self) -> str:
+        return str(getattr(self.player_generator_state, "players", ""))
+
+    def _generator_display_text(self) -> str:
+        display = self._generator_display_module()
+        state = self.player_generator_state
+        parts = [str(getattr(state, "status", ""))]
+        rows = getattr(state, "player_rows", ())
+        columns = getattr(state, "field_columns", ())
+        if rows:
+            parts.append("\nPreview:")
+            if columns:
+                parts.append("Player | Team | Player ID | " + " | ".join(str(column) for column in columns))
+            for row in rows:
+                parts.append(" | ".join([str(row.player), str(row.source_team), str(row.player_id), *(str(value) for value in row.values)]))
+        return "\n".join(part for part in parts if part)
+
+    def _sync_player_generator_status(self) -> None:
+        state = self.player_generator_state
+        combo_values = (
+            (self.generator_year_combo, list(getattr(state, "seasons", ())), str(getattr(state, "selected_season", ""))),
+            (self.generator_source_team_combo, list(getattr(state, "source_team_filters", ())), str(getattr(state, "selected_source_team", ""))),
+            (self.generator_player_combo, list(getattr(state, "players", ())), str(getattr(state, "selected_player", ""))),
+        )
+        for combo, items, selected in combo_values:
+            if combo is None:
+                continue
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItems(items)
+            if selected:
+                combo.setCurrentText(selected)
+            combo.blockSignals(False)
+        self._refresh_player_generator_display()
+
+    def _refresh_franchise_manager(self, *, background: bool = False) -> None:
+        if not hasattr(self.franchise_display, "build_franchise_dashboard_state"):
+            self._sync_franchise_manager_status()
+            return
+        if not background:
+            self.franchise_state = self.franchise_display.build_franchise_dashboard_state(self.model)
+            self._sync_franchise_manager_status()
+            return
+
+        def worker() -> str:
+            self.franchise_state = self.franchise_display.build_franchise_dashboard_state(self.model)
+            return str(getattr(self.franchise_state, "status", "Loaded full app dataset."))
+
+        self._start_background_operation("Use Full Loaded App Data", worker, done_callback=self._sync_franchise_manager_status)
+
+    def _sync_franchise_manager_status(self) -> None:
+        if self.franchise_text is None:
+            return
+        lines = [str(getattr(self.franchise_state, "status", ""))]
+        panel_texts = getattr(self.franchise_state, "panel_texts", {}) or {}
+        for panel, text in panel_texts.items():
+            lines.append(f"\n## {panel}\n{text}")
+        self.franchise_text.setPlainText("\n".join(lines))
+
+    def _apply_franchise_action(self, action: str) -> None:
+        index_text = getattr(self, "franchise_action_input", QLineEdit("1")).text()
+        action_index = int(index_text or "1") - 1
+        function_name = {
+            "trade": "apply_first_trade_proposal",
+            "signing": "apply_first_signing_plan",
+            "draft": "apply_first_draft_action",
+            "roster": "apply_first_roster_move",
+        }[action]
+        apply_function = getattr(self.franchise_display, function_name)
+        state_snapshot = self.franchise_state
+
+        def worker() -> str:
+            self.franchise_state = apply_function(self.model, state_snapshot, index=action_index)
+            return str(getattr(self.franchise_state, "status", f"Applied {action}."))
+
+        self._start_background_operation(f"Apply Franchise {action.title()}", worker, done_callback=self._sync_franchise_manager_status)
+
+    def _set_all_players_stat_ids_to_no_stats(self) -> None:
+        def worker() -> str:
+            result = self.model.set_all_players_stat_ids_to_no_stats(progress_callback=self._background_operation_progress)
+            return str(result)
+
+        self._start_background_operation("Set All Loaded Current Stat IDs To 65535", worker)
+
+    def run(self, *, load_on_start: bool = True) -> int:
+        app = _ensure_qapplication()
+        apply_qt_theme(app)
+        self.show()
+        print("QT_OPENED NBA2K Editor", flush=True)
+        if load_on_start:
+            self._attach_and_load_all()
+        self.scan_timer.start(50)
+        self.operation_timer.start(50)
+        return int(app.exec())
+
+
+__all__ = [
+    "QtEditorApp",
+    "APP_TITLE",
+    "APP_VIEWPORT_WIDTH",
+    "APP_VIEWPORT_HEIGHT",
+    "EDITOR_DOMAINS",
+    "RecordListItem",
+    "PLAYER_ROSTER_EXPORT_MODES",
+    "FRANCHISE_MANAGER_SCREEN",
+    "NAV_ORDER",
+    "APP_SCREENS",
+    "verify_edits",
+]
