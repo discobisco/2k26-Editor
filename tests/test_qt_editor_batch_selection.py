@@ -64,7 +64,7 @@ class FakeModel:
             "NBA Records": {},
         }
         self.selected_items: dict[str, RecordListItem | None] = {"Players": self.items[0], "Teams": self.team_items[0]}
-        self.writes: list[tuple[int, str]] = []
+        self.writes: list[tuple[int, Any]] = []
         self.resets: list[tuple[int, str | None]] = []
 
     def runtime_status_text(self) -> str:

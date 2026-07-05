@@ -35,7 +35,7 @@ class SeasonSelectorModel:
         self.selector_entry = FieldEntry("Players", "Stats", "Season IDs", 1, {"normalized_name": "STATSID1", "display_name": "STATS ID#1", "stat_role": "season_id_selector"})
         self.points_entry = FieldEntry("Players", "Stats", "Season IDs", 2, {"normalized_name": "POINTS", "display_name": "Points", "stat_role": "season_id_detail", "selected_record_source": {"base_pointer": "PlayerSeasonStats", "stride": "playerSeasonStatsSize"}})
         self.read_calls: list[tuple[str, int, object | None]] = []
-        self.write_calls: list[tuple[str, int, str, object | None]] = []
+        self.write_calls: list[tuple[str, int, object, object | None]] = []
 
     def runtime_status_text(self) -> str:
         return "not attached"
@@ -113,8 +113,19 @@ class SeasonSelectorModel:
         suffix = "99" if stat_selector == "[99] STATS ID#2" else "42"
         return {"raw_value": int(suffix), "display_value": f"PTS-{suffix}"}
 
-    def write_entry_value(self, entry: FieldEntry, *, index: int, value: str, stat_selector: object | None = None) -> None:
+    def write_entry_value(self, entry: FieldEntry, *, index: int, value: object, stat_selector: object | None = None) -> None:
         self.write_calls.append((entry.normalized_name, index, value, stat_selector))
+
+    def apply_player_roster_snapshot(self, snapshot, *, target_items=None, stat_selector=None, **_kwargs):
+        attempted = 0
+        for item, row in zip(tuple(target_items or ()), snapshot.get("records", [])):
+            for key, payload in row.get("fields", {}).items():
+                normalized = str(key).split("/")[-1]
+                entry = self.points_entry if normalized == self.points_entry.normalized_name else self.selector_entry
+                value = payload.get("display_value") if isinstance(payload, dict) else payload
+                self.write_entry_value(entry, index=item.index, value=value, stat_selector=stat_selector)
+                attempted += 1
+        return {"attempted": attempted, "succeeded": attempted, "failed": 0, "skipped": 0}
 
     def editor_field_save_key(self, entry: FieldEntry) -> str:
         return f"{entry.domain}\x1f{entry.section}\x1f{entry.group}\x1f{entry.ordinal}"

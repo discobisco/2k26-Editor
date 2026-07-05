@@ -4,6 +4,7 @@ import unittest
 from typing import Any
 
 from nba2k_editor.models.data_model import EditorDataModel
+from nba2k_editor.models.resetleaguemodel import ResetLeagueModel
 from nba2k_editor.models.schema import FieldEntry, RecordListItem
 
 
@@ -59,34 +60,59 @@ class ResetRecordingModel(EditorDataModel):
         return {"display_value": value}
 
 
+class ResetSnapshotModel:
+    def is_player_selected_stat_detail_entry(self, entry: FieldEntry) -> bool:
+        return entry.field.get("stat_role") == "season_id_detail"
+
+    def player_season_stat_id_options(self, player_index: int) -> list[str]:
+        return ["[42] STATS ID#1", "-- STATS ID#2 (65535)", "[99] CURRENTYEARSTATID"]
+
+
 class PlayerEditorResetTests(unittest.TestCase):
-    def test_reset_player_editor_values_uses_backend_owned_defaults(self) -> None:
+    def test_reset_model_keeps_stat_ids_and_zeroes_each_valid_stat_row(self) -> None:
+        entries = [
+            _entry("Vitals", "FIRSTNAME", 1),
+            _entry("Stats", "STATSID1", 2, stat_role="season_id_selector"),
+            _entry("Stats", "POINTS", 3, stat_role="season_id_detail", selected_record_source={"base_pointer": "PlayerSeasonStats", "stride": "playerSeasonStatsSize"}),
+            _entry("Stats", "ISUSED", 4, stat_role="season_id_detail", selected_record_source={"base_pointer": "PlayerSeasonStats", "stride": "playerSeasonStatsSize"}),
+        ]
+        item = RecordListItem("Players", 12, 0x1000, "Alpha")
+
+        snapshots = ResetLeagueModel(ResetSnapshotModel()).player_editor_reset_snapshots(item, entries, stat_selector_for_entry=lambda _entry: "[active]")
+
+        self.assertEqual(3, len(snapshots))
+        self.assertEqual(({"records": [{"index": 12, "fields": {"Vitals/FIRSTNAME": {"display_value": "A"}}}]}, None), snapshots[0])
+        self.assertEqual("[42] STATS ID#1", snapshots[1][1])
+        self.assertEqual("[99] CURRENTYEARSTATID", snapshots[2][1])
+        for snapshot, _selector in snapshots[1:]:
+            fields = snapshot["records"][0]["fields"]
+            self.assertEqual({"Stats/POINTS": {"display_value": 0}}, fields)
+            self.assertNotIn("Stats/STATSID1", fields)
+            self.assertNotIn("Stats/ISUSED", fields)
+
+    def test_apply_player_roster_snapshot_ignores_stats_by_default(self) -> None:
         model = ResetRecordingModel()
 
-        result = model.reset_player_editor_values(index=12, stat_selector="[42] Active")
-
-        self.assertEqual({"attempted": 7, "succeeded": 7, "failed": 0}, result)
-        self.assertEqual(
-            [
-                (12, "Vitals", "FIRSTNAME", "A", "[42] Active"),
-                (12, "Vitals", "LASTNAME", "Z", "[42] Active"),
-                (12, "Vitals", "BIRTHYEAR", 2006, "[42] Active"),
-                (12, "Attributes", "MIDRANGE", 25, "[42] Active"),
-                (12, "Tendencies", "SHOT", 0, "[42] Active"),
-                (12, "Badges", "BULLDOZER", 0, "[42] Active"),
-                (12, "Stats", "POINTS", 0, "[42] Active"),
-            ],
-            model.writes,
+        result = model.apply_player_roster_snapshot(
+            {
+                "records": [
+                    {
+                        "index": 12,
+                        "fields": {
+                            "Vitals/FIRSTNAME": {"display_value": "B"},
+                            "Stats/STATSID1": {"display_value": 65535},
+                            "Stats/POINTS": {"display_value": 0},
+                        },
+                    }
+                ]
+            },
+            stat_selector="[42] Active",
         )
 
-    def test_reset_player_editor_values_does_not_zero_stat_details_without_active_stat_selector(self) -> None:
-        model = ResetRecordingModel()
-
-        result = model.reset_player_editor_values(index=12)
-
-        self.assertEqual({"attempted": 6, "succeeded": 6, "failed": 0}, result)
-        self.assertNotIn("POINTS", [write[2] for write in model.writes])
-        self.assertNotIn("STATSID1", [write[2] for write in model.writes])
+        self.assertEqual(1, result["attempted"])
+        self.assertEqual(1, result["succeeded"])
+        self.assertEqual(2, result["skipped"])
+        self.assertEqual([(12, "Vitals", "FIRSTNAME", "B", "[42] Active")], model.writes)
 
     def test_set_all_players_stat_ids_writes_65535_to_each_stat_id_field_without_failure_accounting(self) -> None:
         model = ResetRecordingModel()

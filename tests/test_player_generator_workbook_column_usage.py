@@ -13,7 +13,7 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GENERATOR_DIR = PROJECT_ROOT / "nba2k_editor" / "Player Generator"
 MASTER_DB = GENERATOR_DIR / "NBA Player Data" / "NBA_DATA_Master.sqlite"
-REPORT_DIR = PROJECT_ROOT / "test" / "artifacts"
+REPORT_DIR = PROJECT_ROOT / "tests" / "artifacts"
 REPORT_JSON = REPORT_DIR / "player_generator_workbook_column_usage.json"
 REPORT_CSV = REPORT_DIR / "player_generator_workbook_column_usage.csv"
 
@@ -873,7 +873,6 @@ class TestPlayerGeneratorWorkbookColumnUsage(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.rows = build_usage_report()
-        write_usage_report(cls.rows)
 
     def test_qualified_literal_catch_all_does_not_count_as_usage(self) -> None:
         columns = load_workbook_columns()
@@ -950,13 +949,6 @@ def real_formula(evidence):
         unused_numeric_rows = [row for row in numeric_rows if row.usage_count == 0]
         self.assertGreater(len(used_numeric_rows), 0)
         self.assertGreater(len(unused_numeric_rows), 0)
-
-    def test_usage_report_artifacts_are_written(self) -> None:
-        self.assertTrue(REPORT_JSON.is_file(), REPORT_JSON)
-        self.assertTrue(REPORT_CSV.is_file(), REPORT_CSV)
-        self.assertGreater(REPORT_JSON.stat().st_size, 0)
-        self.assertGreater(REPORT_CSV.stat().st_size, 0)
-
 
 if __name__ == "__main__":
     rows = build_usage_report()

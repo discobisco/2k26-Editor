@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from functools import lru_cache
@@ -20,6 +21,7 @@ from player_rules import (
     derive_player_rule_values,
 )
 from workbook_sqlite import ensure_workbook_sqlite_database, iter_workbook_sqlite_sheet_rows, workbook_sqlite_sheet_names
+from pre_nba_source import build_pre_nba_evidence_by_key, has_pre_nba_season, pre_nba_context_rows
 
 _GENERATOR_DIR = Path(__file__).resolve().parent
 _DEFAULT_OFFSETS_PLAYERS_PATH = _GENERATOR_DIR.parent / "core" / "Offsets" / "offsets_players.json"
@@ -210,6 +212,7 @@ def generate_player_proposal(
             "team_abbrev": source_team,
             "team_name": _team_display_name(evidence),
             "multi_team_stat_shares": evidence.source_context.get("multi_team_stat_shares"),
+            "source": evidence.source_context.get("source"),
         },
         field_candidates=candidates,
     )
@@ -287,7 +290,7 @@ def generate_draft_class_proposals(
 def _draft_pick_mode_proposals(context: SeasonPlayerContextIndex, draft_year: int) -> list[GeneratedPlayerProposal]:
     proposals: list[GeneratedPlayerProposal] = []
     by_player = _context_keys_by_player_id(context)
-    for draft_row in _draft_pick_rows(context.source_database_path, draft_year):
+    for draft_row in _draft_pick_rows(context.source_database_path, draft_year, player_ids=set(by_player)):
         player_id = str(draft_row.get("player_id") or "").strip().upper()
         if not player_id:
             continue
@@ -300,13 +303,16 @@ def _draft_pick_mode_proposals(context: SeasonPlayerContextIndex, draft_year: in
 
 
 def _rookie_year_mode_proposals(context: SeasonPlayerContextIndex, draft_year: int) -> list[GeneratedPlayerProposal]:
-    draft_rows = {str(row.get("player_id") or "").strip().upper(): row for row in _draft_pick_rows(context.source_database_path, draft_year)}
+    context_player_ids = {player_id for player_id, _team in context.player_keys()}
+    draft_row_entries = _draft_pick_rows(context.source_database_path, draft_year, player_ids=context_player_ids)
+    draft_rows = {str(row.get("player_id") or "").strip().upper(): row for row in draft_row_entries}
+    draft_order = {str(row.get("player_id") or "").strip().upper(): index for index, row in enumerate(draft_row_entries)}
     rookie_keys: list[tuple[str, str]] = []
     for player_id, team in context.player_keys():
         evidence = context.evidence_for(player_id=player_id, team=team)
         if _is_rookie_year_evidence(evidence, context.season):
             rookie_keys.append((player_id, team))
-    rookie_keys.sort(key=lambda key: _rookie_year_sort_key(context, key, draft_rows))
+    rookie_keys.sort(key=lambda key: _rookie_year_sort_key(key, draft_order))
 
     proposals: list[GeneratedPlayerProposal] = []
     for player_id, team in rookie_keys:
@@ -322,18 +328,17 @@ def _context_keys_by_player_id(context: SeasonPlayerContextIndex) -> dict[str, t
     return {player_id: tuple(sorted(keys)) for player_id, keys in grouped.items()}
 
 
-def _draft_pick_rows(database: Path, draft_year: int) -> tuple[dict[str, Any], ...]:
-    rows = [row for row in iter_workbook_sqlite_sheet_rows(database, "Draft Picks") if row.get("season") == int(draft_year)]
-    return tuple(sorted(rows, key=_draft_pick_sort_key))
-
-
-def _draft_pick_sort_key(row: dict[str, Any]) -> tuple[int, int, str]:
-    overall = _int_value(row.get("overall_pick"))
-    round_number = _int_value(row.get("round"))
-    name = str(row.get("player") or "").strip().upper()
-    if overall is None or round_number is None or not name:
-        raise ValueError("draft pick row is missing sort evidence")
-    return (overall, round_number, name)
+def _draft_pick_rows(database: Path, draft_year: int, *, player_ids: set[str] | None = None) -> tuple[dict[str, Any], ...]:
+    wanted_players = {str(player_id).strip().upper() for player_id in player_ids} if player_ids is not None else None
+    rows = []
+    for row in iter_workbook_sqlite_sheet_rows(database, "Draft Picks"):
+        if row.get("season") != int(draft_year):
+            continue
+        player_id = str(row.get("player_id") or "").strip().upper()
+        if wanted_players is not None and player_id not in wanted_players:
+            continue
+        rows.append(row)
+    return tuple(rows)
 
 
 def _is_rookie_year_evidence(evidence: PlayerEvidence, rookie_season: int) -> bool:
@@ -343,18 +348,10 @@ def _is_rookie_year_evidence(evidence: PlayerEvidence, rookie_season: int) -> bo
 
 
 def _rookie_year_sort_key(
-    context: SeasonPlayerContextIndex,
     key: tuple[str, str],
-    draft_rows: dict[str, dict[str, Any]],
-) -> tuple[int, int, int, str]:
-    player_id, team = key
-    draft_row = draft_rows.get(player_id)
-    evidence = context.evidence_for(player_id=player_id, team=team)
-    player_name = str(evidence.identity.get("player") or player_id).strip().upper()
-    if draft_row is None:
-        return (1, 9999, 9999, player_name)
-    overall, round_number, _ = _draft_pick_sort_key(draft_row)
-    return (0, overall, round_number, player_name)
+    draft_order: dict[str, int],
+) -> int:
+    return draft_order.get(key[0], len(draft_order))
 
 
 def _proposal_with_draft_class_metadata(
@@ -403,8 +400,17 @@ def season_context_index(
 @lru_cache(maxsize=None)
 def _cached_season_context_index(database_path: str, season: int, offsets_path: str) -> SeasonPlayerContextIndex:
     database = Path(database_path)
-    sheet_names = workbook_sqlite_sheet_names(database)
     field_index = _cached_authored_player_field_index(offsets_path)
+    if not _workbook_has_player_season(database, season) and has_pre_nba_season(database.parent, season):
+        evidence_by_key = build_pre_nba_evidence_by_key(database.parent, season)
+        return SeasonPlayerContextIndex(
+            season=season,
+            source_database_path=database,
+            comparison_rows=pre_nba_context_rows(database.parent, season),
+            evidence_by_key=evidence_by_key,
+            field_index=dict(field_index),
+        )
+    sheet_names = workbook_sqlite_sheet_names(database)
     multi_team_primary = _multi_team_primary_teams(database, season)
     multi_team_shares = _multi_team_stat_shares(database, season, multi_team_primary)
 
@@ -495,6 +501,21 @@ def _cached_season_context_index(database_path: str, season: int, offsets_path: 
         evidence_by_key=evidence_by_key,
         field_index=dict(field_index),
     )
+
+
+def _workbook_has_player_season(database: Path, season: int) -> bool:
+    table_name = _workbook_table_name(database, _BASE_PLAYER_SEASON_SHEET)
+    with sqlite3.connect(database) as connection:
+        row = connection.execute(f'SELECT 1 FROM "{table_name}" WHERE season = ? LIMIT 1', (int(season),)).fetchone()
+    return row is not None
+
+
+def _workbook_table_name(database: Path, sheet_name: str) -> str:
+    with sqlite3.connect(database) as connection:
+        row = connection.execute("SELECT table_name FROM workbook_tables WHERE sheet_name = ?", (sheet_name,)).fetchone()
+    if row is None:
+        raise KeyError(f"workbook sheet not found in SQLite database: {sheet_name}")
+    return str(row[0])
 
 
 def _build_evidence_index(

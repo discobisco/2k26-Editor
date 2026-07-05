@@ -831,8 +831,8 @@ class EditorDataModel:
         item = self.selected_items["Teams"]
         if item is None:
             raise RuntimeError("select a team first")
-        saved = 0
-        failed = 0
+        fields: dict[str, dict[str, Any]] = {}
+        missing = 0
         for label, candidates in TEAM_SUMMARY_FIELD_SPECS:
             entry = None
             for name in candidates:
@@ -840,14 +840,53 @@ class EditorDataModel:
                 if entry is not None:
                     break
             if entry is None:
-                failed += 1
+                missing += 1
+                continue
+            fields[f"{entry.section}/{entry.normalized_name}"] = {"display_value": values.get(label, "")}
+        result = self.apply_team_summary_snapshot({"records": [{"index": item.index, "fields": fields}]})
+        return int(result["succeeded"]), int(result["failed"] + result["skipped"] + missing)
+
+    def apply_team_summary_snapshot(self, snapshot: dict[str, Any]) -> dict[str, int]:
+        entries: dict[str, FieldEntry] = {}
+        for _label, candidates in TEAM_SUMMARY_FIELD_SPECS:
+            for name in candidates:
+                entry = self._field_by_normalized_name("Teams", name)
+                if entry is not None:
+                    entries[f"{entry.section}/{entry.normalized_name}"] = entry
+                    break
+        records = snapshot.get("records") if isinstance(snapshot, dict) else None
+        if not isinstance(records, list):
+            raise ValueError("team summary snapshot is missing records")
+        attempted = 0
+        succeeded = 0
+        failed = 0
+        skipped = 0
+        for row in records:
+            if not isinstance(row, dict):
+                skipped += 1
+                continue
+            fields = row.get("fields")
+            if not isinstance(fields, dict):
+                skipped += 1
                 continue
             try:
-                self.write_entry_value(entry, index=item.index, value=values.get(label, ""))
-                saved += 1
+                index = int(row["index"])
             except Exception:
-                failed += 1
-        return saved, failed
+                skipped += len(fields)
+                continue
+            for key, payload in fields.items():
+                entry = entries.get(str(key))
+                if entry is None:
+                    skipped += 1
+                    continue
+                value = payload.get("display_value") if isinstance(payload, dict) else payload
+                attempted += 1
+                try:
+                    self.write_entry_value(entry, index=index, value=value)
+                    succeeded += 1
+                except Exception:
+                    failed += 1
+        return {"attempted": attempted, "succeeded": succeeded, "failed": failed, "skipped": skipped}
 
     def selected_detail_title(self, domain: str, label: str) -> str:
         item = self.selected_items[domain]
@@ -1097,15 +1136,21 @@ class EditorDataModel:
     ) -> dict[str, int]:
         items = tuple(player_items) if player_items is not None else tuple(self.loaded_items.get("Players", {}).values())
         selector_entries = tuple(self._player_season_id_selector_entries(_STAT_ROLE_SELECTOR))
-        total = len(items) * len(selector_entries)
-        written = 0
-        for item in items:
-            for entry in selector_entries:
-                self.write_entry_value(entry, index=item.index, value=65535)
-                written += 1
-                if progress_callback is not None:
-                    progress_callback(written, total, f"Setting player stat IDs: {written}/{total}")
-        return {"players": len(items), "stat_id_fields": len(selector_entries), "written": written}
+        fields = {f"{entry.section}/{entry.normalized_name}": {"display_value": 65535} for entry in selector_entries}
+        total = len(items) * len(fields)
+
+        def apply_progress(done: int, _total: int, _message: str) -> None:
+            if progress_callback is not None:
+                written = min(done * len(fields), total)
+                progress_callback(written, total, f"Setting player stat IDs: {written}/{total}")
+
+        result = self.apply_player_roster_snapshot(
+            {"records": [{"fields": fields} for _item in items]},
+            target_items=items,
+            progress_callback=apply_progress,
+            allow_stats=True,
+        )
+        return {"players": len(items), "stat_id_fields": len(selector_entries), "written": int(result["succeeded"])}
 
     def export_player_roster_snapshot(self, *, limit: int | None = None, progress_callback: Any | None = None) -> dict[str, Any]:
         return self.export_player_roster_snapshot_for_items(self.scan_records("Players", limit=limit), progress_callback=progress_callback)
@@ -1183,6 +1228,21 @@ class EditorDataModel:
             return payload.get("display_value")
         return payload
 
+    def _write_player_roster_snapshot_value(
+        self,
+        *,
+        target_domain: str,
+        target_record_addr: int | None,
+        entry: FieldEntry,
+        index: int,
+        value: Any,
+        stat_selector: object | None = None,
+    ) -> None:
+        if target_domain == "Draft Class" and target_record_addr is not None:
+            self._write_field_at_record_address("Draft Class", int(target_record_addr), entry.field, value)
+            return
+        self.write_entry_value(entry, index=index, value=value, stat_selector=stat_selector)
+
     def apply_player_roster_snapshot(
         self,
         snapshot: dict[str, Any],
@@ -1190,6 +1250,8 @@ class EditorDataModel:
         limit: int | None = None,
         progress_callback: Any | None = None,
         target_items: Iterable[RecordListItem] | None = None,
+        stat_selector: object | None = None,
+        allow_stats: bool = False,
     ) -> dict[str, int]:
         entries = {f"{entry.section}/{entry.normalized_name}": entry for entry in self._portable_player_roster_entries()}
         records = snapshot.get("records") if isinstance(snapshot, dict) else None
@@ -1199,8 +1261,8 @@ class EditorDataModel:
         target_item_tuple = tuple(target_items) if target_items is not None else None
         target_indices = tuple(item.index for item in target_item_tuple) if target_item_tuple is not None else None
         slot_target_indices: dict[tuple[object, str], int] = {}
-        if target_indices is None:
-            for player, placement in self.player_roster_slot_items_for_team_items(self.loaded_items.get("Teams", {}).values()):
+        if target_indices is None and getattr(self, "loaded_items", {}).get("Teams"):
+            for player, placement in self.player_roster_slot_items_for_team_items(getattr(self, "loaded_items", {}).get("Teams", {}).values()):
                 slot_key = _field_identity(str(placement.get("team_slot_field") or f"PLAYER{placement.get('team_slot')}"))
                 slot_target_indices[(int(placement["team_index"]), slot_key)] = int(player.index)
                 slot_target_indices[(str(placement["team_label"]), slot_key)] = int(player.index)
@@ -1266,13 +1328,20 @@ class EditorDataModel:
                 if entry is None:
                     skipped += 1
                     continue
+                if entry.section == "Stats" and not allow_stats:
+                    skipped += 1
+                    continue
                 value = self._snapshot_write_value(row, entry, payload)
                 attempted += 1
                 try:
-                    if target_domain == "Draft Class" and target_record_addr is not None:
-                        self._write_field_at_record_address("Draft Class", int(target_record_addr), entry.field, value)
-                    else:
-                        self.write_entry_value(entry, index=index, value=value)
+                    self._write_player_roster_snapshot_value(
+                        target_domain=target_domain,
+                        target_record_addr=target_record_addr,
+                        entry=entry,
+                        index=index,
+                        value=value,
+                        stat_selector=stat_selector,
+                    )
                     succeeded += 1
                 except Exception:
                     failed += 1
