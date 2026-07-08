@@ -11,6 +11,8 @@ _SOURCE_ROOT = _GENERATOR_DIR / "NBA Player Data"
 _DATABASE_NAME = "NBA_DATA_Master.sqlite"
 _BASE_PLAYER_SEASON_SHEET = "Player Season Info"
 _SOURCE_TEAM_ALL = "All source teams"
+_LEAGUE_ALL = "All leagues"
+_POSITION_ALL = "All positions"
 _PLAYER_LABEL_SEPARATOR = " | "
 _MULTI_TEAM_MARKERS = {"TOT", "2TM", "3TM", "4TM", "5TM"}
 
@@ -44,6 +46,10 @@ class GeneratorDisplayState:
     source_loaded: bool
     seasons: tuple[str, ...]
     selected_season: str
+    league_filters: tuple[str, ...]
+    selected_league: str
+    position_filters: tuple[str, ...]
+    selected_position: str
     source_team_filters: tuple[str, ...]
     selected_source_team: str
     players: tuple[str, ...]
@@ -60,6 +66,10 @@ def empty_generator_display_state(status: str = "Load generator source data to d
         source_loaded=False,
         seasons=(),
         selected_season="",
+        league_filters=(_LEAGUE_ALL,),
+        selected_league=_LEAGUE_ALL,
+        position_filters=(_POSITION_ALL,),
+        selected_position=_POSITION_ALL,
         source_team_filters=(_SOURCE_TEAM_ALL,),
         selected_source_team=_SOURCE_TEAM_ALL,
         players=(),
@@ -74,19 +84,27 @@ def load_generator_display_state(*, selected_season: str | int | None = None) ->
     if not seasons:
         return empty_generator_display_state("Generator source data loaded, but no seasons were found.")
     season = seasons[0] if selected_season is None else _require_option(selected_season, seasons, "season")
-    source_team_filters = (_SOURCE_TEAM_ALL, *_source_team_options(database, int(season)))
+    selected_league = _LEAGUE_ALL
+    selected_position = _POSITION_ALL
     selected_source_team = _SOURCE_TEAM_ALL
-    players = _player_options(database, int(season), selected_source_team)
+    league_filters = (_LEAGUE_ALL, *_league_options(database, int(season)))
+    source_team_filters = (_SOURCE_TEAM_ALL, *_source_team_options(database, int(season), selected_league))
+    position_filters = (_POSITION_ALL, *_position_options(database, int(season), selected_league))
+    players = _player_options(database, int(season), selected_league, selected_source_team, selected_position)
     selected_player = players[0] if players else ""
     return GeneratorDisplayState(
         source_loaded=True,
         seasons=seasons,
         selected_season=season,
+        league_filters=league_filters,
+        selected_league=selected_league,
+        position_filters=position_filters,
+        selected_position=selected_position,
         source_team_filters=source_team_filters,
         selected_source_team=selected_source_team,
         players=players,
         selected_player=selected_player,
-        status=_option_status(season, selected_source_team, players),
+        status=_option_status(season, selected_league, selected_position, selected_source_team, players),
     )
 
 
@@ -94,6 +112,8 @@ def update_generator_display_selection(
     state: GeneratorDisplayState,
     *,
     selected_season: str | int | None = None,
+    selected_league: str | None = None,
+    selected_position: str | None = None,
     selected_source_team: str | None = None,
     selected_player: str | None = None,
 ) -> GeneratorDisplayState:
@@ -101,15 +121,24 @@ def update_generator_display_selection(
         return state
     database = _database_path()
     season = state.selected_season if selected_season is None else _require_option(selected_season, state.seasons, "season")
-    source_team_filters = (_SOURCE_TEAM_ALL, *_source_team_options(database, int(season)))
-    source_team = state.selected_source_team if selected_source_team is None else _require_option(selected_source_team, source_team_filters, "source team")
-    players = _player_options(database, int(season), source_team)
+    league_filters = (_LEAGUE_ALL, *_league_options(database, int(season)))
+    requested_league = state.selected_league if selected_league is None else str(selected_league or "").strip()
+    league = requested_league if requested_league in league_filters else _LEAGUE_ALL
+    position_filters = (_POSITION_ALL, *_position_options(database, int(season), league))
+    requested_position = state.selected_position if selected_position is None else str(selected_position or "").strip()
+    position = requested_position if requested_position in position_filters else _POSITION_ALL
+    source_team_filters = (_SOURCE_TEAM_ALL, *_source_team_options(database, int(season), league))
+    requested_source_team = state.selected_source_team if selected_source_team is None else str(selected_source_team or "").strip()
+    source_team = requested_source_team if requested_source_team in source_team_filters else _SOURCE_TEAM_ALL
+    players = _player_options(database, int(season), league, source_team, position)
     if selected_player is None:
         player = state.selected_player if state.selected_player in players else (players[0] if players else "")
     else:
         player = _require_option(selected_player, players, "player")
     selection_changed = (
         season != state.selected_season
+        or league != state.selected_league
+        or position != state.selected_position
         or source_team != state.selected_source_team
         or player != state.selected_player
         or players != state.players
@@ -117,6 +146,10 @@ def update_generator_display_selection(
     return replace(
         state,
         selected_season=season,
+        league_filters=league_filters,
+        selected_league=league,
+        position_filters=position_filters,
+        selected_position=position,
         source_team_filters=source_team_filters,
         selected_source_team=source_team,
         players=players,
@@ -125,7 +158,7 @@ def update_generator_display_selection(
         field_columns=() if selection_changed else state.field_columns,
         player_rows=() if selection_changed else state.player_rows,
         generated_proposals=() if selection_changed else state.generated_proposals,
-        status=_option_status(season, source_team, players) if selection_changed else state.status,
+        status=_option_status(season, league, position, source_team, players) if selection_changed else state.status,
     )
 
 
@@ -179,6 +212,8 @@ def generate_generator_preview_display_state(state: GeneratorDisplayState) -> Ge
     selected = update_generator_display_selection(
         state,
         selected_season=state.selected_season,
+        selected_league=state.selected_league,
+        selected_position=state.selected_position,
         selected_source_team=state.selected_source_team,
     )
 
@@ -193,9 +228,19 @@ def generate_generator_preview_display_state(state: GeneratorDisplayState) -> Ge
     )
     team_filter = None if selected.selected_source_team == _SOURCE_TEAM_ALL else selected.selected_source_team
     batch = generate_player_proposals_from_index(season_context_index(contract), team_filter=team_filter)
+    selected_keys = {
+        (player_id, source_team)
+        for label in selected.players
+        for player_id, source_team, _player in (_parse_player_label(label),)
+    }
+    proposals = tuple(
+        proposal
+        for proposal in batch.proposals
+        if (str(proposal.player_id).strip(), str(proposal.team).strip().upper()) in selected_keys
+    )
     columns: list[str] = []
     proposal_values: dict[tuple[str, str], dict[str, str]] = {}
-    for proposal in batch.proposals:
+    for proposal in proposals:
         values: dict[str, str] = {}
         for candidate in proposal.field_candidates:
             column = _field_column(candidate)
@@ -213,8 +258,11 @@ def generate_generator_preview_display_state(state: GeneratorDisplayState) -> Ge
         rows=(),
         field_columns=tuple(columns),
         player_rows=tuple(rows),
-        generated_proposals=batch.proposals,
-        status=f"Displaying {len(rows)} generated players and {len(columns)} data columns for {selected.selected_season} / {selected.selected_source_team}.",
+        generated_proposals=proposals,
+        status=(
+            f"Displaying {len(rows)} generated players and {len(columns)} data columns for "
+            f"{selected.selected_season} / {selected.selected_league} / {selected.selected_position} / {selected.selected_source_team}."
+        ),
     )
 
 
@@ -269,22 +317,70 @@ def _season_options(database: Path) -> tuple[str, ...]:
     return tuple(sorted(seasons, key=lambda value: int(value), reverse=True))
 
 
-def _source_team_options(database: Path, season: int) -> tuple[str, ...]:
+def _league_options(database: Path, season: int) -> tuple[str, ...]:
     context = _generator_context_for_season(season)
-    return tuple(sorted({team for _player_id, team in context.player_keys()}))
+    leagues = {_evidence_league(context.evidence_for(player_id=player_id, team=team)) for player_id, team in context.player_keys()}
+    return tuple(sorted(league for league in leagues if league))
 
 
-def _player_options(database: Path, season: int, source_team: str) -> tuple[str, ...]:
+def _source_team_options(database: Path, season: int, league: str) -> tuple[str, ...]:
+    context = _generator_context_for_season(season)
+    return tuple(
+        sorted(
+            {
+                team
+                for player_id, team in context.player_keys()
+                if _league_matches(context.evidence_for(player_id=player_id, team=team), league)
+            }
+        )
+    )
+
+
+def _position_options(database: Path, season: int, league: str) -> tuple[str, ...]:
+    context = _generator_context_for_season(season)
+    positions: set[str] = set()
+    for player_id, team in context.player_keys():
+        evidence = context.evidence_for(player_id=player_id, team=team)
+        if not _league_matches(evidence, league):
+            continue
+        positions.update(_evidence_positions(evidence))
+    order = {position: index for index, position in enumerate(("PG", "SG", "SF", "PF", "C"))}
+    return tuple(sorted(positions, key=lambda value: (order.get(value, 99), value)))
+
+
+def _player_options(database: Path, season: int, league: str, source_team: str, position: str) -> tuple[str, ...]:
     context = _generator_context_for_season(season)
     team_filter = None if not source_team or source_team == _SOURCE_TEAM_ALL else source_team
+    selected_position = str(position or "").strip().upper()
     labels: list[str] = []
     for player_id, team in context.player_keys(team_filter=team_filter):
         evidence = context.evidence_for(player_id=player_id, team=team)
+        if not _league_matches(evidence, league):
+            continue
+        if selected_position and selected_position != _POSITION_ALL.upper() and selected_position not in _evidence_positions(evidence):
+            continue
         source_player_id = str(evidence.player_id or player_id).strip()
         source_team = str(evidence.team or team).strip().upper()
         player_name = str(evidence.identity.get("player") or evidence.season_info.get("player") or source_player_id).strip()
         labels.append(_player_label(player_name, source_team, source_player_id))
     return tuple(sorted(labels, key=str.casefold))
+
+
+def _league_matches(evidence: Any, selected_league: str) -> bool:
+    league = _evidence_league(evidence)
+    return not selected_league or selected_league == _LEAGUE_ALL or league == selected_league
+
+
+def _evidence_league(evidence: Any) -> str:
+    return str(evidence.season_info.get("lg") or evidence.season_info.get("league") or "").strip().upper()
+
+
+def _evidence_positions(evidence: Any) -> tuple[str, ...]:
+    _ensure_generator_import_path()
+    from stat_neighbor_framework import select_positions_from_evidence
+
+    selected = select_positions_from_evidence(evidence.play_by_play, evidence.season_info.get("pos") or evidence.identity.get("pos"))
+    return tuple(position for position in selected.all_positions if position)
 
 
 def _generator_context_for_season(season: int) -> Any:
@@ -327,8 +423,8 @@ def _require_option(value: object, options: tuple[str, ...], label: str) -> str:
     raise ValueError(f"invalid generator {label}: {text}")
 
 
-def _option_status(season: str, source_team: str, players: tuple[str, ...]) -> str:
-    return f"Displaying {len(players)} player options for {season} / {source_team}."
+def _option_status(season: str, league: str, position: str, source_team: str, players: tuple[str, ...]) -> str:
+    return f"Displaying {len(players)} player options for {season} / {league} / {position} / {source_team}."
 
 
 def _ensure_generator_import_path() -> None:
