@@ -3890,6 +3890,13 @@
               "length": 8,
               "startBit": 0,
               "type": "number"
+            },
+            "2K26": {
+              "address": 52,
+              "hex": "0x34",
+              "length": 16,
+              "startBit": 0,
+              "type": "number"
             }
           }
         },

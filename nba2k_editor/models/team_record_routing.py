@@ -96,6 +96,7 @@ def team_record_rows(model: Any, item: Any, section: str, stat: str) -> list[dic
         limit=row_count,
         record_row_start=int(start_index) + int(row_start),
         record_row_count=row_count,
+        record_row_stride=model.domain_stride("NBA Records"),
     )
 
 

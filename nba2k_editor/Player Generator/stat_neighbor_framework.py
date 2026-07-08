@@ -83,6 +83,27 @@ FEATURES: tuple[str, ...] = (
     "num_of_dunks",
     "percent_corner_3s_of_3pa",
     "corner_3_point_percent",
+    "team_points",
+    "team_pa",
+    "team_poss",
+    "team_games",
+    "team_fgm",
+    "team_fga",
+    "team_3pm",
+    "team_3pa",
+    "team_ftm",
+    "team_fta",
+    "team_ast",
+    "team_orb",
+    "team_drb",
+    "team_stl",
+    "team_blk",
+    "team_tov",
+    "team_pf",
+    "opp_fgm",
+    "opp_fga",
+    "opp_3pm",
+    "opp_3pa",
     "team_o_rtg",
     "team_d_rtg",
     "team_n_rtg",
@@ -121,6 +142,7 @@ class PositionSelection:
     primary: str
     secondary: str | None
     all_positions: tuple[str, ...]
+    position_weights: tuple[tuple[str, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -139,10 +161,27 @@ class StatNeighborModel:
         player_key = (_clean_key(player_id), position.strip().upper())
         return dict(self.suggestions_by_player_position.get(player_key, {}))
 
-    def suggestions_for_evidence(self, *, evidence: Any, position: str) -> dict[str, NeighborFieldSuggestion]:
-        return self.suggestions_for_features(
+    def suggestions_for_evidence(self, *, evidence: Any, positions: PositionSelection) -> dict[str, NeighborFieldSuggestion]:
+        return self.suggestions_for_position_selection(
             target_features=target_features_from_evidence(evidence),
-            position=position,
+            positions=positions,
+        )
+
+    def suggestions_for_position_selection(self, *, target_features: dict[str, float | None], positions: PositionSelection) -> dict[str, NeighborFieldSuggestion]:
+        weighted_positions = tuple((pos, weight) for pos, weight in positions.position_weights if pos in POSITIONS and weight > 0.0)
+        if weighted_positions:
+            return _blend_weighted_position_suggestions(
+                (
+                    (pos, weight, self.suggestions_for_features(target_features=target_features, position=pos))
+                    for pos, weight in weighted_positions
+                )
+            )
+        return _best_position_suggestions(
+            (
+                (pos, self.suggestions_for_features(target_features=target_features, position=pos))
+                for pos in positions.all_positions
+                if pos in POSITIONS
+            )
         )
 
     def suggestions_for_features(self, *, target_features: dict[str, float | None], position: str) -> dict[str, NeighborFieldSuggestion]:
@@ -165,7 +204,8 @@ class StatNeighborModel:
                 k=5,
             )
             for field_key in field_keys:
-                top = [row["candidate"] for row in neighbors if field_key in row["candidate"]["fields"]]
+                field_rows = [row for row in neighbors if field_key in row["candidate"]["fields"]]
+                top = [row["candidate"] for row in field_rows]
                 if not top:
                     continue
                 field_values = [float(candidate["fields"][field_key]) for candidate in top]
@@ -179,11 +219,84 @@ class StatNeighborModel:
                         f"position={pos}",
                         f"section_features={','.join(section_features)}",
                         f"neighbor_count={len(field_values)}",
+                        f"best_distance={field_rows[0]['distance']:.6f}",
+                        f"common_features={field_rows[0]['common_features']}",
                         "rank_weights=54,25,15,5,1",
                         f"top_neighbor={top[0].get('player_label')}",
                     ),
                 )
         return values
+
+
+def _blend_weighted_position_suggestions(
+    position_suggestions: Any,
+) -> dict[str, NeighborFieldSuggestion]:
+    by_field: dict[str, list[tuple[str, float, NeighborFieldSuggestion]]] = {}
+    position_weights: list[tuple[str, float]] = []
+    for position, weight, suggestions in position_suggestions:
+        if not suggestions:
+            continue
+        position_weights.append((position, weight))
+        for field_key, suggestion in suggestions.items():
+            by_field.setdefault(field_key, []).append((position, weight, suggestion))
+
+    values: dict[str, NeighborFieldSuggestion] = {}
+    for field_key, entries in by_field.items():
+        total_weight = sum(weight for _position, weight, _suggestion in entries)
+        if total_weight <= 0.0:
+            continue
+        numeric_values: list[tuple[float, float]] = []
+        for _position, weight, suggestion in entries:
+            number = _float(suggestion.value)
+            if number is not None:
+                numeric_values.append((number, weight))
+        if numeric_values:
+            blended_value: int | str = int(round(sum(value * weight for value, weight in numeric_values) / sum(weight for _value, weight in numeric_values)))
+        else:
+            blended_value = max(entries, key=lambda entry: entry[1])[2].value
+        values[field_key] = NeighborFieldSuggestion(
+            field_key=field_key,
+            value=blended_value,
+            source_rule="position_percent_weighted_neighbor",
+            evidence_keys=(
+                "position_weights=" + ",".join(f"{position}:{weight:.6f}" for position, weight in position_weights),
+                "blended_positions=" + ",".join(position for position, _weight, _suggestion in entries),
+                *tuple(f"{position}:{key}" for position, _weight, suggestion in entries for key in suggestion.evidence_keys),
+            ),
+        )
+    return values
+
+
+def _best_position_suggestions(
+    position_suggestions: Any,
+) -> dict[str, NeighborFieldSuggestion]:
+    values: dict[str, tuple[int, float, NeighborFieldSuggestion]] = {}
+    for order, (position, suggestions) in enumerate(position_suggestions):
+        for field_key, suggestion in suggestions.items():
+            distance = _suggestion_best_distance(suggestion)
+            current = values.get(field_key)
+            if current is None or (distance, order) < (current[1], current[0]):
+                values[field_key] = (
+                    order,
+                    distance,
+                    NeighborFieldSuggestion(
+                        field_key=field_key,
+                        value=suggestion.value,
+                        source_rule="listed_position_best_neighbor",
+                        evidence_keys=(f"selected_position={position}", *suggestion.evidence_keys),
+                    ),
+                )
+    return {field_key: suggestion for field_key, (_order, _distance, suggestion) in values.items()}
+
+
+def _suggestion_best_distance(suggestion: NeighborFieldSuggestion) -> float:
+    for key in suggestion.evidence_keys:
+        text = str(key)
+        if text.startswith("best_distance="):
+            number = _float(text.partition("=")[2])
+            if number is not None:
+                return number
+    return float("inf")
 
 
 def _rank_weighted_top_values(values: list[float]) -> float:
@@ -207,8 +320,11 @@ def select_positions_from_evidence(play_by_play: dict[str, Any], fallback_pos: o
         if value is not None and value > 0:
             percent_rows.append((pos, value))
     if percent_rows:
-        ordered = tuple(pos for pos, _ in sorted(percent_rows, key=lambda item: (-item[1], POSITIONS.index(item[0]))))
-        return PositionSelection(primary=ordered[0], secondary=ordered[1] if len(ordered) > 1 else None, all_positions=ordered)
+        ordered_rows = tuple(sorted(percent_rows, key=lambda item: (-item[1], POSITIONS.index(item[0]))))
+        total = sum(value for _pos, value in ordered_rows)
+        weights = tuple((pos, value / total) for pos, value in ordered_rows) if total > 0.0 else ()
+        ordered = tuple(pos for pos, _ in ordered_rows)
+        return PositionSelection(primary=ordered[0], secondary=ordered[1] if len(ordered) > 1 else None, all_positions=ordered, position_weights=weights)
 
     parsed = _parse_listed_positions(fallback_pos)
     primary = parsed[0] if parsed else ""
@@ -604,6 +720,9 @@ def target_features_from_evidence(evidence: Any) -> dict[str, float | None]:
     advanced = getattr(evidence, "advanced", {}) or {}
     shooting = getattr(evidence, "shooting", {}) or {}
     team_summary = getattr(evidence, "team_summary", {}) or {}
+    team_stats_per_game = getattr(evidence, "team_stats_per_game", {}) or {}
+    team_stats_per_100 = getattr(evidence, "team_stats_per_100", {}) or {}
+    opponent_stats_per_game = getattr(evidence, "opponent_stats_per_game", {}) or {}
     source_context = getattr(evidence, "source_context", {}) or {}
 
     def per36(per36_col: str, per_game_col: str) -> float | None:
@@ -618,6 +737,20 @@ def target_features_from_evidence(evidence: Any) -> dict[str, float | None]:
             return per_game_value
         return per_game_value * 36.0 / minutes
 
+    def team_total(row: dict[str, Any], column: str, games: float | None) -> float | None:
+        value = _float(row.get(column))
+        if value is None:
+            return None
+        return value if games in (None, 0) else value * float(games)
+
+    team_wins = _float(team_summary.get("w"))
+    team_losses = _float(team_summary.get("l"))
+    team_games = _float(team_stats_per_game.get("g"))
+    if team_games is None and team_wins is not None and team_losses is not None:
+        team_games = team_wins + team_losses
+    team_points = team_total(team_stats_per_game, "pts_per_game", team_games)
+    team_pts_per100 = _float(team_stats_per_100.get("pts_per_100_poss"))
+    team_possessions = None if team_points is None or team_pts_per100 in (None, 0) else team_points * 100.0 / team_pts_per100
     features: dict[str, float | None] = {
         "pts_per36": per36("pts_per_36_min", "pts_per_game"),
         "fga_per36": per36("fga_per_36_min", "fga_per_game"),
@@ -652,6 +785,27 @@ def target_features_from_evidence(evidence: Any) -> dict[str, float | None]:
         "player_d_rtg": _float(per_100.get("d_rtg")),
         "height_inches": _float(identity.get("ht_in_in")),
         "weight_pounds": _float(identity.get("wt")),
+        "team_points": team_points,
+        "team_pa": team_total(opponent_stats_per_game, "opp_pts_per_game", team_games),
+        "team_poss": team_possessions,
+        "team_games": team_games,
+        "team_fgm": team_total(team_stats_per_game, "fg_per_game", team_games),
+        "team_fga": team_total(team_stats_per_game, "fga_per_game", team_games),
+        "team_3pm": team_total(team_stats_per_game, "x3p_per_game", team_games),
+        "team_3pa": team_total(team_stats_per_game, "x3pa_per_game", team_games),
+        "team_ftm": team_total(team_stats_per_game, "ft_per_game", team_games),
+        "team_fta": team_total(team_stats_per_game, "fta_per_game", team_games),
+        "team_ast": team_total(team_stats_per_game, "ast_per_game", team_games),
+        "team_orb": team_total(team_stats_per_game, "orb_per_game", team_games),
+        "team_drb": team_total(team_stats_per_game, "drb_per_game", team_games),
+        "team_stl": team_total(team_stats_per_game, "stl_per_game", team_games),
+        "team_blk": team_total(team_stats_per_game, "blk_per_game", team_games),
+        "team_tov": team_total(team_stats_per_game, "tov_per_game", team_games),
+        "team_pf": team_total(team_stats_per_game, "pf_per_game", team_games),
+        "opp_fgm": team_total(opponent_stats_per_game, "opp_fg_per_game", team_games),
+        "opp_fga": team_total(opponent_stats_per_game, "opp_fga_per_game", team_games),
+        "opp_3pm": team_total(opponent_stats_per_game, "opp_x3p_per_game", team_games),
+        "opp_3pa": team_total(opponent_stats_per_game, "opp_x3pa_per_game", team_games),
     }
     for column in (
         "per", "ts_percent", "x3p_ar", "f_tr", "orb_percent", "drb_percent", "trb_percent", "ast_percent", "stl_percent", "blk_percent", "tov_percent", "usg_percent", "ows", "dws", "ws", "ws_48", "obpm", "dbpm", "bpm", "vorp",
@@ -770,7 +924,7 @@ def _parse_listed_positions(value: object) -> tuple[str, ...]:
     mapped = position_map.get(compact)
     if mapped:
         return mapped
-    found = [pos for pos in POSITIONS if re.search(rf"\b{pos}\b", text)]
+    found = re.findall(r"\b(?:PG|SG|SF|PF|C)\b", text)
     if found:
         return tuple(dict.fromkeys(found))
     return ()

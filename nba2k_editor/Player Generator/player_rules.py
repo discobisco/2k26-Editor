@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from player_evidence import PlayerEvidence
-from stat_neighbor_framework import hot_zone_neutral_values, load_latest_stat_neighbor_model, select_positions_from_evidence
+from stat_neighbor_framework import PositionSelection, hot_zone_neutral_values, load_latest_stat_neighbor_model, select_positions_from_evidence
 
 
 @dataclass(frozen=True)
@@ -32,8 +32,9 @@ class PlayerRuleResult:
     values: dict[str, RuleValue]
 
 
-def derive_player_profile_values(evidence: PlayerEvidence) -> PlayerProfileResult:
+def derive_player_profile_values(evidence: PlayerEvidence, positions: PositionSelection | None = None) -> PlayerProfileResult:
     values: dict[str, ProfileValue] = {}
+    positions = positions or select_positions_from_evidence(evidence.play_by_play, evidence.season_info.get("pos") or evidence.identity.get("pos"))
     first, last = _split_name(evidence.identity.get("player") or evidence.season_info.get("player") or evidence.player_id)
     _add_profile(values, "Vitals/FIRSTNAME", first, "profile_sql_identity", "player_info.player")
     _add_profile(values, "Vitals/LASTNAME", last, "profile_sql_identity", "player_info.player")
@@ -43,7 +44,6 @@ def derive_player_profile_values(evidence: PlayerEvidence) -> PlayerProfileResul
     _add_profile(values, "Vitals/HEIGHT", height, "profile_sql_bio", "player_info.ht_in_in")
     _add_profile(values, "Vitals/WEIGHT", weight, "profile_sql_bio", "player_info.wt")
 
-    positions = select_positions_from_evidence(evidence.play_by_play, evidence.season_info.get("pos") or evidence.identity.get("pos"))
     _add_profile(values, "Vitals/POSITION", positions.primary, "profile_sql_position_percent", "play_by_play.position_percent")
     if positions.secondary:
         _add_profile(values, "Vitals/SECONDARYPOSITION", positions.secondary, "profile_sql_position_percent", "play_by_play.position_percent")
@@ -67,8 +67,8 @@ def derive_player_profile_values(evidence: PlayerEvidence) -> PlayerProfileResul
     return PlayerProfileResult(values=values)
 
 
-def derive_player_rule_values(evidence: PlayerEvidence) -> PlayerRuleResult:
-    positions = select_positions_from_evidence(evidence.play_by_play, evidence.season_info.get("pos") or evidence.identity.get("pos"))
+def derive_player_rule_values(evidence: PlayerEvidence, positions: PositionSelection | None = None) -> PlayerRuleResult:
+    positions = positions or select_positions_from_evidence(evidence.play_by_play, evidence.season_info.get("pos") or evidence.identity.get("pos"))
     if not positions.primary:
         return PlayerRuleResult(values={})
 
@@ -77,7 +77,7 @@ def derive_player_rule_values(evidence: PlayerEvidence) -> PlayerRuleResult:
     except FileNotFoundError:
         suggestions = {}
     else:
-        suggestions = model.suggestions_for_evidence(evidence=evidence, position=positions.primary)
+        suggestions = model.suggestions_for_evidence(evidence=evidence, positions=positions)
     values: dict[str, RuleValue] = {
         key: RuleValue(value=suggestion.value, source_rule=suggestion.source_rule, evidence_keys=suggestion.evidence_keys)
         for key, suggestion in suggestions.items()

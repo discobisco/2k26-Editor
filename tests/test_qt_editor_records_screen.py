@@ -6,9 +6,10 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QTabWidget
 
 from nba2k_editor.models.schema import FieldEntry, RecordListItem
+from nba2k_editor.models.team_record_routing import team_record_rows
 from nba2k_editor.ui.qt_app import QtEditorApp
 
 
@@ -36,6 +37,7 @@ class RecordsModel:
         self.saved_values: dict[int, str] = {}
         self.zero_writes: list[tuple[int, str]] = []
         self.data_entry = FieldEntry("NBA Records", "Records", "Records", 0, {"normalized_name": "DATA", "display_name": "Data"})
+        self.team_entry = FieldEntry("Teams", "Vitals", "Info", 0, {"normalized_name": "TEAMNAME", "display_name": "Team Name"})
         self.background_refresh_domains: tuple[str, ...] | None = None
 
     def runtime_status_text(self) -> str:
@@ -120,6 +122,25 @@ class RecordsModel:
     def write_entry_value(self, entry: FieldEntry, *, index: int, value):
         self.zero_writes.append((index, str(value)))
 
+    def grouped_fields(self, domain: str):
+        if domain == "Teams":
+            return {"Vitals": {"Info": [self.team_entry]}}
+        if domain == "NBA Records":
+            return {"Records": {"Records": [self.data_entry]}}
+        return {}
+
+    def is_player_selected_stat_detail_entry(self, _entry: FieldEntry) -> bool:
+        return False
+
+    def is_player_season_id_selector_entry(self, _entry: FieldEntry) -> bool:
+        return False
+
+    def read_entry_value(self, entry: FieldEntry, *, index: int, stat_selector=None):
+        return {"display_value": f"{entry.display_name} {index}"}
+
+    def field_options(self, _entry: FieldEntry):
+        return []
+
 
 class QtEditorRecordsScreenTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -168,6 +189,106 @@ class QtEditorRecordsScreenTests(unittest.TestCase):
             app._zero_all_team_record_data_values()
 
         self.assertEqual([(9102, "0"), (9103, "0")], model.zero_writes)
+
+    def test_team_records_live_in_team_popout_not_main_team_screen(self) -> None:
+        model = RecordsModel()
+        app = QtEditorApp(model)  # type: ignore[arg-type]
+        self.assertIsNone(app.team_record_table)
+
+        def fake_team_record_rows(_model, team, section, stat):
+            self.assertIs(model.team_b, team)
+            self.assertEqual("Single Game (Regular)", section)
+            self.assertEqual("Points", stat)
+            return [{"Rank": "1", "First Name": "Team", "Data": "44"}]
+
+        captured: dict[str, bool] = {}
+
+        def capture_exec(dialog):
+            captured["team_records_tab"] = any(
+                tabs.tabText(index) == "Team Records"
+                for tabs in dialog.findChildren(QTabWidget)
+                for index in range(tabs.count())
+            )
+            return 0
+
+        with patch("nba2k_editor.ui.qt_app.team_record_rows", fake_team_record_rows), patch("nba2k_editor.ui.qt_app.team_record_indexes", return_value=[9100 + index for index in range(510)]), patch("nba2k_editor.ui.qt_app.QDialog.exec", capture_exec):
+            app._open_editor_window(model.team_b)
+
+        self.assertTrue(captured["team_records_tab"])
+        self.assertIsNotNone(app.team_record_table)
+        table = app.team_record_table
+        assert table is not None
+        self.assertEqual(1, table.rowCount())
+        self.assertEqual("44", table.item(0, table.columnCount() - 1).text())
+        self.assertEqual(9100, app.table_row_items["Team Records"][0].index)
+
+    def test_team_record_table_save_writes_visible_data_values_to_team_record_indexes(self) -> None:
+        model = RecordsModel()
+        app = QtEditorApp(model)  # type: ignore[arg-type]
+        model.select_item("Teams", model.team_b)
+
+        rows = [
+            {"Rank": "1", "First Name": "Team", "Data": "44"},
+            {"Rank": "2", "First Name": "Team", "Data": "43"},
+        ]
+        with patch("nba2k_editor.ui.qt_app.team_record_rows", return_value=rows), patch("nba2k_editor.ui.qt_app.team_record_indexes", return_value=[9100 + index for index in range(510)]), patch("nba2k_editor.ui.qt_app.QDialog.exec", return_value=0):
+            app._open_editor_window(model.team_b)
+            table = app.team_record_table
+            assert table is not None
+            table.item(0, table.columnCount() - 1).setText("61")
+            table.item(1, table.columnCount() - 1).setText("59")
+            with patch("nba2k_editor.ui.qt_app.QMessageBox.information"):
+                app._save_team_record_data_values()
+
+        self.assertEqual([(9100, "61"), (9101, "59")], model.zero_writes)
+
+    def test_team_record_rows_delegates_with_nba_records_stride(self) -> None:
+        test = self
+
+        class TeamRecordModel:
+            target_executable = "NBA2K26.exe"
+
+            def __init__(self) -> None:
+                self.kwargs: dict[str, object] = {}
+
+            def _layout_entries(self, domain: str):
+                test.assertEqual("Teams", domain)
+                return [
+                    FieldEntry(
+                        "Teams",
+                        "History",
+                        "Records",
+                        0,
+                        {
+                            "normalized_name": "CURRENTYEARSTATS",
+                            "display_name": "CURRENT_YEAR_STATS",
+                            "selected_record_source": {
+                                "role": "team_record_start",
+                                "target_domain": "NBA Records",
+                                "versions": ["2K26"],
+                                "start_index": 3100,
+                                "row_count": 510,
+                            },
+                        },
+                    )
+                ]
+
+            def record_summary_rows(self, domain: str, **kwargs):
+                test.assertEqual("NBA Records", domain)
+                self.kwargs = dict(kwargs)
+                return [{"Rank": "1", "Data": "1"}]
+
+            def domain_stride(self, domain: str) -> int:
+                test.assertEqual("NBA Records", domain)
+                return 123
+
+        model = TeamRecordModel()
+        rows = team_record_rows(model, RecordListItem("Teams", 2, 0x3000, "Team B"), "Single Game (Regular)", "Points")
+
+        self.assertEqual([{"Rank": "1", "Data": "1"}], rows)
+        self.assertEqual(3100 + 2 * 510, model.kwargs["record_row_start"])
+        self.assertEqual(5, model.kwargs["record_row_count"])
+        self.assertEqual(123, model.kwargs["record_row_stride"])
 
     def test_history_table_selection_sets_loaded_history_item(self) -> None:
         model = RecordsModel()

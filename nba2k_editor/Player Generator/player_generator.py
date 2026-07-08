@@ -20,6 +20,7 @@ from player_rules import (
     derive_player_profile_values,
     derive_player_rule_values,
 )
+from stat_neighbor_framework import select_positions_from_evidence
 from workbook_sqlite import ensure_workbook_sqlite_database, iter_workbook_sqlite_sheet_rows, workbook_sqlite_sheet_names
 from pre_nba_source import build_pre_nba_evidence_by_key, has_pre_nba_season, pre_nba_context_rows
 
@@ -198,8 +199,9 @@ def generate_player_proposal(
     field_index: dict[str, FieldEntry] | None = None,
 ) -> GeneratedPlayerProposal:
     source_team = str(evidence.team or "").strip().upper()
-    profile_result = derive_player_profile_values(evidence)
-    rule_result = derive_player_rule_values(evidence)
+    positions = select_positions_from_evidence(evidence.play_by_play, evidence.season_info.get("pos") or evidence.identity.get("pos"))
+    profile_result = derive_player_profile_values(evidence, positions=positions)
+    rule_result = derive_player_rule_values(evidence, positions=positions)
     candidates = player_field_candidates_from_results(profile_result, rule_result, offsets_path=offsets_path, field_index=field_index)
     return GeneratedPlayerProposal(
         player_id=evidence.player_id,

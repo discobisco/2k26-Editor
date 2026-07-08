@@ -6,8 +6,7 @@ the latest position-neighbor model artifact consumed by player_rules.py.
 
 Core contract:
 - 2K exported sim stats are the link between 2K field packages and IRL stats.
-- Compare PG only to PG, SG only to SG, SF only to SF, PF only to PF, C only to C.
-- No position weights and no cross-position blending.
+- Compare by generated position selection; play-by-play percentages can blend position pools.
 - NBA Master SQL provides IRL target stats/positions.
 - 2K run exports provide sim-output stats plus actual 2K attributes/tendencies to transfer.
 """
@@ -110,6 +109,27 @@ FEATURES = (
     "num_of_dunks",
     "percent_corner_3s_of_3pa",
     "corner_3_point_percent",
+    "team_points",
+    "team_pa",
+    "team_poss",
+    "team_games",
+    "team_fgm",
+    "team_fga",
+    "team_3pm",
+    "team_3pa",
+    "team_ftm",
+    "team_fta",
+    "team_ast",
+    "team_orb",
+    "team_drb",
+    "team_stl",
+    "team_blk",
+    "team_tov",
+    "team_pf",
+    "opp_fgm",
+    "opp_fga",
+    "opp_3pm",
+    "opp_3pa",
     "team_o_rtg",
     "team_d_rtg",
     "team_n_rtg",
@@ -349,6 +369,7 @@ def parse_positions(pos_text: object) -> tuple[str, ...]:
 
 def live_features(stats: Dict[str, str]) -> Dict[str, Optional[float]]:
     minutes = as_float(stats.get("Minutes"))
+    games = as_float(stats.get("Games") or stats.get("G"))
     return {
         "pts_per36": per36(as_float(stats.get("Points")), minutes),
         "fga_per36": per36(as_float(stats.get("Field Goals Attempted")), minutes),
@@ -365,34 +386,115 @@ def live_features(stats: Dict[str, str]) -> Dict[str, Optional[float]]:
         "blk_per36": per36(as_float(stats.get("Blocks")), minutes),
         "tov_per36": per36(as_float(stats.get("Turnovers")), minutes),
         "pf_per36": per36(as_float(stats.get("Fouls")), minutes),
-        "games": as_float(stats.get("Games") or stats.get("G")),
-        "mp_per_game": None,
+        "games": games,
+        "mp_per_game": safe_div(minutes, games),
     }
 
 
+def _team_stat_value(stats: Dict[str, str], *keys: str) -> Optional[float]:
+    for key in keys:
+        value = as_float(stats.get(key))
+        if value is not None:
+            return value
+    return None
+
+
 def live_team_features(stats: Dict[str, str]) -> Dict[str, Optional[float]]:
-    points = as_float(stats.get("POINTS"))
-    allowed = as_float(stats.get("PA"))
-    possessions = as_float(stats.get("POSS"))
-    made = as_float(stats.get("MADE"))
-    attempted = as_float(stats.get("ATTEMPTED"))
-    threes_made = as_float(stats.get("3PT_MADE"))
-    threes_attempted = as_float(stats.get("3PT_ATTEMPTED"))
-    free_throw_attempted = as_float(stats.get("FREE_THROWS_ATTEMPTED"))
-    turnovers = as_float(stats.get("TURNOVER"))
-    opp_made = as_float(stats.get("OFGM"))
-    opp_attempted = as_float(stats.get("OFGA"))
-    opp_threes_made = as_float(stats.get("O3PM"))
+    points = _team_stat_value(stats, "POINTS")
+    allowed = _team_stat_value(stats, "PA")
+    possessions = _team_stat_value(stats, "POSS")
+    made = _team_stat_value(stats, "MADE")
+    attempted = _team_stat_value(stats, "ATTEMPTED")
+    threes_made = _team_stat_value(stats, "3POINTMADE", "3PT_MADE")
+    threes_attempted = _team_stat_value(stats, "3POINTATTEMPTED", "3PT_ATTEMPTED")
+    free_throw_made = _team_stat_value(stats, "FREETHROWMADE", "FREE_THROWS_MADE")
+    free_throw_attempted = _team_stat_value(stats, "FREETHROWATTEMPTED", "FREE_THROWS_ATTEMPTED")
+    turnovers = _team_stat_value(stats, "TURNOVER")
+    offensive_rebounds = _team_stat_value(stats, "OFFENSIVEREBOUNDS", "OFFENSIVE_REBOUNDS")
+    defensive_rebounds = _team_stat_value(stats, "DEFENSEREBOUNDS", "DEFENSIVE_REBOUNDS")
+    assists = _team_stat_value(stats, "ASSISTS")
+    steals = _team_stat_value(stats, "STEALS")
+    blocks = _team_stat_value(stats, "BLOCKS")
+    fouls = _team_stat_value(stats, "FOUL")
+    wins = _team_stat_value(stats, "W")
+    losses = _team_stat_value(stats, "L")
+    opp_made = _team_stat_value(stats, "OFGM")
+    opp_attempted = _team_stat_value(stats, "OFGA")
+    opp_threes_made = _team_stat_value(stats, "O3PM")
+    opp_threes_attempted = _team_stat_value(stats, "O3PA")
+    games = None if wins is None or losses is None else wins + losses
     return {
+        "team_points": points,
+        "team_pa": allowed,
+        "team_poss": possessions,
+        "team_games": games,
+        "team_fgm": made,
+        "team_fga": attempted,
+        "team_3pm": threes_made,
+        "team_3pa": threes_attempted,
+        "team_ftm": free_throw_made,
+        "team_fta": free_throw_attempted,
+        "team_ast": assists,
+        "team_orb": offensive_rebounds,
+        "team_drb": defensive_rebounds,
+        "team_stl": steals,
+        "team_blk": blocks,
+        "team_tov": turnovers,
+        "team_pf": fouls,
+        "opp_fgm": opp_made,
+        "opp_fga": opp_attempted,
+        "opp_3pm": opp_threes_made,
+        "opp_3pa": opp_threes_attempted,
         "team_o_rtg": None if possessions in (None, 0) or points is None else points * 100.0 / possessions,
         "team_d_rtg": None if possessions in (None, 0) or allowed is None else allowed * 100.0 / possessions,
         "team_n_rtg": None if possessions in (None, 0) or points is None or allowed is None else (points - allowed) * 100.0 / possessions,
-        "team_pace": as_float(stats.get("PACE")),
+        "team_pace": _team_stat_value(stats, "PACE"),
         "team_ts_percent": safe_div(points, None if attempted is None or free_throw_attempted is None else 2.0 * (attempted + 0.44 * free_throw_attempted)),
         "team_x3p_ar": safe_div(threes_attempted, attempted),
         "team_e_fg_percent": safe_div((made or 0.0) + 0.5 * (threes_made or 0.0), attempted),
         "team_tov_percent": safe_div(turnovers, possessions),
         "team_opp_e_fg_percent": safe_div((opp_made or 0.0) + 0.5 * (opp_threes_made or 0.0), opp_attempted),
+    }
+
+
+def live_player_team_features(stats: Dict[str, str], team: Dict[str, Optional[float]]) -> Dict[str, Optional[float]]:
+    minutes = as_float(stats.get("Minutes"))
+    points = as_float(stats.get("Points"))
+    fgm = as_float(stats.get("Field Goals Made"))
+    fga = as_float(stats.get("Field Goals Attempted"))
+    threes_attempted = as_float(stats.get("Three Pointers Attempted"))
+    fta = as_float(stats.get("Free Throws Attempted"))
+    ast = as_float(stats.get("Assists"))
+    stl = as_float(stats.get("Steals"))
+    blk = as_float(stats.get("Blocks"))
+    tov = as_float(stats.get("Turnovers"))
+    pf = as_float(stats.get("Fouls"))
+    team_games = team.get("team_games")
+    team_minutes = None if team_games is None else float(team_games) * 240.0
+    team_player_minutes = None if team_minutes in (None, 0) else team_minutes / 5.0
+    team_possessions = team.get("team_poss")
+    player_possessions = None if team_possessions in (None, 0) or minutes in (None, 0) or team_minutes in (None, 0) else float(team_possessions) * float(minutes) / float(team_minutes)
+    team_fgm = team.get("team_fgm")
+    team_fga = team.get("team_fga")
+    team_fta = team.get("team_fta")
+    team_tov = team.get("team_tov")
+    opp_fga = team.get("opp_fga")
+    opp_3pa = team.get("opp_3pa")
+    return {
+        "pts_per100": None if points is None or player_possessions in (None, 0) else points * 100.0 / player_possessions,
+        "fga_per100": None if fga is None or player_possessions in (None, 0) else fga * 100.0 / player_possessions,
+        "x3pa_per100": None if threes_attempted is None or player_possessions in (None, 0) else threes_attempted * 100.0 / player_possessions,
+        "fta_per100": None if fta is None or player_possessions in (None, 0) else fta * 100.0 / player_possessions,
+        "ast_per100": None if ast is None or player_possessions in (None, 0) else ast * 100.0 / player_possessions,
+        "stl_per100": None if stl is None or player_possessions in (None, 0) else stl * 100.0 / player_possessions,
+        "blk_per100": None if blk is None or player_possessions in (None, 0) else blk * 100.0 / player_possessions,
+        "tov_per100": None if tov is None or player_possessions in (None, 0) else tov * 100.0 / player_possessions,
+        "pf_per100": None if pf is None or player_possessions in (None, 0) else pf * 100.0 / player_possessions,
+        "ast_percent": safe_div(ast, None if minutes in (None, 0) or team_minutes in (None, 0) or team_fgm is None or fgm is None else ((minutes / (team_minutes / 5.0)) * team_fgm) - fgm),
+        "stl_percent": None if stl is None or minutes in (None, 0) or team_player_minutes in (None, 0) or team_possessions in (None, 0) else stl * team_player_minutes / (minutes * team_possessions),
+        "blk_percent": None if blk is None or minutes in (None, 0) or team_player_minutes in (None, 0) or opp_fga is None or opp_3pa is None or opp_fga == opp_3pa else blk * team_player_minutes / (minutes * (opp_fga - opp_3pa)),
+        "tov_percent": safe_div(tov, None if fga is None or fta is None or tov is None else fga + 0.44 * fta + tov),
+        "usg_percent": None if minutes in (None, 0) or team_player_minutes in (None, 0) or team_fga is None or team_fta is None or team_tov is None else safe_div((fga or 0.0) + 0.44 * (fta or 0.0) + (tov or 0.0), minutes * (team_fga + 0.44 * team_fta + team_tov) / team_player_minutes),
     }
 
 
@@ -727,8 +829,11 @@ def load_candidates(root: Path, runs: Sequence[str] | None = None) -> Tuple[List
                     fields[f"Tendency::{col}"] = v
             master = _master_features_for_live(stats, positions)
             team_index = int(stats.get("team_index") or -1)
-            team_features = {key: value for key, value in live_team_features(team_rows.get(team_index, {})).items() if value is not None}
-            feats = {**live_features(stats), **(master.get("features") or {}), **team_features}
+            live = live_features(stats)
+            team_all_features = live_team_features(team_rows.get(team_index, {}))
+            team_features = {key: value for key, value in team_all_features.items() if value is not None}
+            player_team_features = {key: value for key, value in live_player_team_features(stats, team_all_features).items() if value is not None}
+            feats = {**(master.get("features") or {}), **live, **team_features, **player_team_features}
             vitals = live_vitals(stats, {"height_inches": feats.get("height_inches"), "weight_pounds": feats.get("weight_pounds")})
             features_with_body = {**feats, "height_inches": vitals.get("height_inches"), "weight_pounds": vitals.get("weight_pounds")}
             master_player = str(master.get("player") or label)
@@ -991,7 +1096,7 @@ def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None
         ),
         key=lambda item: item[0],
     )[:15]
-    team_stat_entries = list(model.grouped_fields("Teams").get("Team Stats Edit", {}).get("Team Stats Edit", ()))
+    team_stat_entries = list(model.grouped_fields("Teams").get("Team Stats Edit", {}).get("Teams", ()))
     players: list[tuple[Any, Any, int, int]] = []
     for team_slot, team in enumerate(loaded_teams[:30]):
         for roster_slot, entry in team_player_entries:
@@ -1201,7 +1306,7 @@ def sync_player_generation_pool(request: PlayerGenerationPoolRequest | None = No
         "model_sqlite": str(model_path),
         "pool_sqlite": str(pool_database_path()),
         "source_runs": [str((root / RUNS_DIR / run).resolve()) for run in runs],
-        "rule": "same-position stat-profile neighbors only; no position weights; no cross-position blending",
+        "rule": "position-selected stat-profile neighbors; play-by-play position weights may blend position pools",
         "features": list(FEATURES),
         "vital_columns": list(VITAL_COLUMNS),
         "live_rows": len(match_rows),

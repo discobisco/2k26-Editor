@@ -42,7 +42,13 @@ from nba2k_editor.models.data_model import (
     RecordListItem,
     verify_edits,
 )
-from nba2k_editor.models.team_record_routing import team_record_indexes
+from nba2k_editor.models.team_record_routing import (
+    TEAM_RECORD_SECTION_STAT_TABS,
+    TEAM_RECORD_SIDE_NAV,
+    team_record_indexes,
+    team_record_row_group,
+    team_record_rows,
+)
 APP_TITLE = "Offline Player Data Editor"
 APP_VIEWPORT_WIDTH = 1600
 APP_VIEWPORT_HEIGHT = 900
@@ -247,6 +253,7 @@ class QtEditorApp(QMainWindow):
         self.table_row_items: dict[str, list[RecordListItem]] = {}
         self.editor_stat_selectors: dict[tuple[str, int, str], QComboBox] = {}
         self.team_summary_inputs: dict[str, QLineEdit] = {}
+        self.team_record_table: QTableWidget | None = None
         self.player_filter_combo: QComboBox | None = None
         self.player_search_input: QLineEdit | None = None
         self.operation_dialog: OperationDialog | None = None
@@ -644,10 +651,31 @@ class QtEditorApp(QMainWindow):
             detail.addLayout(row)
         detail.addWidget(QPushButton("Save Team Summary", clicked=self._save_team_summary))
         detail.addWidget(QPushButton("Edit Team", clicked=lambda: self._open_selected("Teams")))
-        detail.addWidget(QPushButton("Zero All Team Record Data", clicked=self._zero_all_team_record_data_values))
         detail.addStretch(1)
         self._add_split_body(layout, record_list, detail_widget, left_width=430)
         return widget
+
+    def _build_team_records_widget(self) -> QWidget:
+        records_box = QGroupBox("Team Records")
+        records_layout = QVBoxLayout(records_box)
+        record_controls = QHBoxLayout()
+        record_section = configure_combo_box(QComboBox())
+        record_section.addItems(TEAM_RECORD_SIDE_NAV)
+        record_stat = configure_combo_box(QComboBox())
+        record_stat.addItems(TEAM_RECORD_SECTION_STAT_TABS[self.state.team_record_section])
+        record_section.currentTextChanged.connect(lambda value: self._set_team_record_section(value, record_stat))
+        record_stat.currentTextChanged.connect(lambda value: self._set_team_record_stat(value))
+        record_controls.addWidget(record_section)
+        record_controls.addWidget(record_stat)
+        record_controls.addWidget(QPushButton("Load Team Records", clicked=self._show_team_record_rows))
+        record_controls.addWidget(QPushButton("Save Team Record Data", clicked=self._save_team_record_data_values))
+        record_controls.addWidget(QPushButton("Zero All Team Record Data", clicked=self._zero_all_team_record_data_values))
+        records_layout.addLayout(record_controls)
+        team_record_table = QTableWidget(0, 0)
+        configure_table(team_record_table, editable=True)
+        self.team_record_table = team_record_table
+        records_layout.addWidget(team_record_table, 1)
+        return records_box
 
     def _build_history_screen(self) -> QWidget:
         widget, layout = self._base_domain_screen("NBA History")
@@ -905,6 +933,9 @@ class QtEditorApp(QMainWindow):
             for label, value in self.model.selected_team_summary_values().items():
                 if label in self.team_summary_inputs:
                     self.team_summary_inputs[label].setText(str(value))
+            self._show_team_record_rows()
+        elif domain == "Teams":
+            self._show_team_record_rows()
         if domain == "Players" and item is not None:
             for label, value in self.model.selected_player_detail_values().items():
                 if label in self.player_detail_rows:
@@ -1067,6 +1098,12 @@ class QtEditorApp(QMainWindow):
                 group_tabs.addTab(scroll, str(group))
             section_layout.addWidget(group_tabs)
             tabs.addTab(section_widget, str(section))
+        if source.domain == "Teams":
+            select_item = getattr(self.model, "select_item", None)
+            if callable(select_item):
+                select_item("Teams", source)
+            tabs.addTab(self._build_team_records_widget(), "Team Records")
+            self._show_team_record_rows()
         layout.addWidget(tabs, 1)
         buttons = QHBoxLayout()
         buttons.addWidget(QPushButton("Save", clicked=lambda: self._save_item_editor(source, row_widgets)))
@@ -1139,6 +1176,63 @@ class QtEditorApp(QMainWindow):
             indexes.extend(team_record_indexes(self.model, team))
         return tuple(dict.fromkeys(indexes))
 
+    def _active_team_record_indexes(self) -> tuple[int, ...]:
+        team = self.model.selected_item("Teams")
+        if team is None:
+            return ()
+        indexes = tuple(team_record_indexes(self.model, team))
+        row_start, row_count = team_record_row_group(self.state.team_record_section, self.state.team_record_stat)
+        return indexes[row_start : row_start + row_count]
+
+    def _table_data_value(self, table: QTableWidget | None, row: int) -> str:
+        if table is None or table.columnCount() <= 0:
+            return ""
+        data_column = table.columnCount() - 1
+        for column in range(table.columnCount()):
+            header = table.horizontalHeaderItem(column)
+            if header is not None and header.text().strip().casefold() == "data":
+                data_column = column
+                break
+        item = table.item(row, data_column)
+        return "" if item is None else item.text()
+
+    def _show_team_record_rows(self) -> None:
+        if self.team_record_table is None:
+            return
+        team = self.model.selected_item("Teams")
+        if team is None:
+            self.table_row_items["Team Records"] = []
+            self._fill_table(self.team_record_table, [{"Status": "Select a team."}])
+            return
+        try:
+            rows = team_record_rows(self.model, team, self.state.team_record_section, self.state.team_record_stat)
+            active_indexes = self._active_team_record_indexes()
+            self.table_row_items["Team Records"] = [
+                RecordListItem("NBA Records", index, self.model.record_address("NBA Records", index), f"{team.display_label} {self.state.team_record_section} {self.state.team_record_stat} #{row + 1}")
+                for row, index in enumerate(active_indexes[: len(rows)])
+            ]
+        except Exception as exc:
+            rows = [{"Status": f"Team Records unavailable: {exc}"}]
+            self.table_row_items["Team Records"] = []
+        self._fill_table(self.team_record_table, rows)
+
+    def _save_team_record_data_values(self) -> None:
+        team = self.model.selected_item("Teams")
+        if team is None:
+            QMessageBox.warning(self, "No selection", "Select a team first.")
+            return
+        data_entry = self.model._field_by_normalized_name("NBA Records", "DATA")
+        if data_entry is None:
+            QMessageBox.warning(self, "Team Records", "DATA field is not available for NBA Records.")
+            return
+        active_indexes = self._active_team_record_indexes()
+        visible_count = self.team_record_table.rowCount() if self.team_record_table is not None else len(active_indexes)
+        saved = 0
+        for row, index in enumerate(active_indexes[:visible_count]):
+            self.model.write_entry_value(data_entry, index=index, value=self._table_data_value(self.team_record_table, row))
+            saved += 1
+        QMessageBox.information(self, "Team Records", f"saved {saved}/{len(active_indexes)}")
+
     def _record_data_value(self, row: int) -> str:
         if not hasattr(self, "record_table"):
             return ""
@@ -1176,6 +1270,7 @@ class QtEditorApp(QMainWindow):
         for index in indexes:
             self.model.write_entry_value(data_entry, index=index, value=0)
         QMessageBox.information(self, "Team Records", f"zeroed {len(indexes)}/{len(indexes)}")
+        self._show_team_record_rows()
 
     def _set_history_section(self, section: str, tab_combo: QComboBox) -> None:
         self.state.history_section = section
@@ -1212,6 +1307,20 @@ class QtEditorApp(QMainWindow):
     def _set_record_stat(self, stat: str) -> None:
         self.state.record_stat = stat
         self._show_record_screen_rows()
+
+    def _set_team_record_section(self, section: str, stat_combo: QComboBox) -> None:
+        self.state.team_record_section = section
+        stats = TEAM_RECORD_SECTION_STAT_TABS[section]
+        stat_combo.blockSignals(True)
+        stat_combo.clear()
+        stat_combo.addItems(stats)
+        stat_combo.blockSignals(False)
+        self.state.team_record_stat = stats[0]
+        self._show_team_record_rows()
+
+    def _set_team_record_stat(self, stat: str) -> None:
+        self.state.team_record_stat = stat
+        self._show_team_record_rows()
 
     def _load_history_screen_rows(self) -> None:
         if getattr(self.model, "domain_item_count")("NBA History") <= 0:
