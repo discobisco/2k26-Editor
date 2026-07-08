@@ -78,6 +78,16 @@ def _plausible_record_name_part(value: object) -> bool:
     return any(char.isalpha() for char in text) and all(char.isalpha() or char in " .'-" for char in text)
 
 
+def _valid_record_list_label_part(value: object) -> bool:
+    text = str(value or "").strip()
+    return bool(text) and any(char.isalpha() for char in text) and all(char.isalnum() or char in " .'-" for char in text)
+
+
+def _valid_record_list_label_values(values: list[Any]) -> bool:
+    parts = [value for value in values if str(value or "").strip()]
+    return bool(parts) and all(_valid_record_list_label_part(value) for value in parts)
+
+
 def _valid_nba_record_label_values(values: list[Any]) -> bool:
     if len(values) < 3:
         return False
@@ -307,9 +317,8 @@ class EditorDataModel:
     def app_dataset_snapshot(self, domains: Iterable[str] | None = None) -> dict[str, Any]:
         """Return the model-owned loaded app dataset for app-integrated consumers.
 
-        This is intentionally a backend/data-model contract, not a Franchise
-        Manager private snapshot. It exposes the same loaded records and
-        model-read field values that the editor screens use.
+        This exposes the same loaded records and model-read field values that
+        the editor screens use.
         """
         selected_domains = tuple(domains) if domains is not None else _MODEL_DOMAINS
         return {
@@ -1013,7 +1022,7 @@ class EditorDataModel:
         if domain == "NBA History":
             type_entry = self._field_by_normalized_name(domain, "TYPE")
             if type_entry is None:
-                return bool(labels)
+                return _valid_record_list_label_values(values)
             try:
                 raw_type = int(self._read_field_at_record_address(domain, record_addr, type_entry.field)["raw_value"])
             except Exception:
@@ -1021,7 +1030,7 @@ class EditorDataModel:
             if raw_type <= 0:
                 return False
             return any(_has_alpha_text(value) for value in values)
-        return bool(labels)
+        return _valid_record_list_label_values(values)
 
     def _domain_record_count_limit(self, domain: str) -> int | None:
         try:
@@ -1063,6 +1072,8 @@ class EditorDataModel:
         return items
 
     def read_entry_value(self, entry: FieldEntry, *, index: int, stat_selector: object | None = None) -> dict[str, Any]:
+        if entry.domain == "Teams" and entry.section == "Team Stats Edit":
+            return self._read_field_at_record_address(entry.domain, self._team_stats_edit_record_address(index), entry.field)
         if stat_selector is not None and _is_player_selected_stat_detail_entry(entry):
             return self._read_field_at_record_address(
                 entry.domain,
@@ -1072,6 +1083,9 @@ class EditorDataModel:
         return self.read_value(entry.domain, index=index, field=entry.field)
 
     def write_entry_value(self, entry: FieldEntry, *, index: int, value: Any, stat_selector: object | None = None) -> None:
+        if entry.domain == "Teams" and entry.section == "Team Stats Edit":
+            self._write_field_at_record_address(entry.domain, self._team_stats_edit_record_address(index), entry.field, value)
+            return
         if stat_selector is not None and _is_player_selected_stat_detail_entry(entry):
             record_addr = self._player_season_stat_detail_base_address(entry, index, stat_selector)
             self._write_field_at_record_address(entry.domain, record_addr, entry.field, value)
@@ -1151,6 +1165,29 @@ class EditorDataModel:
             allow_stats=True,
         )
         return {"players": len(items), "stat_id_fields": len(selector_entries), "written": int(result["succeeded"])}
+
+    def export_team_stats_snapshot_rows(self) -> list[dict[str, Any]]:
+        teams = sorted(self.loaded_items.get("Teams", {}).values(), key=lambda item: int(item.index))
+        entries = list(self.grouped_fields("Teams").get("Team Stats Edit", {}).get("Teams", ()))
+        if not teams or not entries:
+            return []
+        rows: list[dict[str, Any]] = []
+        for team_slot, team in enumerate(teams[:30]):
+            row: dict[str, Any] = {
+                "team_slot": int(team_slot),
+                "team_index": int(team.index),
+                "team_label": str(team.label),
+            }
+            for entry in entries:
+                try:
+                    value = self.read_entry_value(entry, index=team.index)
+                except Exception:
+                    display_value = ""
+                else:
+                    display_value = _json_safe_roster_value(value.get("display_value"))
+                row[f"{entry.group} / {entry.display_name}"] = display_value
+            rows.append(row)
+        return rows
 
     def export_player_roster_snapshot(self, *, limit: int | None = None, progress_callback: Any | None = None) -> dict[str, Any]:
         return self.export_player_roster_snapshot_for_items(self.scan_records("Players", limit=limit), progress_callback=progress_callback)
@@ -1396,6 +1433,16 @@ class EditorDataModel:
 
     def record_address(self, domain: str, index: int) -> int:
         return record_address(base=self.domain_base(domain), index=index, stride=self.domain_stride(domain))
+
+    def _team_stats_edit_record_address(self, index: int) -> int:
+        base = resolve_base_pointer_entry(
+            self.memory,
+            self._base_pointer_entry("TeamStatsEdit"),
+            label="TeamStatsEdit",
+            apply_final_offset_without_module_base=False,
+            follow_chain=False,
+        )
+        return record_address(base=base, index=index, stride=self._stride_value("teamStatsEditSize"))
 
     def _field_version_payload(self, field: dict[str, Any]) -> dict[str, Any]:
         versions = field.get("versions")

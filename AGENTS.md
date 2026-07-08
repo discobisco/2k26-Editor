@@ -31,5 +31,7 @@
 - No explanation unless it helps solve the active task.
 
 
-## Default Skills
-- Always apply `skills/fact-first-diagnostics` for work in this repository.
+
+## Important
+NO HARD FAILURES ALLOWED IN THIS REPO
+

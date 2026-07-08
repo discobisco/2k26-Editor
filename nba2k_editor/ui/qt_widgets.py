@@ -21,6 +21,15 @@ from PyQt6.QtWidgets import (
 )
 
 
+COMBO_BOX_MAX_VISIBLE_ITEMS = 12
+
+
+def configure_combo_box(combo: QComboBox) -> QComboBox:
+    combo.setMaxVisibleItems(COMBO_BOX_MAX_VISIBLE_ITEMS)
+    combo.view().setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+    return combo
+
+
 def configure_table(table: QTableWidget, *, editable: bool = False) -> None:
     table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
     table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
@@ -143,7 +152,7 @@ class EditableFieldRow(QWidget):
         self.current.setReadOnly(True)
         option_values = [str(option) for option in (options or [])]
         if option_values:
-            combo = QComboBox()
+            combo = configure_combo_box(QComboBox())
             combo.addItems(option_values)
             if current_value not in option_values:
                 combo.insertItem(0, current_value)

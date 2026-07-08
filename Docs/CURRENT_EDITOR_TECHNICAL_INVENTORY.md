@@ -74,14 +74,7 @@ Evidence: `models/data_model.py:565`, `models/data_model.py:838`, `ui/qt_app.py`
 - UI exposes Load Source, Add Current Roster to Pool SQL, Sync Player Pool SQL, Display Preview, Import Generated Players, and Import Matched Names. Evidence: `ui/qt_app.py`.
 - Import path writes generated proposals to live game fields through the shared model write seam. Evidence: `Player Generator/game_port.py:36`, `Player Generator/game_port.py:84`, `Player Generator/game_port.py:159`.
 
-## 9. Franchise command center
-
-- Fresh `nba2k_editor.franchise` layer stores snapshots/profiles/plans/dashboards and builds a command-center dashboard. Evidence: `franchise/models.py:10`, `franchise/display.py:13`, `franchise/service.py:102`.
-- Imports live editor data into a `LiveFranchiseSnapshot`, builds LLM prompt/context, parses LLM output, and previews/applies trades, signings, draft actions, and roster moves. Evidence: `franchise/service.py:248`, `franchise/service.py:262`, `franchise/service.py:324`, `franchise/service.py:128-147`.
-- Roster moves/trades write through existing Team slot and Player current-team entries. Evidence: `franchise/service.py:176-247`, `franchise/service.py:378-418`.
-- UI exposes Import Current Editor Data, Action index, Apply Trade, Apply Signing, Apply Draft, Apply Roster, and dashboard panels. Evidence: `ui/qt_app.py`.
-
-## 10. Things this editor explicitly is not doing
+## 9. Things this editor explicitly is not doing
 
 - No 3D venue/IFF/SCNE visual preview surface is present under `nba2k_editor`.
 - No archive browser/search/extract UI for installed NBA 2K game archives is present.

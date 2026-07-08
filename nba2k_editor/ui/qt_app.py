@@ -47,7 +47,6 @@ APP_TITLE = "Offline Player Data Editor"
 APP_VIEWPORT_WIDTH = 1600
 APP_VIEWPORT_HEIGHT = 900
 PLAYER_GENERATOR_SCREEN = "Player Generator"
-FRANCHISE_MANAGER_SCREEN = "Franchise Manager"
 TARGET_CHOICES: tuple[str, ...] = ("NBA 2K22", "NBA 2K23", "NBA 2K24", "NBA 2K25", "NBA 2K26")
 PLAYER_ROSTER_EXPORT_MODES: tuple[str, ...] = (
     "Full Loaded Roster",
@@ -188,13 +187,12 @@ class EditorUiState:
     operation_cancel_requested: bool = False
 
 from nba2k_editor.ui.qt_theme import apply_qt_theme
-from nba2k_editor.ui.qt_widgets import DetailRow, EditableFieldRow, NavButton, OperationDialog, RecordListWidget, configure_output_text, configure_table
+from nba2k_editor.ui.qt_widgets import DetailRow, EditableFieldRow, NavButton, OperationDialog, RecordListWidget, configure_combo_box, configure_output_text, configure_table
 
 NAV_ORDER: tuple[str, ...] = (
     "Players",
     "Teams",
     PLAYER_GENERATOR_SCREEN,
-    FRANCHISE_MANAGER_SCREEN,
     "NBA History",
     "NBA Records",
     "Staff",
@@ -202,7 +200,7 @@ NAV_ORDER: tuple[str, ...] = (
     "Jerseys",
     "Shoes",
 )
-APP_SCREENS: tuple[str, ...] = ("Home", *EDITOR_DOMAINS, PLAYER_GENERATOR_SCREEN, FRANCHISE_MANAGER_SCREEN)
+APP_SCREENS: tuple[str, ...] = ("Home", *EDITOR_DOMAINS, PLAYER_GENERATOR_SCREEN)
 _QT_APPLICATION: QApplication | None = None
 
 
@@ -243,7 +241,6 @@ class QtEditorApp(QMainWindow):
         self.status_labels: dict[str, QLabel] = {}
         self.count_labels: dict[str, QLabel] = {}
         self.dashboard_metric_labels: dict[str, QLabel] = {}
-        self.generator_metric_labels: dict[str, QLabel] = {}
         self.detail_titles: dict[str, QLabel] = {}
         self.detail_addresses: dict[str, QLabel] = {}
         self.player_detail_rows: dict[str, DetailRow] = {}
@@ -258,13 +255,12 @@ class QtEditorApp(QMainWindow):
         self.operation_events_lock = threading.Lock()
         self.player_generator_display = import_module("nba2k_editor.Player Generator.display")
         self.player_generator_state = self.player_generator_display.empty_generator_display_state()
-        self.franchise_display = import_module("nba2k_editor.ui.franchise_screen")
-        self.franchise_state = self.franchise_display.empty_franchise_display_state()
         self.generator_text: QTextEdit | None = None
         self.generator_year_combo: QComboBox | None = None
+        self.generator_league_combo: QComboBox | None = None
+        self.generator_position_combo: QComboBox | None = None
         self.generator_source_team_combo: QComboBox | None = None
         self.generator_player_combo: QComboBox | None = None
-        self.franchise_text: QTextEdit | None = None
         self._build_ui()
         self.scan_timer = QTimer(self)
         self.scan_timer.timeout.connect(self._poll_background_scan)
@@ -291,7 +287,6 @@ class QtEditorApp(QMainWindow):
             "Players": "⌕  Players",
             "Teams": "⌘  Teams",
             PLAYER_GENERATOR_SCREEN: "◇  Player Gen",
-            FRANCHISE_MANAGER_SCREEN: "▤  Franchise",
             "NBA History": "◷  NBA History",
             "NBA Records": "▥  NBA Records",
             "Staff": "♙  Staff",
@@ -376,9 +371,9 @@ class QtEditorApp(QMainWindow):
         for name, button in self.nav_buttons.items():
             button.setChecked(name == screen)
         if screen == PLAYER_GENERATOR_SCREEN:
-            self._refresh_player_generator_display()
-        if screen == FRANCHISE_MANAGER_SCREEN:
-            self._refresh_franchise_manager()
+            self._sync_player_generator_status()
+            if not getattr(self.player_generator_state, "source_loaded", False) and self.operation_thread is None:
+                self._load_player_generator_source()
         if screen == "NBA Records":
             self._show_record_screen_rows()
 
@@ -402,7 +397,7 @@ class QtEditorApp(QMainWindow):
         self.home_status.setObjectName("DashboardStatus")
         self.home_target_status = QLabel(self._game_status_text())
         self.home_target_status.setObjectName("LiveStatusChip")
-        target = QComboBox()
+        target = configure_combo_box(QComboBox())
         target.addItems(TARGET_CHOICES)
         target.currentTextChanged.connect(lambda text: self._set_target(text))
         header.addWidget(QLabel("Target"))
@@ -430,8 +425,7 @@ class QtEditorApp(QMainWindow):
         body = QHBoxLayout()
         body.setSpacing(10)
         body.addWidget(self._build_dashboard_navigation_panel(), 0)
-        body.addWidget(self._build_dashboard_updates_panel(), 2)
-        body.addWidget(self._build_dashboard_side_panel(), 1)
+        body.addWidget(self._build_dashboard_updates_panel(), 1)
         layout.addLayout(body, 1)
 
         self._refresh_dashboard_metrics()
@@ -465,7 +459,6 @@ class QtEditorApp(QMainWindow):
             ("⌘  Teams", "Teams"),
             ("◷  NBA History", "NBA History"),
             ("▥  NBA Records", "NBA Records"),
-            ("▤  Franchise", FRANCHISE_MANAGER_SCREEN),
         ):
             button = QPushButton(label, clicked=lambda checked=False, s=screen: self._show_screen(s))
             button.setObjectName("DashboardLinkButton")
@@ -494,7 +487,6 @@ class QtEditorApp(QMainWindow):
             ("FEATURE", "Players", "Roster list, team filter, selected-player details, and editor launch."),
             ("FEATURE", "Records / History", "Loaded rows render into editable Records and selectable History tables."),
             ("UPDATE", "Player Generator", "Generate, preview, and import through the existing generator display state."),
-            ("UPDATE", "Franchise Manager", "Franchise runs against the same loaded app dataset instead of a private mini-snapshot."),
         ):
             layout.addWidget(self._build_dashboard_update_item(badge, title_text, body))
         layout.addStretch(1)
@@ -518,34 +510,6 @@ class QtEditorApp(QMainWindow):
         layout.addWidget(body_label)
         return item
 
-    def _build_dashboard_side_panel(self) -> QWidget:
-        panel = QWidget()
-        panel.setObjectName("DashboardSideColumn")
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
-        progress = QWidget()
-        progress.setObjectName("DashboardPanel")
-        progress_layout = QVBoxLayout(progress)
-        progress_layout.setContentsMargins(12, 10, 12, 12)
-        heading = QLabel("PROGRESSION")
-        heading.setObjectName("PanelEyebrow")
-        progress_layout.addWidget(heading)
-        progress_layout.addWidget(QLabel("Load domains with Attach + Load All to populate editor lists."))
-        progress_layout.addStretch(1)
-        recent = QWidget()
-        recent.setObjectName("DashboardPanel")
-        recent_layout = QVBoxLayout(recent)
-        recent_layout.setContentsMargins(12, 10, 12, 12)
-        recent_heading = QLabel("CURRENT TARGET")
-        recent_heading.setObjectName("PanelEyebrow")
-        recent_layout.addWidget(recent_heading)
-        recent_layout.addWidget(QLabel(self._game_status_text()))
-        recent_layout.addStretch(1)
-        layout.addWidget(progress, 1)
-        layout.addWidget(recent, 1)
-        return panel
-
     def _build_domain_screen(self, domain: str) -> QWidget:
         if domain == "Players":
             return self._build_players_screen()
@@ -557,8 +521,6 @@ class QtEditorApp(QMainWindow):
             return self._build_records_screen()
         if domain == PLAYER_GENERATOR_SCREEN:
             return self._build_player_generator_screen()
-        if domain == FRANCHISE_MANAGER_SCREEN:
-            return self._build_franchise_manager_screen()
         return self._build_generic_domain_screen(domain)
 
     def _base_domain_screen(self, domain: str) -> tuple[QWidget, QVBoxLayout]:
@@ -601,7 +563,7 @@ class QtEditorApp(QMainWindow):
     def _build_players_screen(self) -> QWidget:
         widget, layout = self._base_domain_screen("Players")
         controls = QHBoxLayout()
-        player_filter_combo = QComboBox()
+        player_filter_combo = configure_combo_box(QComboBox())
         player_filter_combo.addItems(list(self.model.player_team_filter_options()))
         player_filter_combo.currentTextChanged.connect(self._set_player_team_filter)
         player_search_input = QLineEdit()
@@ -643,7 +605,7 @@ class QtEditorApp(QMainWindow):
         form = QFormLayout(box)
         self.roster_folder_input = QLineEdit(self.state.player_roster_export_folder)
         self.roster_file_input = QLineEdit(self.state.player_roster_snapshot_filename)
-        self.roster_mode_combo = QComboBox()
+        self.roster_mode_combo = configure_combo_box(QComboBox())
         self.roster_mode_combo.addItems(PLAYER_ROSTER_EXPORT_MODES)
         self.roster_start_input = QLineEdit(self.state.player_roster_team_start)
         self.roster_end_input = QLineEdit(self.state.player_roster_team_end)
@@ -690,9 +652,9 @@ class QtEditorApp(QMainWindow):
     def _build_history_screen(self) -> QWidget:
         widget, layout = self._base_domain_screen("NBA History")
         controls = QHBoxLayout()
-        section = QComboBox()
+        section = configure_combo_box(QComboBox())
         section.addItems(HISTORY_SIDE_NAV)
-        tab = QComboBox()
+        tab = configure_combo_box(QComboBox())
         tab.addItems(HISTORY_SECTION_TABS[self.state.history_section])
         section.currentTextChanged.connect(lambda value: self._set_history_section(value, tab))
         tab.currentTextChanged.connect(lambda value: self._set_history_tab(value))
@@ -710,9 +672,9 @@ class QtEditorApp(QMainWindow):
     def _build_records_screen(self) -> QWidget:
         widget, layout = self._base_domain_screen("NBA Records")
         controls = QHBoxLayout()
-        section = QComboBox()
+        section = configure_combo_box(QComboBox())
         section.addItems(RECORD_SIDE_NAV)
-        stat = QComboBox()
+        stat = configure_combo_box(QComboBox())
         stat.addItems(RECORD_SECTION_STAT_TABS[self.state.record_section])
         section.currentTextChanged.connect(lambda value: self._set_record_section(value, stat))
         stat.currentTextChanged.connect(lambda value: self._set_record_stat(value))
@@ -732,31 +694,28 @@ class QtEditorApp(QMainWindow):
     def _build_player_generator_screen(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        generator_metrics = QGridLayout()
-        generator_metrics.setHorizontalSpacing(8)
-        generator_metrics.setVerticalSpacing(8)
-        for column, (key, label) in enumerate((
-            ("source", "Source Loaded"),
-            ("options", "Source Players"),
-            ("generated", "Players Generated"),
-            ("columns", "Generated Columns"),
-        )):
-            card, value_label = self._build_dashboard_metric_card("0", label)
-            self.generator_metric_labels[key] = value_label
-            generator_metrics.addWidget(card, 0, column)
-        layout.addLayout(generator_metrics)
         selectors = QHBoxLayout()
-        year_combo = QComboBox()
-        source_team_combo = QComboBox()
-        player_combo = QComboBox()
+        year_combo = configure_combo_box(QComboBox())
+        league_combo = configure_combo_box(QComboBox())
+        position_combo = configure_combo_box(QComboBox())
+        source_team_combo = configure_combo_box(QComboBox())
+        player_combo = configure_combo_box(QComboBox())
         year_combo.currentTextChanged.connect(lambda _value: self._refresh_player_generator_dropdowns())
+        league_combo.currentTextChanged.connect(lambda _value: self._refresh_player_generator_dropdowns())
+        position_combo.currentTextChanged.connect(lambda _value: self._refresh_player_generator_dropdowns())
         source_team_combo.currentTextChanged.connect(lambda _value: self._refresh_player_generator_dropdowns())
         player_combo.currentTextChanged.connect(lambda _value: self._refresh_player_generator_dropdowns())
         self.generator_year_combo = year_combo
+        self.generator_league_combo = league_combo
+        self.generator_position_combo = position_combo
         self.generator_source_team_combo = source_team_combo
         self.generator_player_combo = player_combo
         selectors.addWidget(QLabel("Season"))
         selectors.addWidget(year_combo)
+        selectors.addWidget(QLabel("League"))
+        selectors.addWidget(league_combo)
+        selectors.addWidget(QLabel("Position"))
+        selectors.addWidget(position_combo)
         selectors.addWidget(QLabel("Source Team"))
         selectors.addWidget(source_team_combo)
         selectors.addWidget(QLabel("Player"))
@@ -767,7 +726,7 @@ class QtEditorApp(QMainWindow):
         buttons.addWidget(QPushButton("Add Current Roster to Pool SQL", clicked=self._add_current_roster_to_player_pool))
         buttons.addWidget(QPushButton("Sync Player Pool SQL", clicked=self._sync_player_generator_pool))
         buttons.addWidget(QPushButton("Display Preview", clicked=self._display_generator_preview))
-        buttons.addWidget(QPushButton("Import Generated Players", clicked=self._import_generator_to_game_display))
+        buttons.addWidget(QPushButton("Import By Team Matching", clicked=self._import_generator_to_game_display))
         buttons.addWidget(QPushButton("Import Matched Names", clicked=lambda: self._import_generator_to_game_display(match_existing_player_names=True)))
         layout.addLayout(buttons)
         generator_text = QTextEdit()
@@ -775,26 +734,6 @@ class QtEditorApp(QMainWindow):
         configure_output_text(generator_text)
         self.generator_text = generator_text
         layout.addWidget(generator_text, 1)
-        return widget
-
-    def _build_franchise_manager_screen(self) -> QWidget:
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        buttons = QHBoxLayout()
-        self.franchise_action_input = QLineEdit("1")
-        buttons.addWidget(QPushButton("Use Full Loaded App Data", clicked=lambda: self._refresh_franchise_manager(background=True)))
-        buttons.addWidget(QLabel("Action #"))
-        buttons.addWidget(self.franchise_action_input)
-        buttons.addWidget(QPushButton("Apply Trade", clicked=lambda: self._apply_franchise_action("trade")))
-        buttons.addWidget(QPushButton("Apply Signing", clicked=lambda: self._apply_franchise_action("signing")))
-        buttons.addWidget(QPushButton("Apply Draft", clicked=lambda: self._apply_franchise_action("draft")))
-        buttons.addWidget(QPushButton("Apply Roster", clicked=lambda: self._apply_franchise_action("roster")))
-        layout.addLayout(buttons)
-        franchise_text = QTextEdit()
-        franchise_text.setReadOnly(True)
-        configure_output_text(franchise_text)
-        self.franchise_text = franchise_text
-        layout.addWidget(franchise_text, 1)
         return widget
 
     def _set_target(self, selected: str) -> None:
@@ -871,7 +810,9 @@ class QtEditorApp(QMainWindow):
                     self.status_labels[domain].setText("Loading records...")
             elif event == "domain":
                 domain = str(value)
-                if domain == "Players":
+                if domain in {"Players", "Teams"}:
+                    if domain == "Teams":
+                        self._sync_domain_list(domain)
                     self._sync_player_team_filter()
                     self._sync_player_list()
                 elif domain == "NBA History":
@@ -1073,7 +1014,7 @@ class QtEditorApp(QMainWindow):
         options = self._season_stat_selector_options(selector_entry, source)
         selected = self._ensure_season_stat_selector(selector_entry, source, options)
         row = QHBoxLayout()
-        combo = QComboBox()
+        combo = configure_combo_box(QComboBox())
         combo.addItems(options)
         if selected is not None:
             combo.setCurrentText(selected)
@@ -1506,29 +1447,27 @@ class QtEditorApp(QMainWindow):
                 self._show_operation_popup(message, progress=progress, overlay=f"{int(round(progress * 100))}%")
             elif event == "done":
                 message, overlay, done_callback = value
+                if overlay == "complete":
+                    if done_callback is not None:
+                        done_callback()
+                    if self.operation_dialog is not None:
+                        self.operation_dialog.hide()
+                    if self.operation_timer.isActive():
+                        self.operation_timer.stop()
+                    self.operation_thread = None
+                    self.state.operation_cancel_requested = False
+                    continue
                 self._show_operation_popup(message, progress=1.0, overlay=overlay)
                 if done_callback is not None:
                     done_callback()
+                if self.operation_timer.isActive():
+                    self.operation_timer.stop()
+                self.operation_thread = None
                 self.state.operation_cancel_requested = False
 
     def _refresh_player_generator_display(self) -> None:
         if self.generator_text is not None:
             self.generator_text.setPlainText(str(self._generator_display_text()))
-        self._refresh_player_generator_metrics()
-
-    def _refresh_player_generator_metrics(self) -> None:
-        if not self.generator_metric_labels:
-            return
-        state = self.player_generator_state
-        metrics = {
-            "source": "Yes" if getattr(state, "source_loaded", False) else "No",
-            "options": str(len(getattr(state, "players", ()) or ())),
-            "generated": str(len(getattr(state, "player_rows", ()) or ())),
-            "columns": str(len(getattr(state, "field_columns", ()) or ())),
-        }
-        for key, value in metrics.items():
-            if key in self.generator_metric_labels:
-                self.generator_metric_labels[key].setText(value)
 
     def _load_player_generator_source(self) -> None:
         display = self._generator_display_module()
@@ -1552,12 +1491,16 @@ class QtEditorApp(QMainWindow):
             self._sync_player_generator_status()
             return
         season = self.generator_year_combo.currentText() if self.generator_year_combo is not None else getattr(self.player_generator_state, "selected_season", "")
+        league = self.generator_league_combo.currentText() if self.generator_league_combo is not None else getattr(self.player_generator_state, "selected_league", "")
+        position = self.generator_position_combo.currentText() if self.generator_position_combo is not None else getattr(self.player_generator_state, "selected_position", "")
         source_team = self.generator_source_team_combo.currentText() if self.generator_source_team_combo is not None else getattr(self.player_generator_state, "selected_source_team", "")
         selected_player = self.generator_player_combo.currentText() if self.generator_player_combo is not None else getattr(self.player_generator_state, "selected_player", "")
         try:
             state = display.update_generator_display_selection(
                 self.player_generator_state,
                 selected_season=season or None,
+                selected_league=league or None,
+                selected_position=position or None,
                 selected_source_team=source_team or None,
             )
             if selected_player in getattr(state, "players", ()):
@@ -1662,16 +1605,29 @@ class QtEditorApp(QMainWindow):
         columns = getattr(state, "field_columns", ())
         if rows:
             parts.append("\nPreview:")
-            if columns:
-                parts.append("Player | Team | Player ID | " + " | ".join(str(column) for column in columns))
-            for row in rows:
-                parts.append(" | ".join([str(row.player), str(row.source_team), str(row.player_id), *(str(value) for value in row.values)]))
+            parts.extend(self._generator_preview_table_lines(rows, columns))
         return "\n".join(part for part in parts if part)
+
+    def _generator_preview_table_lines(self, rows: tuple[Any, ...], columns: tuple[Any, ...]) -> list[str]:
+        headers = ["Player", "Team", "Player ID", *(str(column) for column in columns)]
+        body = [[str(row.player), str(row.source_team), str(row.player_id), *(str(value) for value in row.values)] for row in rows]
+        widths = [len(header) for header in headers]
+        for body_row in body:
+            if len(body_row) < len(widths):
+                body_row.extend("" for _ in range(len(widths) - len(body_row)))
+            for index, cell in enumerate(body_row[: len(widths)]):
+                widths[index] = max(widths[index], len(cell))
+        separator = " | "
+        lines = [separator.join(headers[index].ljust(widths[index]) for index in range(len(headers)))]
+        lines.extend(separator.join(row[index].ljust(widths[index]) for index in range(len(headers))) for row in body)
+        return lines
 
     def _sync_player_generator_status(self) -> None:
         state = self.player_generator_state
         combo_values = (
             (self.generator_year_combo, list(getattr(state, "seasons", ())), str(getattr(state, "selected_season", ""))),
+            (self.generator_league_combo, list(getattr(state, "league_filters", ())), str(getattr(state, "selected_league", ""))),
+            (self.generator_position_combo, list(getattr(state, "position_filters", ())), str(getattr(state, "selected_position", ""))),
             (self.generator_source_team_combo, list(getattr(state, "source_team_filters", ())), str(getattr(state, "selected_source_team", ""))),
             (self.generator_player_combo, list(getattr(state, "players", ())), str(getattr(state, "selected_player", ""))),
         )
@@ -1685,48 +1641,6 @@ class QtEditorApp(QMainWindow):
                 combo.setCurrentText(selected)
             combo.blockSignals(False)
         self._refresh_player_generator_display()
-
-    def _refresh_franchise_manager(self, *, background: bool = False) -> None:
-        if not hasattr(self.franchise_display, "build_franchise_dashboard_state"):
-            self._sync_franchise_manager_status()
-            return
-        if not background:
-            self.franchise_state = self.franchise_display.build_franchise_dashboard_state(self.model)
-            self._sync_franchise_manager_status()
-            return
-
-        def worker() -> str:
-            self.franchise_state = self.franchise_display.build_franchise_dashboard_state(self.model)
-            return str(getattr(self.franchise_state, "status", "Loaded full app dataset."))
-
-        self._start_background_operation("Use Full Loaded App Data", worker, done_callback=self._sync_franchise_manager_status)
-
-    def _sync_franchise_manager_status(self) -> None:
-        if self.franchise_text is None:
-            return
-        lines = [str(getattr(self.franchise_state, "status", ""))]
-        panel_texts = getattr(self.franchise_state, "panel_texts", {}) or {}
-        for panel, text in panel_texts.items():
-            lines.append(f"\n## {panel}\n{text}")
-        self.franchise_text.setPlainText("\n".join(lines))
-
-    def _apply_franchise_action(self, action: str) -> None:
-        index_text = getattr(self, "franchise_action_input", QLineEdit("1")).text()
-        action_index = int(index_text or "1") - 1
-        function_name = {
-            "trade": "apply_first_trade_proposal",
-            "signing": "apply_first_signing_plan",
-            "draft": "apply_first_draft_action",
-            "roster": "apply_first_roster_move",
-        }[action]
-        apply_function = getattr(self.franchise_display, function_name)
-        state_snapshot = self.franchise_state
-
-        def worker() -> str:
-            self.franchise_state = apply_function(self.model, state_snapshot, index=action_index)
-            return str(getattr(self.franchise_state, "status", f"Applied {action}."))
-
-        self._start_background_operation(f"Apply Franchise {action.title()}", worker, done_callback=self._sync_franchise_manager_status)
 
     def _set_all_players_stat_ids_to_no_stats(self) -> None:
         def worker() -> str:
@@ -1755,7 +1669,6 @@ __all__ = [
     "EDITOR_DOMAINS",
     "RecordListItem",
     "PLAYER_ROSTER_EXPORT_MODES",
-    "FRANCHISE_MANAGER_SCREEN",
     "NAV_ORDER",
     "APP_SCREENS",
     "verify_edits",

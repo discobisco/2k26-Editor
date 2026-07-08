@@ -69,11 +69,6 @@ hiddenimports = [
     "PyQt6.QtCore",
     "PyQt6.QtGui",
     "PyQt6.QtWidgets",
-    "nba2k_editor.franchise",
-    "nba2k_editor.franchise.display",
-    "nba2k_editor.franchise.models",
-    "nba2k_editor.franchise.service",
-    "nba2k_editor.franchise.store",
     *_player_generator_modules(),
 ]
 

@@ -150,6 +150,11 @@
           "address": 132254856,
           "chain": []
         },
+        "TeamStatsEdit": {
+          "address": 132254856,
+          "chain": [],
+          "finalOffset": 4592542
+        },
         "Staff": {
           "address": 132254920,
           "chain": []
@@ -200,7 +205,8 @@
         "draftClassBodyOffset": 8,
         "recordSize": 64,
         "historySize": 168,
-        "hallOfFameSize": 108
+        "hallOfFameSize": 108,
+        "teamStatsEditSize": 62
       }
     }
   },

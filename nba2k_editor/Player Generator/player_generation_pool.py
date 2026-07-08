@@ -214,7 +214,8 @@ def _ensure_pool_export_tables(connection: sqlite3.Connection) -> None:
             source TEXT NOT NULL,
             stats_rows INTEGER NOT NULL,
             attribute_rows INTEGER NOT NULL,
-            tendency_rows INTEGER NOT NULL
+            tendency_rows INTEGER NOT NULL,
+            team_stat_rows INTEGER NOT NULL DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS pool_export_rows (
             snapshot_id TEXT NOT NULL,
@@ -225,6 +226,9 @@ def _ensure_pool_export_tables(connection: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_pool_export_rows_snapshot_type ON pool_export_rows(snapshot_id, row_type);
         """
     )
+    columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(pool_export_snapshots)")}
+    if "team_stat_rows" not in columns:
+        connection.execute("ALTER TABLE pool_export_snapshots ADD COLUMN team_stat_rows INTEGER NOT NULL DEFAULT 0")
 
 
 def stored_pool_snapshot_ids() -> tuple[str, ...]:
@@ -262,7 +266,7 @@ def source_signature(root: Path, sources: Sequence[str]) -> dict[str, Any]:
             _ensure_pool_export_tables(connection)
             for snapshot_id in snapshot_sources:
                 row = connection.execute(
-                    "SELECT created_at, stats_rows, attribute_rows, tendency_rows FROM pool_export_snapshots WHERE snapshot_id = ?",
+                    "SELECT created_at, stats_rows, attribute_rows, tendency_rows, team_stat_rows FROM pool_export_snapshots WHERE snapshot_id = ?",
                     (snapshot_id,),
                 ).fetchone()
                 if row is not None:
@@ -271,6 +275,7 @@ def source_signature(root: Path, sources: Sequence[str]) -> dict[str, Any]:
                         "stats_rows": int(row[1]),
                         "attribute_rows": int(row[2]),
                         "tendency_rows": int(row[3]),
+                        "team_stat_rows": int(row[4]),
                     }
     return signature
 
@@ -362,6 +367,32 @@ def live_features(stats: Dict[str, str]) -> Dict[str, Optional[float]]:
         "pf_per36": per36(as_float(stats.get("Fouls")), minutes),
         "games": as_float(stats.get("Games") or stats.get("G")),
         "mp_per_game": None,
+    }
+
+
+def live_team_features(stats: Dict[str, str]) -> Dict[str, Optional[float]]:
+    points = as_float(stats.get("POINTS"))
+    allowed = as_float(stats.get("PA"))
+    possessions = as_float(stats.get("POSS"))
+    made = as_float(stats.get("MADE"))
+    attempted = as_float(stats.get("ATTEMPTED"))
+    threes_made = as_float(stats.get("3PT_MADE"))
+    threes_attempted = as_float(stats.get("3PT_ATTEMPTED"))
+    free_throw_attempted = as_float(stats.get("FREE_THROWS_ATTEMPTED"))
+    turnovers = as_float(stats.get("TURNOVER"))
+    opp_made = as_float(stats.get("OFGM"))
+    opp_attempted = as_float(stats.get("OFGA"))
+    opp_threes_made = as_float(stats.get("O3PM"))
+    return {
+        "team_o_rtg": None if possessions in (None, 0) or points is None else points * 100.0 / possessions,
+        "team_d_rtg": None if possessions in (None, 0) or allowed is None else allowed * 100.0 / possessions,
+        "team_n_rtg": None if possessions in (None, 0) or points is None or allowed is None else (points - allowed) * 100.0 / possessions,
+        "team_pace": as_float(stats.get("PACE")),
+        "team_ts_percent": safe_div(points, None if attempted is None or free_throw_attempted is None else 2.0 * (attempted + 0.44 * free_throw_attempted)),
+        "team_x3p_ar": safe_div(threes_attempted, attempted),
+        "team_e_fg_percent": safe_div((made or 0.0) + 0.5 * (threes_made or 0.0), attempted),
+        "team_tov_percent": safe_div(turnovers, possessions),
+        "team_opp_e_fg_percent": safe_div((opp_made or 0.0) + 0.5 * (opp_threes_made or 0.0), opp_attempted),
     }
 
 
@@ -623,7 +654,7 @@ def _feature_distance(a: dict[str, Optional[float]], b: dict[str, Optional[float
     return math.sqrt(sum(parts) / len(parts)), len(parts)
 
 
-def _stored_snapshot_rows(snapshot_id: str) -> tuple[dict[int, dict[str, str]], dict[int, dict[str, str]], dict[int, dict[str, str]]]:
+def _stored_snapshot_rows(snapshot_id: str) -> tuple[dict[int, dict[str, str]], dict[int, dict[str, str]], dict[int, dict[str, str]], dict[int, dict[str, str]]]:
     if not POOL_SQLITE.is_file():
         raise FileNotFoundError(f"missing player pool SQL: {POOL_SQLITE}")
     with sqlite3.connect(POOL_SQLITE) as connection:
@@ -632,21 +663,27 @@ def _stored_snapshot_rows(snapshot_id: str) -> tuple[dict[int, dict[str, str]], 
             "SELECT row_type, row_json FROM pool_export_rows WHERE snapshot_id = ? ORDER BY rowid",
             (snapshot_id,),
         ).fetchall()
-    by_type: dict[str, dict[int, dict[str, str]]] = {"stats": {}, "attributes": {}, "tendencies": {}}
+    by_type: dict[str, dict[int, dict[str, str]]] = {"stats": {}, "attributes": {}, "tendencies": {}, "team_stats": {}}
     for row_type, row_json in rows:
         payload = {str(key): str(value) for key, value in json.loads(str(row_json)).items()}
-        player_index = int(payload["player_index"])
-        by_type[str(row_type)][player_index] = payload
-    return by_type["stats"], by_type["attributes"], by_type["tendencies"]
+        bucket = by_type.get(str(row_type))
+        if bucket is None:
+            continue
+        if str(row_type) == "team_stats":
+            bucket[int(payload["team_index"])] = payload
+        else:
+            bucket[int(payload["player_index"])] = payload
+    return by_type["stats"], by_type["attributes"], by_type["tendencies"], by_type["team_stats"]
 
 
-def _source_export_rows(root: Path, source_id: str) -> tuple[dict[int, dict[str, str]], dict[int, dict[str, str]], dict[int, dict[str, str]]]:
+def _source_export_rows(root: Path, source_id: str) -> tuple[dict[int, dict[str, str]], dict[int, dict[str, str]], dict[int, dict[str, str]], dict[int, dict[str, str]]]:
     if source_id.startswith("run_"):
         run_dir = root / RUNS_DIR / source_id
         return (
             {int(r["player_index"]): r for r in read_csv(run_dir / "current_active_player_stats.csv")},
             {int(r["player_index"]): r for r in read_csv(run_dir / "current_active_player_attributes.csv")},
             {int(r["player_index"]): r for r in read_csv(run_dir / "current_active_player_tendencies.csv")},
+            {},
         )
     return _stored_snapshot_rows(source_id)
 
@@ -656,7 +693,7 @@ def load_candidates(root: Path, runs: Sequence[str] | None = None) -> Tuple[List
     match_rows: List[Dict[str, Any]] = []
     fieldnames: list[str] = []
     for run_id in tuple(runs or pool_source_ids(root)):
-        stats_rows, attrs_rows, tends_rows = _source_export_rows(root, run_id)
+        stats_rows, attrs_rows, tends_rows, team_rows = _source_export_rows(root, run_id)
         if not fieldnames and attrs_rows and tends_rows:
             attr_fields = [c for c in next(iter(attrs_rows.values())).keys() if c not in BASE_COLS]
             tend_fields = [c for c in next(iter(tends_rows.values())).keys() if c not in BASE_COLS]
@@ -689,7 +726,9 @@ def load_candidates(root: Path, runs: Sequence[str] | None = None) -> Tuple[List
                 if v is not None:
                     fields[f"Tendency::{col}"] = v
             master = _master_features_for_live(stats, positions)
-            feats = {**live_features(stats), **(master.get("features") or {})}
+            team_index = int(stats.get("team_index") or -1)
+            team_features = {key: value for key, value in live_team_features(team_rows.get(team_index, {})).items() if value is not None}
+            feats = {**live_features(stats), **(master.get("features") or {}), **team_features}
             vitals = live_vitals(stats, {"height_inches": feats.get("height_inches"), "weight_pounds": feats.get("weight_pounds")})
             features_with_body = {**feats, "height_inches": vitals.get("height_inches"), "weight_pounds": vitals.get("weight_pounds")}
             master_player = str(master.get("player") or label)
@@ -936,7 +975,7 @@ def _raw_int(value: dict[str, Any] | None) -> int | None:
         return None
 
 
-def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     loaded_players = sorted(model.loaded_items.get("Players", {}).values(), key=lambda item: int(item.index))
     if not loaded_players:
         raise RuntimeError("no loaded Players; load the editor player list before adding the current roster to Pool SQL")
@@ -952,6 +991,7 @@ def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None
         ),
         key=lambda item: item[0],
     )[:15]
+    team_stat_entries = list(model.grouped_fields("Teams").get("Team Stats Edit", {}).get("Team Stats Edit", ()))
     players: list[tuple[Any, Any, int, int]] = []
     for team_slot, team in enumerate(loaded_teams[:30]):
         for roster_slot, entry in team_player_entries:
@@ -997,7 +1037,8 @@ def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None
     stats_rows: list[dict[str, Any]] = []
     attribute_rows: list[dict[str, Any]] = []
     tendency_rows: list[dict[str, Any]] = []
-    total_units = max(1, len(players) * 3 + 1)
+    team_stat_rows: list[dict[str, Any]] = []
+    total_units = max(1, len(players) * 3 + len(loaded_teams[:30]) + 1)
     completed_units = 0
     last_progress_percent = -1
 
@@ -1011,6 +1052,14 @@ def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None
             progress_callback(completed_units, total_units, message)
 
     emit_progress(f"Capturing 0/{len(players)} loaded team-slot players into Pool SQL...", force=True)
+    for team_slot, team in enumerate(loaded_teams[:30]):
+        team_row: dict[str, Any] = {"team_slot": team_slot, "team_index": team.index, "team_label": team.label}
+        for entry in team_stat_entries:
+            team_row[str(entry.normalized_name)] = _display(model.read_entry_value(entry, index=team.index))
+        team_stat_rows.append(team_row)
+        completed_units += 1
+        emit_progress(f"Captured team stats for {team_slot + 1}/{len(loaded_teams[:30])} loaded teams...")
+
     for progress_slot, (player, team, team_slot, roster_slot) in enumerate(players, start=1):
         identity = {
             "team_slot": team_slot,
@@ -1059,12 +1108,12 @@ def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None
         tendency_rows.append(tendency_row)
         completed_units += 1
         emit_progress(f"Captured tendencies for {progress_slot}/{len(players)} loaded team-slot players...")
-    return stats_rows, attribute_rows, tendency_rows
+    return stats_rows, attribute_rows, tendency_rows, team_stat_rows
 
 
 def add_current_roster_to_player_generation_pool(model: Any, *, season: int = 2026, progress_callback: Any | None = None) -> dict[str, Any]:
-    stats_rows, attribute_rows, tendency_rows = capture_active_roster_pool_rows(model, progress_callback=progress_callback)
-    total_units = max(1, len(stats_rows) * 3 + 1)
+    stats_rows, attribute_rows, tendency_rows, team_stat_rows = capture_active_roster_pool_rows(model, progress_callback=progress_callback)
+    total_units = max(1, len(stats_rows) * 3 + len(team_stat_rows) + 1)
     if progress_callback is not None:
         progress_callback(max(0, total_units - 1), total_units, "Writing current roster snapshot to Pool SQL...")
     with _connect_pool() as connection:
@@ -1072,10 +1121,10 @@ def add_current_roster_to_player_generation_pool(model: Any, *, season: int = 20
         snapshot_id = _next_snapshot_id(connection)
         created_at = datetime.now(timezone.utc).isoformat()
         connection.execute(
-            "INSERT INTO pool_export_snapshots VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (snapshot_id, int(season), created_at, "editor_active_roster", len(stats_rows), len(attribute_rows), len(tendency_rows)),
+            "INSERT INTO pool_export_snapshots VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (snapshot_id, int(season), created_at, "editor_active_roster", len(stats_rows), len(attribute_rows), len(tendency_rows), len(team_stat_rows)),
         )
-        for row_type, rows in (("stats", stats_rows), ("attributes", attribute_rows), ("tendencies", tendency_rows)):
+        for row_type, rows in (("stats", stats_rows), ("attributes", attribute_rows), ("tendencies", tendency_rows), ("team_stats", team_stat_rows)):
             connection.executemany(
                 "INSERT INTO pool_export_rows VALUES (?, ?, ?)",
                 ((snapshot_id, row_type, json.dumps(row, ensure_ascii=False, sort_keys=True)) for row in rows),
@@ -1094,6 +1143,7 @@ def add_current_roster_to_player_generation_pool(model: Any, *, season: int = 20
         "added_stats_rows": len(stats_rows),
         "added_attribute_rows": len(attribute_rows),
         "added_tendency_rows": len(tendency_rows),
+        "added_team_stat_rows": len(team_stat_rows),
         "sync_required": True,
     }
 
