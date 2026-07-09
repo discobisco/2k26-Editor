@@ -530,11 +530,27 @@ def live_vitals(stats: Dict[str, str], master: Dict[str, Any]) -> Dict[str, Opti
 
 
 def _feature_columns_sql() -> str:
-    return ",\n                ".join(f'"{column}" REAL' for column in (*VITAL_COLUMNS, *FEATURES))
+    columns = (
+        *(f'"{column}" REAL' for column in (*VITAL_COLUMNS, *FEATURES)),
+        *(f'"master_{column}" REAL' for column in FEATURES),
+        *(f'"sim_{column}" REAL' for column in FEATURES),
+    )
+    return ",\n                ".join(columns)
 
 
 def _candidate_pool_insert_sql() -> str:
-    columns = ("run_id", "player_index", "player_label", "master_player", "master_player_id", "position", *VITAL_COLUMNS, *FEATURES)
+    columns = (
+        "run_id",
+        "player_index",
+        "player_label",
+        "master_player",
+        "master_player_id",
+        "position",
+        *VITAL_COLUMNS,
+        *FEATURES,
+        *(f"master_{feature}" for feature in FEATURES),
+        *(f"sim_{feature}" for feature in FEATURES),
+    )
     quoted = ", ".join(f'"{column}"' for column in columns)
     placeholders = ", ".join("?" for _ in columns)
     return f"INSERT INTO candidate_pool ({quoted}) VALUES ({placeholders})"
@@ -543,6 +559,8 @@ def _candidate_pool_insert_sql() -> str:
 def _candidate_pool_values(row: dict[str, Any]) -> tuple[Any, ...]:
     feature_payload = row.get("features", {}) if isinstance(row.get("features"), dict) else {}
     vital_payload = row.get("vitals", {}) if isinstance(row.get("vitals"), dict) else {}
+    master_feature_payload = row.get("master_features", {}) if isinstance(row.get("master_features"), dict) else {}
+    sim_feature_payload = row.get("sim_features", {}) if isinstance(row.get("sim_features"), dict) else {}
     return (
         row.get("run_id"),
         row.get("player_index"),
@@ -552,6 +570,8 @@ def _candidate_pool_values(row: dict[str, Any]) -> tuple[Any, ...]:
         row.get("position"),
         *(vital_payload.get(column, row.get(column)) for column in VITAL_COLUMNS),
         *(feature_payload.get(feature, row.get(feature)) for feature in FEATURES),
+        *(master_feature_payload.get(feature, feature_payload.get(feature, row.get(f"master_{feature}"))) for feature in FEATURES),
+        *(sim_feature_payload.get(feature, feature_payload.get(feature, row.get(f"sim_{feature}"))) for feature in FEATURES),
     )
 
 
@@ -833,7 +853,9 @@ def load_candidates(root: Path, runs: Sequence[str] | None = None) -> Tuple[List
             team_all_features = live_team_features(team_rows.get(team_index, {}))
             team_features = {key: value for key, value in team_all_features.items() if value is not None}
             player_team_features = {key: value for key, value in live_player_team_features(stats, team_all_features).items() if value is not None}
-            feats = {**(master.get("features") or {}), **live, **team_features, **player_team_features}
+            master_features = {**(master.get("features") or {}), **team_features}
+            sim_features = {**live, **team_features, **player_team_features}
+            feats = {**master_features, **sim_features}
             vitals = live_vitals(stats, {"height_inches": feats.get("height_inches"), "weight_pounds": feats.get("weight_pounds")})
             features_with_body = {**feats, "height_inches": vitals.get("height_inches"), "weight_pounds": vitals.get("weight_pounds")}
             master_player = str(master.get("player") or label)
@@ -847,6 +869,8 @@ def load_candidates(root: Path, runs: Sequence[str] | None = None) -> Tuple[List
                     "master_player_id": master_player_id,
                     "position": pos,
                     "features": features_with_body,
+                    "master_features": master_features,
+                    "sim_features": sim_features,
                     "vitals": vitals,
                     "fields": fields,
                 })
@@ -1299,6 +1323,8 @@ def sync_player_generation_pool(request: PlayerGenerationPoolRequest | None = No
             row[column] = c.get("vitals", {}).get(column)
         for feat in FEATURES:
             row[feat] = c["features"].get(feat)
+            row[f"master_{feat}"] = c.get("master_features", {}).get(feat)
+            row[f"sim_{feat}"] = c.get("sim_features", {}).get(feat)
         candidate_rows.append(row)
 
     manifest = {

@@ -53,6 +53,7 @@ APP_TITLE = "Offline Player Data Editor"
 APP_VIEWPORT_WIDTH = 1600
 APP_VIEWPORT_HEIGHT = 900
 PLAYER_GENERATOR_SCREEN = "Player Generator"
+FRANCHISE_SCREEN = "Franchise"
 TARGET_CHOICES: tuple[str, ...] = ("NBA 2K22", "NBA 2K23", "NBA 2K24", "NBA 2K25", "NBA 2K26")
 PLAYER_ROSTER_EXPORT_MODES: tuple[str, ...] = (
     "Full Loaded Roster",
@@ -198,6 +199,7 @@ from nba2k_editor.ui.qt_widgets import DetailRow, EditableFieldRow, NavButton, O
 NAV_ORDER: tuple[str, ...] = (
     "Players",
     "Teams",
+    FRANCHISE_SCREEN,
     PLAYER_GENERATOR_SCREEN,
     "NBA History",
     "NBA Records",
@@ -206,7 +208,7 @@ NAV_ORDER: tuple[str, ...] = (
     "Jerseys",
     "Shoes",
 )
-APP_SCREENS: tuple[str, ...] = ("Home", *EDITOR_DOMAINS, PLAYER_GENERATOR_SCREEN)
+APP_SCREENS: tuple[str, ...] = ("Home", *EDITOR_DOMAINS, FRANCHISE_SCREEN, PLAYER_GENERATOR_SCREEN)
 _QT_APPLICATION: QApplication | None = None
 
 
@@ -293,6 +295,7 @@ class QtEditorApp(QMainWindow):
             "Home": "▦  Dashboard",
             "Players": "⌕  Players",
             "Teams": "⌘  Teams",
+            FRANCHISE_SCREEN: "▤  Franchise",
             PLAYER_GENERATOR_SCREEN: "◇  Player Gen",
             "NBA History": "◷  NBA History",
             "NBA Records": "▥  NBA Records",
@@ -381,6 +384,10 @@ class QtEditorApp(QMainWindow):
             self._sync_player_generator_status()
             if not getattr(self.player_generator_state, "source_loaded", False) and self.operation_thread is None:
                 self._load_player_generator_source()
+        if screen == FRANCHISE_SCREEN:
+            franchise_widget = self.screen_widgets.get(FRANCHISE_SCREEN)
+            if franchise_widget is not None and hasattr(franchise_widget, "refresh_entry_menu"):
+                franchise_widget.refresh_entry_menu()
         if screen == "NBA Records":
             self._show_record_screen_rows()
 
@@ -462,6 +469,7 @@ class QtEditorApp(QMainWindow):
         layout.addWidget(heading)
         for label, screen in (
             ("◇  Player Gen", PLAYER_GENERATOR_SCREEN),
+            ("▤  Franchise", FRANCHISE_SCREEN),
             ("⌕  Players", "Players"),
             ("⌘  Teams", "Teams"),
             ("◷  NBA History", "NBA History"),
@@ -528,6 +536,8 @@ class QtEditorApp(QMainWindow):
             return self._build_records_screen()
         if domain == PLAYER_GENERATOR_SCREEN:
             return self._build_player_generator_screen()
+        if domain == FRANCHISE_SCREEN:
+            return import_module("nba2k_editor.franchise.qt_screen").build_franchise_screen(self.model)
         return self._build_generic_domain_screen(domain)
 
     def _base_domain_screen(self, domain: str) -> tuple[QWidget, QVBoxLayout]:
@@ -1778,6 +1788,7 @@ __all__ = [
     "EDITOR_DOMAINS",
     "RecordListItem",
     "PLAYER_ROSTER_EXPORT_MODES",
+    "FRANCHISE_SCREEN",
     "NAV_ORDER",
     "APP_SCREENS",
     "verify_edits",

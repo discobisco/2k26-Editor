@@ -11,6 +11,8 @@ from pathlib import Path
 from statistics import median
 from typing import Any
 
+from field_value_normalizer import normalize_field_value
+
 POSITIONS: tuple[str, ...] = ("PG", "SG", "SF", "PF", "C")
 FEATURES: tuple[str, ...] = (
     "pts_per36",
@@ -210,20 +212,31 @@ class StatNeighborModel:
                     continue
                 field_values = [float(candidate["fields"][field_key]) for candidate in top]
                 weighted_value = _rank_weighted_top_values(field_values)
+                evidence_keys = (
+                    relpath,
+                    f"position={pos}",
+                    f"section_features={','.join(section_features)}",
+                    f"neighbor_count={len(field_values)}",
+                    f"best_distance={field_rows[0]['distance']:.6f}",
+                    f"common_features={field_rows[0]['common_features']}",
+                    "rank_weights=54,25,15,5,1",
+                    f"top_neighbor={top[0].get('player_label')}",
+                )
+                normalized = normalize_field_value(
+                    field_key=field_key,
+                    value=weighted_value,
+                    initial_match_2k_features=top[0].get("sim_features", top[0]["features"]),
+                    initial_match_master_features=top[0].get("master_features", top[0]["features"]),
+                    domain_master_feature_rows=(candidate.get("master_features", candidate["features"]) for candidate in candidates),
+                    feature_names=section_features,
+                    source_rule="position_stat_neighbor_section_top5_weighted",
+                    evidence_keys=evidence_keys,
+                )
                 values[field_key] = NeighborFieldSuggestion(
                     field_key=field_key,
-                    value=int(round(weighted_value)),
-                    source_rule="position_stat_neighbor_section_top5_weighted",
-                    evidence_keys=(
-                        relpath,
-                        f"position={pos}",
-                        f"section_features={','.join(section_features)}",
-                        f"neighbor_count={len(field_values)}",
-                        f"best_distance={field_rows[0]['distance']:.6f}",
-                        f"common_features={field_rows[0]['common_features']}",
-                        "rank_weights=54,25,15,5,1",
-                        f"top_neighbor={top[0].get('player_label')}",
-                    ),
+                    value=normalized.value,
+                    source_rule=normalized.source_rule,
+                    evidence_keys=normalized.evidence_keys,
                 )
         return values
 
@@ -477,6 +490,8 @@ def _load_candidate_pool(model_path: Path, field_map: dict[tuple[str, str], str]
             "master_player_id": str(row.get("master_player_id") or ""),
             "position": pos,
             "features": {feature: _float(row.get(feature)) for feature in (*FEATURES, *BODY_FEATURES)},
+            "master_features": {feature: _float(row.get(f"master_{feature}", row.get(feature))) for feature in (*FEATURES, *BODY_FEATURES)},
+            "sim_features": {feature: _float(row.get(f"sim_{feature}", row.get(feature))) for feature in (*FEATURES, *BODY_FEATURES)},
             "fields": fields,
         }
         by_position.setdefault(pos, []).append(candidate)
