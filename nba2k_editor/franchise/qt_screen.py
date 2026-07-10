@@ -37,6 +37,7 @@ from nba2k_editor.franchise.llm_pick_runner import LlmDraftPickResult, run_llm_f
 from nba2k_editor.franchise.models import FantasyDraftState, FranchiseRecord, FranchiseSetup, FranchiseTeamOption, TeamRecommendation
 from nba2k_editor.franchise.recommendations import build_team_recommendation_requests, run_team_recommendation_requests
 from nba2k_editor.franchise.storage import DEFAULT_FRANCHISE_DB_PATH, FranchiseRepository, team_options_from_model
+from nba2k_editor.ui.qt_widgets import configure_combo_box
 
 FRANCHISE_SCREEN_TITLE = "Franchise"
 
@@ -129,7 +130,7 @@ class FranchiseScreen(QWidget):
         form_box = QGroupBox("League Setup")
         form = QFormLayout(form_box)
         self.start_year_input = QLineEdit("2025")
-        user_team_combo = QComboBox()
+        user_team_combo = configure_combo_box(QComboBox())
         for option in self.team_options:
             user_team_combo.addItem(option.display_label, option.team_index)
         user_team_combo.currentIndexChanged.connect(lambda _index: self._sync_user_team_llm_checkbox())
@@ -425,7 +426,7 @@ class FranchiseScreen(QWidget):
             controls.addWidget(button)
         controls.addStretch(1)
         layout.addLayout(controls)
-        player_combo = QComboBox()
+        player_combo = configure_combo_box(QComboBox())
         self.draft_player_combo = player_combo
         layout.addWidget(QLabel("Available player for user/manual pick"))
         layout.addWidget(player_combo)

@@ -5,6 +5,7 @@ from typing import Callable
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QComboBox,
     QDialog,
     QHBoxLayout,
@@ -22,11 +23,21 @@ from PyQt6.QtWidgets import (
 
 
 COMBO_BOX_MAX_VISIBLE_ITEMS = 12
+COMBO_BOX_POPUP_ROW_HEIGHT = 24
 
 
 def configure_combo_box(combo: QComboBox) -> QComboBox:
     combo.setMaxVisibleItems(COMBO_BOX_MAX_VISIBLE_ITEMS)
-    combo.view().setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+    combo.setMinimumContentsLength(14)
+    combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+    combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+    view = combo.view()
+    view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+    view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    view.setTextElideMode(Qt.TextElideMode.ElideRight)
+    view.setUniformItemSizes(True)
+    view.setMaximumHeight(COMBO_BOX_MAX_VISIBLE_ITEMS * COMBO_BOX_POPUP_ROW_HEIGHT)
+    view.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerItem)
     return combo
 
 
