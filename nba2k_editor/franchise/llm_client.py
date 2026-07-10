@@ -89,6 +89,21 @@ class LLMClient:
             backend=_env_value("FRANCHISE_LLM_BACKEND") or "auto",
         )
 
+    @classmethod
+    def for_franchise_gm(cls) -> "LLMClient":
+        base_url = (
+            _env_value("FRANCHISE_GM_HERMES_BASE_URL", "FRANCHISE_HERMES_BASE_URL", "HERMES_API_BASE_URL")
+            or _HERMES_DEFAULT_BASE_URL
+        )
+        return cls(
+            LLMClientConfig(
+                base_url=base_url,
+                api_key=_hermes_api_key(),
+                model=_env_value("FRANCHISE_GM_HERMES_MODEL") or "franchise-gm",
+                backend=_env_value("FRANCHISE_GM_LLM_BACKEND") or "hermes_api",
+            )
+        )
+
     def _openai_config(self) -> LLMClientConfig:
         return LLMClientConfig(
             base_url=_env_value("FRANCHISE_LLM_BASE_URL", "OPENAI_BASE_URL") or _OPENAI_DEFAULT_BASE_URL,
@@ -140,44 +155,44 @@ class LLMClient:
             return self._hermes_cli_available()
         return self._hermes_api_available() or self._openai_available() or self._hermes_cli_available()
 
-    def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str, *, system_prompt: str = "Return only valid JSON for the requested NBA2K fantasy draft decision.") -> str:
         backend = self.config.backend.strip().casefold()
         if backend in {"hermes_api", "api", "hermes-server", "hermes_server"}:
-            return self._generate_with_hermes_api(prompt)
+            return self._generate_with_hermes_api(prompt, system_prompt=system_prompt)
         if backend == "openai":
-            return self._generate_with_openai(prompt)
+            return self._generate_with_openai(prompt, system_prompt=system_prompt)
         if backend == "hermes":
-            return self._generate_with_hermes_cli(prompt)
+            return self._generate_with_hermes_cli(prompt, system_prompt=system_prompt)
         if self._hermes_api_available():
-            return self._generate_with_hermes_api(prompt)
+            return self._generate_with_hermes_api(prompt, system_prompt=system_prompt)
         if self._openai_available():
-            return self._generate_with_openai(prompt)
-        return self._generate_with_hermes_cli(prompt)
+            return self._generate_with_openai(prompt, system_prompt=system_prompt)
+        return self._generate_with_hermes_cli(prompt, system_prompt=system_prompt)
 
-    def _messages(self, prompt: str) -> list[dict[str, str]]:
+    def _messages(self, prompt: str, *, system_prompt: str) -> list[dict[str, str]]:
         return [
-            {"role": "system", "content": "Return only valid JSON for the requested NBA2K fantasy draft decision."},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ]
 
-    def _generate_with_hermes_api(self, prompt: str) -> str:
+    def _generate_with_hermes_api(self, prompt: str, *, system_prompt: str) -> str:
         if not self.config.api_key.strip():
             raise RuntimeError("Hermes API Server key unavailable. Set API_SERVER_KEY, FRANCHISE_HERMES_API_KEY, or FRANCHISE_HERMES_ENV_PATH.")
         return self._post_chat_completions(
             base_url=self.config.base_url,
             api_key=self.config.api_key,
             model=self.config.model,
-            messages=self._messages(prompt),
+            messages=self._messages(prompt, system_prompt=system_prompt),
             timeout=180,
             label="Hermes API Server",
         )
 
-    def _generate_with_hermes_cli(self, prompt: str) -> str:
+    def _generate_with_hermes_cli(self, prompt: str, *, system_prompt: str) -> str:
         command = self._hermes_command()
         if command is None:
             raise RuntimeError("Hermes is unavailable. Start Hermes API Server on 127.0.0.1:8642 or set FRANCHISE_HERMES_API_KEY/API_SERVER_KEY.")
         full_prompt = (
-            "Return only valid JSON for the requested NBA2K fantasy draft decision. "
+            f"{system_prompt} "
             "Do not use tools. Do not include markdown.\n\n"
             + prompt
         )
@@ -202,7 +217,7 @@ class LLMClient:
             raise RuntimeError((run.stderr or run.stdout or "Hermes CLI failed").strip())
         return run.stdout.strip()
 
-    def _generate_with_openai(self, prompt: str) -> str:
+    def _generate_with_openai(self, prompt: str, *, system_prompt: str) -> str:
         config = self._openai_config()
         if not config.api_key.strip():
             raise RuntimeError("LLM unavailable: Hermes API Server is unavailable and no FRANCHISE_LLM_API_KEY or OPENAI_API_KEY is set")
@@ -210,7 +225,7 @@ class LLMClient:
             base_url=config.base_url,
             api_key=config.api_key,
             model=config.model,
-            messages=self._messages(prompt),
+            messages=self._messages(prompt, system_prompt=system_prompt),
             timeout=90,
             label="OpenAI-compatible provider",
         )

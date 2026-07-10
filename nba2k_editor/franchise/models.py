@@ -53,3 +53,18 @@ class FantasyDraftStoredPick:
     raw_llm_response: str = ""
     rationale: str = ""
     created_at: str = ""
+
+
+@dataclass(frozen=True)
+class TeamRecommendation:
+
+    team_index: int
+    team_label: str
+    recommended_action: str
+    reasoning: str
+    owner_approval_required: bool
+    blocked_reason: str
+    raw_llm_response: str = ""
+    status: str = "pending"
+    created_at: str = ""
+    recommendation_id: int = 0

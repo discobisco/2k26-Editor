@@ -34,7 +34,8 @@ from nba2k_editor.franchise.draft_room import (
     team_labels_from_model,
 )
 from nba2k_editor.franchise.llm_pick_runner import LlmDraftPickResult, run_llm_fantasy_draft_pick
-from nba2k_editor.franchise.models import FantasyDraftState, FranchiseRecord, FranchiseSetup, FranchiseTeamOption
+from nba2k_editor.franchise.models import FantasyDraftState, FranchiseRecord, FranchiseSetup, FranchiseTeamOption, TeamRecommendation
+from nba2k_editor.franchise.recommendations import build_team_recommendation_requests, run_team_recommendation_requests
 from nba2k_editor.franchise.storage import DEFAULT_FRANCHISE_DB_PATH, FranchiseRepository, team_options_from_model
 
 FRANCHISE_SCREEN_TITLE = "Franchise"
@@ -52,6 +53,13 @@ class FranchiseScreen(QWidget):
         self.full_league_save_checkbox: QCheckBox | None = None
         self.fantasy_draft_checkbox: QCheckBox | None = None
         self.dashboard_text: QTextEdit | None = None
+        self.recommendation_text: QTextEdit | None = None
+        self.recommendation_action_buttons: list[QPushButton] = []
+        self._recommendation_thread: threading.Thread | None = None
+        self._recommendation_events: queue.Queue[tuple[str, object]] = queue.Queue()
+        self._recommendation_timer = QTimer(self)
+        self._recommendation_timer.setInterval(100)
+        self._recommendation_timer.timeout.connect(self._poll_team_recommendations)
         self.draft_status_text: QTextEdit | None = None
         self.draft_player_combo: QComboBox | None = None
         self.draft_action_buttons: list[QPushButton] = []
@@ -214,9 +222,18 @@ class FranchiseScreen(QWidget):
 
     def _load_franchise_dashboard(self) -> None:
         record = self.repository.load()
+        if record.setup.fantasy_draft:
+            self._show_fantasy_draft_page(record)
+            return
+        self._show_franchise_systems_page(record)
+
+    def _show_franchise_systems_page(self, record: FranchiseRecord) -> None:
+        self.draft_status_text = None
+        self.draft_player_combo = None
+        self.draft_action_buttons = []
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        layout.addWidget(self._header("Franchise Loaded", f"Database: {record.database_path}"))
+        layout.addWidget(self._header("Franchise Systems", f"Database: {record.database_path}"))
         text = QTextEdit()
         text.setReadOnly(True)
         text.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
@@ -245,9 +262,8 @@ class FranchiseScreen(QWidget):
         text.setPlainText("\n".join(lines))
         self.dashboard_text = text
         layout.addWidget(text)
-        if record.setup.fantasy_draft:
-            layout.addWidget(self._build_fantasy_draft_widget(record), 1)
-            self._refresh_draft_room()
+        layout.addWidget(self._build_team_recommendations_widget(record), 1)
+        self._refresh_team_recommendations()
         buttons = QHBoxLayout()
         buttons.addWidget(QPushButton("New", clicked=self._show_new_franchise_setup))
         buttons.addWidget(QPushButton("Entry Menu", clicked=self.refresh_entry_menu))
@@ -255,8 +271,144 @@ class FranchiseScreen(QWidget):
         layout.addLayout(buttons)
         self._replace_body(widget)
 
+    def _show_fantasy_draft_page(self, record: FranchiseRecord) -> None:
+        self.dashboard_text = None
+        self.recommendation_text = None
+        self.recommendation_action_buttons = []
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.addWidget(
+            self._header(
+                "Fantasy Draft",
+                f"Database: {record.database_path}. This franchise is in fantasy draft mode, so only the draft room is active on this page.",
+            )
+        )
+        layout.addWidget(self._build_fantasy_draft_widget(record), 1)
+        buttons = QHBoxLayout()
+        buttons.addWidget(QPushButton("New", clicked=self._show_new_franchise_setup))
+        buttons.addWidget(QPushButton("Entry Menu", clicked=self.refresh_entry_menu))
+        buttons.addStretch(1)
+        layout.addLayout(buttons)
+        self._replace_body(widget)
+        self._refresh_draft_room()
+
+    def _build_team_recommendations_widget(self, _record: FranchiseRecord) -> QWidget:
+        box = QGroupBox("Team GM Recommendations")
+        box.setObjectName("TeamGMRecommendationsPage")
+        layout = QVBoxLayout(box)
+        controls = QHBoxLayout()
+        self.recommendation_action_buttons = []
+        for label, callback in (
+            ("Generate Team Recommendations", self._run_team_recommendations),
+            ("Refresh Recommendations", self._refresh_team_recommendations),
+        ):
+            button = QPushButton(label, clicked=callback)
+            button.setEnabled(not self._recommendations_running())
+            self.recommendation_action_buttons.append(button)
+            controls.addWidget(button)
+        controls.addStretch(1)
+        layout.addLayout(controls)
+        text = QTextEdit()
+        text.setReadOnly(True)
+        text.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        self.recommendation_text = text
+        layout.addWidget(text, 1)
+        return box
+
+    def _refresh_team_recommendations(self) -> None:
+        if self.recommendation_text is None:
+            return
+        record = self.repository.load()
+        recommendations = self.repository.list_team_recommendations()
+        lines = [
+            "# Team GM Recommendations",
+            "Mode: recommendation-only. No game-memory write, preview, apply, save, import, trade, signing, release, or roster move is performed here.",
+            f"True Sim Year: {record.setup.start_year}",
+            f"User Team: {self._team_label(record.setup.user_team_index)}",
+            f"AI Teams: {', '.join(str(index) for index in record.setup.llm_gm_team_indexes) or 'none'}",
+            "",
+            "## Saved Recommendations",
+        ]
+        if not recommendations:
+            lines.append("None")
+        for recommendation in recommendations[-30:]:
+            approval = "yes" if recommendation.owner_approval_required else "no"
+            lines.append(
+                f"#{recommendation.recommendation_id} Team {recommendation.team_index} {recommendation.team_label} "
+                f"[{recommendation.status}] owner approval: {approval}"
+            )
+            lines.append(f"Action: {recommendation.recommended_action}")
+            lines.append(f"Reasoning: {recommendation.reasoning}")
+            if recommendation.blocked_reason:
+                lines.append(f"Blocked: {recommendation.blocked_reason}")
+            lines.append("")
+        self.recommendation_text.setPlainText("\n".join(lines))
+
+    def _run_team_recommendations(self) -> None:
+        if self._recommendations_running():
+            QMessageBox.warning(self, "Team GM recommendations", "Recommendations are already running.")
+            return
+        try:
+            record = self.repository.load()
+            requests = build_team_recommendation_requests(record, self.model)
+            if not requests:
+                QMessageBox.warning(self, "Team GM recommendations", "No AI league teams selected.")
+                return
+        except Exception as exc:
+            QMessageBox.warning(self, "Team GM recommendations", str(exc))
+            return
+        self._set_recommendations_running(True)
+        self._append_recommendation_status("\nLLM team recommendations running through Hermes API Server...")
+
+        def worker() -> None:
+            try:
+                result = run_team_recommendation_requests(requests)
+                self._recommendation_events.put(("done", result))
+            except Exception as exc:
+                self._recommendation_events.put(("error", str(exc)))
+
+        self._recommendation_thread = threading.Thread(target=worker, name="nba2k-franchise-recommendations", daemon=True)
+        self._recommendation_thread.start()
+        self._recommendation_timer.start()
+
+    def _recommendations_running(self) -> bool:
+        return self._recommendation_thread is not None and self._recommendation_thread.is_alive()
+
+    def _set_recommendations_running(self, running: bool) -> None:
+        for button in self.recommendation_action_buttons:
+            button.setEnabled(not running)
+
+    def _append_recommendation_status(self, message: str) -> None:
+        if self.recommendation_text is None:
+            return
+        current = self.recommendation_text.toPlainText()
+        self.recommendation_text.setPlainText(current + message)
+
+    def _poll_team_recommendations(self) -> None:
+        handled = False
+        while not self._recommendation_events.empty():
+            kind, payload = self._recommendation_events.get()
+            handled = True
+            if kind == "done":
+                self._finish_team_recommendations(payload)
+            else:
+                QMessageBox.warning(self, "Team GM recommendations", str(payload))
+        if handled or not self._recommendations_running():
+            self._recommendation_timer.stop()
+            self._recommendation_thread = None
+            self._set_recommendations_running(False)
+
+    def _finish_team_recommendations(self, payload: object) -> None:
+        if not isinstance(payload, tuple) or not all(isinstance(item, TeamRecommendation) for item in payload):
+            QMessageBox.warning(self, "Team GM recommendations", "Invalid recommendation result.")
+            return
+        for recommendation in payload:
+            self.repository.record_team_recommendation(recommendation)
+        self._refresh_team_recommendations()
+
     def _build_fantasy_draft_widget(self, _record: FranchiseRecord) -> QWidget:
         box = QGroupBox("Fantasy Draft Room")
+        box.setObjectName("FantasyDraftRoomPage")
         layout = QVBoxLayout(box)
         controls = QHBoxLayout()
         self.draft_action_buttons = []
@@ -264,6 +416,7 @@ class FranchiseScreen(QWidget):
             ("Start / Reset Draft", self._start_or_reset_fantasy_draft),
             ("Refresh Draft Room", self._refresh_draft_room),
             ("Run LLM Pick", self._run_llm_draft_pick),
+            ("Go Back One AI Pick", self._go_back_one_ai_draft_pick),
             ("Mark Selected Pick", self._mark_selected_draft_pick),
         ):
             button = QPushButton(label, clicked=callback)
@@ -391,6 +544,21 @@ class FranchiseScreen(QWidget):
             QMessageBox.warning(self, "Fantasy draft", str(exc))
             return
         self._refresh_draft_room()
+
+    def _go_back_one_ai_draft_pick(self) -> None:
+        if self._llm_pick_running():
+            QMessageBox.warning(self, "Fantasy draft", "Wait for the running LLM pick to finish.")
+            return
+        try:
+            undone = self.repository.undo_last_fantasy_draft_pick(picked_by="llm")
+        except Exception as exc:
+            QMessageBox.warning(self, "Fantasy draft", str(exc))
+            return
+        if undone is None:
+            QMessageBox.warning(self, "Fantasy draft", "The latest draft pick is not an AI pick.")
+            return
+        self._refresh_draft_room()
+        self._append_draft_status(f"\nUndid AI pick {undone.pick_number}: {undone.player_label}")
 
     def _run_llm_draft_pick(self) -> None:
         if self._llm_pick_running():

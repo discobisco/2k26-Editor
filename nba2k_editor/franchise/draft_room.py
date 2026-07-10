@@ -15,6 +15,7 @@ class DraftPoolPlayer:
     source_team_label: str
     source_slot: int
     source_slot_field: str
+    draft_facts: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,40 @@ def _player_is_active(value: dict[str, Any]) -> bool:
     return raw in {1, True} or display == "yes"
 
 
+_DRAFT_FACT_FIELDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("overall", ("OVERALL", "OVR", "OVERALLRATING")),
+    ("potential", ("POTENTIAL",)),
+    ("position", ("POSITION",)),
+    ("height", ("HEIGHT",)),
+    ("weight", ("WEIGHT",)),
+    ("birth_year", ("BIRTHYEAR",)),
+)
+
+
+def _read_draft_fact(model: Any, player_index: int, candidates: tuple[str, ...]) -> str:
+    for name in candidates:
+        entry = model._field_by_normalized_name("Players", name)
+        if entry is None:
+            continue
+        value = model.read_entry_value(entry, index=player_index)
+        display = str(value.get("display_value") or "").strip()
+        if display:
+            return display
+        raw = value.get("raw_value")
+        if raw is not None:
+            return str(raw)
+    return ""
+
+
+def _draft_facts_for_player(model: Any, player_index: int) -> tuple[tuple[str, str], ...]:
+    facts: list[tuple[str, str]] = []
+    for key, candidates in _DRAFT_FACT_FIELDS:
+        value = _read_draft_fact(model, player_index, candidates)
+        if value:
+            facts.append((key, value))
+    return tuple(facts)
+
+
 def build_active_player_draft_pool(model: Any, *, team_count: int = 30) -> tuple[DraftPoolPlayer, ...]:
     active_entry = model._field_by_normalized_name("Players", "ISACTIVE")
     if active_entry is None:
@@ -89,6 +124,7 @@ def build_active_player_draft_pool(model: Any, *, team_count: int = 30) -> tuple
                 source_team_label="Is Active",
                 source_slot=0,
                 source_slot_field="ISACTIVE",
+                draft_facts=_draft_facts_for_player(model, player_index),
             )
         )
     return tuple(players)
@@ -112,7 +148,10 @@ def draft_position(
         raise ValueError("league must include at least one team")
     zero_based_pick = max(0, int(pick_number) - 1)
     round_number = zero_based_pick // len(order) + 1
-    team_index = order[zero_based_pick % len(order)]
+    round_pick_index = zero_based_pick % len(order)
+    if round_number % 2 == 0:
+        round_pick_index = len(order) - 1 - round_pick_index
+    team_index = order[round_pick_index]
     labels = team_labels or {}
     return DraftPosition(int(pick_number), round_number, team_index, labels.get(team_index, f"Team {team_index}"))
 

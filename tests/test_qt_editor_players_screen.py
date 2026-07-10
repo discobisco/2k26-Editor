@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt6.QtCore import QItemSelection, QItemSelectionModel
 from PyQt6.QtWidgets import QApplication, QComboBox
 
 from nba2k_editor.models.schema import FieldEntry, RecordListItem
@@ -123,8 +124,10 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
     def test_selected_player_detail_values_render_in_player_detail_panel(self) -> None:
         model = PlayerScreenModel()
         app = QtEditorApp(model)  # type: ignore[arg-type]
+        app._sync_player_list()
 
-        app._select_item_label("Players", model.player.display_label, True)
+        app.domain_lists["Players"].setCurrentRow(0)
+        qt_app().processEvents()
 
         self.assertEqual("91", app.player_detail_rows["OVR"].value.text())
         self.assertEqual("Team A", app.player_detail_rows["Team"].value.text())
@@ -155,7 +158,7 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
         self.assertEqual("Players: 1", app.count_labels["Players"].text())
         self.assertEqual([model.player.display_label], [app.domain_lists["Players"].item(index).text() for index in range(app.domain_lists["Players"].count())])
 
-    def test_player_list_selection_emits_only_changed_row(self) -> None:
+    def test_player_range_selection_updates_model_once_for_selection_snapshot(self) -> None:
         model = PlayerScreenModel()
         for index in range(30):
             player = RecordListItem("Players", index + 100, 0x4000 + index, f"Bench {index}")
@@ -171,10 +174,14 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
         app = QtEditorApp(model)  # type: ignore[arg-type]
         app._sync_player_list()
 
-        app.domain_lists["Players"].setCurrentRow(0)
+        record_list = app.domain_lists["Players"]
+        record_list.setCurrentRow(record_list.count() - 1, QItemSelectionModel.SelectionFlag.NoUpdate)
+        selection = QItemSelection(record_list.model().index(0, 0), record_list.model().index(record_list.count() - 1, 0))
+        record_list.selectionModel().select(selection, QItemSelectionModel.SelectionFlag.ClearAndSelect)
         qt_app().processEvents()
 
         self.assertEqual(1, detail_reads)
+        self.assertEqual(record_list.count(), len(app.state.selected_item_labels["Players"]))
 
     def test_player_popout_starts_smaller_and_can_shrink(self) -> None:
         model = PlayerScreenModel()

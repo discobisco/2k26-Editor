@@ -87,7 +87,7 @@ class OperationDialog(QDialog):
 
 
 class RecordListWidget(QListWidget):
-    def __init__(self, selection_callback: Callable[[str, bool], None] | None = None) -> None:
+    def __init__(self, selection_callback: Callable[[set[str], str | None], None] | None = None) -> None:
         super().__init__()
         self.setObjectName("RecordList")
         self.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
@@ -111,17 +111,19 @@ class RecordListWidget(QListWidget):
     def selected_labels(self) -> set[str]:
         return {item.text() for item in self.selectedItems()}
 
+    def current_label(self) -> str | None:
+        item = self.currentItem()
+        return None if item is None else item.text()
+
     def _emit_selection(self) -> None:
         if self._selection_callback is None:
             return
         selected = self.selected_labels()
-        removed = self._last_selected_labels - selected
-        added = selected - self._last_selected_labels
+        if selected == self._last_selected_labels:
+            return
         self._last_selected_labels = set(selected)
-        for label in removed:
-            self._selection_callback(label, False)
-        for label in added:
-            self._selection_callback(label, True)
+        current = self.current_label()
+        self._selection_callback(set(selected), current if current in selected else None)
 
 
 class DetailRow(QWidget):

@@ -3,19 +3,45 @@ from __future__ import annotations
 import json
 from typing import Iterable
 
-from nba2k_editor.franchise.draft_room import DraftPoolPlayer, DraftPosition
+from nba2k_editor.franchise.draft_room import DraftPoolPlayer, DraftPosition, TeamProfile
+from nba2k_editor.franchise.llm_tasks import team_profile_payload
 from nba2k_editor.franchise.models import FantasyDraftStoredPick, FranchiseRecord
+
+
+def _player_facts(player: DraftPoolPlayer) -> dict[str, str]:
+    return {str(key): str(value) for key, value in player.draft_facts}
+
+
+def _numeric_fact(player: DraftPoolPlayer, key: str) -> int:
+    facts = _player_facts(player)
+    text = facts.get(key, "")
+    digits = "".join(character for character in text if character.isdigit())
+    return int(digits) if digits else -1
+
+
+def _draft_board_score(player: DraftPoolPlayer) -> int:
+    overall = _numeric_fact(player, "overall")
+    if overall > 0:
+        return overall
+    return _numeric_fact(player, "potential")
+
+
+def _ranked_available_players(players: Iterable[DraftPoolPlayer]) -> tuple[DraftPoolPlayer, ...]:
+    indexed = tuple(enumerate(players))
+    ranked = sorted(indexed, key=lambda item: (-_draft_board_score(item[1]), item[0]))
+    return tuple(player for _index, player in ranked)
 
 
 def build_fantasy_draft_pick_prompt(
     *,
     record: FranchiseRecord,
     position: DraftPosition,
+    team_profile: TeamProfile,
     available_players: Iterable[DraftPoolPlayer],
     drafted_picks: Iterable[FantasyDraftStoredPick],
     max_players: int = 80,
 ) -> str:
-    available = tuple(available_players)[:max_players]
+    available = _ranked_available_players(available_players)[:max_players]
     picks = tuple(drafted_picks)[-20:]
     payload = {
         "task": "fantasy_draft_pick",
@@ -23,6 +49,8 @@ def build_fantasy_draft_pick_prompt(
             "You are acting only as the GM for the on-clock team.",
             "The user controls the user_team_index team; never act for that team.",
             "Pick exactly one player from available_players.",
+            "Available players are ordered as the draft board: higher live overall first; when live overall is 0, use live potential as the board score.",
+            "Use the assigned staff_profile for this draft task no matter which Franchise Manager mode launched it.",
             "Do not pick functional filler players such as forty overall, A Z, or similar while any real player is available.",
             "Return only valid JSON. No markdown. No prose outside JSON.",
         ],
@@ -37,6 +65,11 @@ def build_fantasy_draft_pick_prompt(
             "round_number": position.round_number,
             "team_index": position.team_index,
             "team_label": position.team_label,
+        },
+        "team": {
+            "team_index": position.team_index,
+            "team_label": position.team_label,
+            "staff_profile": team_profile_payload(team_profile),
         },
         "recent_picks": [
             {
@@ -53,8 +86,10 @@ def build_fantasy_draft_pick_prompt(
                 "player_label": player.player_label,
                 "source_team_index": player.source_team_index,
                 "source_slot_field": player.source_slot_field,
+                "draft_rank": index + 1,
+                "draft_facts": _player_facts(player),
             }
-            for player in available
+            for index, player in enumerate(available)
         ],
         "required_json_schema": {
             "team_index": position.team_index,

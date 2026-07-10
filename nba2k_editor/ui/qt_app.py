@@ -559,7 +559,7 @@ class QtEditorApp(QMainWindow):
 
     def _build_generic_domain_screen(self, domain: str) -> QWidget:
         widget, layout = self._base_domain_screen(domain)
-        record_list = RecordListWidget(lambda label, selected, d=domain: self._select_item_label(d, label, selected))
+        record_list = RecordListWidget(lambda labels, current, d=domain: self._select_item_labels(d, labels, current))
         self.domain_lists[domain] = record_list
         detail_widget = QWidget()
         detail = QVBoxLayout(detail_widget)
@@ -593,7 +593,7 @@ class QtEditorApp(QMainWindow):
         controls.addWidget(QLabel("Search"))
         controls.addWidget(player_search_input)
         layout.addLayout(controls)
-        record_list = RecordListWidget(lambda label, selected: self._select_item_label("Players", label, selected))
+        record_list = RecordListWidget(lambda labels, current: self._select_item_labels("Players", labels, current))
         self.domain_lists["Players"] = record_list
         detail_widget = QWidget()
         detail = QVBoxLayout(detail_widget)
@@ -639,7 +639,7 @@ class QtEditorApp(QMainWindow):
 
     def _build_teams_screen(self) -> QWidget:
         widget, layout = self._base_domain_screen("Teams")
-        record_list = RecordListWidget(lambda label, selected: self._select_item_label("Teams", label, selected))
+        record_list = RecordListWidget(lambda labels, current: self._select_item_labels("Teams", labels, current))
         self.domain_lists["Teams"] = record_list
         detail_widget = QWidget()
         detail = QVBoxLayout(detail_widget)
@@ -912,15 +912,14 @@ class QtEditorApp(QMainWindow):
         self._update_detail_panel("Players")
         self._refresh_dashboard_metrics()
 
-    def _select_item_label(self, domain: str, label: str, selected: bool) -> None:
-        selected_set = self.state.selected_item_labels.setdefault(domain, set())
-        if selected:
-            selected_set.add(label)
-            self.model.select_item_by_label(domain, label)
-        else:
-            selected_set.discard(label)
-            if not selected_set:
-                self.model.select_item_by_label(domain, None)
+    def _select_item_labels(self, domain: str, selected_labels: set[str], current_label: str | None = None) -> None:
+        self.state.selected_item_labels[domain] = set(selected_labels)
+        if not selected_labels:
+            self.model.select_item_by_label(domain, None)
+            self._update_detail_panel(domain)
+            return
+        primary_label = current_label if current_label in selected_labels else next(iter(selected_labels))
+        self.model.select_item_by_label(domain, primary_label)
         self._update_detail_panel(domain)
 
     def _set_player_team_filter(self, value: str) -> None:

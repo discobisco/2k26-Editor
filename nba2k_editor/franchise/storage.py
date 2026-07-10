@@ -12,6 +12,7 @@ from nba2k_editor.franchise.models import (
     FranchiseRecord,
     FranchiseSetup,
     FranchiseTeamOption,
+    TeamRecommendation,
 )
 
 DEFAULT_FRANCHISE_DB_PATH = Path("outputs") / "franchise" / "franchise.sqlite"
@@ -97,6 +98,18 @@ class FranchiseRepository:
                 rationale TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS team_recommendations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                team_index INTEGER NOT NULL,
+                team_label TEXT NOT NULL,
+                recommended_action TEXT NOT NULL,
+                reasoning TEXT NOT NULL,
+                owner_approval_required INTEGER NOT NULL,
+                blocked_reason TEXT NOT NULL,
+                raw_llm_response TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
             """
         )
 
@@ -120,6 +133,7 @@ class FranchiseRepository:
             connection.execute("DELETE FROM league_saves")
             connection.execute("DELETE FROM fantasy_draft_state")
             connection.execute("DELETE FROM fantasy_draft_picks")
+            connection.execute("DELETE FROM team_recommendations")
             meta = {
                 "start_year": str(int(setup.start_year)),
                 "user_team_index": str(int(setup.user_team_index)),
@@ -311,4 +325,120 @@ class FranchiseRepository:
             raw_llm_response=pick.raw_llm_response,
             rationale=pick.rationale,
             created_at=now,
+        )
+
+    def undo_last_fantasy_draft_pick(self, *, picked_by: str = "llm") -> FantasyDraftStoredPick | None:
+        now = _utc_now_text()
+        connection = self._connect()
+        try:
+            self.initialize(connection)
+            row = connection.execute(
+                """
+                SELECT pick_number, round_number, team_index, team_label, player_index, player_label,
+                       source_team_index, source_slot, source_slot_field, picked_by,
+                       raw_llm_response, rationale, created_at
+                FROM fantasy_draft_picks
+                ORDER BY pick_number DESC
+                LIMIT 1
+                """
+            ).fetchone()
+            if row is None or str(row[9]) != str(picked_by):
+                connection.commit()
+                return None
+            connection.execute("DELETE FROM fantasy_draft_picks WHERE pick_number = ?", (int(row[0]),))
+            connection.execute(
+                "UPDATE fantasy_draft_state SET current_pick_number = ?, updated_at = ? WHERE id = 1",
+                (int(row[0]), now),
+            )
+            connection.execute("INSERT OR REPLACE INTO franchise_meta(key, value) VALUES(?, ?)", ("updated_at", now))
+            connection.commit()
+        finally:
+            connection.close()
+        return FantasyDraftStoredPick(
+            pick_number=int(row[0]),
+            round_number=int(row[1]),
+            team_index=int(row[2]),
+            team_label=str(row[3]),
+            player_index=int(row[4]),
+            player_label=str(row[5]),
+            source_team_index=int(row[6]),
+            source_slot=int(row[7]),
+            source_slot_field=str(row[8]),
+            picked_by=str(row[9]),
+            raw_llm_response=str(row[10]),
+            rationale=str(row[11]),
+            created_at=str(row[12]),
+        )
+
+    def record_team_recommendation(self, recommendation: TeamRecommendation) -> TeamRecommendation:
+        now = recommendation.created_at or _utc_now_text()
+        connection = self._connect()
+        try:
+            self.initialize(connection)
+            cursor = connection.execute(
+                """
+                INSERT INTO team_recommendations(
+                    team_index, team_label, recommended_action, reasoning,
+                    owner_approval_required, blocked_reason, raw_llm_response, status, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(recommendation.team_index),
+                    str(recommendation.team_label),
+                    str(recommendation.recommended_action),
+                    str(recommendation.reasoning),
+                    1 if recommendation.owner_approval_required else 0,
+                    str(recommendation.blocked_reason),
+                    str(recommendation.raw_llm_response),
+                    str(recommendation.status),
+                    now,
+                ),
+            )
+            connection.execute("INSERT OR REPLACE INTO franchise_meta(key, value) VALUES(?, ?)", ("updated_at", now))
+            connection.commit()
+            recommendation_id = int(cursor.lastrowid or 0)
+        finally:
+            connection.close()
+        return TeamRecommendation(
+            team_index=recommendation.team_index,
+            team_label=recommendation.team_label,
+            recommended_action=recommendation.recommended_action,
+            reasoning=recommendation.reasoning,
+            owner_approval_required=recommendation.owner_approval_required,
+            blocked_reason=recommendation.blocked_reason,
+            raw_llm_response=recommendation.raw_llm_response,
+            status=recommendation.status,
+            created_at=now,
+            recommendation_id=recommendation_id,
+        )
+
+    def list_team_recommendations(self) -> tuple[TeamRecommendation, ...]:
+        connection = self._connect()
+        try:
+            self.initialize(connection)
+            rows = connection.execute(
+                """
+                SELECT id, team_index, team_label, recommended_action, reasoning,
+                       owner_approval_required, blocked_reason, raw_llm_response, status, created_at
+                FROM team_recommendations
+                ORDER BY id
+                """
+            ).fetchall()
+            connection.commit()
+        finally:
+            connection.close()
+        return tuple(
+            TeamRecommendation(
+                recommendation_id=int(row[0]),
+                team_index=int(row[1]),
+                team_label=str(row[2]),
+                recommended_action=str(row[3]),
+                reasoning=str(row[4]),
+                owner_approval_required=bool(int(row[5])),
+                blocked_reason=str(row[6]),
+                raw_llm_response=str(row[7]),
+                status=str(row[8]),
+                created_at=str(row[9]),
+            )
+            for row in rows
         )
