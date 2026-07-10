@@ -122,3 +122,17 @@ UPDATE player_info SET ht_in_in = 73, wt = 185 WHERE player_id = 'mulvibo01' AND
 UPDATE player_info SET ht_in_in = 74, wt = 170 WHERE player_id = 'ajaxwa01' AND player = 'Warren Ajax'; -- https://www.basketball-reference.com/nbl/players/a/ajaxwa01n.html
 UPDATE player_info SET ht_in_in = 72, wt = 185 WHERE player_id = 'dienejo01' AND player = 'Whitey Dienelt'; -- https://www.basketball-reference.com/nbl/players/d/dienejo01n.html
 COMMIT;
+
+-- Manual/BRef-NBL-slug-corrected remaining NBL height/weight updates.
+-- Doyle Cofer page has 6-4 only; user supplied 210 lb.
+-- Eddie Wollen user supplied 6-4, 220 lb.
+-- Longie Powell page has 6-4 only under powelro01n; user supplied 220 lb for DB row powelro02.
+-- Jack Watkins, Johnny Isaacs, Willie Smith use NBL directory slugs watkija01n, isaacjo01n, smithwi01n applied to DB rows watkija02, isaacjo02, smithwi03.
+BEGIN TRANSACTION;
+UPDATE player_info SET ht_in_in = 76, wt = 210 WHERE player_id = 'coferdo01' AND player = 'Doyle Cofer';
+UPDATE player_info SET ht_in_in = 76, wt = 220 WHERE player_id = 'wolleed01' AND player = 'Eddie Wollen';
+UPDATE player_info SET ht_in_in = 76, wt = 220 WHERE player_id = 'powelro02' AND player = 'Longie Powell';
+UPDATE player_info SET ht_in_in = 74, wt = 180 WHERE player_id = 'watkija02' AND player = 'Jack Watkins';
+UPDATE player_info SET ht_in_in = 75, wt = 190 WHERE player_id = 'isaacjo02' AND player = 'Johnny Isaacs';
+UPDATE player_info SET ht_in_in = 77, wt = 230 WHERE player_id = 'smithwi03' AND player = 'Willie Smith';
+COMMIT;
