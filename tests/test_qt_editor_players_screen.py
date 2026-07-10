@@ -11,6 +11,8 @@ from PyQt6.QtWidgets import QApplication, QComboBox
 
 from nba2k_editor.models.schema import FieldEntry, RecordListItem
 from nba2k_editor.ui.qt_app import QtEditorApp
+from nba2k_editor.ui.qt_theme import editor_stylesheet
+from nba2k_editor.ui.qt_widgets import COMBO_BOX_MAX_VISIBLE_ITEMS, COMBO_BOX_POPUP_MAX_HEIGHT, configure_combo_box
 
 
 def qt_app() -> QApplication:
@@ -213,6 +215,16 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
             app._open_editor_window(model.player)
 
         self.assertEqual(["PG", "SG", "SF"], captured["options"])
+
+    def test_configured_combo_popup_is_bounded_dropdown(self) -> None:
+        combo = configure_combo_box(QComboBox())
+        combo.addItems([f"Option {index}" for index in range(50)])
+
+        self.assertEqual(COMBO_BOX_MAX_VISIBLE_ITEMS, combo.maxVisibleItems())
+        self.assertEqual(COMBO_BOX_POPUP_MAX_HEIGHT, combo.view().maximumHeight())
+
+    def test_theme_uses_dropdown_popup_not_full_screen_combo_popup(self) -> None:
+        self.assertIn("combobox-popup: 0;", editor_stylesheet())
 
 
 if __name__ == "__main__":

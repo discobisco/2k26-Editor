@@ -301,6 +301,78 @@ def import_generator_to_game_display_state(model: Any, state: GeneratorDisplaySt
     return replace(import_state, status=f"Imported {applied.applied_players}/{applied.generated_count} generated players{mode}. Fields: {applied.succeeded} ok, {applied.failed} failed.")
 
 
+def missing_generator_import_preview(model: Any, state: GeneratorDisplayState) -> dict[str, Any]:
+    if not state.source_loaded or not state.generated_proposals:
+        return {"names": (), "missing_count": 0, "target_count": 0, "skipped_existing": 0}
+    _ensure_generator_import_path()
+    from game_port import missing_generated_players_and_active_placeholder_indices
+
+    missing_players, target_indices, skipped_existing = missing_generated_players_and_active_placeholder_indices(model, state.generated_proposals, placeholder_name="A Z")
+    names = tuple(_generated_player_label(player) for player in missing_players)
+    return {
+        "names": names,
+        "missing_count": len(missing_players),
+        "target_count": len(target_indices),
+        "skipped_existing": skipped_existing,
+    }
+
+
+def import_missing_generator_to_game_display_state(model: Any, state: GeneratorDisplayState, *, progress_callback: Any | None = None) -> GeneratorDisplayState:
+    if not state.source_loaded:
+        return empty_generator_display_state("Load generator source data before importing missing generated players.")
+    _ensure_generator_import_path()
+    from contracts import GeneratorInputContract, OutputTarget
+    from game_port import import_generated_players_to_game, missing_generated_players_and_active_placeholder_indices
+
+    import_state = state
+    if not import_state.generated_proposals:
+        return replace(import_state, status="Display preview before importing missing generated players.")
+    missing_players, target_indices, skipped_existing = missing_generated_players_and_active_placeholder_indices(model, import_state.generated_proposals, placeholder_name="A Z")
+    import_kwargs: dict[str, Any] = {
+        "generated_players": missing_players,
+        "player_indices": target_indices,
+        "team_filter": None if import_state.selected_source_team == _SOURCE_TEAM_ALL else import_state.selected_source_team,
+    }
+    if progress_callback is not None:
+        import_kwargs["progress_callback"] = progress_callback
+    result = import_generated_players_to_game(
+        model,
+        GeneratorInputContract(int(import_state.selected_season), _SOURCE_ROOT, OutputTarget.OVERWRITE_CURRENT_ROSTER, f"Player Generator Missing {import_state.selected_season}"),
+        **import_kwargs,
+    )
+    applied = result.apply_result
+    return replace(
+        import_state,
+        status=(
+            f"Added missing players: imported {applied.applied_players}/{len(missing_players)} missing generated players onto active A Z players. "
+            f"Skipped {skipped_existing} generated players already active. "
+            f"Targets: {len(target_indices)} active A Z players. Fields: {applied.succeeded} ok, {applied.failed} failed."
+        ),
+    )
+
+
+def _generated_player_label(generated: Any) -> str:
+    identity = getattr(generated, "identity", None)
+    if isinstance(identity, dict):
+        for key in ("player", "name"):
+            value = str(identity.get(key) or "").strip()
+            if value:
+                return value
+    by_field = getattr(generated, "by_field_key", None)
+    if callable(by_field):
+        try:
+            fields = by_field()
+        except Exception:
+            fields = {}
+        if isinstance(fields, dict):
+            first = fields.get("Vitals/FIRSTNAME")
+            last = fields.get("Vitals/LASTNAME")
+            name = f"{getattr(first, 'display_value', '')} {getattr(last, 'display_value', '')}".strip()
+            if name:
+                return name
+    return str(getattr(generated, "player_id", "")).strip()
+
+
 def _field_column(candidate: Any) -> str:
     return " / ".join(
         str(part)

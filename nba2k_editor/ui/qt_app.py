@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import threading
 from dataclasses import dataclass, field
 from importlib import import_module
 from pathlib import Path
@@ -32,6 +31,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from nba2k_editor.models.background_operations import BackgroundOperationWorker
 from nba2k_editor.models.data_model import (
     EDITOR_DOMAINS,
     PLAYER_TEAM_FILTER_ALL,
@@ -191,7 +191,6 @@ class EditorUiState:
     open_rows: dict[str, Any] = field(default_factory=dict)
     row_raw_values: dict[str, Any] = field(default_factory=dict)
     player_season_stat_id_selection: dict[tuple[str, int, str], str] = field(default_factory=dict)
-    operation_cancel_requested: bool = False
 
 from nba2k_editor.ui.qt_theme import apply_qt_theme
 from nba2k_editor.ui.qt_widgets import DetailRow, EditableFieldRow, NavButton, OperationDialog, RecordListWidget, configure_combo_box, configure_output_text, configure_table
@@ -210,10 +209,6 @@ NAV_ORDER: tuple[str, ...] = (
 )
 APP_SCREENS: tuple[str, ...] = ("Home", *EDITOR_DOMAINS, FRANCHISE_SCREEN, PLAYER_GENERATOR_SCREEN)
 _QT_APPLICATION: QApplication | None = None
-
-
-class _OperationCancelled(Exception):
-    pass
 
 
 def _target_executable(label: str) -> str:
@@ -259,9 +254,7 @@ class QtEditorApp(QMainWindow):
         self.player_filter_combo: QComboBox | None = None
         self.player_search_input: QLineEdit | None = None
         self.operation_dialog: OperationDialog | None = None
-        self.operation_thread: threading.Thread | None = None
-        self.operation_events: list[tuple[str, Any]] = []
-        self.operation_events_lock = threading.Lock()
+        self.operation_worker = BackgroundOperationWorker()
         self.player_generator_display = import_module("nba2k_editor.Player Generator.display")
         self.player_generator_state = self.player_generator_display.empty_generator_display_state()
         self.generator_text: QTextEdit | None = None
@@ -382,7 +375,7 @@ class QtEditorApp(QMainWindow):
             button.setChecked(name == screen)
         if screen == PLAYER_GENERATOR_SCREEN:
             self._sync_player_generator_status()
-            if not getattr(self.player_generator_state, "source_loaded", False) and self.operation_thread is None:
+            if not getattr(self.player_generator_state, "source_loaded", False) and not self.operation_worker.is_running():
                 self._load_player_generator_source()
         if screen == FRANCHISE_SCREEN:
             franchise_widget = self.screen_widgets.get(FRANCHISE_SCREEN)
@@ -766,6 +759,7 @@ class QtEditorApp(QMainWindow):
         buttons.addWidget(QPushButton("Display Preview", clicked=self._display_generator_preview))
         buttons.addWidget(QPushButton("Import By Team Matching", clicked=self._import_generator_to_game_display))
         buttons.addWidget(QPushButton("Import Matched Names", clicked=lambda: self._import_generator_to_game_display(match_existing_player_names=True)))
+        buttons.addWidget(QPushButton("Add Missing Players", clicked=self._import_missing_generator_to_game_display))
         layout.addLayout(buttons)
         generator_text = QTextEdit()
         generator_text.setReadOnly(True)
@@ -1502,41 +1496,21 @@ class QtEditorApp(QMainWindow):
         self._start_background_operation("Roster Snapshot Apply", worker)
 
     def _raise_if_operation_cancelled(self) -> None:
-        if self.state.operation_cancel_requested:
-            raise _OperationCancelled("operation cancelled")
+        self.operation_worker.raise_if_cancelled()
 
     def _request_operation_cancel(self) -> None:
-        self.state.operation_cancel_requested = True
+        self.operation_worker.request_cancel()
         if self.operation_dialog is not None:
             self.operation_dialog.message.setText("Cancelling...")
             self.operation_dialog.cancel_button.setEnabled(False)
 
-    def _push_operation_event(self, event: str, value: Any) -> None:
-        with self.operation_events_lock:
-            self.operation_events.append((event, value))
-
     def _start_background_operation(self, title: str, worker: Callable[[], str], *, done_callback: Callable[[], None] | None = None) -> None:
-        if self.operation_thread is not None and self.operation_thread.is_alive():
+        if not self.operation_worker.start(title, worker, done_callback=done_callback):
             QMessageBox.warning(self, title, "Another operation is already running.")
             return
-        self.state.operation_cancel_requested = False
         self._show_operation_popup(f"{title}...", progress=0.0, overlay="0%")
-        QApplication.processEvents()
         if not self.operation_timer.isActive():
             self.operation_timer.start(50)
-
-        def run_worker() -> None:
-            try:
-                message = worker()
-            except _OperationCancelled:
-                self._push_operation_event("done", (f"{title} cancelled.", "cancelled", done_callback))
-            except Exception as exc:
-                self._push_operation_event("done", (f"{title} failed: {exc}", "failed", done_callback))
-            else:
-                self._push_operation_event("done", (message, "complete", done_callback))
-
-        self.operation_thread = threading.Thread(target=run_worker, name=f"nba2k-editor-{title.lower().replace(' ', '-')}", daemon=True)
-        self.operation_thread.start()
 
     def _show_operation_popup(self, message: str, *, progress: float = 0.0, overlay: str = "") -> None:
         if self.operation_dialog is None:
@@ -1547,15 +1521,10 @@ class QtEditorApp(QMainWindow):
         self.operation_dialog.show()
 
     def _background_operation_progress(self, current: int, total: int, message: str) -> None:
-        self._raise_if_operation_cancelled()
-        with self.operation_events_lock:
-            self.operation_events.append(("progress", (current, total, message)))
+        self.operation_worker.report_progress(current, total, message)
 
     def _pop_operation_events(self) -> list[tuple[str, Any]]:
-        with self.operation_events_lock:
-            events = list(self.operation_events)
-            self.operation_events.clear()
-            return events
+        return self.operation_worker.pop_events()
 
     def _poll_background_operation(self) -> None:
         for event, value in self._pop_operation_events():
@@ -1572,16 +1541,12 @@ class QtEditorApp(QMainWindow):
                         self.operation_dialog.hide()
                     if self.operation_timer.isActive():
                         self.operation_timer.stop()
-                    self.operation_thread = None
-                    self.state.operation_cancel_requested = False
                     continue
                 self._show_operation_popup(message, progress=1.0, overlay=overlay)
                 if done_callback is not None:
                     done_callback()
                 if self.operation_timer.isActive():
                     self.operation_timer.stop()
-                self.operation_thread = None
-                self.state.operation_cancel_requested = False
 
     def _refresh_player_generator_display(self) -> None:
         if self.generator_text is not None:
@@ -1708,6 +1673,69 @@ class QtEditorApp(QMainWindow):
                 return str(getattr(self.player_generator_state, "status", "Import complete."))
 
             self._start_background_operation("Import Generated Players", worker, done_callback=self._sync_player_generator_status)
+
+    def _confirm_missing_generator_import(self, summary: dict[str, Any]) -> bool:
+        names = tuple(str(name) for name in summary.get("names", ()))
+        missing_count = int(summary.get("missing_count") or len(names))
+        target_count = int(summary.get("target_count") or 0)
+        skipped_existing = int(summary.get("skipped_existing") or 0)
+        if missing_count <= 0:
+            QMessageBox.information(self, "Add Missing Players", f"No missing generated players found. Skipped {skipped_existing} generated players already active.")
+            return False
+        if target_count <= 0:
+            QMessageBox.warning(self, "Add Missing Players", "No active A Z players are available as import targets.")
+            return False
+        import_count = min(missing_count, target_count)
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Add Missing Players")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel(f"Import {import_count}/{missing_count} missing generated players onto active A Z players?"))
+        if target_count < missing_count:
+            layout.addWidget(QLabel(f"Only {target_count} active A Z targets are available."))
+        text = QTextEdit()
+        text.setReadOnly(True)
+        text.setPlainText("\n".join(names))
+        configure_output_text(text)
+        layout.addWidget(text, 1)
+        buttons = QHBoxLayout()
+        cancel_button = QPushButton("Cancel")
+        import_button = QPushButton("Import Listed Players")
+        cancel_button.clicked.connect(dialog.reject)
+        import_button.clicked.connect(dialog.accept)
+        buttons.addStretch(1)
+        buttons.addWidget(cancel_button)
+        buttons.addWidget(import_button)
+        layout.addLayout(buttons)
+        dialog.resize(560, 420)
+        return dialog.exec() == QDialog.DialogCode.Accepted
+
+    def _import_missing_generator_to_game_display(self) -> None:
+        display = self._generator_display_module()
+        if hasattr(display, "import_missing_generator_to_game_display_state"):
+            self._refresh_player_generator_dropdowns()
+            if hasattr(display, "missing_generator_import_preview"):
+                try:
+                    summary = display.missing_generator_import_preview(self.model, self.player_generator_state)
+                except Exception as exc:
+                    QMessageBox.warning(self, "Add Missing Players", str(exc))
+                    return
+                if not self._confirm_missing_generator_import(summary):
+                    return
+            state_snapshot = self.player_generator_state
+
+            def worker() -> str:
+                try:
+                    self.player_generator_state = display.import_missing_generator_to_game_display_state(
+                        self.model,
+                        state_snapshot,
+                        progress_callback=self._background_operation_progress,
+                    )
+                except Exception as exc:
+                    self.player_generator_state = display.empty_generator_display_state(f"Add missing players failed: {exc}")
+                    raise
+                return str(getattr(self.player_generator_state, "status", "Add missing players complete."))
+
+            self._start_background_operation("Add Missing Players", worker, done_callback=self._sync_player_generator_status)
 
     def _generator_grid_text(self) -> str:
         return str(getattr(self.player_generator_state, "player_rows", ""))

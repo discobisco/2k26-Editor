@@ -2845,6 +2845,21 @@
           }
         },
         {
+          "normalized_name": "SHORTSPREFERREDLENGTH",
+          "display_name": "Shorts Preferred Length",
+          "versions": {
+            "2K26": {
+              "address": 945,
+              "bit_length": 2,
+              "bit_offset": 4,
+              "hex": "0x3B1",
+              "length": 2,
+              "startBit": 4,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
           "normalized_name": "SHORTSPREFERREDTYPE",
           "display_name": "Shorts Preferred Type",
           "versions": {

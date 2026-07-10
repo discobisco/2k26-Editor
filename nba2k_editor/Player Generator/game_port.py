@@ -140,6 +140,34 @@ def import_generated_players_to_game(
     )
 
 
+def missing_generated_players_and_active_placeholder_indices(
+    model: Any,
+    generated_players: Iterable[Any],
+    *,
+    placeholder_name: str = "A Z",
+) -> tuple[tuple[Any, ...], tuple[int, ...], int]:
+    generated_tuple = tuple(generated_players)
+    active_name_keys = _active_loaded_player_name_keys(model)
+    active_profanity_name_keys = _active_loaded_player_profanity_name_keys(model)
+    missing: list[Any] = []
+    seen_missing_keys: set[str] = set()
+    for generated in generated_tuple:
+        generated_keys = _generated_player_name_keys(generated)
+        if any(key in active_name_keys for key in generated_keys):
+            continue
+        profanity_keys = _generated_player_profanity_name_keys(generated)
+        if profanity_keys and any(key in active_profanity_name_keys for key in profanity_keys):
+            continue
+        primary_key = generated_keys[0] if generated_keys else str(id(generated))
+        if primary_key in seen_missing_keys:
+            continue
+        seen_missing_keys.add(primary_key)
+        missing.append(generated)
+    placeholder_indices = _active_placeholder_player_indices(model, placeholder_name)
+    skipped_existing = len(generated_tuple) - len(missing)
+    return tuple(missing), placeholder_indices, skipped_existing
+
+
 def apply_generated_player_proposal_to_game(
     model: Any,
     proposal: GeneratedPlayerProposal,
@@ -261,6 +289,7 @@ _FIRST_NAME_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 _NAME_SUFFIXES = {"JR", "SR", "II", "III", "IV", "V"}
+_PROFANITY_MATCH_FRAGMENTS = ("CON", "FUC")
 
 
 def _loaded_players_by_name_key(model: Any) -> dict[str, tuple[Any, ...]]:
@@ -282,6 +311,72 @@ def _loaded_players_by_name_key(model: Any) -> dict[str, tuple[Any, ...]]:
             for key in keys:
                 raw.setdefault(key, []).append(item)
     return {key: _unique_items_by_index(items) for key, items in raw.items()}
+
+
+def _active_loaded_player_name_keys(model: Any) -> set[str]:
+    keys: set[str] = set()
+    for player in _loaded_items(model, "Players"):
+        if not _player_is_active(model, player):
+            continue
+        for value in _live_player_name_values(model, player):
+            keys.update(_person_name_keys(value))
+    return keys
+
+
+def _active_loaded_player_profanity_name_keys(model: Any) -> set[str]:
+    keys: set[str] = set()
+    for player in _loaded_items(model, "Players"):
+        if not _player_is_active(model, player):
+            continue
+        for value in _live_player_name_values(model, player):
+            keys.update(_profanity_fragment_value_keys(value))
+    return keys
+
+
+def _active_placeholder_player_indices(model: Any, placeholder_name: str) -> tuple[int, ...]:
+    placeholder_keys = set(_person_name_keys(placeholder_name))
+    indices: list[int] = []
+    for player in _loaded_items(model, "Players"):
+        if not _player_is_active(model, player):
+            continue
+        player_keys: set[str] = set()
+        for value in _live_player_name_values(model, player):
+            player_keys.update(_person_name_keys(value))
+        if player_keys & placeholder_keys:
+            indices.append(int(getattr(player, "index")))
+    return tuple(indices)
+
+
+def _player_is_active(model: Any, player: Any) -> bool:
+    active_reader = getattr(model, "_read_player_is_active", None)
+    if callable(active_reader):
+        try:
+            return bool(active_reader(player))
+        except Exception:
+            return False
+    raw_reader = getattr(model, "_read_named_raw_int", None)
+    if callable(raw_reader):
+        try:
+            value = raw_reader("Players", player, "ISACTIVE")
+            return bool(int(str(value or 0)))
+        except Exception:
+            return False
+    return bool(getattr(player, "active", False))
+
+
+
+def _live_player_name_values(model: Any, player: Any) -> tuple[object, ...]:
+    reader = getattr(model, "_read_named_value", None)
+    if callable(reader):
+        try:
+            first = reader("Players", player, ("FIRSTNAME", "FIRST NAME"))
+            last = reader("Players", player, ("LASTNAME", "LAST NAME"))
+            full_name = f"{first} {last}".strip()
+            if full_name and full_name != "-- --":
+                return (full_name,)
+        except Exception:
+            pass
+    return _loaded_player_name_values(_safe_label(player), player)
 
 
 def _unique_items_by_index(items: Iterable[Any]) -> tuple[Any, ...]:
@@ -319,6 +414,18 @@ def _safe_getattr(item: Any, name: str) -> object:
 
 
 def _generated_player_name_keys(generated: Any) -> tuple[str, ...]:
+    values: list[object] = list(_generated_player_name_values(generated))
+    return _person_name_keys(*values)
+
+
+def _generated_player_profanity_name_keys(generated: Any) -> tuple[str, ...]:
+    keys: list[str] = []
+    for value in _generated_player_name_values(generated):
+        keys.extend(_profanity_fragment_value_keys(value))
+    return tuple(dict.fromkeys(key for key in keys if key))
+
+
+def _generated_player_name_values(generated: Any) -> tuple[object, ...]:
     identity = _safe_getattr(generated, "identity")
     identity = identity if isinstance(identity, dict) else {}
     values: list[object] = [identity.get("player"), _safe_getattr(generated, "player_id")]
@@ -333,7 +440,7 @@ def _generated_player_name_keys(generated: Any) -> tuple[str, ...]:
             last = fields.get("Vitals/LASTNAME")
             if first is not None or last is not None:
                 values.append(f"{_safe_getattr(first, 'display_value')} {_safe_getattr(last, 'display_value')}")
-    return _person_name_keys(*values)
+    return tuple(values)
 
 
 def _person_name_keys(*values: object) -> tuple[str, ...]:
@@ -355,6 +462,48 @@ def _person_name_keys(*values: object) -> tuple[str, ...]:
             for alias in _FIRST_NAME_ALIASES.get(first, ()):
                 keys.append(alias + last)
     return tuple(dict.fromkeys(key for key in keys if key))
+
+
+def _profanity_fragment_value_keys(value: object) -> tuple[str, ...]:
+    tokens = tuple(token for token in _name_tokens(value) if token not in _NAME_SUFFIXES)
+    return _profanity_fragment_name_keys(tokens)
+
+
+def _profanity_fragment_name_keys(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    if len(tokens) < 2:
+        return ()
+    joined = "".join(tokens)
+    if not _has_profanity_fragment(joined):
+        return ()
+    keys: list[str] = []
+    first = tokens[0]
+    tail = "".join(tokens[1:])
+    for first_value in (first, *_FIRST_NAME_ALIASES.get(first, ())):
+        for tail_key in _profanity_fragment_tail_keys(tail):
+            keys.append(first_value + tail_key)
+    keys.extend(_profanity_fragment_tail_keys(joined))
+    return tuple(dict.fromkeys(key for key in keys if key))
+
+
+def _profanity_fragment_tail_keys(value: str) -> tuple[str, ...]:
+    variants: set[str] = {value}
+    for fragment in _PROFANITY_MATCH_FRAGMENTS:
+        if fragment not in value:
+            continue
+        stripped = value.replace(fragment, "")
+        if stripped:
+            variants.update((stripped, _without_vowels(stripped)))
+            singular = stripped[:-1] if stripped.endswith("S") else stripped
+            variants.update((singular, _without_vowels(singular)))
+    return tuple(sorted(key for key in variants if key))
+
+
+def _has_profanity_fragment(value: str) -> bool:
+    return any(fragment in value for fragment in _PROFANITY_MATCH_FRAGMENTS)
+
+
+def _without_vowels(value: str) -> str:
+    return re.sub(r"[AEIOU]+", "", value)
 
 
 def _name_tokens(value: object) -> tuple[str, ...]:
@@ -882,6 +1031,7 @@ __all__ = [
     "apply_generated_players_to_game",
     "apply_generated_rows_to_game",
     "import_generated_players_to_game",
+    "missing_generated_players_and_active_placeholder_indices",
     "player_team_slot_indices_for_generated",
     "validate_generated_player_names_match_offsets",
 ]

@@ -22,11 +22,15 @@ from PyQt6.QtWidgets import (
 
 
 COMBO_BOX_MAX_VISIBLE_ITEMS = 12
+COMBO_BOX_POPUP_ROW_HEIGHT = 24
+COMBO_BOX_POPUP_MAX_HEIGHT = COMBO_BOX_MAX_VISIBLE_ITEMS * COMBO_BOX_POPUP_ROW_HEIGHT + 4
 
 
 def configure_combo_box(combo: QComboBox) -> QComboBox:
     combo.setMaxVisibleItems(COMBO_BOX_MAX_VISIBLE_ITEMS)
-    combo.view().setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+    view = combo.view()
+    view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+    view.setMaximumHeight(COMBO_BOX_POPUP_MAX_HEIGHT)
     return combo
 
 

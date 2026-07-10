@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from nba2k_editor.models.data_model import EDITOR_DOMAINS, EditorDataModel, PLAYER_TEAM_FILTER_ALL
+from nba2k_editor.models.data_model import EDITOR_DOMAINS, EditorDataModel, PLAYER_TEAM_FILTER_ALL, PLAYER_TEAM_FILTER_FREE_AGENTS
 from nba2k_editor.models.schema import RecordListItem
 
 
@@ -41,6 +41,28 @@ class PlayerLoadPerformanceTests(unittest.TestCase):
         self.assertEqual({}, model._player_team_pointer_cache)
         self.assertEqual([item.display_label for item in model.items], model.player_item_labels_for_team_filter(PLAYER_TEAM_FILTER_ALL))
         self.assertEqual(0, model.team_pointer_reads)
+
+    def test_free_agents_filter_requires_active_player_with_no_current_team(self) -> None:
+        model = PlayerLoadModel()
+        free_agent = RecordListItem(domain="Players", index=10, address=0x2000, label="Active None")
+        inactive_none = RecordListItem(domain="Players", index=11, address=0x2100, label="Inactive None")
+        active_team = RecordListItem(domain="Players", index=12, address=0x2200, label="Active Team")
+        model.loaded_items["Players"] = {
+            free_agent.display_label: free_agent,
+            inactive_none.display_label: inactive_none,
+            active_team.display_label: active_team,
+        }
+        active_by_index = {10: True, 11: False, 12: True}
+        team_pointer_by_index = {10: 0, 11: 0, 12: 0x3000}
+        model._read_player_is_active = lambda item: active_by_index[item.index]  # type: ignore[method-assign]
+        model._read_player_current_team_pointer = lambda item: team_pointer_by_index[item.index]  # type: ignore[method-assign]
+
+        labels = model.player_item_labels_for_team_filter(PLAYER_TEAM_FILTER_FREE_AGENTS)
+        items = model.player_items_for_team_filter(PLAYER_TEAM_FILTER_FREE_AGENTS)
+
+        self.assertIn(PLAYER_TEAM_FILTER_FREE_AGENTS, model.player_team_filter_options())
+        self.assertEqual([free_agent.display_label], labels)
+        self.assertEqual({free_agent.display_label: free_agent}, items)
 
 
 if __name__ == "__main__":

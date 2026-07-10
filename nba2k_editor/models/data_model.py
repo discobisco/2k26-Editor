@@ -68,6 +68,7 @@ _LABEL_FIELD_NAMES: dict[str, tuple[str, ...]] = {
 
 PLAYER_TEAM_FILTER_ALL = "All Players"
 PLAYER_TEAM_FILTER_BASE_TEAMS = "Teams 0-29"
+PLAYER_TEAM_FILTER_FREE_AGENTS = "Free Agents"
 PLAYER_TEAM_FILTER_DRAFT_CLASS = "Draft Class"
 
 
@@ -376,7 +377,7 @@ class EditorDataModel:
         return {"count": len(records), "records": records}
 
     def player_team_filter_options(self) -> tuple[str, ...]:
-        return (PLAYER_TEAM_FILTER_ALL, PLAYER_TEAM_FILTER_BASE_TEAMS, PLAYER_TEAM_FILTER_DRAFT_CLASS, *self.domain_item_labels("Teams"))
+        return (PLAYER_TEAM_FILTER_ALL, PLAYER_TEAM_FILTER_BASE_TEAMS, PLAYER_TEAM_FILTER_FREE_AGENTS, PLAYER_TEAM_FILTER_DRAFT_CLASS, *self.domain_item_labels("Teams"))
 
     def _team_player_slot_entries(self) -> list[tuple[int, FieldEntry]]:
         entries: list[tuple[int, FieldEntry]] = []
@@ -432,6 +433,20 @@ class EditorDataModel:
             self._player_team_pointer_cache[item.index] = self._read_player_current_team_pointer(item)
         return self._player_team_pointer_cache[item.index]
 
+    def _read_player_is_active(self, item: RecordListItem) -> bool:
+        entry = self._field_by_normalized_name("Players", "ISACTIVE")
+        if entry is None:
+            return False
+        value = self.read_entry_value(entry, index=item.index).get("raw_value")
+        return bool(int(value or 0))
+
+    def _free_agent_player_items(self) -> dict[str, RecordListItem]:
+        return {
+            label: player
+            for label, player in self.loaded_items.get("Players", {}).items()
+            if self._read_player_is_active(player) and self._player_current_team_pointer(player) == 0
+        }
+
     def _base_team_items(self) -> tuple[RecordListItem, ...]:
         return tuple(
             team
@@ -455,6 +470,8 @@ class EditorDataModel:
         selected = str(selected_team_label or "").strip()
         if selected == PLAYER_TEAM_FILTER_BASE_TEAMS:
             return self._base_team_player_items()
+        if selected == PLAYER_TEAM_FILTER_FREE_AGENTS:
+            return self._free_agent_player_items()
         if selected == PLAYER_TEAM_FILTER_DRAFT_CLASS:
             self._ensure_draft_class_items_loaded()
             return self.loaded_items.get("Draft Class", {})
@@ -466,7 +483,7 @@ class EditorDataModel:
     def player_item_labels_for_team_filter(self, selected_team_label: str | None, search_text: str | None = None) -> list[str]:
         selected = str(selected_team_label or "").strip()
         query = str(search_text or "").strip().lower()
-        if selected in {PLAYER_TEAM_FILTER_BASE_TEAMS, PLAYER_TEAM_FILTER_DRAFT_CLASS}:
+        if selected in {PLAYER_TEAM_FILTER_BASE_TEAMS, PLAYER_TEAM_FILTER_FREE_AGENTS, PLAYER_TEAM_FILTER_DRAFT_CLASS}:
             labels = list(self._player_filter_items(selected))
         elif not selected or selected == PLAYER_TEAM_FILTER_ALL:
             labels = self.domain_item_labels("Players")
