@@ -194,10 +194,6 @@ def editor_stylesheet() -> str:
         selection-color: {BUTTON_TEXT};
     }}
 
-    QComboBox {{
-        combobox-popup: 0;
-    }}
-
     QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QListWidget:focus, QTableWidget:focus {{
         background: {ENTRY_ACTIVE_BG};
         border: 1px solid {TEXT_ACCENT};
