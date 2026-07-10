@@ -113,3 +113,29 @@ def test_player_match_groups_include_best_plus_players_within_point005() -> None
     assert [match.player_label for match in matches["player"]] == ["Exact Overall", "Within Overall"]
     assert [match.player_label for match in matches["offensive"]] == ["Exact Overall", "Within Overall"]
     assert [match.player_label for match in matches["defensive"]] == ["Exact Overall", "Within Overall"]
+
+
+def test_field_suggestion_blends_individual_full_and_offensive_match_values() -> None:
+    root = Path(__file__).resolve().parents[1]
+    model = StatNeighborModel(
+        path=root / "nba2k_editor" / "Player Generator" / "NBA Player Data" / "player_generation_pool" / "POSITION_STAT_NEIGHBOR_MODEL.sqlite",
+        suggestions_by_player_position={},
+        suggestions_by_player_team_position={},
+        candidates_by_position={
+            "SG": (
+                _match_candidate("Free Throw Twin", "SG", {"ft_pct": 0.90, "per": 100.0, "pts_per36": 100.0}),
+                _match_candidate("Offensive Twin", "SG", {"ft_pct": 0.50, "per": 20.0, "pts_per36": 10.0}),
+            )
+        },
+        scales_by_position={"SG": {"ft_pct": (0.0, 1.0), "per": (0.0, 1.0), "pts_per36": (0.0, 1.0)}},
+    )
+    model.candidates_by_position["SG"][0]["fields"]["Attributes/FREETHROW"] = 30.0
+    model.candidates_by_position["SG"][1]["fields"]["Attributes/FREETHROW"] = 90.0
+
+    suggestions = model.suggestions_for_position_selection(
+        target_features={"ft_pct": 0.90, "per": 20.0, "pts_per36": 10.0},
+        positions=PositionSelection(primary="SG", secondary=None, all_positions=("SG",)),
+    )
+
+    assert suggestions["Attributes/FREETHROW"].value == 76
+    assert "player_match_blend=individual,player,offensive" in suggestions["Attributes/FREETHROW"].evidence_keys

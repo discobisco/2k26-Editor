@@ -137,18 +137,21 @@ OFFENSIVE_PLAYER_MATCH_FEATURES: tuple[str, ...] = (
     "fta_per36",
     "ft_pct",
     "ast_per36",
+    "orb_per36",
     "tov_per36",
     "pts_per100",
     "fga_per100",
     "x3pa_per100",
     "fta_per100",
     "ast_per100",
+    "orb_per100",
     "tov_per100",
     "player_o_rtg",
     "per",
     "ts_percent",
     "x3p_ar",
     "f_tr",
+    "orb_percent",
     "ast_percent",
     "tov_percent",
     "usg_percent",
@@ -287,6 +290,15 @@ class StatNeighborModel:
         positions: tuple[str, ...],
         features: tuple[str, ...],
     ) -> tuple[NeighborPlayerMatch, ...]:
+        return tuple(_row_to_player_match(row) for row in self._player_match_rows_for_features(target_features=target_features, positions=positions, features=features))
+
+    def _player_match_rows_for_features(
+        self,
+        *,
+        target_features: dict[str, float | None],
+        positions: tuple[str, ...],
+        features: tuple[str, ...],
+    ) -> tuple[dict[str, Any], ...]:
         rows: list[dict[str, Any]] = []
         for pos in positions:
             candidates = self.candidates_by_position.get(pos, ())
@@ -312,22 +324,7 @@ class StatNeighborModel:
             deduped.append(row)
         best_distance = float(deduped[0]["distance"])
         cutoff = best_distance + _PLAYER_MATCH_DISTANCE_DEVIATION
-        matches: list[NeighborPlayerMatch] = []
-        for row in deduped:
-            distance = float(row["distance"])
-            if distance > cutoff:
-                break
-            candidate = row["candidate"]
-            matches.append(
-                NeighborPlayerMatch(
-                    player_label=str(candidate.get("player_label") or ""),
-                    master_player_id=str(candidate.get("master_player_id") or ""),
-                    position=str(candidate.get("position") or "").strip().upper(),
-                    distance=distance,
-                    common_features=int(row["common_features"]),
-                )
-            )
-        return tuple(matches)
+        return tuple(row for row in deduped if float(row["distance"]) <= cutoff)
 
     def suggestions_for_position_selection(self, *, target_features: dict[str, float | None], positions: PositionSelection) -> dict[str, NeighborFieldSuggestion]:
         weighted_positions = tuple((pos, weight) for pos, weight in positions.position_weights if pos in POSITIONS and weight > 0.0)
@@ -352,6 +349,11 @@ class StatNeighborModel:
         if not candidates:
             return {}
         relpath = str(self.path.relative_to(_repo_root()))
+        match_rows_by_group = {
+            "player": self._player_match_rows_for_features(target_features=target_features, positions=(pos,), features=OVERALL_PLAYER_MATCH_FEATURES),
+            "offensive": self._player_match_rows_for_features(target_features=target_features, positions=(pos,), features=OFFENSIVE_PLAYER_MATCH_FEATURES),
+            "defensive": self._player_match_rows_for_features(target_features=target_features, positions=(pos,), features=DEFENSIVE_PLAYER_MATCH_FEATURES),
+        }
         values: dict[str, NeighborFieldSuggestion] = {}
         all_fields = sorted(set().union(*(set(candidate["fields"]) for candidate in candidates)))
         fields_by_features: dict[tuple[str, ...], list[str]] = {}
@@ -392,13 +394,86 @@ class StatNeighborModel:
                     source_rule="position_stat_neighbor_section_top5_weighted",
                     evidence_keys=evidence_keys,
                 )
+                blended = _blend_suggestion_with_player_matches(
+                    field_key=field_key,
+                    individual_value=normalized.value,
+                    section_features=section_features,
+                    match_rows_by_group=match_rows_by_group,
+                )
                 values[field_key] = NeighborFieldSuggestion(
                     field_key=field_key,
-                    value=normalized.value,
-                    source_rule=normalized.source_rule,
-                    evidence_keys=normalized.evidence_keys,
+                    value=blended[0],
+                    source_rule=normalized.source_rule if len(blended[1]) <= 1 else f"{normalized.source_rule}_player_match_blended",
+                    evidence_keys=normalized.evidence_keys if len(blended[1]) <= 1 else (*normalized.evidence_keys, *blended[1]),
                 )
         return values
+
+
+def _row_to_player_match(row: dict[str, Any]) -> NeighborPlayerMatch:
+    candidate = row["candidate"]
+    return NeighborPlayerMatch(
+        player_label=str(candidate.get("player_label") or ""),
+        master_player_id=str(candidate.get("master_player_id") or ""),
+        position=str(candidate.get("position") or "").strip().upper(),
+        distance=float(row["distance"]),
+        common_features=int(row["common_features"]),
+    )
+
+
+def _blend_suggestion_with_player_matches(
+    *,
+    field_key: str,
+    individual_value: int | str,
+    section_features: tuple[str, ...],
+    match_rows_by_group: dict[str, tuple[dict[str, Any], ...]],
+) -> tuple[int | str, tuple[str, ...]]:
+    individual_number = _float(individual_value)
+    if individual_number is None:
+        return individual_value, ("player_match_blend=skipped_non_numeric",)
+    values: list[tuple[str, float]] = [("individual", float(individual_number))]
+    for group in _field_match_blend_groups(section_features):
+        group_value = _match_group_field_average(match_rows_by_group.get(group, ()), field_key)
+        if group_value is not None:
+            values.append((group, group_value))
+    if len(values) <= 1:
+        return individual_value, ("player_match_blend=individual",)
+    blended_value = _clamp_match_blended_field_value(field_key, int(round(sum(value for _label, value in values) / len(values))))
+    return blended_value, (
+        "player_match_blend=" + ",".join(label for label, _value in values),
+        *tuple(f"player_match_{label}_value={value:.6f}" for label, value in values[1:]),
+    )
+
+
+def _field_match_blend_groups(section_features: tuple[str, ...]) -> tuple[str, ...]:
+    defensive = sum(1 for feature in section_features if feature in DEFENSIVE_PLAYER_MATCH_FEATURES)
+    offensive = sum(1 for feature in section_features if feature in OFFENSIVE_PLAYER_MATCH_FEATURES)
+    groups = ["player"]
+    if defensive > offensive:
+        groups.append("defensive")
+    elif offensive > defensive:
+        groups.append("offensive")
+    return tuple(groups)
+
+
+def _match_group_field_average(rows: tuple[dict[str, Any], ...], field_key: str) -> float | None:
+    values = [
+        float(value)
+        for row in rows
+        for value in (row["candidate"].get("fields", {}).get(field_key),)
+        if _float(value) is not None
+    ]
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
+def _clamp_match_blended_field_value(field_key: str, value: int) -> int:
+    section = _identity(field_key.partition("/")[0])
+    if section == "ATTRIBUTES":
+        return max(25, min(99, value))
+    if section == "TENDENCIES":
+        return max(0, min(100, value))
+    return value
 
 
 def _blend_weighted_position_suggestions(
