@@ -136,3 +136,11 @@ UPDATE player_info SET ht_in_in = 74, wt = 180 WHERE player_id = 'watkija02' AND
 UPDATE player_info SET ht_in_in = 75, wt = 190 WHERE player_id = 'isaacjo02' AND player = 'Johnny Isaacs';
 UPDATE player_info SET ht_in_in = 77, wt = 230 WHERE player_id = 'smithwi03' AND player = 'Willie Smith';
 COMMIT;
+
+-- Manual weight fills from average weight of same-height players in season window year-1..year+1.
+BEGIN TRANSACTION;
+UPDATE player_info SET wt = 167 WHERE player_id = 'woodbo01' AND player = 'Bob Wood' AND ht_in_in = 70; -- 1949-1951 same-height avg=166.67, n=15
+UPDATE player_info SET wt = 211 WHERE player_id = 'leedi01' AND player = 'Dick Lee' AND ht_in_in = 78; -- 1967-1969 same-height avg=211.31, n=36
+UPDATE player_info SET wt = 208 WHERE player_id = 'mitchmu01' AND player = 'Murray Mitchell' AND ht_in_in = 78; -- 1949-1951 same-height avg=207.86, n=21
+UPDATE player_info SET wt = 245 WHERE player_id = 'nolenpa01' AND player = 'Paul Nolen' AND ht_in_in = 82; -- 1953-1955 same-height avg=245.00, n=1
+COMMIT;
