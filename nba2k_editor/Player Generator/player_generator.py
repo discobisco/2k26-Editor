@@ -202,6 +202,7 @@ def generate_player_proposal(
     positions = select_positions_from_evidence(evidence.play_by_play, evidence.season_info.get("pos") or evidence.identity.get("pos"))
     profile_result = derive_player_profile_values(evidence, positions=positions)
     rule_result = derive_player_rule_values(evidence, positions=positions)
+    player_match_identity = _player_match_identity_values(evidence, positions)
     candidates = player_field_candidates_from_results(profile_result, rule_result, offsets_path=offsets_path, field_index=field_index)
     return GeneratedPlayerProposal(
         player_id=evidence.player_id,
@@ -215,9 +216,50 @@ def generate_player_proposal(
             "team_name": _team_display_name(evidence),
             "multi_team_stat_shares": evidence.source_context.get("multi_team_stat_shares"),
             "source": evidence.source_context.get("source"),
+            **player_match_identity,
         },
         field_candidates=candidates,
     )
+
+
+def _player_match_identity_values(evidence: PlayerEvidence, positions: Any) -> dict[str, Any]:
+    try:
+        from stat_neighbor_framework import load_latest_stat_neighbor_model
+
+        groups = load_latest_stat_neighbor_model().player_matches_for_evidence(evidence=evidence, positions=positions)
+    except FileNotFoundError:
+        return {}
+    return {
+        "player_match": _format_player_matches(groups.get("player", ())),
+        "offensive_player_match": _format_player_matches(groups.get("offensive", ())),
+        "defensive_player_match": _format_player_matches(groups.get("defensive", ())),
+        "player_match_details": tuple(_player_match_detail(match) for match in groups.get("player", ())),
+        "offensive_player_match_details": tuple(_player_match_detail(match) for match in groups.get("offensive", ())),
+        "defensive_player_match_details": tuple(_player_match_detail(match) for match in groups.get("defensive", ())),
+    }
+
+
+def _format_player_matches(matches: Iterable[Any]) -> str:
+    parts: list[str] = []
+    for match in matches:
+        label = str(getattr(match, "player_label", "") or "").strip()
+        if not label:
+            continue
+        position = str(getattr(match, "position", "") or "").strip().upper()
+        distance = getattr(match, "distance", None)
+        suffix = f"{position}, {float(distance):.6f}" if position and distance is not None else f"{float(distance):.6f}" if distance is not None else position
+        parts.append(f"{label} ({suffix})" if suffix else label)
+    return "; ".join(parts)
+
+
+def _player_match_detail(match: Any) -> dict[str, Any]:
+    return {
+        "player": str(getattr(match, "player_label", "") or ""),
+        "player_id": str(getattr(match, "master_player_id", "") or ""),
+        "position": str(getattr(match, "position", "") or ""),
+        "distance": float(getattr(match, "distance", 0.0)),
+        "common_features": int(getattr(match, "common_features", 0)),
+    }
 
 
 def generate_player_proposal_from_contract(

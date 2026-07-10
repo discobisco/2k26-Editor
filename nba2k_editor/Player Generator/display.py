@@ -14,6 +14,11 @@ _SOURCE_TEAM_ALL = "All source teams"
 _LEAGUE_ALL = "All leagues"
 _POSITION_ALL = "All positions"
 _PLAYER_LABEL_SEPARATOR = " | "
+_MATCH_DISPLAY_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("Player Match", "player_match"),
+    ("Offensive Player Match", "offensive_player_match"),
+    ("Defensive Player Match", "defensive_player_match"),
+)
 _MULTI_TEAM_MARKERS = {"TOT", "2TM", "3TM", "4TM", "5TM"}
 
 
@@ -238,10 +243,13 @@ def generate_generator_preview_display_state(state: GeneratorDisplayState) -> Ge
         for proposal in batch.proposals
         if (str(proposal.player_id).strip(), str(proposal.team).strip().upper()) in selected_keys
     )
-    columns: list[str] = []
+    columns: list[str] = [label for label, _key in _MATCH_DISPLAY_COLUMNS]
     proposal_values: dict[tuple[str, str], dict[str, str]] = {}
     for proposal in proposals:
-        values: dict[str, str] = {}
+        values: dict[str, str] = {
+            label: str(getattr(proposal, "identity", {}).get(key) or "")
+            for label, key in _MATCH_DISPLAY_COLUMNS
+        }
         for candidate in proposal.field_candidates:
             column = _field_column(candidate)
             if column not in columns:

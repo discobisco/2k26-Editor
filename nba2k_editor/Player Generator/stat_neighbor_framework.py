@@ -127,6 +127,91 @@ FEATURES: tuple[str, ...] = (
     "all_team_vote_share",
 )
 BODY_FEATURES: tuple[str, ...] = ("height_inches", "weight_pounds")
+OFFENSIVE_PLAYER_MATCH_FEATURES: tuple[str, ...] = (
+    "pts_per36",
+    "fga_per36",
+    "fg_pct",
+    "x3pa_per36",
+    "x3p_pct",
+    "e_fg_percent",
+    "fta_per36",
+    "ft_pct",
+    "ast_per36",
+    "tov_per36",
+    "pts_per100",
+    "fga_per100",
+    "x3pa_per100",
+    "fta_per100",
+    "ast_per100",
+    "tov_per100",
+    "player_o_rtg",
+    "per",
+    "ts_percent",
+    "x3p_ar",
+    "f_tr",
+    "ast_percent",
+    "tov_percent",
+    "usg_percent",
+    "ows",
+    "obpm",
+    "avg_dist_fga",
+    "percent_fga_from_x2p_range",
+    "percent_fga_from_x0_3_range",
+    "percent_fga_from_x3_10_range",
+    "percent_fga_from_x10_16_range",
+    "percent_fga_from_x16_3p_range",
+    "percent_fga_from_x3p_range",
+    "fg_percent_from_x2p_range",
+    "fg_percent_from_x0_3_range",
+    "fg_percent_from_x3_10_range",
+    "fg_percent_from_x10_16_range",
+    "fg_percent_from_x16_3p_range",
+    "fg_percent_from_x3p_range",
+    "percent_assisted_x2p_fg",
+    "percent_assisted_x3p_fg",
+    "percent_dunks_of_fga",
+    "num_of_dunks",
+    "percent_corner_3s_of_3pa",
+    "corner_3_point_percent",
+)
+DEFENSIVE_PLAYER_MATCH_FEATURES: tuple[str, ...] = (
+    "drb_per36",
+    "stl_per36",
+    "blk_per36",
+    "pf_per36",
+    "drb_per100",
+    "stl_per100",
+    "blk_per100",
+    "pf_per100",
+    "player_d_rtg",
+    "drb_percent",
+    "stl_percent",
+    "blk_percent",
+    "dws",
+    "dbpm",
+    "all_defense",
+    "dpoy_share",
+    "team_d_rtg",
+    "team_drb_percent",
+    "team_opp_e_fg_percent",
+)
+OVERALL_PLAYER_MATCH_FEATURES: tuple[str, ...] = tuple(
+    dict.fromkeys(
+        (
+            "per",
+            "bpm",
+            "vorp",
+            "ws",
+            "ws_48",
+            "mp_per_game",
+            "games",
+            *OFFENSIVE_PLAYER_MATCH_FEATURES,
+            *DEFENSIVE_PLAYER_MATCH_FEATURES,
+            *BODY_FEATURES,
+        )
+    )
+)
+_PLAYER_MATCH_DISTANCE_DEVIATION = 0.005
 _MODEL_PREFIX = "POSITION_STAT_NEIGHBOR_MODEL_"
 _SUGGESTIONS_FILE = "suggested_field_values.csv"
 _TOP_FIVE_RANK_WEIGHTS: tuple[float, ...] = (0.54, 0.25, 0.15, 0.05, 0.01)
@@ -137,6 +222,14 @@ class NeighborFieldSuggestion:
     source_rule: str
     evidence_keys: tuple[str, ...]
 
+
+@dataclass(frozen=True)
+class NeighborPlayerMatch:
+    player_label: str
+    master_player_id: str
+    position: str
+    distance: float
+    common_features: int
 
 
 @dataclass(frozen=True)
@@ -168,6 +261,69 @@ class StatNeighborModel:
             target_features=target_features_from_evidence(evidence),
             positions=positions,
         )
+
+    def player_matches_for_evidence(self, *, evidence: Any, positions: PositionSelection) -> dict[str, tuple[NeighborPlayerMatch, ...]]:
+        return self.player_matches_for_position_selection(
+            target_features=target_features_from_evidence(evidence),
+            positions=positions,
+        )
+
+    def player_matches_for_position_selection(self, *, target_features: dict[str, float | None], positions: PositionSelection) -> dict[str, tuple[NeighborPlayerMatch, ...]]:
+        selected_positions = _match_positions(positions)
+        return {
+            "player": self._player_matches_for_features(target_features=target_features, positions=selected_positions, features=OVERALL_PLAYER_MATCH_FEATURES),
+            "offensive": self._player_matches_for_features(target_features=target_features, positions=selected_positions, features=OFFENSIVE_PLAYER_MATCH_FEATURES),
+            "defensive": self._player_matches_for_features(target_features=target_features, positions=selected_positions, features=DEFENSIVE_PLAYER_MATCH_FEATURES),
+        }
+
+    def _player_matches_for_features(
+        self,
+        *,
+        target_features: dict[str, float | None],
+        positions: tuple[str, ...],
+        features: tuple[str, ...],
+    ) -> tuple[NeighborPlayerMatch, ...]:
+        rows: list[dict[str, Any]] = []
+        for pos in positions:
+            candidates = self.candidates_by_position.get(pos, ())
+            if not candidates:
+                continue
+            scales = self.scales_by_position.get(pos, {})
+            for candidate in candidates:
+                distance, common = _distance(target_features, candidate["features"], scales, features=features)
+                if distance is None:
+                    continue
+                rows.append({"candidate": candidate, "distance": distance, "common_features": common})
+        if not rows:
+            return ()
+        rows.sort(key=lambda row: (float(row["distance"]), str(row["candidate"].get("player_label") or "").casefold()))
+        deduped: list[dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+        for row in rows:
+            candidate = row["candidate"]
+            key = (str(candidate.get("player_label") or ""), str(candidate.get("master_player_id") or ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(row)
+        best_distance = float(deduped[0]["distance"])
+        cutoff = best_distance + _PLAYER_MATCH_DISTANCE_DEVIATION
+        matches: list[NeighborPlayerMatch] = []
+        for row in deduped:
+            distance = float(row["distance"])
+            if distance > cutoff:
+                break
+            candidate = row["candidate"]
+            matches.append(
+                NeighborPlayerMatch(
+                    player_label=str(candidate.get("player_label") or ""),
+                    master_player_id=str(candidate.get("master_player_id") or ""),
+                    position=str(candidate.get("position") or "").strip().upper(),
+                    distance=distance,
+                    common_features=int(row["common_features"]),
+                )
+            )
+        return tuple(matches)
 
     def suggestions_for_position_selection(self, *, target_features: dict[str, float | None], positions: PositionSelection) -> dict[str, NeighborFieldSuggestion]:
         weighted_positions = tuple((pos, weight) for pos, weight in positions.position_weights if pos in POSITIONS and weight > 0.0)
@@ -300,6 +456,13 @@ def _best_position_suggestions(
                     ),
                 )
     return {field_key: suggestion for field_key, (_order, _distance, suggestion) in values.items()}
+
+
+def _match_positions(positions: PositionSelection) -> tuple[str, ...]:
+    weighted = tuple(pos for pos, weight in positions.position_weights if pos in POSITIONS and weight > 0.0)
+    if weighted:
+        return weighted
+    return tuple(pos for pos in positions.all_positions if pos in POSITIONS)
 
 
 def _suggestion_best_distance(suggestion: NeighborFieldSuggestion) -> float:

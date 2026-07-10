@@ -10,6 +10,18 @@ if str(GENERATOR_DIR) not in sys.path:
 from stat_neighbor_framework import PositionSelection, StatNeighborModel, select_positions_from_evidence  # type: ignore[import-not-found]
 
 
+def _match_candidate(label: str, position: str, features: dict[str, float]) -> dict[str, object]:
+    return {
+        "run_id": label,
+        "player_index": label,
+        "player_label": label,
+        "master_player_id": label.upper().replace(" ", ""),
+        "position": position,
+        "features": features,
+        "fields": {"Attributes/FREETHROW": 70.0},
+    }
+
+
 def _candidate(position: str, value: int, ft_pct: float = 0.75) -> dict[str, object]:
     return {
         "run_id": position,
@@ -74,3 +86,30 @@ def test_listed_multi_position_without_percentages_uses_best_matching_position_p
     assert positions.position_weights == ()
     assert suggestions["Attributes/FREETHROW"].value == 55
     assert suggestions["Attributes/FREETHROW"].source_rule == "listed_position_best_neighbor"
+
+
+def test_player_match_groups_include_best_plus_players_within_point005() -> None:
+    root = Path(__file__).resolve().parents[1]
+    model = StatNeighborModel(
+        path=root / "nba2k_editor" / "Player Generator" / "NBA Player Data" / "player_generation_pool" / "POSITION_STAT_NEIGHBOR_MODEL.sqlite",
+        suggestions_by_player_position={},
+        suggestions_by_player_team_position={},
+        candidates_by_position={
+            "SG": (
+                _match_candidate("Exact Overall", "SG", {"per": 20.0, "pts_per36": 10.0, "dbpm": 2.0}),
+                _match_candidate("Within Overall", "SG", {"per": 20.004, "pts_per36": 10.004, "dbpm": 2.004}),
+                _match_candidate("Outside Overall", "SG", {"per": 20.006, "pts_per36": 10.006, "dbpm": 2.006}),
+            )
+        },
+        scales_by_position={"SG": {"per": (0.0, 1.0), "pts_per36": (0.0, 1.0), "dbpm": (0.0, 1.0)}},
+    )
+    positions = PositionSelection(primary="SG", secondary=None, all_positions=("SG",))
+
+    matches = model.player_matches_for_position_selection(
+        target_features={"per": 20.0, "pts_per36": 10.0, "dbpm": 2.0},
+        positions=positions,
+    )
+
+    assert [match.player_label for match in matches["player"]] == ["Exact Overall", "Within Overall"]
+    assert [match.player_label for match in matches["offensive"]] == ["Exact Overall", "Within Overall"]
+    assert [match.player_label for match in matches["defensive"]] == ["Exact Overall", "Within Overall"]
