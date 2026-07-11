@@ -64,6 +64,7 @@ class GeneratorDisplayState:
     field_columns: tuple[str, ...] = ()
     player_rows: tuple[GeneratorPlayerDisplayRow, ...] = ()
     generated_proposals: tuple[Any, ...] = ()
+    preview_target: str = "Players"
 
 
 def empty_generator_display_state(status: str = "Load generator source data to display player options.") -> GeneratorDisplayState:
@@ -267,11 +268,115 @@ def generate_generator_preview_display_state(state: GeneratorDisplayState) -> Ge
         field_columns=tuple(columns),
         player_rows=tuple(rows),
         generated_proposals=proposals,
+        preview_target="Players",
         status=(
             f"Displaying {len(rows)} generated players and {len(columns)} data columns for "
             f"{selected.selected_season} / {selected.selected_league} / {selected.selected_position} / {selected.selected_source_team}."
         ),
     )
+
+
+def generate_draft_class_display_state(state: GeneratorDisplayState) -> GeneratorDisplayState:
+    if not state.source_loaded:
+        return empty_generator_display_state("Load generator source data before building a draft class.")
+    selected = update_generator_display_selection(
+        state,
+        selected_season=state.selected_season,
+        selected_league=state.selected_league,
+        selected_position=state.selected_position,
+        selected_source_team=state.selected_source_team,
+    )
+    _ensure_generator_import_path()
+    from player_generator import DraftClassMode, generate_draft_class_proposals
+
+    draft_year = int(selected.selected_season)
+    draft_class = generate_draft_class_proposals(
+        draft_year,
+        mode=DraftClassMode.FIRST_APPEARANCE,
+        source_root=_SOURCE_ROOT,
+    )
+    proposals = draft_class.proposals
+    columns: list[str] = [label for label, _key in _MATCH_DISPLAY_COLUMNS]
+    rows: list[GeneratorPlayerDisplayRow] = []
+    for proposal in proposals:
+        values: dict[str, str] = {
+            label: str(getattr(proposal, "identity", {}).get(key) or "")
+            for label, key in _MATCH_DISPLAY_COLUMNS
+        }
+        for candidate in proposal.field_candidates:
+            column = _field_column(candidate)
+            if column not in columns:
+                columns.append(column)
+            values[column] = str(candidate.display_value)
+        identity = getattr(proposal, "identity", {})
+        rows.append(
+            GeneratorPlayerDisplayRow(
+                player=str(identity.get("player") or proposal.player_id),
+                source_team=str(getattr(proposal, "team", "") or ""),
+                player_id=str(getattr(proposal, "player_id", "") or ""),
+                values=tuple(values.get(column, "") for column in columns),
+            )
+        )
+    return replace(
+        selected,
+        rows=(),
+        field_columns=tuple(columns),
+        player_rows=tuple(rows),
+        generated_proposals=proposals,
+        preview_target="Draft Class",
+        status=(
+            f"Built {len(rows)} generated Draft Class players for {draft_class.rookie_season}. "
+            f"Subtracted players already present from {proposals[0].identity.get('draft_class_base_season', draft_year) if proposals else draft_year}-{draft_year}."
+        ),
+    )
+
+
+def import_draft_class_display_state(model: Any, state: GeneratorDisplayState, *, progress_callback: Any | None = None) -> GeneratorDisplayState:
+    if not state.source_loaded:
+        return empty_generator_display_state("Load generator source data before importing a draft class.")
+    import_state = state
+    if getattr(import_state, "preview_target", "Players") != "Draft Class" or not import_state.generated_proposals:
+        return replace(import_state, status="Build Draft Class before importing to Draft Class.")
+    target_items = tuple(model.player_items_for_team_filter("Draft Class").values())
+    if not target_items:
+        return replace(import_state, status="Load Draft Class before importing generated draft players.")
+    snapshot = _draft_class_snapshot(import_state.generated_proposals)
+    result = model.apply_player_roster_snapshot(
+        snapshot,
+        target_items=target_items,
+        progress_callback=progress_callback,
+    )
+    return replace(
+        import_state,
+        status=(
+            f"Imported {min(len(import_state.generated_proposals), len(target_items))}/{len(import_state.generated_proposals)} generated draft players "
+            f"to Draft Class. Fields: {result.get('succeeded', 0)} ok, {result.get('failed', 0)} failed, {result.get('skipped', 0)} skipped."
+        ),
+    )
+
+
+def _draft_class_snapshot(proposals: tuple[Any, ...]) -> dict[str, Any]:
+    records: list[dict[str, Any]] = []
+    for proposal in proposals:
+        identity = getattr(proposal, "identity", {})
+        fields = {
+            str(candidate.field_key): {"display_value": candidate.display_value}
+            for candidate in getattr(proposal, "field_candidates", ())
+        }
+        records.append(
+            {
+                "label": str(identity.get("player") or getattr(proposal, "player_id", "")),
+                "player_id": str(getattr(proposal, "player_id", "")),
+                "source_team": str(getattr(proposal, "team", "")),
+                "fields": fields,
+            }
+        )
+    return {
+        "domain": "Draft Class",
+        "mode": "Player Generator Draft Class",
+        "record_count": len(records),
+        "records": records,
+    }
 
 
 def import_generator_to_game_display_state(model: Any, state: GeneratorDisplayState, *, match_existing_player_names: bool = False, progress_callback: Any | None = None) -> GeneratorDisplayState:
@@ -282,6 +387,8 @@ def import_generator_to_game_display_state(model: Any, state: GeneratorDisplaySt
     from game_port import import_generated_players_to_game
 
     import_state = state
+    if getattr(import_state, "preview_target", "Players") == "Draft Class":
+        return replace(import_state, status="Current preview targets Draft Class; use Import Draft Class.")
     if not import_state.generated_proposals:
         return replace(import_state, status="Display preview before importing generated players.")
     import_kwargs: dict[str, Any] = {
@@ -519,7 +626,9 @@ __all__ = [
     "GeneratorPlayerDisplayRow",
     "add_current_roster_to_pool_display_state",
     "empty_generator_display_state",
+    "generate_draft_class_display_state",
     "generate_generator_preview_display_state",
+    "import_draft_class_display_state",
     "import_generator_to_game_display_state",
     "load_generator_display_state",
     "sync_generator_pool_display_state",

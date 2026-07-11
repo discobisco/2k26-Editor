@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from dataclasses import dataclass, replace
 from enum import StrEnum
@@ -22,7 +23,7 @@ from player_rules import (
 )
 from stat_neighbor_framework import select_positions_from_evidence
 from workbook_sqlite import ensure_workbook_sqlite_database, iter_workbook_sqlite_sheet_rows, workbook_sqlite_sheet_names
-from pre_nba_source import build_pre_nba_evidence_by_key, has_pre_nba_season, pre_nba_context_rows
+from pre_nba_source import build_pre_nba_evidence_by_key, has_pre_nba_season, pre_nba_context_rows, pre_nba_seasons
 
 _GENERATOR_DIR = Path(__file__).resolve().parent
 _DEFAULT_OFFSETS_PLAYERS_PATH = _GENERATOR_DIR.parent / "core" / "Offsets" / "offsets_players.json"
@@ -108,6 +109,7 @@ class GeneratedPlayerBatch:
 class DraftClassMode(StrEnum):
     DRAFT_PICKS = "draft_picks"
     ROOKIE_YEAR = "rookie_year"
+    FIRST_APPEARANCE = "first_appearance"
 
 
 @dataclass(frozen=True)
@@ -308,6 +310,7 @@ def generate_draft_class_proposals(
     mode: DraftClassMode | str = DraftClassMode.DRAFT_PICKS,
     source_root: str | Path | None = None,
     offsets_path: str | Path | None = None,
+    base_season: int | None = None,
 ) -> GeneratedDraftClass:
     if isinstance(draft_year, bool) or not isinstance(draft_year, int):
         raise ValueError("draft_year must be an int")
@@ -321,6 +324,8 @@ def generate_draft_class_proposals(
     context = season_context_index(contract, offsets_path=offsets_path)
     if draft_mode is DraftClassMode.DRAFT_PICKS:
         proposals = _draft_pick_mode_proposals(context, draft_year)
+    elif draft_mode is DraftClassMode.FIRST_APPEARANCE:
+        proposals = _first_appearance_mode_proposals(context, draft_year, base_season=base_season)
     else:
         proposals = _rookie_year_mode_proposals(context, draft_year)
     return GeneratedDraftClass(
@@ -365,6 +370,107 @@ def _rookie_year_mode_proposals(context: SeasonPlayerContextIndex, draft_year: i
     return proposals
 
 
+def _first_appearance_mode_proposals(
+    context: SeasonPlayerContextIndex,
+    draft_year: int,
+    *,
+    base_season: int | None = None,
+) -> list[GeneratedPlayerProposal]:
+    first_source_season = _draft_class_base_season(draft_year, base_season)
+    previous_person_keys = _person_keys_for_seasons(context.source_database_path, range(first_source_season, int(draft_year) + 1))
+    selected_by_person: dict[str, tuple[str, str]] = {}
+    for player_id, team in context.player_keys():
+        evidence = context.evidence_for(player_id=player_id, team=team)
+        person_key = _person_identity_key(evidence)
+        if not person_key or person_key in previous_person_keys:
+            continue
+        current = selected_by_person.get(person_key)
+        if current is None or _draft_class_evidence_sort_key(evidence) < _draft_class_evidence_sort_key(context.evidence_for(player_id=current[0], team=current[1])):
+            selected_by_person[person_key] = (player_id, team)
+
+    selected_keys = sorted(
+        selected_by_person.values(),
+        key=lambda key: _draft_class_output_sort_key(context.evidence_for(player_id=key[0], team=key[1])),
+    )
+    proposals: list[GeneratedPlayerProposal] = []
+    for player_id, team in selected_keys:
+        proposal = generate_player_proposal_from_index(context, player_id=player_id, team=team)
+        proposals.append(
+            _proposal_with_draft_class_metadata(
+                proposal,
+                None,
+                DraftClassMode.FIRST_APPEARANCE,
+                draft_year,
+                context.season,
+                base_season=first_source_season,
+            )
+        )
+    return proposals
+
+
+def _draft_class_base_season(draft_year: int, base_season: int | None) -> int:
+    if base_season is not None:
+        if isinstance(base_season, bool) or not isinstance(base_season, int):
+            raise ValueError("base_season must be an int")
+        if base_season > draft_year:
+            raise ValueError("base_season must be less than or equal to draft_year")
+        return base_season
+    return 1947 if draft_year >= 1947 else draft_year
+
+
+def _person_keys_for_seasons(database: Path, seasons: Iterable[int]) -> set[str]:
+    source_root = database.parent
+    keys: set[str] = set()
+    available = set(_available_source_seasons(database))
+    for season in seasons:
+        if int(season) not in available:
+            continue
+        contract = GeneratorInputContract(season=int(season), source_root=source_root, output_target="proposal")
+        context = season_context_index(contract)
+        for player_id, team in context.player_keys():
+            person_key = _person_identity_key(context.evidence_for(player_id=player_id, team=team))
+            if person_key:
+                keys.add(person_key)
+    return keys
+
+
+def _available_source_seasons(database: Path) -> tuple[int, ...]:
+    seasons = set(pre_nba_seasons(database.parent))
+    try:
+        table_name = _workbook_table_name(database, _BASE_PLAYER_SEASON_SHEET)
+    except Exception:
+        table_name = ""
+    if table_name:
+        with sqlite3.connect(database) as connection:
+            rows = connection.execute(f'SELECT DISTINCT season FROM "{table_name}" WHERE season IS NOT NULL').fetchall()
+        for (season,) in rows:
+            value = _int_value(season)
+            if value is not None:
+                seasons.add(value)
+    return tuple(sorted(seasons))
+
+
+def _person_identity_key(evidence: PlayerEvidence) -> str:
+    name = str(evidence.identity.get("player") or evidence.season_info.get("player") or "").strip()
+    if name:
+        return re.sub(r"[^A-Z0-9]", "", name.upper())
+    player_id = str(evidence.player_id or "").strip().upper()
+    return player_id[:-1] if player_id.endswith("N") else player_id
+
+
+def _draft_class_evidence_sort_key(evidence: PlayerEvidence) -> tuple[int, float, float, str, str]:
+    games = _float(evidence.season_info.get("g") or evidence.per_game.get("g") or evidence.totals.get("g")) or 0.0
+    points = _float(evidence.totals.get("pts") or evidence.per_game.get("pts_per_game") or evidence.season_info.get("pts")) or 0.0
+    has_stats = 0 if games > 0 or points > 0 else 1
+    name = str(evidence.identity.get("player") or evidence.player_id or "")
+    return (has_stats, -games, -points, name, str(evidence.team))
+
+
+def _draft_class_output_sort_key(evidence: PlayerEvidence) -> tuple[int, str, str]:
+    name = str(evidence.identity.get("player") or evidence.season_info.get("player") or evidence.player_id or "").strip()
+    return (1 if name.startswith("###") else 0, name.upper(), str(evidence.player_id).upper())
+
+
 def _context_keys_by_player_id(context: SeasonPlayerContextIndex) -> dict[str, tuple[tuple[str, str], ...]]:
     grouped: dict[str, list[tuple[str, str]]] = {}
     for player_id, team in context.player_keys():
@@ -404,11 +510,15 @@ def _proposal_with_draft_class_metadata(
     mode: DraftClassMode,
     draft_year: int,
     rookie_season: int,
+    *,
+    base_season: int | None = None,
 ) -> GeneratedPlayerProposal:
     identity = dict(proposal.identity)
     identity["draft_class_mode"] = mode.value
     identity["draft_year"] = draft_year
     identity["rookie_season"] = rookie_season
+    if base_season is not None:
+        identity["draft_class_base_season"] = base_season
     if draft_row:
         identity["draft_overall_pick"] = draft_row.get("overall_pick")
         identity["draft_round"] = draft_row.get("round")

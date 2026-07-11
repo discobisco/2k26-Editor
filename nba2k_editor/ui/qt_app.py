@@ -757,6 +757,8 @@ class QtEditorApp(QMainWindow):
         buttons.addWidget(QPushButton("Add Current Roster to Pool SQL", clicked=self._add_current_roster_to_player_pool))
         buttons.addWidget(QPushButton("Sync Player Pool SQL", clicked=self._sync_player_generator_pool))
         buttons.addWidget(QPushButton("Display Preview", clicked=self._display_generator_preview))
+        buttons.addWidget(QPushButton("Build Draft Class", clicked=self._build_generator_draft_class))
+        buttons.addWidget(QPushButton("Import Draft Class", clicked=self._import_generator_draft_class))
         buttons.addWidget(QPushButton("Import By Team Matching", clicked=self._import_generator_to_game_display))
         buttons.addWidget(QPushButton("Import Matched Names", clicked=lambda: self._import_generator_to_game_display(match_existing_player_names=True)))
         buttons.addWidget(QPushButton("Add Missing Players", clicked=self._import_missing_generator_to_game_display))
@@ -1612,6 +1614,46 @@ class QtEditorApp(QMainWindow):
                 return str(getattr(self.player_generator_state, "status", "Preview generated."))
 
             self._start_background_operation("Display Player Generator Preview", worker, done_callback=self._sync_player_generator_status)
+
+    def _build_generator_draft_class(self) -> None:
+        display = self._generator_display_module()
+        if hasattr(display, "generate_draft_class_display_state"):
+            if getattr(self.player_generator_state, "source_loaded", False):
+                self._refresh_player_generator_dropdowns()
+            state_snapshot = self.player_generator_state
+
+            def worker() -> str:
+                try:
+                    state = state_snapshot
+                    if not getattr(state, "source_loaded", False):
+                        state = display.load_generator_display_state()
+                    self.player_generator_state = display.generate_draft_class_display_state(state)
+                except Exception as exc:
+                    self.player_generator_state = display.empty_generator_display_state(f"Draft class build failed: {exc}")
+                    raise
+                return str(getattr(self.player_generator_state, "status", "Draft class built."))
+
+            self._start_background_operation("Build Player Generator Draft Class", worker, done_callback=self._sync_player_generator_status)
+
+    def _import_generator_draft_class(self) -> None:
+        display = self._generator_display_module()
+        if hasattr(display, "import_draft_class_display_state"):
+            self._refresh_player_generator_dropdowns()
+            state_snapshot = self.player_generator_state
+
+            def worker() -> str:
+                try:
+                    self.player_generator_state = display.import_draft_class_display_state(
+                        self.model,
+                        state_snapshot,
+                        progress_callback=self._background_operation_progress,
+                    )
+                except Exception as exc:
+                    self.player_generator_state = display.empty_generator_display_state(f"Draft class import failed: {exc}")
+                    raise
+                return str(getattr(self.player_generator_state, "status", "Draft class import complete."))
+
+            self._start_background_operation("Import Player Generator Draft Class", worker, done_callback=self._sync_player_generator_status)
 
     def _sync_player_generator_pool(self) -> None:
         display = self._generator_display_module()
