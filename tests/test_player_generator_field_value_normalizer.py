@@ -22,10 +22,10 @@ def test_attribute_value_is_adjusted_by_match_2k_vs_master_deviation() -> None:
         evidence_keys=("base",),
     )
 
-    assert adjusted.value == 60
+    assert adjusted.value == 58
     assert adjusted.source_rule == "position_stat_neighbor_section_top5_weighted_match_deviation_adjusted"
     assert "normalization=league" in adjusted.evidence_keys
-    assert "match_2k_to_master_percent_delta=0.200000" in adjusted.evidence_keys
+    assert "match_2k_to_master_percent_delta=0.166667" in adjusted.evidence_keys
 
 
 def test_attribute_value_lowers_when_match_2k_stat_is_above_master_stat() -> None:
@@ -56,10 +56,10 @@ def test_tendency_value_is_adjusted_by_team_normalized_match_deviation() -> None
         evidence_keys=("base",),
     )
 
-    assert adjusted.value == 60
+    assert adjusted.value == 58
     assert adjusted.source_rule == "position_stat_neighbor_section_top5_weighted_match_deviation_adjusted"
     assert "normalization=team" in adjusted.evidence_keys
-    assert "match_2k_to_master_percent_delta=0.200000" in adjusted.evidence_keys
+    assert "match_2k_to_master_percent_delta=0.166667" in adjusted.evidence_keys
 
 
 def test_normalizer_preserves_base_rule_when_no_match_deviation_exists() -> None:
@@ -103,3 +103,20 @@ def test_normalizer_clamps_attribute_and_tendency_ranges() -> None:
 
     assert attribute.value == 99
     assert tendency.value == 100
+
+def test_attribute_normalizer_aligns_percent_point_units_and_inverts_lower_is_better_delta() -> None:
+    adjusted = normalize_field_value(
+        field_key="Attributes/PASSACCURACY",
+        value=60,
+        initial_match_2k_features={"ast_percent": 14.5, "tov_percent": 0.059241706161137435},
+        initial_match_master_features={"ast_percent": 14.5, "tov_percent": 16.3},
+        domain_master_feature_rows=({"ast_percent": 14.5, "tov_percent": 16.3},),
+        feature_names=("ast_percent", "tov_percent"),
+        source_rule="rule",
+        evidence_keys=(),
+    )
+
+    assert adjusted.value == 41
+    assert "match_2k_to_master_percent_delta=-0.318277" in adjusted.evidence_keys
+    assert "unit_aligned_features=tov_percent" in adjusted.evidence_keys
+    assert "inverse_delta_features=tov_percent" in adjusted.evidence_keys

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 GENERATOR_DIR = Path(__file__).resolve().parents[1] / "nba2k_editor" / "Player Generator"
 if str(GENERATOR_DIR) not in sys.path:
     sys.path.insert(0, str(GENERATOR_DIR))
 
+from player_rules import derive_player_profile_values  # type: ignore[import-not-found]
 from stat_neighbor_framework import PositionSelection, StatNeighborModel, select_positions_from_evidence  # type: ignore[import-not-found]
 
 
@@ -130,12 +132,83 @@ def test_field_suggestion_blends_individual_full_and_offensive_match_values() ->
         scales_by_position={"SG": {"ft_pct": (0.0, 1.0), "per": (0.0, 1.0), "pts_per36": (0.0, 1.0)}},
     )
     model.candidates_by_position["SG"][0]["fields"]["Attributes/FREETHROW"] = 30.0
+    model.candidates_by_position["SG"][0]["sim_features"] = {"ft_pct": 0.50}
+    model.candidates_by_position["SG"][0]["master_features"] = {"ft_pct": 0.75}
     model.candidates_by_position["SG"][1]["fields"]["Attributes/FREETHROW"] = 90.0
+    model.candidates_by_position["SG"][1]["sim_features"] = {"ft_pct": 0.50}
+    model.candidates_by_position["SG"][1]["master_features"] = {"ft_pct": 0.25}
 
     suggestions = model.suggestions_for_position_selection(
         target_features={"ft_pct": 0.90, "per": 20.0, "pts_per36": 10.0},
         positions=PositionSelection(primary="SG", secondary=None, all_positions=("SG",)),
     )
 
-    assert suggestions["Attributes/FREETHROW"].value == 76
+    assert suggestions["Attributes/FREETHROW"].value == 52
     assert "player_match_blend=individual,player,offensive" in suggestions["Attributes/FREETHROW"].evidence_keys
+    assert "player_match_player_normalized_components=1/1" in suggestions["Attributes/FREETHROW"].evidence_keys
+    assert "player_match_offensive_normalized_components=1/1" in suggestions["Attributes/FREETHROW"].evidence_keys
+
+def test_field_without_section_neighbors_uses_exact_player_match_rows_before_omit() -> None:
+    root = Path(__file__).resolve().parents[1]
+    model = StatNeighborModel(
+        path=root / "nba2k_editor" / "Player Generator" / "NBA Player Data" / "player_generation_pool" / "POSITION_STAT_NEIGHBOR_MODEL.sqlite",
+        suggestions_by_player_position={},
+        suggestions_by_player_team_position={},
+        candidates_by_position={
+            "SG": (
+                _match_candidate("Overall Exact Field", "SG", {"per": 20.0, "pts_per36": 10.0, "ft_pct": None}),
+                _match_candidate("Offensive Exact Field", "SG", {"per": 20.004, "pts_per36": 10.004, "ft_pct": None}),
+            )
+        },
+        scales_by_position={"SG": {"per": (0.0, 1.0), "pts_per36": (0.0, 1.0), "ft_pct": (0.0, 1.0)}},
+    )
+    model.candidates_by_position["SG"][0]["fields"]["Attributes/FREETHROW"] = 30.0
+    model.candidates_by_position["SG"][1]["fields"]["Attributes/FREETHROW"] = 90.0
+
+    suggestions = model.suggestions_for_position_selection(
+        target_features={"per": 20.0, "pts_per36": 10.0, "ft_pct": None},
+        positions=PositionSelection(primary="SG", secondary=None, all_positions=("SG",)),
+    )
+
+    suggestion = suggestions["Attributes/FREETHROW"]
+    assert suggestion.value != 25
+    assert suggestion.source_rule == "listed_position_best_neighbor"
+    assert "field_source=exact_player_match_rows" in suggestion.evidence_keys
+    assert "player_match_blend=individual,player,offensive" in suggestion.evidence_keys
+
+def test_single_position_profile_writes_secondary_position_na() -> None:
+    evidence = SimpleNamespace(
+        identity={"player": "Single Position", "ht_in_in": 74, "wt": 190},
+        season_info={},
+        play_by_play={},
+        source_context={},
+        player_id="single01",
+        season=1947,
+    )
+
+    result = derive_player_profile_values(
+        evidence,
+        positions=PositionSelection(primary="C", secondary=None, all_positions=("C",)),
+    )
+
+    assert result.values["Vitals/POSITION"].value == "C"
+    assert result.values["Vitals/SECONDARYPOSITION"].value == "N/A"
+
+
+def test_multi_position_profile_writes_actual_secondary_position() -> None:
+    evidence = SimpleNamespace(
+        identity={"player": "Multi Position", "ht_in_in": 74, "wt": 190},
+        season_info={},
+        play_by_play={},
+        source_context={},
+        player_id="multi01",
+        season=1947,
+    )
+
+    result = derive_player_profile_values(
+        evidence,
+        positions=PositionSelection(primary="SF", secondary="SG", all_positions=("SF", "SG")),
+    )
+
+    assert result.values["Vitals/POSITION"].value == "SF"
+    assert result.values["Vitals/SECONDARYPOSITION"].value == "SG"

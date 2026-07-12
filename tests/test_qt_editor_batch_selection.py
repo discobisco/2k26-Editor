@@ -55,7 +55,6 @@ class FakeModel:
         self.loaded_items = {
             "Players": {item.display_label: item for item in self.items},
             "Teams": {item.display_label: item for item in self.team_items},
-            "Draft Class": {},
             "Staff": {},
             "Stadiums": {},
             "Jerseys": {},
@@ -124,6 +123,9 @@ class FakeModel:
 
     def write_entry_value(self, entry: FieldEntry, *, index: int, value: str, stat_selector: str | None = None) -> None:
         self.writes.append((index, value))
+
+    def write_entry_value_for_item(self, entry: FieldEntry, item: RecordListItem, *, value: str, stat_selector: str | None = None) -> None:
+        self.write_entry_value(entry, index=item.index, value=value, stat_selector=stat_selector)
 
     def reset_player_editor_values(self, *, index: int, stat_selector: str | None = None) -> dict[str, int]:
         self.resets.append((index, stat_selector))

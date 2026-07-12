@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import json
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -368,6 +369,86 @@ def _franchise_record_for_recommendations() -> FranchiseRecord:
         created_at="",
         updated_at="",
     )
+
+
+def _write_offseason_growth_fixture(root: Path) -> None:
+    pool_dir = root / "player_generation_pool"
+    pool_dir.mkdir(parents=True)
+    connection = sqlite3.connect(pool_dir / "player_generation_pool.sqlite")
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE pool_runs(run_id TEXT);
+            CREATE TABLE candidate_pool(run_id TEXT, player_index INTEGER, master_player_id TEXT, master_player TEXT);
+            """
+        )
+        connection.execute("INSERT INTO pool_runs(run_id) VALUES(?)", ("editor_capture_test",))
+        connection.execute(
+            "INSERT INTO candidate_pool(run_id, player_index, master_player_id, master_player) VALUES(?,?,?,?)",
+            ("editor_capture_test", 4, "jamesle01", "LeBron James"),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    growth_dir = root / "statistical_growth_model"
+    growth_dir.mkdir(parents=True)
+    connection = sqlite3.connect(growth_dir / "player_growth_model.sqlite")
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE player_growth_profile(
+                player_id TEXT, player TEXT, season INTEGER, next_season INTEGER,
+                total_metric_count INTEGER, improved_count INTEGER, declined_count INTEGER, unchanged_count INTEGER,
+                strongest_source_table TEXT, weakest_source_table TEXT, coverage_confidence TEXT
+            );
+            CREATE TABLE player_growth_source_profile(player_id TEXT, season INTEGER, source_table TEXT, metric_count INTEGER);
+            """
+        )
+        connection.execute(
+            "INSERT INTO player_growth_profile VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            ("jamesle01", "LeBron James", 2004, 2005, 291, 230, 57, 4, "crafted_standardized_metrics", "player_totals", "full"),
+        )
+        connection.execute(
+            "INSERT INTO player_growth_source_profile VALUES(?,?,?,?)",
+            ("jamesle01", 2004, "player_per_game", 25),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def test_franchise_llm_view_adds_growth_only_as_offseason_progression_context(tmp_path: Path) -> None:
+    _write_offseason_growth_fixture(tmp_path)
+    model = ReadOnlyFranchiseModel()
+
+    view = build_franchise_llm_view(model, progression_season=2004, growth_data_root=tmp_path)
+
+    facts = dict(view.roster_slots[0].offseason_progression_facts)
+    assert facts["growth_model_mapping_source"] == "player_generation_pool:editor_capture_test:player_index"
+    assert facts["growth_model_master_player_id"] == "jamesle01"
+    assert facts["growth_model_next_season"] == "2005"
+    assert facts["growth_model_metric_count"] == "291"
+    assert "growth_model_sources" in facts
+
+
+def test_team_recommendation_prompt_carries_growth_for_offseason_progression_not_draft(tmp_path: Path) -> None:
+    _write_offseason_growth_fixture(tmp_path)
+    (tmp_path / "team_00_profile.md").write_text(
+        "---\nname: Team Zero Staff\n---\n# Team Zero\nGM: develop real players\n",
+        encoding="utf-8",
+    )
+    model = ReadOnlyFranchiseModel()
+    record = _franchise_record_for_recommendations()
+
+    requests = build_team_recommendation_requests(record, model, profile_dir=tmp_path, progression_season=2004, growth_data_root=tmp_path)
+    payload = json.loads(requests[0].task.prompt)
+
+    progression = payload["team"]["current_roster"][0]["offseason_progression"]
+    assert progression["growth_model_master_player_id"] == "jamesle01"
+    assert progression["growth_model_metric_count"] == "291"
+    assert "offseason_player_progression" in payload["allowed_recommendation_types"]
+    assert any("not fantasy draft decisions" in rule for rule in payload["rules"])
 
 
 class FakeRecommendationClient:

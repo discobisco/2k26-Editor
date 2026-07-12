@@ -372,7 +372,7 @@ def _draft_class_snapshot(proposals: tuple[Any, ...]) -> dict[str, Any]:
             }
         )
     return {
-        "domain": "Draft Class",
+        "domain": "Players",
         "mode": "Player Generator Draft Class",
         "record_count": len(records),
         "records": records,

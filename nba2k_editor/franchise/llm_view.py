@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+
+from nba2k_editor.franchise.growth_model import franchise_growth_facts_for_player
 
 
 @dataclass(frozen=True)
@@ -18,6 +21,7 @@ class FranchiseRosterSlot:
     team_slot_field: str
     player_label: str
     player_index: int
+    offseason_progression_facts: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -53,7 +57,23 @@ def _string_values(values: dict[str, Any]) -> dict[str, str]:
     return {str(key): str(value) for key, value in values.items()}
 
 
-def build_franchise_llm_view(model: Any) -> FranchiseLLMView:
+def _offseason_progression_facts(
+    player_index: int,
+    *,
+    progression_season: int | None,
+    growth_data_root: str | Path | None,
+) -> tuple[tuple[str, str], ...]:
+    if progression_season is None:
+        return ()
+    return franchise_growth_facts_for_player(player_index, season=int(progression_season), data_root=growth_data_root)
+
+
+def build_franchise_llm_view(
+    model: Any,
+    *,
+    progression_season: int | None = None,
+    growth_data_root: str | Path | None = None,
+) -> FranchiseLLMView:
     players = _loaded_items(model, "Players")
     teams = _loaded_items(model, "Teams")
     selected_player_item = _selected_item(model, "Players")
@@ -73,6 +93,11 @@ def build_franchise_llm_view(model: Any) -> FranchiseLLMView:
             team_slot_field=str(placement["team_slot_field"]),
             player_label=str(getattr(player, "display_label", getattr(player, "label", ""))),
             player_index=int(getattr(player, "index")),
+            offseason_progression_facts=_offseason_progression_facts(
+                int(getattr(player, "index")),
+                progression_season=progression_season,
+                growth_data_root=growth_data_root,
+            ),
         )
         for player, placement in roster_rows
     )
@@ -90,8 +115,13 @@ def build_franchise_llm_view(model: Any) -> FranchiseLLMView:
     )
 
 
-def build_franchise_llm_markdown(model: Any) -> str:
-    view = build_franchise_llm_view(model)
+def build_franchise_llm_markdown(
+    model: Any,
+    *,
+    progression_season: int | None = None,
+    growth_data_root: str | Path | None = None,
+) -> str:
+    view = build_franchise_llm_view(model, progression_season=progression_season, growth_data_root=growth_data_root)
     lines = [
         "# Franchise Manager LLM View",
         "",
@@ -122,4 +152,7 @@ def build_franchise_llm_markdown(model: Any) -> str:
         lines.append("None")
     for slot in view.roster_slots:
         lines.append(f"Team {slot.team_index} {slot.team_label} {slot.team_slot_field}: {slot.player_label}")
+        if slot.offseason_progression_facts:
+            lines.append("  Offseason progression:")
+            lines.extend(f"  {key}: {value}" for key, value in slot.offseason_progression_facts)
     return "\n".join(lines)

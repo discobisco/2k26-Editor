@@ -27,7 +27,6 @@ class PlayerScreenModel:
         self.loaded_items = {
             "Players": {self.player.display_label: self.player},
             "Teams": {self.team_a.display_label: self.team_a, self.team_b.display_label: self.team_b},
-            "Draft Class": {},
             "Staff": {},
             "Stadiums": {},
             "Jerseys": {},
@@ -112,6 +111,9 @@ class PlayerScreenModel:
 
     def read_entry_value(self, entry: FieldEntry, *, index: int, stat_selector=None):
         return {"raw_value": 0, "display_value": "PG"}
+
+    def read_entry_value_for_item(self, entry: FieldEntry, item: RecordListItem, *, stat_selector=None):
+        return self.read_entry_value(entry, index=item.index, stat_selector=stat_selector)
 
     def field_options(self, entry: FieldEntry) -> list[str]:
         if entry is self.editor_entry:

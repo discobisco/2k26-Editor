@@ -28,6 +28,11 @@ _TEAM_PER100_TOTAL_FEATURES: dict[str, str] = {
 }
 
 _EPSILON = 1.0e-9
+_ATTRIBUTE_LOWER_IS_BETTER_FEATURES: frozenset[str] = frozenset({
+    "tov_percent",
+    "tov_per100",
+    "pf_per100",
+})
 
 
 def normalize_field_value(
@@ -40,6 +45,7 @@ def normalize_field_value(
     feature_names: Iterable[str],
     source_rule: str,
     evidence_keys: Iterable[str],
+    league_feature_baselines: dict[str, float] | None = None,
 ) -> NormalizedFieldValue:
     """Adjust a neighbor-selected 2K field by its match's 2K-vs-master stat deviation.
 
@@ -47,8 +53,8 @@ def normalize_field_value(
     master stat features after league normalization. Tendencies compare the same
     pair after team-context normalization. The incoming value remains the exact
     2K attribute/tendency value selected by the neighbor model; this only moves
-    that value by the percent that the matched player's 2K stat output is off
-    from the matched player's master stat value.
+    that value by the same-stat bounded percent difference between the matched player's 2K stat output
+    and that same player's master stat value.
     """
 
     section = _section(field_key)
@@ -57,19 +63,35 @@ def normalize_field_value(
         return NormalizedFieldValue(value=rounded_value, source_rule=source_rule, evidence_keys=tuple(evidence_keys))
 
     features = tuple(str(feature) for feature in feature_names if str(feature).strip())
-    baselines = _league_feature_baselines(domain_master_feature_rows, features) if section == "Attributes" else {}
+    if section == "Attributes":
+        baselines = league_feature_baselines if league_feature_baselines is not None else _league_feature_baselines(domain_master_feature_rows, features)
+    else:
+        baselines = {}
     deltas: list[float] = []
     used_features: list[str] = []
+    unit_aligned_features: list[str] = []
+    inverse_features: list[str] = []
     for feature in features:
-        two_k_value = _normalized_feature_value(section, feature, initial_match_2k_features, baselines)
-        master_value = _normalized_feature_value(section, feature, initial_match_master_features, baselines)
+        two_k_value, master_value, unit_aligned = _normalized_feature_pair(
+            section,
+            feature,
+            initial_match_2k_features,
+            initial_match_master_features,
+            baselines,
+        )
         if two_k_value is None or master_value is None or not _finite(two_k_value) or not _finite(master_value):
             continue
-        denominator = abs(two_k_value)
+        denominator = max(abs(two_k_value), abs(master_value))
         if denominator <= _EPSILON:
             continue
-        deltas.append((master_value - two_k_value) / denominator)
+        delta = (master_value - two_k_value) / denominator
+        if section == "Attributes" and _lower_is_better_feature(feature):
+            delta *= -1.0
+            inverse_features.append(feature)
+        deltas.append(delta)
         used_features.append(feature)
+        if unit_aligned:
+            unit_aligned_features.append(feature)
 
     if not deltas:
         return NormalizedFieldValue(value=_clamp_field_value(section, rounded_value), source_rule=source_rule, evidence_keys=tuple(evidence_keys))
@@ -84,6 +106,16 @@ def normalize_field_value(
             f"normalization={'league' if section == 'Attributes' else 'team'}",
             f"match_2k_to_master_percent_delta={percent_delta:.6f}",
             "normalized_features=" + ",".join(used_features),
+            *(
+                ("unit_aligned_features=" + ",".join(unit_aligned_features),)
+                if unit_aligned_features
+                else ()
+            ),
+            *(
+                ("inverse_delta_features=" + ",".join(inverse_features),)
+                if inverse_features
+                else ()
+            ),
         ),
     )
 
@@ -98,20 +130,62 @@ def _league_feature_baselines(rows: Iterable[dict[str, float | None]], features:
     return {feature: mean(feature_values) for feature, feature_values in values.items() if feature_values and abs(mean(feature_values)) > _EPSILON}
 
 
-def _normalized_feature_value(
+def build_league_feature_baselines(rows: Iterable[dict[str, float | None]], features: Iterable[str]) -> dict[str, float]:
+    return _league_feature_baselines(rows, tuple(str(feature) for feature in features if str(feature).strip()))
+
+
+def _normalized_feature_pair(
     section: str,
     feature: str,
-    row: dict[str, float | None],
+    two_k_row: dict[str, float | None],
+    master_row: dict[str, float | None],
     league_baselines: dict[str, float],
-) -> float | None:
+) -> tuple[float | None, float | None, bool]:
+    if section == "Attributes":
+        two_k_value = _float(two_k_row.get(feature))
+        master_value = _float(master_row.get(feature))
+        two_k_value, master_value, unit_aligned = _align_percent_units(feature, two_k_value, master_value)
+        baseline = league_baselines.get(feature)
+        if baseline not in (None, 0.0):
+            two_k_value = None if two_k_value is None else two_k_value / baseline
+            master_value = None if master_value is None else master_value / baseline
+        return two_k_value, master_value, unit_aligned
+
+    two_k_value = _team_normalized_feature_value(feature, two_k_row)
+    master_value = _team_normalized_feature_value(feature, master_row)
+    two_k_value, master_value, unit_aligned = _align_percent_units(feature, two_k_value, master_value)
+    return two_k_value, master_value, unit_aligned
+
+
+def _team_normalized_feature_value(feature: str, row: dict[str, float | None]) -> float | None:
     value = _float(row.get(feature))
     if value is None:
         return None
-    if section == "Attributes":
-        baseline = league_baselines.get(feature)
-        return value if baseline in (None, 0.0) else value / baseline
     team_rate = _team_per100_rate(row, _TEAM_PER100_TOTAL_FEATURES.get(feature))
     return value if team_rate in (None, 0.0) else value / team_rate
+
+
+def _align_percent_units(feature: str, left: float | None, right: float | None) -> tuple[float | None, float | None, bool]:
+    if left is None or right is None or not _percent_point_feature(feature):
+        return left, right, False
+    left_abs = abs(left)
+    right_abs = abs(right)
+    if left_abs <= 1.0 < right_abs <= 100.0:
+        return left * 100.0, right, True
+    if right_abs <= 1.0 < left_abs <= 100.0:
+        return left, right * 100.0, True
+    return left, right, False
+
+
+def _percent_point_feature(feature: str) -> bool:
+    key = str(feature).lower()
+    if key in {"fg_pct", "x3p_pct", "e_fg_percent", "ft_pct", "ts_percent", "x3p_ar", "f_tr"}:
+        return False
+    return key.endswith("_percent") or key.startswith("percent_")
+
+
+def _lower_is_better_feature(feature: str) -> bool:
+    return str(feature).lower() in _ATTRIBUTE_LOWER_IS_BETTER_FEATURES
 
 
 def _team_per100_rate(row: dict[str, float | None], total_feature: str | None) -> float | None:
@@ -149,4 +223,4 @@ def _finite(value: float) -> bool:
     return math.isfinite(float(value))
 
 
-__all__ = ["NormalizedFieldValue", "normalize_field_value"]
+__all__ = ["NormalizedFieldValue", "build_league_feature_baselines", "normalize_field_value"]

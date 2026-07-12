@@ -100,7 +100,7 @@ def test_draft_class_import_uses_draft_class_snapshot_target_items() -> None:
 
         def player_items_for_team_filter(self, selected):
             assert selected == "Draft Class"
-            return {"Slot 0": SimpleNamespace(domain="Draft Class", index=0, address=0x2000)}
+            return {"Slot 0": SimpleNamespace(domain="Players", index=0, address=0x2000)}
 
         def apply_player_roster_snapshot(self, snapshot, *, target_items, progress_callback=None):
             self.snapshot = snapshot
@@ -112,7 +112,7 @@ def test_draft_class_import_uses_draft_class_snapshot_target_items() -> None:
 
     assert model.snapshot is not None
     assert model.target_items is not None
-    assert model.snapshot["domain"] == "Draft Class"
+    assert model.snapshot["domain"] == "Players"
     assert model.snapshot["records"][0]["fields"] == {"Vitals/FIRSTNAME": {"display_value": "Rookie"}}
-    assert model.target_items[0].domain == "Draft Class"
+    assert model.target_items[0].domain == "Players"
     assert "Imported 1/1 generated draft players to Draft Class" in result.status

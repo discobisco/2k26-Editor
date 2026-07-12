@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from collections import OrderedDict
 from typing import Any
 
 from nba2k_editor.models.data_model import EditorDataModel
@@ -48,7 +49,10 @@ class ResetRecordingModel(EditorDataModel):
     def grouped_fields(self, domain: str):  # type: ignore[override]
         if domain != "Players":
             raise AssertionError(domain)
-        return {"Players": {"Test": self.entries}}
+        grouped = OrderedDict()
+        for entry in self.entries:
+            grouped.setdefault(entry.section, OrderedDict()).setdefault(entry.group, []).append(entry)
+        return grouped
 
     def _field_version_payload(self, field: dict[str, Any]) -> dict[str, Any]:  # type: ignore[override]
         if "selected_record_source" in field:
@@ -69,7 +73,7 @@ class ResetSnapshotModel:
 
 
 class PlayerEditorResetTests(unittest.TestCase):
-    def test_reset_model_keeps_stat_ids_and_zeroes_each_valid_stat_row(self) -> None:
+    def test_reset_model_does_not_include_stat_fields(self) -> None:
         entries = [
             _entry("Vitals", "FIRSTNAME", 1),
             _entry("Stats", "STATSID1", 2, stat_role="season_id_selector"),
@@ -80,15 +84,27 @@ class PlayerEditorResetTests(unittest.TestCase):
 
         snapshots = ResetLeagueModel(ResetSnapshotModel()).player_editor_reset_snapshots(item, entries, stat_selector_for_entry=lambda _entry: "[active]")
 
-        self.assertEqual(3, len(snapshots))
+        self.assertEqual(1, len(snapshots))
         self.assertEqual(({"records": [{"index": 12, "fields": {"Vitals/FIRSTNAME": {"display_value": "A"}}}]}, None), snapshots[0])
-        self.assertEqual("[42] STATS ID#1", snapshots[1][1])
-        self.assertEqual("[99] CURRENTYEARSTATID", snapshots[2][1])
-        for snapshot, _selector in snapshots[1:]:
-            fields = snapshot["records"][0]["fields"]
-            self.assertEqual({"Stats/POINTS": {"display_value": 0}}, fields)
-            self.assertNotIn("Stats/STATSID1", fields)
-            self.assertNotIn("Stats/ISUSED", fields)
+        fields = snapshots[0][0]["records"][0]["fields"]
+        self.assertNotIn("Stats/STATSID1", fields)
+        self.assertNotIn("Stats/POINTS", fields)
+        self.assertNotIn("Stats/ISUSED", fields)
+
+
+    def test_reset_player_editor_values_does_not_include_stats_fields(self) -> None:
+        model = ResetRecordingModel()
+
+        result = model.reset_player_editor_values(index=12, stat_selector="[42] Active")
+
+        self.assertEqual({"attempted": 6, "succeeded": 6, "failed": 0}, result)
+        written_names = [write[2] for write in model.writes]
+        self.assertIn("MIDRANGE", written_names)
+        self.assertIn("SHOT", written_names)
+        self.assertIn("BULLDOZER", written_names)
+        self.assertNotIn("CURRENTYEARSTATID", written_names)
+        self.assertNotIn("STATSID1", written_names)
+        self.assertNotIn("POINTS", written_names)
 
     def test_apply_player_roster_snapshot_ignores_stats_by_default(self) -> None:
         model = ResetRecordingModel()

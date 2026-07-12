@@ -23,7 +23,6 @@ class SeasonSelectorModel:
         self.loaded_items = {
             "Players": {self.player_a.display_label: self.player_a, self.player_b.display_label: self.player_b},
             "Teams": {},
-            "Draft Class": {},
             "Staff": {},
             "Stadiums": {},
             "Jerseys": {},
@@ -113,8 +112,14 @@ class SeasonSelectorModel:
         suffix = "99" if stat_selector == "[99] STATS ID#2" else "42"
         return {"raw_value": int(suffix), "display_value": f"PTS-{suffix}"}
 
+    def read_entry_value_for_item(self, entry: FieldEntry, item: RecordListItem, *, stat_selector: object | None = None):
+        return self.read_entry_value(entry, index=item.index, stat_selector=stat_selector)
+
     def write_entry_value(self, entry: FieldEntry, *, index: int, value: object, stat_selector: object | None = None) -> None:
         self.write_calls.append((entry.normalized_name, index, value, stat_selector))
+
+    def write_entry_value_for_item(self, entry: FieldEntry, item: RecordListItem, *, value: object, stat_selector: object | None = None) -> None:
+        self.write_entry_value(entry, index=item.index, value=value, stat_selector=stat_selector)
 
     def apply_player_roster_snapshot(self, snapshot, *, target_items=None, stat_selector=None, **_kwargs):
         attempted = 0

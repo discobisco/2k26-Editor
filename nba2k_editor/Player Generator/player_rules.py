@@ -45,8 +45,13 @@ def derive_player_profile_values(evidence: PlayerEvidence, positions: PositionSe
     _add_profile(values, "Vitals/WEIGHT", weight, "profile_sql_bio", "player_info.wt")
 
     _add_profile(values, "Vitals/POSITION", positions.primary, "profile_sql_position_percent", "play_by_play.position_percent")
-    if positions.secondary:
-        _add_profile(values, "Vitals/SECONDARYPOSITION", positions.secondary, "profile_sql_position_percent", "play_by_play.position_percent")
+    _add_profile(
+        values,
+        "Vitals/SECONDARYPOSITION",
+        positions.secondary if positions.secondary else "N/A",
+        "profile_sql_position_percent",
+        "play_by_play.position_percent",
+    )
 
     birth = _birth_date_from_source(evidence.identity.get("birth_date"))
     if birth:

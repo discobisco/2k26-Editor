@@ -25,7 +25,6 @@ class RecordsModel:
         self.loaded_items = {
             "Players": {},
             "Teams": {self.team_a.display_label: self.team_a, self.team_b.display_label: self.team_b},
-            "Draft Class": {},
             "Staff": {},
             "Stadiums": {},
             "Jerseys": {},

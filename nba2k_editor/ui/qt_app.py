@@ -817,13 +817,7 @@ class QtEditorApp(QMainWindow):
         self._start_background_scan(EDITOR_DOMAINS)
 
     def _scan_domains_for_request(self, domains: tuple[str, ...]) -> tuple[str, ...]:
-        expanded: list[str] = []
-        for domain in domains:
-            if domain not in expanded:
-                expanded.append(domain)
-            if domain == "Players" and "Draft Class" not in expanded:
-                expanded.append("Draft Class")
-        return tuple(expanded)
+        return tuple(dict.fromkeys(domains))
 
     def _start_background_scan(self, domains: tuple[str, ...]) -> None:
         scan_domains = self._scan_domains_for_request(domains)
@@ -1025,7 +1019,7 @@ class QtEditorApp(QMainWindow):
                 continue
             try:
                 selector = self._selected_season_stat_selector(entry, source)
-                value_info = self.model.read_entry_value(entry, index=source.index, stat_selector=selector)
+                value_info = self.model.read_entry_value_for_item(entry, source, stat_selector=selector)
                 display = str(value_info.get("display_value", ""))
                 row.current.setText(display)
                 row.new_value.setText(display)
@@ -1086,7 +1080,7 @@ class QtEditorApp(QMainWindow):
                     row_key = self._row_key(source, entry)
                     stat_selector = self._selected_season_stat_selector(entry, source)
                     try:
-                        value_info = self.model.read_entry_value(entry, index=source.index, stat_selector=stat_selector)
+                        value_info = self.model.read_entry_value_for_item(entry, source, stat_selector=stat_selector)
                         display = str(value_info.get("display_value", ""))
                     except Exception as exc:
                         display = f"ERROR: {exc}"
@@ -1127,7 +1121,7 @@ class QtEditorApp(QMainWindow):
             succeeded = 0
             for item in targets:
                 stat_selector = self._row_stat_selector_for_item(entry, item, source)
-                self.model.write_entry_value(entry, index=item.index, value=value, stat_selector=stat_selector)
+                self.model.write_entry_value_for_item(entry, item, value=value, stat_selector=stat_selector)
                 succeeded += 1
             row.status.setText(f"saved {succeeded} records")
             self.state.dirty_rows.discard(row_key)

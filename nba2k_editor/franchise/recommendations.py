@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from nba2k_editor.franchise.draft_room import TeamProfile
+from nba2k_editor.franchise.growth_model import growth_facts_dict
 from nba2k_editor.franchise.llm_view import FranchiseRosterSlot, build_franchise_llm_view
 from nba2k_editor.franchise.llm_tasks import DEFAULT_TEAM_PROFILE_DIR, FranchiseLlmTask, build_franchise_llm_task, franchise_team_context, run_franchise_llm_task, team_profile_payload
 from nba2k_editor.franchise.models import FranchiseRecord, TeamRecommendation
@@ -25,6 +26,7 @@ def _roster_for_team(roster_slots: Iterable[FranchiseRosterSlot], team_index: in
             "player_label": slot.player_label,
             "team_slot": slot.team_slot,
             "team_slot_field": slot.team_slot_field,
+            "offseason_progression": growth_facts_dict(slot.offseason_progression_facts),
         }
         for slot in roster_slots
         if int(slot.team_index) == int(team_index)
@@ -47,6 +49,7 @@ def build_team_recommendation_prompt(
             "Return only valid JSON. No markdown. No prose outside JSON.",
             "Do not recommend drafting, trading, or signing functional filler players such as forty overall, A Z, or similar while any real player is available.",
             "Use true_sim_year for era reasoning, not the in-game year label.",
+            "Use offseason_progression only for offseason player progression/development context, not fantasy draft decisions.",
         ],
         "franchise": {
             "true_sim_year": record.setup.start_year,
@@ -70,6 +73,7 @@ def build_team_recommendation_prompt(
             "scouting_focus",
             "season_goal",
             "owner_constraint",
+            "offseason_player_progression",
             "no_action",
         ],
         "required_json_schema": {
@@ -89,8 +93,11 @@ def build_team_recommendation_requests(
     model: object,
     *,
     profile_dir: str | Path = DEFAULT_TEAM_PROFILE_DIR,
+    progression_season: int | None = None,
+    growth_data_root: str | Path | None = None,
 ) -> tuple[TeamRecommendationRequest, ...]:
-    view = build_franchise_llm_view(model)
+    selected_progression_season = record.setup.start_year if progression_season is None else int(progression_season)
+    view = build_franchise_llm_view(model, progression_season=selected_progression_season, growth_data_root=growth_data_root)
     requests: list[TeamRecommendationRequest] = []
     for team_index in record.setup.llm_gm_team_indexes:
         index = int(team_index)

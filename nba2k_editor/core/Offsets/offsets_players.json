@@ -2205,6 +2205,15 @@
               "length": 1,
               "startBit": 0,
               "type": "Integer"
+            },
+            "2K26": {
+              "address": 946,
+              "bit_length": 1,
+              "bit_offset": 2,
+              "hex": "0x3B2",
+              "length": 1,
+              "startBit": 2,
+              "type": "bitfield"
             }
           }
         },
