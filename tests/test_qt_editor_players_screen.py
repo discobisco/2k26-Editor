@@ -7,7 +7,7 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import QItemSelection, QItemSelectionModel
-from PyQt6.QtWidgets import QApplication, QComboBox
+from PyQt6.QtWidgets import QApplication, QComboBox, QMessageBox, QPushButton
 
 from nba2k_editor.models.schema import FieldEntry, RecordListItem
 from nba2k_editor.ui.qt_app import QtEditorApp
@@ -217,6 +217,25 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
             app._open_editor_window(model.player)
 
         self.assertEqual(["PG", "SG", "SF"], captured["options"])
+
+    def test_generic_staff_edit_button_preserves_domain_when_clicked_signal_sends_checked_arg(self) -> None:
+        model = PlayerScreenModel()
+        staff = RecordListItem("Staff", 3, 0x3300, "Coach Test")
+        model.loaded_items["Staff"] = {staff.display_label: staff}
+        model.selected_items["Staff"] = staff
+        app = QtEditorApp(model)  # type: ignore[arg-type]
+        opened: list[RecordListItem] = []
+
+        staff_screen = app.screen_widgets["Staff"]
+        edit_button = next(button for button in staff_screen.findChildren(QPushButton) if button.text() == "Edit Staff")
+        with patch.object(app, "_open_editor_window", side_effect=lambda item: opened.append(item)), patch.object(
+            QMessageBox,
+            "warning",
+        ) as warning:
+            edit_button.click()
+
+        self.assertEqual([staff], opened)
+        warning.assert_not_called()
 
     def test_configured_combo_popup_is_bounded_dropdown(self) -> None:
         combo = configure_combo_box(QComboBox())

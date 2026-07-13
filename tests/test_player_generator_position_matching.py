@@ -73,7 +73,7 @@ def test_position_percentages_blend_model_suggestions_for_all_played_positions()
 
     suggestions = model.suggestions_for_position_selection(target_features={"ft_pct": 0.75}, positions=positions)
 
-    assert suggestions["Attributes/FREETHROW"].value == 70
+    assert suggestions["Attributes/FREETHROW"].value == 75
     assert suggestions["Attributes/FREETHROW"].source_rule == "position_percent_weighted_neighbor"
 
 
@@ -86,7 +86,7 @@ def test_listed_multi_position_without_percentages_uses_best_matching_position_p
     assert positions.primary == "SF"
     assert positions.secondary == "SG"
     assert positions.position_weights == ()
-    assert suggestions["Attributes/FREETHROW"].value == 55
+    assert suggestions["Attributes/FREETHROW"].value == 75
     assert suggestions["Attributes/FREETHROW"].source_rule == "listed_position_best_neighbor"
 
 
@@ -143,10 +143,9 @@ def test_field_suggestion_blends_individual_full_and_offensive_match_values() ->
         positions=PositionSelection(primary="SG", secondary=None, all_positions=("SG",)),
     )
 
-    assert suggestions["Attributes/FREETHROW"].value == 52
-    assert "player_match_blend=individual,player,offensive" in suggestions["Attributes/FREETHROW"].evidence_keys
-    assert "player_match_player_normalized_components=1/1" in suggestions["Attributes/FREETHROW"].evidence_keys
-    assert "player_match_offensive_normalized_components=1/1" in suggestions["Attributes/FREETHROW"].evidence_keys
+    assert suggestions["Attributes/FREETHROW"].value == 90
+    assert "field_source=ft_percent_direct" in suggestions["Attributes/FREETHROW"].evidence_keys
+    assert "player_match_blend=individual,player,offensive" not in suggestions["Attributes/FREETHROW"].evidence_keys
 
 def test_field_without_section_neighbors_uses_exact_player_match_rows_before_omit() -> None:
     root = Path(__file__).resolve().parents[1]
@@ -162,15 +161,15 @@ def test_field_without_section_neighbors_uses_exact_player_match_rows_before_omi
         },
         scales_by_position={"SG": {"per": (0.0, 1.0), "pts_per36": (0.0, 1.0), "ft_pct": (0.0, 1.0)}},
     )
-    model.candidates_by_position["SG"][0]["fields"]["Attributes/FREETHROW"] = 30.0
-    model.candidates_by_position["SG"][1]["fields"]["Attributes/FREETHROW"] = 90.0
+    model.candidates_by_position["SG"][0]["fields"] = {"Attributes/MIDRANGE": 30.0}
+    model.candidates_by_position["SG"][1]["fields"] = {"Attributes/MIDRANGE": 90.0}
 
     suggestions = model.suggestions_for_position_selection(
         target_features={"per": 20.0, "pts_per36": 10.0, "ft_pct": None},
         positions=PositionSelection(primary="SG", secondary=None, all_positions=("SG",)),
     )
 
-    suggestion = suggestions["Attributes/FREETHROW"]
+    suggestion = suggestions["Attributes/MIDRANGE"]
     assert suggestion.value != 25
     assert suggestion.source_rule == "listed_position_best_neighbor"
     assert "field_source=exact_player_match_rows" in suggestion.evidence_keys

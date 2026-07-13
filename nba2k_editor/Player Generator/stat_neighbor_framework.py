@@ -5,13 +5,12 @@ import json
 import math
 import re
 import sqlite3
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from statistics import median
 from typing import Any
 
-from field_value_normalizer import build_league_feature_baselines, normalize_field_value
 
 POSITIONS: tuple[str, ...] = ("PG", "SG", "SF", "PF", "C")
 FEATURES: tuple[str, ...] = (
@@ -254,7 +253,6 @@ class StatNeighborModel:
     suggestions_by_player_team_position: dict[tuple[str, str, str], dict[str, NeighborFieldSuggestion]]
     candidates_by_position: dict[str, tuple[dict[str, Any], ...]]
     scales_by_position: dict[str, dict[str, tuple[float, float]]]
-    league_feature_baselines_by_position_features: dict[tuple[str, tuple[str, ...]], dict[str, float]] = field(default_factory=dict)
 
     def suggestions_for(self, *, player_id: str, team: str, position: str) -> dict[str, NeighborFieldSuggestion]:
         team_key = (_clean_key(player_id), _clean_key(team), position.strip().upper())
@@ -350,7 +348,6 @@ class StatNeighborModel:
         if not candidates:
             return {}
         relpath = str(self.path.relative_to(_repo_root()))
-        domain_master_feature_rows = tuple(candidate.get("master_features", candidate["features"]) for candidate in candidates)
         match_rows_by_group = {
             "player": self._player_match_rows_for_features(target_features=target_features, positions=(pos,), features=OVERALL_PLAYER_MATCH_FEATURES),
             "offensive": self._player_match_rows_for_features(target_features=target_features, positions=(pos,), features=OFFENSIVE_PLAYER_MATCH_FEATURES),
@@ -362,7 +359,6 @@ class StatNeighborModel:
         for field_key in all_fields:
             fields_by_features.setdefault(_features_for_field(field_key), []).append(field_key)
         for section_features, field_keys in fields_by_features.items():
-            league_feature_baselines = self.league_feature_baselines_by_position_features.get((pos, section_features), {})
             neighbors = _nearest_neighbors(
                 target_features,
                 candidates,
@@ -396,30 +392,17 @@ class StatNeighborModel:
                     "rank_weights=54,25,15,5,1",
                     f"top_neighbor={top[0].get('player_label')}",
                 )
-                normalized = normalize_field_value(
-                    field_key=field_key,
-                    value=weighted_value,
-                    initial_match_2k_features=top[0].get("sim_features", top[0]["features"]),
-                    initial_match_master_features=top[0].get("master_features", top[0]["features"]),
-                    domain_master_feature_rows=domain_master_feature_rows,
-                    feature_names=section_features,
-                    league_feature_baselines=league_feature_baselines,
-                    source_rule="position_stat_neighbor_section_top5_weighted",
-                    evidence_keys=evidence_keys,
-                )
                 blended = _blend_suggestion_with_player_matches(
                     field_key=field_key,
-                    individual_value=normalized.value,
+                    individual_value=int(round(weighted_value)),
                     section_features=section_features,
                     match_rows_by_group=match_rows_by_group,
-                    domain_master_feature_rows=domain_master_feature_rows,
-                    league_feature_baselines=league_feature_baselines,
                 )
                 values[field_key] = NeighborFieldSuggestion(
                     field_key=field_key,
                     value=blended[0],
-                    source_rule=normalized.source_rule if len(blended[1]) <= 1 else f"{normalized.source_rule}_player_match_blended",
-                    evidence_keys=normalized.evidence_keys if len(blended[1]) <= 1 else (*normalized.evidence_keys, *blended[1]),
+                    source_rule="position_stat_neighbor_section_top5_weighted" if len(blended[1]) <= 1 else "position_stat_neighbor_section_top5_weighted_player_match_blended",
+                    evidence_keys=evidence_keys if len(blended[1]) <= 1 else (*evidence_keys, *blended[1]),
                 )
         return values
 
@@ -466,32 +449,21 @@ def _blend_suggestion_with_player_matches(
     individual_value: int | str,
     section_features: tuple[str, ...],
     match_rows_by_group: dict[str, tuple[dict[str, Any], ...]],
-    domain_master_feature_rows: tuple[dict[str, float | None], ...],
-    league_feature_baselines: dict[str, float],
 ) -> tuple[int | str, tuple[str, ...]]:
     individual_number = _float(individual_value)
     if individual_number is None:
         return individual_value, ("player_match_blend=skipped_non_numeric",)
     values: list[tuple[str, float]] = [("individual", float(individual_number))]
-    component_evidence: list[str] = []
     for group in _field_match_blend_groups(section_features):
-        group_value, group_evidence = _match_group_field_average(
-            match_rows_by_group.get(group, ()),
-            field_key,
-            section_features=section_features,
-            domain_master_feature_rows=domain_master_feature_rows,
-            league_feature_baselines=league_feature_baselines,
-        )
+        group_value = _match_group_field_average(match_rows_by_group.get(group, ()), field_key)
         if group_value is not None:
             values.append((group, group_value))
-            component_evidence.extend(f"player_match_{group}_{item}" for item in group_evidence)
     if len(values) <= 1:
         return individual_value, ("player_match_blend=individual",)
     blended_value = _clamp_match_blended_field_value(field_key, int(round(sum(value for _label, value in values) / len(values))))
     return blended_value, (
         "player_match_blend=" + ",".join(label for label, _value in values),
         *tuple(f"player_match_{label}_value={value:.6f}" for label, value in values[1:]),
-        *tuple(component_evidence),
     )
 
 
@@ -506,39 +478,16 @@ def _field_match_blend_groups(section_features: tuple[str, ...]) -> tuple[str, .
     return tuple(groups)
 
 
-def _match_group_field_average(
-    rows: tuple[dict[str, Any], ...],
-    field_key: str,
-    *,
-    section_features: tuple[str, ...],
-    domain_master_feature_rows: tuple[dict[str, float | None], ...],
-    league_feature_baselines: dict[str, float],
-) -> tuple[float | None, tuple[str, ...]]:
-    values: list[float] = []
-    adjusted = 0
-    for row in rows:
-        candidate = row["candidate"]
-        raw_value = candidate.get("fields", {}).get(field_key)
-        if _float(raw_value) is None:
-            continue
-        normalized = normalize_field_value(
-            field_key=field_key,
-            value=float(raw_value),
-            initial_match_2k_features=candidate.get("sim_features", candidate.get("features", {})),
-            initial_match_master_features=candidate.get("master_features", candidate.get("features", {})),
-            domain_master_feature_rows=domain_master_feature_rows,
-            feature_names=section_features,
-            league_feature_baselines=league_feature_baselines,
-            source_rule="player_match_component",
-            evidence_keys=(),
-        )
-        if normalized.source_rule.endswith("_match_deviation_adjusted"):
-            adjusted += 1
-        values.append(float(normalized.value))
+def _match_group_field_average(rows: tuple[dict[str, Any], ...], field_key: str) -> float | None:
+    values = [
+        float(value)
+        for row in rows
+        for value in (row["candidate"].get("fields", {}).get(field_key),)
+        if _float(value) is not None
+    ]
     if not values:
-        return None, ()
-    evidence = (f"normalized_components={adjusted}/{len(values)}",)
-    return sum(values) / len(values), evidence
+        return None
+    return sum(values) / len(values)
 
 
 def _clamp_match_blended_field_value(field_key: str, value: int) -> int:
@@ -693,14 +642,12 @@ def load_latest_stat_neighbor_model() -> StatNeighborModel:
         suggestions_by_player.setdefault((key[0], key[2]), {})[field_key] = suggestion
     candidates_by_position = _load_candidate_pool(model_dir, field_map)
     scales_by_position = _scale_by_position(candidates_by_position)
-    league_feature_baselines_by_position_features = _league_feature_baselines_by_position_features(candidates_by_position)
     return StatNeighborModel(
         path=model_dir,
         suggestions_by_player_position=suggestions_by_player,
         suggestions_by_player_team_position=suggestions_by_team,
         candidates_by_position=candidates_by_position,
         scales_by_position=scales_by_position,
-        league_feature_baselines_by_position_features=league_feature_baselines_by_position_features,
     )
 
 
@@ -815,26 +762,6 @@ def _load_candidate_pool(model_path: Path, field_map: dict[tuple[str, str], str]
         by_position.setdefault(pos, []).append(candidate)
     return {pos: tuple(candidates) for pos, candidates in by_position.items()}
 
-
-def _league_feature_baselines_by_position_features(
-    candidates_by_position: dict[str, tuple[dict[str, Any], ...]],
-) -> dict[tuple[str, tuple[str, ...]], dict[str, float]]:
-    out: dict[tuple[str, tuple[str, ...]], dict[str, float]] = {}
-    for pos, candidates in candidates_by_position.items():
-        if not candidates:
-            continue
-        fields_by_features = _fields_by_features(candidates)
-        attribute_feature_sets = {
-            features
-            for features, field_keys in fields_by_features.items()
-            if any(str(field_key).startswith("Attributes/") for field_key in field_keys)
-        }
-        if not attribute_feature_sets:
-            continue
-        domain_master_feature_rows = tuple(candidate.get("master_features", candidate["features"]) for candidate in candidates)
-        for features in attribute_feature_sets:
-            out[(pos, features)] = build_league_feature_baselines(domain_master_feature_rows, features)
-    return out
 
 
 

@@ -87,6 +87,13 @@ def derive_player_rule_values(evidence: PlayerEvidence, positions: PositionSelec
         key: RuleValue(value=suggestion.value, source_rule=suggestion.source_rule, evidence_keys=suggestion.evidence_keys)
         for key, suggestion in suggestions.items()
     }
+    ft_percent = _float(evidence.per_game.get("ft_percent"))
+    if ft_percent is not None:
+        values["Attributes/FREETHROW"] = RuleValue(
+            value=max(25, min(99, int(round(ft_percent * 100.0)))),
+            source_rule="ft_percent_direct",
+            evidence_keys=("player_per_game.ft_percent", f"ft_percent={ft_percent:.6f}"),
+        )
     for key, suggestion in hot_zone_neutral_values().items():
         values.setdefault(key, RuleValue(value=suggestion.value, source_rule=suggestion.source_rule, evidence_keys=suggestion.evidence_keys))
     return PlayerRuleResult(values=values)

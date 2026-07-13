@@ -565,7 +565,7 @@ class QtEditorApp(QMainWindow):
         detail.addWidget(title)
         detail.addWidget(QLabel("Record address"))
         detail.addWidget(address)
-        detail.addWidget(QPushButton(f"Edit {self._display_label(domain)}", clicked=lambda d=domain: self._open_selected(d)))
+        detail.addWidget(QPushButton(f"Edit {self._display_label(domain)}", clicked=lambda _checked=False, d=domain: self._open_selected(d)))
         detail.addStretch(1)
         self._add_split_body(layout, record_list, detail_widget, left_width=430)
         return widget
