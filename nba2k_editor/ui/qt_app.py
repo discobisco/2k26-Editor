@@ -1139,7 +1139,7 @@ class QtEditorApp(QMainWindow):
         )
         for item in targets:
             stat_selector = self._row_stat_selector_for_item(stat_entry, item, source) if stat_entry is not None else None
-            results.append(self.model.reset_player_editor_values(index=item.index, stat_selector=stat_selector))
+            results.append(self.model.reset_player_editor_values(item=item, stat_selector=stat_selector))
         attempted = sum(result.get("attempted", 0) for result in results)
         succeeded = sum(result.get("succeeded", 0) for result in results)
         failed = sum(result.get("failed", 0) for result in results)

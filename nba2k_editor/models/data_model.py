@@ -1157,7 +1157,7 @@ class EditorDataModel:
             except Exception:
                 self._player_team_pointer_cache.pop(item.index, None)
 
-    def reset_player_editor_values(self, *, index: int, stat_selector: object | None = None) -> dict[str, int]:
+    def reset_player_editor_values(self, *, item: RecordListItem, stat_selector: object | None = None) -> dict[str, int]:
         attempted = 0
         succeeded = 0
         failed = 0
@@ -1170,7 +1170,7 @@ class EditorDataModel:
                         continue
                     attempted += 1
                     try:
-                        self.write_entry_value(entry, index=index, value=value, stat_selector=stat_selector)
+                        self.write_entry_value_for_item(entry, item, value=value, stat_selector=stat_selector)
                         succeeded += 1
                     except Exception:
                         failed += 1
