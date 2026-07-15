@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import json
 import math
 import re
@@ -219,8 +218,6 @@ OVERALL_PLAYER_MATCH_FEATURES: tuple[str, ...] = tuple(
 )
 _PLAYER_MATCH_DISTANCE_DEVIATION = 0.005
 _MODEL_PREFIX = "POSITION_STAT_NEIGHBOR_MODEL_"
-_SUGGESTIONS_FILE = "suggested_field_values.csv"
-_TOP_FIVE_RANK_WEIGHTS: tuple[float, ...] = (0.54, 0.25, 0.15, 0.05, 0.01)
 @dataclass(frozen=True)
 class NeighborFieldSuggestion:
     field_key: str
@@ -249,18 +246,8 @@ class PositionSelection:
 @dataclass(frozen=True)
 class StatNeighborModel:
     path: Path
-    suggestions_by_player_position: dict[tuple[str, str], dict[str, NeighborFieldSuggestion]]
-    suggestions_by_player_team_position: dict[tuple[str, str, str], dict[str, NeighborFieldSuggestion]]
     candidates_by_position: dict[str, tuple[dict[str, Any], ...]]
     scales_by_position: dict[str, dict[str, tuple[float, float]]]
-
-    def suggestions_for(self, *, player_id: str, team: str, position: str) -> dict[str, NeighborFieldSuggestion]:
-        team_key = (_clean_key(player_id), _clean_key(team), position.strip().upper())
-        exact = self.suggestions_by_player_team_position.get(team_key)
-        if exact:
-            return dict(exact)
-        player_key = (_clean_key(player_id), position.strip().upper())
-        return dict(self.suggestions_by_player_position.get(player_key, {}))
 
     def suggestions_for_evidence(self, *, evidence: Any, positions: PositionSelection) -> dict[str, NeighborFieldSuggestion]:
         return self.suggestions_for_position_selection(
@@ -359,15 +346,13 @@ class StatNeighborModel:
         for field_key in all_fields:
             fields_by_features.setdefault(_features_for_field(field_key), []).append(field_key)
         for section_features, field_keys in fields_by_features.items():
-            neighbors = _nearest_neighbors(
-                target_features,
-                candidates,
-                self.scales_by_position.get(pos, {}),
+            section_rows = self._player_match_rows_for_features(
+                target_features=target_features,
+                positions=(pos,),
                 features=section_features,
-                k=5,
             )
             for field_key in field_keys:
-                field_rows = [row for row in neighbors if field_key in row["candidate"]["fields"]]
+                field_rows = [row for row in section_rows if field_key in row["candidate"]["fields"]]
                 field_source = "section_neighbors"
                 if not field_rows:
                     field_rows = _exact_field_match_rows_for_field(
@@ -380,7 +365,7 @@ class StatNeighborModel:
                 if not top:
                     continue
                 field_values = [float(candidate["fields"][field_key]) for candidate in top]
-                weighted_value = _rank_weighted_top_values(field_values)
+                field_value = sum(field_values) / len(field_values)
                 evidence_keys = (
                     relpath,
                     f"position={pos}",
@@ -388,20 +373,20 @@ class StatNeighborModel:
                     f"neighbor_count={len(field_values)}",
                     f"field_source={field_source}",
                     f"best_distance={field_rows[0]['distance']:.6f}",
+                    f"distance_cutoff={float(field_rows[0]['distance']) + _PLAYER_MATCH_DISTANCE_DEVIATION:.6f}",
                     f"common_features={field_rows[0]['common_features']}",
-                    "rank_weights=54,25,15,5,1",
-                    f"top_neighbor={top[0].get('player_label')}",
+                    "match_policy=best_distance_plus_0.005",
                 )
                 blended = _blend_suggestion_with_player_matches(
                     field_key=field_key,
-                    individual_value=int(round(weighted_value)),
+                    individual_value=int(round(field_value)),
                     section_features=section_features,
                     match_rows_by_group=match_rows_by_group,
                 )
                 values[field_key] = NeighborFieldSuggestion(
                     field_key=field_key,
                     value=blended[0],
-                    source_rule="position_stat_neighbor_section_top5_weighted" if len(blended[1]) <= 1 else "position_stat_neighbor_section_top5_weighted_player_match_blended",
+                    source_rule="position_stat_neighbor_section_match_range" if len(blended[1]) <= 1 else "position_stat_neighbor_section_match_range_player_match_blended",
                     evidence_keys=evidence_keys if len(blended[1]) <= 1 else (*evidence_keys, *blended[1]),
                 )
         return values
@@ -577,14 +562,6 @@ def _suggestion_best_distance(suggestion: NeighborFieldSuggestion) -> float:
     return float("inf")
 
 
-def _rank_weighted_top_values(values: list[float]) -> float:
-    weights = _TOP_FIVE_RANK_WEIGHTS[: len(values)]
-    total_weight = sum(weights)
-    if total_weight <= 0.0:
-        return 0.0
-    return sum(value * weight for value, weight in zip(values, weights)) / total_weight
-
-
 def select_positions_from_evidence(play_by_play: dict[str, Any], fallback_pos: object = None) -> PositionSelection:
     percent_rows: list[tuple[str, float]] = []
     for pos, col in (
@@ -614,38 +591,10 @@ def select_positions_from_evidence(play_by_play: dict[str, Any], fallback_pos: o
 def load_latest_stat_neighbor_model() -> StatNeighborModel:
     model_dir = _latest_model_dir()
     field_map = _field_key_map()
-    suggestions_by_team: dict[tuple[str, str, str], dict[str, NeighborFieldSuggestion]] = {}
-    suggestions_by_player: dict[tuple[str, str], dict[str, NeighborFieldSuggestion]] = {}
-    suggestion_relpath = str(model_dir.relative_to(_repo_root()))
-    for row in _suggestion_rows(model_dir):
-        field_key = field_map.get((str(row.get("Type") or ""), str(row.get("Input Field") or "")))
-        if not field_key:
-            continue
-        value = _int_round(row.get("suggested_top5_median"))
-        if value is None:
-            continue
-        key = (_clean_key(row.get("target_player_id")), _clean_key(row.get("target_team")), str(row.get("position") or "").strip().upper())
-        if not all(key):
-            continue
-        suggestion = NeighborFieldSuggestion(
-            field_key=field_key,
-            value=value,
-            source_rule="position_stat_neighbor_top5_median",
-            evidence_keys=(
-                suggestion_relpath,
-                f"position={key[2]}",
-                f"neighbor_count={row.get('neighbor_count')}",
-                f"top_neighbor={row.get('top_neighbor')}",
-            ),
-        )
-        suggestions_by_team.setdefault(key, {})[field_key] = suggestion
-        suggestions_by_player.setdefault((key[0], key[2]), {})[field_key] = suggestion
     candidates_by_position = _load_candidate_pool(model_dir, field_map)
     scales_by_position = _scale_by_position(candidates_by_position)
     return StatNeighborModel(
         path=model_dir,
-        suggestions_by_player_position=suggestions_by_player,
-        suggestions_by_player_team_position=suggestions_by_team,
         candidates_by_position=candidates_by_position,
         scales_by_position=scales_by_position,
     )
@@ -678,23 +627,9 @@ def _latest_model_dir() -> Path:
             if suffix.isdigit():
                 candidates.append((int(suffix), path))
             continue
-        if path.is_dir() and path.name.startswith(_MODEL_PREFIX):
-            suffix = path.name[len(_MODEL_PREFIX) :]
-            if suffix.isdigit() and (path / _SUGGESTIONS_FILE).is_file():
-                candidates.append((int(suffix), path))
     if not candidates:
-        raise FileNotFoundError(f"no {_MODEL_PREFIX}### SQLite model or CSV artifact under {base}")
+        raise FileNotFoundError(f"no {_MODEL_PREFIX}### SQLite model under {base}")
     return max(candidates, key=lambda item: item[0])[1]
-
-
-def _suggestion_rows(model_path: Path) -> list[dict[str, Any]]:
-    if model_path.is_file() and model_path.suffix == ".sqlite":
-        with sqlite3.connect(model_path) as connection:
-            connection.row_factory = sqlite3.Row
-            return [dict(row) for row in connection.execute('SELECT * FROM suggested_field_values')]
-    suggestion_path = model_path / _SUGGESTIONS_FILE
-    with suggestion_path.open(newline="", encoding="utf-8-sig") as handle:
-        return list(csv.DictReader(handle))
 
 
 def _candidate_source_path(model_path: Path) -> Path | None:
@@ -784,25 +719,6 @@ def _scale_by_position(candidates_by_position: dict[str, tuple[dict[str, Any], .
             pos_scales[feature] = (float(median(vals)), math.sqrt(variance) or 1.0)
         out[pos] = pos_scales
     return out
-
-
-def _nearest_neighbors(
-    target_features: dict[str, float | None],
-    candidates: tuple[dict[str, Any], ...],
-    scales: dict[str, tuple[float, float]],
-    *,
-    features: tuple[str, ...] = FEATURES,
-    k: int,
-) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for candidate in candidates:
-        dist, common = _distance(target_features, candidate["features"], scales, features=features)
-        if dist is None:
-            continue
-        rows.append({"candidate": candidate, "distance": dist, "common_features": common})
-    rows.sort(key=lambda row: row["distance"])
-    return rows[:k]
-
 
 def _distance(
     a: dict[str, float | None],
@@ -1125,10 +1041,7 @@ def _field_key_map() -> dict[tuple[str, str], str]:
     entries = _offset_entries()
     out: dict[tuple[str, str], str] = {}
     model_path = _latest_model_dir()
-    pairs = sorted(
-        {(str(row.get("Type") or ""), str(row.get("Input Field") or "")) for row in _suggestion_rows(model_path)}
-        | {(str(row.get("field_type") or ""), str(row.get("input_field") or "")) for row in _candidate_field_rows(model_path)}
-    )
+    pairs = sorted({(str(row.get("field_type") or ""), str(row.get("input_field") or "")) for row in _candidate_field_rows(model_path)})
     for field_type, input_field in pairs:
         section = "Attributes" if field_type == "Attribute" else "Tendencies" if field_type == "Tendency" else ""
         if not section or "/" not in input_field:
@@ -1216,10 +1129,6 @@ def _parse_listed_positions(value: object) -> tuple[str, ...]:
 
 def _identity(value: object) -> str:
     return re.sub(r"[^A-Z0-9]+", "", str(value or "").upper())
-
-
-def _clean_key(value: object) -> str:
-    return str(value or "").strip().upper()
 
 
 def _float(value: Any) -> float | None:

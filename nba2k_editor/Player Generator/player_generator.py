@@ -12,6 +12,7 @@ from typing import Any, Iterable
 from nba2k_editor.core import offsets as offsets_mod
 from nba2k_editor.models.schema import FieldEntry
 from contracts import GeneratorInputContract
+from player_attribute_rank_adjuster import align_attribute_totals_to_metric_ranks
 from player_evidence import PlayerEvidence
 from player_rules import (
     PlayerProfileResult,
@@ -22,7 +23,7 @@ from player_rules import (
     derive_player_rule_values,
 )
 from stat_neighbor_framework import select_positions_from_evidence
-from workbook_sqlite import ensure_workbook_sqlite_database, iter_workbook_sqlite_sheet_rows, workbook_sqlite_sheet_names
+from workbook_sqlite import ensure_workbook_sqlite_database, iter_workbook_sqlite_sheet_rows, query_rows_for_season, workbook_sqlite_sheet_names
 from pre_nba_source import build_pre_nba_evidence_by_key, has_pre_nba_season, pre_nba_context_rows, pre_nba_seasons
 
 _GENERATOR_DIR = Path(__file__).resolve().parent
@@ -199,11 +200,18 @@ def generate_player_proposal(
     *,
     offsets_path: str | Path | None = None,
     field_index: dict[str, FieldEntry] | None = None,
+    league_player_rows: Any = (),
 ) -> GeneratedPlayerProposal:
     source_team = str(evidence.team or "").strip().upper()
     positions = select_positions_from_evidence(evidence.play_by_play, evidence.season_info.get("pos") or evidence.identity.get("pos"))
     profile_result = derive_player_profile_values(evidence, positions=positions)
-    rule_result = derive_player_rule_values(evidence, positions=positions)
+    active_field_keys = set(field_index) if field_index is not None else None
+    rule_result = derive_player_rule_values(
+        evidence,
+        positions=positions,
+        league_player_rows=league_player_rows,
+        active_field_keys=active_field_keys,
+    )
     player_match_identity = _player_match_identity_values(evidence, positions)
     candidates = player_field_candidates_from_results(profile_result, rule_result, offsets_path=offsets_path, field_index=field_index)
     return GeneratedPlayerProposal(
@@ -282,7 +290,7 @@ def generate_player_proposal_from_index(
     team: str,
 ) -> GeneratedPlayerProposal:
     evidence = context.evidence_for(player_id=player_id, team=team)
-    return generate_player_proposal(evidence, field_index=context.field_index)
+    return generate_player_proposal(evidence, field_index=context.field_index, league_player_rows=context.comparison_rows)
 
 
 def generate_player_proposals_for_contract(
@@ -301,7 +309,8 @@ def generate_player_proposals_from_index(
     team_filter: str | None = None,
 ) -> GeneratedPlayerBatch:
     proposals = [generate_player_proposal_from_index(context, player_id=player_id, team=team) for player_id, team in context.player_keys(team_filter=team_filter)]
-    return GeneratedPlayerBatch(season=context.season, proposals=tuple(proposals))
+    ranked = align_attribute_totals_to_metric_ranks(proposals, context.evidence_by_key)
+    return GeneratedPlayerBatch(season=context.season, proposals=ranked.proposals)
 
 
 def generate_draft_class_proposals(
@@ -328,11 +337,12 @@ def generate_draft_class_proposals(
         proposals = _first_appearance_mode_proposals(context, draft_year, base_season=base_season)
     else:
         proposals = _rookie_year_mode_proposals(context, draft_year)
+    ranked = align_attribute_totals_to_metric_ranks(proposals, context.evidence_by_key)
     return GeneratedDraftClass(
         draft_year=draft_year,
         rookie_season=rookie_season,
         mode=draft_mode,
-        proposals=tuple(proposals),
+        proposals=ranked.proposals,
     )
 
 
@@ -578,7 +588,7 @@ def _cached_season_context_index(database_path: str, season: int, offsets_path: 
 
     for sheet in sheet_names:
         prefix = _context_prefix(sheet)
-        for row in iter_workbook_sqlite_sheet_rows(database, sheet):
+        for row in _context_sheet_rows(database, sheet, season):
             player_id = str(row.get("player_id") or "").strip()
             team = _row_team(row)
             abbreviation = str(row.get("abbreviation") or "").strip()
@@ -655,6 +665,23 @@ def _cached_season_context_index(database_path: str, season: int, offsets_path: 
         evidence_by_key=evidence_by_key,
         field_index=dict(field_index),
     )
+
+
+def _context_sheet_rows(database: Path, sheet: str, season: int) -> tuple[dict[str, Any], ...]:
+    if sheet in _PLAYER_CAREER_CONTEXT_SHEETS:
+        return iter_workbook_sqlite_sheet_rows(database, sheet)
+    return _season_sheet_rows(database, sheet, season)
+
+
+def _season_sheet_rows(database: Path, sheet: str, season: int) -> tuple[dict[str, Any], ...]:
+    try:
+        return query_rows_for_season(database, _workbook_table_name(database, sheet), season)
+    except (KeyError, sqlite3.Error, ValueError):
+        return tuple(
+            row
+            for row in iter_workbook_sqlite_sheet_rows(database, sheet)
+            if row.get("season") == int(season)
+        )
 
 
 def _workbook_has_player_season(database: Path, season: int) -> bool:
@@ -864,9 +891,7 @@ def _canonicalized_player_row(row: dict[str, Any], canonical_team: str, stat_sha
 def _multi_team_primary_teams(database: Path, season: int) -> dict[str, str]:
     saw_multi: set[str] = set()
     primary: dict[str, str] = {}
-    for row in iter_workbook_sqlite_sheet_rows(database, _BASE_PLAYER_SEASON_SHEET):
-        if row.get("season") != int(season):
-            continue
+    for row in _season_sheet_rows(database, _BASE_PLAYER_SEASON_SHEET, season):
         player_id = str(row.get("player_id") or "").strip().upper()
         team = str(row.get("team") or "").strip().upper()
         if not player_id or not team:
@@ -881,9 +906,7 @@ def _multi_team_primary_teams(database: Path, season: int) -> dict[str, str]:
 def _multi_team_stat_shares(database: Path, season: int, primary_by_player_id: dict[str, str]) -> dict[str, tuple[dict[str, Any], ...]]:
     aggregate_games: dict[str, float] = {}
     actual_rows: dict[str, list[dict[str, Any]]] = {}
-    for row in iter_workbook_sqlite_sheet_rows(database, _PLAYER_TOTALS_SHEET):
-        if row.get("season") != int(season):
-            continue
+    for row in _season_sheet_rows(database, _PLAYER_TOTALS_SHEET, season):
         player_id = str(row.get("player_id") or "").strip().upper()
         team = str(row.get("team") or "").strip().upper()
         if player_id not in primary_by_player_id or not team:

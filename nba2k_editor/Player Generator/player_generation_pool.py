@@ -893,8 +893,6 @@ def write_model_database(
     manifest: dict[str, Any],
     candidate_rows: Sequence[dict[str, Any]],
     match_rows: Sequence[dict[str, Any]],
-    neighbor_rows: Sequence[dict[str, Any]],
-    suggestion_rows: Sequence[dict[str, Any]],
 ) -> None:
     model_path.parent.mkdir(parents=True, exist_ok=True)
     if model_path.exists():
@@ -923,32 +921,6 @@ def write_model_database(
                 master_player_id TEXT NOT NULL,
                 positions TEXT NOT NULL
             );
-            CREATE TABLE irl_to_2k_neighbors (
-                target_player TEXT NOT NULL,
-                target_player_id TEXT NOT NULL,
-                target_team TEXT NOT NULL,
-                position TEXT NOT NULL,
-                neighbor_rank INTEGER NOT NULL,
-                distance REAL NOT NULL,
-                common_features INTEGER NOT NULL,
-                neighbor_run_id TEXT NOT NULL,
-                neighbor_player_index INTEGER NOT NULL,
-                neighbor_live_label TEXT NOT NULL,
-                neighbor_master_player TEXT NOT NULL,
-                neighbor_master_player_id TEXT NOT NULL
-            );
-            CREATE TABLE suggested_field_values (
-                target_player TEXT NOT NULL,
-                target_player_id TEXT NOT NULL,
-                target_team TEXT NOT NULL,
-                position TEXT NOT NULL,
-                Type TEXT NOT NULL,
-                "Input Field" TEXT NOT NULL,
-                suggested_top1 INTEGER NOT NULL,
-                suggested_top5_median REAL NOT NULL,
-                neighbor_count INTEGER NOT NULL,
-                top_neighbor TEXT NOT NULL
-            );
             """
         )
         connection.executemany(
@@ -959,17 +931,7 @@ def write_model_database(
             "INSERT INTO player_name_matches VALUES (?, ?, ?, ?, ?, ?, ?)",
             ((row.get("run_id"), row.get("player_index"), row.get("live_player_label"), 1 if row.get("matched") in (True, "True", "true", 1, "1") else 0, row.get("master_player"), row.get("master_player_id"), row.get("positions")) for row in match_rows),
         )
-        connection.executemany(
-            "INSERT INTO irl_to_2k_neighbors VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ((row.get("target_player"), row.get("target_player_id"), row.get("target_team"), row.get("position"), row.get("neighbor_rank"), row.get("distance"), row.get("common_features"), row.get("neighbor_run_id"), row.get("neighbor_player_index"), row.get("neighbor_live_label"), row.get("neighbor_master_player"), row.get("neighbor_master_player_id")) for row in neighbor_rows),
-        )
-        connection.executemany(
-            "INSERT INTO suggested_field_values VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ((row.get("target_player"), row.get("target_player_id"), row.get("target_team"), row.get("position"), row.get("Type"), row.get("Input Field"), row.get("suggested_top1"), row.get("suggested_top5_median"), row.get("neighbor_count"), row.get("top_neighbor")) for row in suggestion_rows),
-        )
         _create_model_manifest_table(connection, manifest)
-        connection.execute("CREATE INDEX idx_suggested_target ON suggested_field_values(target_player_id, target_team, position)")
-        connection.execute("CREATE INDEX idx_suggested_field ON suggested_field_values(Type, \"Input Field\")")
         connection.commit()
 
 
@@ -1349,8 +1311,6 @@ def sync_player_generation_pool(request: PlayerGenerationPoolRequest | None = No
         manifest=manifest,
         candidate_rows=candidate_rows,
         match_rows=match_rows,
-        neighbor_rows=(),
-        suggestion_rows=(),
     )
     pool_manifest = write_pool_database(
         root,
