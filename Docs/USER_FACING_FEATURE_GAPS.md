@@ -12,6 +12,8 @@ These are not gaps:
 - Team summary save, Team slot ownership, Team Records/NBA Records/History edit surfaces.
 - Player Generator source/load/preview/pool SQL/import workflows.
 - Franchise command center for live snapshot import, LLM prompt/result handling, and applying trade/signing/draft/roster actions through existing editor write seams.
+- Franchise phase controller with persisted true sim year, the game-native season/offseason sequence, conditional Expansion Draft insertion, verified phase resync, and user-team trade pauses.
+- New-franchise team-profile initialization generates and persists franchise-scoped Owner/GM/Coach/Scout identities for every active team; the selected user team keeps LLM Owner/Coach/Scout roles while the user owns its GM role, and missing-profile retries do not overwrite completed identities.
 
 ## Missing or materially weaker user-facing features
 

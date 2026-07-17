@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from nba2k_editor.franchise.draft_room import DraftPoolPlayer, DraftPosition
-from nba2k_editor.franchise.llm_tasks import DEFAULT_TEAM_PROFILE_DIR, build_franchise_llm_task, franchise_team_context, run_franchise_llm_task
+from nba2k_editor.franchise.llm_tasks import build_franchise_llm_task, franchise_team_context, run_franchise_llm_task
 from nba2k_editor.franchise.models import FantasyDraftStoredPick, FranchiseRecord
 from nba2k_editor.franchise.prompts import build_fantasy_draft_pick_prompt, parse_fantasy_draft_pick_response
 
@@ -24,7 +24,7 @@ def run_llm_fantasy_draft_pick(
     position: DraftPosition,
     available_players: Iterable[DraftPoolPlayer],
     drafted_picks: Iterable[FantasyDraftStoredPick],
-    profile_dir: str | Path = DEFAULT_TEAM_PROFILE_DIR,
+    profile_dir: str | Path | None = None,
     client: Any | None = None,
 ) -> LlmDraftPickResult:
     context = franchise_team_context(record, position.team_index, team_label=position.team_label, profile_dir=profile_dir)

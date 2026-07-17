@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from nba2k_editor.franchise.growth_model import franchise_growth_facts_for_player
+from nba2k_editor.franchise.growth_model import franchise_growth_facts_for_player, growth_facts_dict
 
 
 @dataclass(frozen=True)
@@ -112,6 +112,23 @@ def build_franchise_llm_view(
         selected_player=selected_player,
         selected_team=selected_team,
         roster_slots=roster_slots,
+    )
+
+
+def franchise_roster_payload_for_team(
+    roster_slots: tuple[FranchiseRosterSlot, ...],
+    team_index: int,
+) -> tuple[dict[str, object], ...]:
+    return tuple(
+        {
+            "player_index": slot.player_index,
+            "player_label": slot.player_label,
+            "team_slot": slot.team_slot,
+            "team_slot_field": slot.team_slot_field,
+            "offseason_progression": growth_facts_dict(slot.offseason_progression_facts),
+        }
+        for slot in roster_slots
+        if int(slot.team_index) == int(team_index)
     )
 
 

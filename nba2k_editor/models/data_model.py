@@ -51,6 +51,7 @@ _MODEL_DOMAINS: tuple[str, ...] = EDITOR_DOMAINS
 
 _SPARSE_SCAN_INVALID_STREAKS: dict[str, int] = {
     "NBA Records": 12,
+    "Shoes": 256,
 }
 
 _LABEL_FIELD_NAMES: dict[str, tuple[str, ...]] = {

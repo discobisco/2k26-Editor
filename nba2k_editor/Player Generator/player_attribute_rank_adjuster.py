@@ -12,6 +12,7 @@ _GENERATOR_DIR = Path(__file__).resolve().parent
 _PSEUDO_PER_TABLE = "generated_pseudo_per_1947_1951"
 _ATTRIBUTE_MIN = 25
 _ATTRIBUTE_MAX = 99
+_MAX_ATTRIBUTE_AVERAGE_SHIFT = 10
 _EXCLUDED_ATTRIBUTE_NAMES = {
     "BACKDURABILITY",
     "HEADDURABILITY",
@@ -176,25 +177,20 @@ def _metric_ratio_target_totals(metric_order: list[AttributeRankEntry]) -> dict[
     positive_entries = [entry for entry in metric_order if entry.metric_value > 0 and entry.adjustable_candidates]
     if not positive_entries:
         return {_proposal_identity(entry.proposal): entry.current_total for entry in metric_order}
-    anchor_metric = _metric_average_anchor(positive_entries)
-    anchor_average = max(entry.current_total / len(entry.adjustable_candidates) for entry in positive_entries)
-    if anchor_metric <= 0 or anchor_average <= 0:
+    top_metric = positive_entries[0].metric_value
+    if top_metric <= 0:
         return {_proposal_identity(entry.proposal): entry.current_total for entry in metric_order}
     targets: dict[tuple[str, str], int] = {}
     for entry in metric_order:
         if entry.metric_value <= 0:
             targets[_proposal_identity(entry.proposal)] = entry.current_total
             continue
-        target_average = anchor_average * (entry.metric_value / anchor_metric)
+        target_average = _ATTRIBUTE_MIN + (_ATTRIBUTE_MAX - _ATTRIBUTE_MIN) * (entry.metric_value / top_metric)
         raw_target = int(round(target_average * len(entry.adjustable_candidates)))
-        targets[_proposal_identity(entry.proposal)] = _clamp_total_for_entry(entry, raw_target)
+        aligned_target = _clamp_total_for_entry(entry, raw_target)
+        max_lift = _MAX_ATTRIBUTE_AVERAGE_SHIFT * len(entry.adjustable_candidates)
+        targets[_proposal_identity(entry.proposal)] = max(entry.current_total, min(entry.current_total + max_lift, aligned_target))
     return targets
-
-
-def _metric_average_anchor(metric_order: list[AttributeRankEntry]) -> float:
-    if len(metric_order) >= 2 and metric_order[1].metric_value > 0:
-        return metric_order[1].metric_value
-    return metric_order[0].metric_value
 
 
 def _clamp_total_for_entry(entry: AttributeRankEntry, target_total: int) -> int:

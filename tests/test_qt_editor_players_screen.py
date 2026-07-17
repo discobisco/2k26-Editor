@@ -7,7 +7,7 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import QItemSelection, QItemSelectionModel
-from PyQt6.QtWidgets import QApplication, QComboBox, QMessageBox, QPushButton
+from PyQt6.QtWidgets import QApplication, QComboBox, QMessageBox, QPushButton, QWidget
 
 from nba2k_editor.models.schema import FieldEntry, RecordListItem
 from nba2k_editor.ui.qt_app import QtEditorApp
@@ -138,6 +138,50 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
         self.assertEqual("PG", app.player_detail_rows["Position"].value.text())
         self.assertEqual("0x1700", app.detail_addresses["Players"].text())
 
+    def test_player_movement_controls_wire_add_remove_and_trade_actions(self) -> None:
+        model = PlayerScreenModel()
+        second_player = RecordListItem("Players", 8, 0x1800, "Beta Forward")
+        model.loaded_items["Players"][second_player.display_label] = second_player
+        app = QtEditorApp(model)  # type: ignore[arg-type]
+        calls: list[tuple[object, ...]] = []
+
+        class MovementRecorder:
+            def add_player(self, player, team):
+                calls.append(("add", player, team))
+                return type("Placement", (), {"slot": 3})()
+
+            def remove_player(self, player):
+                calls.append(("remove", player))
+                return type("Placement", (), {"team": model.team_a, "slot": 1})()
+
+            def trade_players(self, first, second):
+                calls.append(("trade", first, second))
+                return ()
+
+        app.player_movement = MovementRecorder()
+        self.assertEqual(
+            [model.team_a.display_label, model.team_b.display_label],
+            [app.player_movement_team_combo.itemText(index) for index in range(app.player_movement_team_combo.count())],
+        )
+        app.player_movement_team_combo.setCurrentText(model.team_b.display_label)
+        app.state.selected_item_labels["Players"] = {model.player.display_label}
+        model.select_item("Players", model.player)
+
+        with patch.object(QMessageBox, "information"):
+            app.findChild(QPushButton, "AddPlayerToTeamButton").click()
+            app.findChild(QPushButton, "RemovePlayerFromTeamButton").click()
+            app.state.selected_item_labels["Players"] = {model.player.display_label, second_player.display_label}
+            app.findChild(QPushButton, "TradeSelectedPlayersButton").click()
+
+        self.assertEqual(
+            [
+                ("add", model.player, model.team_b),
+                ("remove", model.player),
+                ("trade", model.player, second_player),
+            ],
+            calls,
+        )
+
     def test_single_team_roster_export_uses_selected_team_filter_not_start_range(self) -> None:
         model = PlayerScreenModel()
         app = QtEditorApp(model)  # type: ignore[arg-type]
@@ -217,6 +261,37 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
             app._open_editor_window(model.player)
 
         self.assertEqual(["PG", "SG", "SF"], captured["options"])
+
+    def test_editor_reset_button_is_only_present_for_players(self) -> None:
+        model = PlayerScreenModel()
+        app = QtEditorApp(model)  # type: ignore[arg-type]
+        sources = [
+            model.player,
+            RecordListItem("Teams", 1, 0x2000, "Team Test"),
+            RecordListItem("Staff", 2, 0x3000, "Staff Test"),
+            RecordListItem("Stadiums", 3, 0x4000, "Stadium Test"),
+            RecordListItem("Jerseys", 4, 0x5000, "Jersey Test"),
+            RecordListItem("Shoes", 5, 0x6000, "Shoe Test"),
+            RecordListItem("NBA History", 6, 0x7000, "History Test"),
+            RecordListItem("NBA Records", 7, 0x8000, "Record Test"),
+        ]
+        buttons_by_domain: dict[str, set[str]] = {}
+
+        def capture_exec(dialog):
+            buttons_by_domain[current_domain] = {button.text() for button in dialog.findChildren(QPushButton)}
+            return 0
+
+        app._build_team_records_widget = lambda: QWidget()  # type: ignore[method-assign]
+        app._show_team_record_rows = lambda: None  # type: ignore[method-assign]
+        with patch("nba2k_editor.ui.qt_app.QDialog.exec", capture_exec):
+            for source in sources:
+                current_domain = source.domain
+                app._open_editor_window(source)
+
+        self.assertIn("Reset", buttons_by_domain["Players"])
+        for source in sources[1:]:
+            with self.subTest(domain=source.domain):
+                self.assertNotIn("Reset", buttons_by_domain[source.domain])
 
     def test_generic_staff_edit_button_preserves_domain_when_clicked_signal_sends_checked_arg(self) -> None:
         model = PlayerScreenModel()

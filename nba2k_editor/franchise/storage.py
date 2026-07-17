@@ -5,14 +5,25 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
+from uuid import uuid4
 
 from nba2k_editor.franchise.models import (
     FantasyDraftState,
     FantasyDraftStoredPick,
     FranchiseRecord,
     FranchiseSetup,
+    FranchiseSimState,
     FranchiseTeamOption,
     TeamRecommendation,
+)
+from nba2k_editor.franchise.sim_phases import (
+    STATUS_READY,
+    STATUS_WAITING_FOR_GAME_ADVANCE,
+    STATUS_WAITING_FOR_USER_TRADE,
+    game_advance_instruction,
+    franchise_phase_sequence,
+    next_franchise_phase,
+    phase_label,
 )
 
 DEFAULT_FRANCHISE_DB_PATH = Path("outputs") / "franchise" / "franchise.sqlite"
@@ -64,6 +75,11 @@ class FranchiseRepository:
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS franchise_teams (
+                team_index INTEGER PRIMARY KEY,
+                label TEXT NOT NULL,
+                display_label TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS llm_gm_teams (
                 team_index INTEGER PRIMARY KEY,
                 label TEXT NOT NULL,
@@ -74,6 +90,17 @@ class FranchiseRepository:
                 created_at TEXT NOT NULL,
                 target_executable TEXT NOT NULL,
                 payload_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS franchise_sim_state (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                sim_year INTEGER NOT NULL,
+                current_phase TEXT NOT NULL,
+                status TEXT NOT NULL,
+                expansion_draft_required INTEGER NOT NULL,
+                expected_next_phase TEXT NOT NULL,
+                expected_next_year INTEGER NOT NULL,
+                required_user_action TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS fantasy_draft_state (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -105,6 +132,7 @@ class FranchiseRepository:
                 recommended_action TEXT NOT NULL,
                 reasoning TEXT NOT NULL,
                 owner_approval_required INTEGER NOT NULL,
+                trade_with_user_team INTEGER NOT NULL DEFAULT 0,
                 blocked_reason TEXT NOT NULL,
                 raw_llm_response TEXT NOT NULL,
                 status TEXT NOT NULL,
@@ -112,6 +140,13 @@ class FranchiseRepository:
             );
             """
         )
+        recommendation_columns = {
+            str(row[1]) for row in connection.execute("PRAGMA table_info(team_recommendations)")
+        }
+        if "trade_with_user_team" not in recommendation_columns:
+            connection.execute(
+                "ALTER TABLE team_recommendations ADD COLUMN trade_with_user_team INTEGER NOT NULL DEFAULT 0"
+            )
 
     def replace_franchise(
         self,
@@ -121,20 +156,32 @@ class FranchiseRepository:
         league_snapshot: dict[str, Any] | None = None,
         target_executable: str = "",
     ) -> FranchiseRecord:
-        selected_indexes = set(setup.llm_gm_team_indexes)
-        selected_indexes.discard(int(setup.user_team_index))
-        selected_teams = tuple(option for option in team_options if option.team_index in selected_indexes)
+        options_by_index = {int(option.team_index): option for option in team_options}
+        llm_indexes = {int(index) for index in setup.llm_gm_team_indexes}
+        llm_indexes.discard(int(setup.user_team_index))
+        active_indexes = {*llm_indexes, int(setup.user_team_index)}
+        missing_indexes = tuple(sorted(active_indexes.difference(options_by_index)))
+        if missing_indexes:
+            raise ValueError(f"franchise team indexes are not loaded: {missing_indexes}")
+        active_teams = tuple(options_by_index[index] for index in sorted(active_indexes))
+        llm_teams = tuple(options_by_index[index] for index in sorted(llm_indexes))
+        franchise_id = uuid4().hex
+        profile_directory = str((self.db_path.parent / "team_profiles" / franchise_id).resolve())
         now = _utc_now_text()
         connection = self._connect()
         try:
             self.initialize(connection)
             connection.execute("DELETE FROM franchise_meta")
+            connection.execute("DELETE FROM franchise_teams")
             connection.execute("DELETE FROM llm_gm_teams")
             connection.execute("DELETE FROM league_saves")
+            connection.execute("DELETE FROM franchise_sim_state")
             connection.execute("DELETE FROM fantasy_draft_state")
             connection.execute("DELETE FROM fantasy_draft_picks")
             connection.execute("DELETE FROM team_recommendations")
             meta = {
+                "franchise_id": franchise_id,
+                "profile_directory": profile_directory,
                 "start_year": str(int(setup.start_year)),
                 "user_team_index": str(int(setup.user_team_index)),
                 "keep_full_league_save": "1" if setup.keep_full_league_save else "0",
@@ -143,9 +190,22 @@ class FranchiseRepository:
                 "updated_at": now,
             }
             connection.executemany("INSERT INTO franchise_meta(key, value) VALUES(?, ?)", meta.items())
+            connection.execute(
+                """
+                INSERT INTO franchise_sim_state(
+                    id, sim_year, current_phase, status, expansion_draft_required,
+                    expected_next_phase, expected_next_year, required_user_action, updated_at
+                ) VALUES(1, ?, 'season', ?, 0, '', ?, '', ?)
+                """,
+                (int(setup.start_year), STATUS_READY, int(setup.start_year), now),
+            )
+            connection.executemany(
+                "INSERT INTO franchise_teams(team_index, label, display_label) VALUES(?, ?, ?)",
+                ((team.team_index, team.label, team.display_label) for team in active_teams),
+            )
             connection.executemany(
                 "INSERT INTO llm_gm_teams(team_index, label, display_label) VALUES(?, ?, ?)",
-                ((team.team_index, team.label, team.display_label) for team in selected_teams),
+                ((team.team_index, team.label, team.display_label) for team in llm_teams),
             )
             if league_snapshot is not None:
                 connection.execute(
@@ -182,8 +242,12 @@ class FranchiseRepository:
             teams = tuple(
                 FranchiseTeamOption(int(index), str(label), str(display_label))
                 for index, label, display_label in connection.execute(
-                    "SELECT team_index, label, display_label FROM llm_gm_teams ORDER BY team_index"
+                    "SELECT team_index, label, display_label FROM franchise_teams ORDER BY team_index"
                 )
+            )
+            llm_gm_team_indexes = tuple(
+                int(row[0])
+                for row in connection.execute("SELECT team_index FROM llm_gm_teams ORDER BY team_index")
             )
             save_count = int(connection.execute("SELECT COUNT(*) FROM league_saves").fetchone()[0])
             connection.commit()
@@ -192,7 +256,7 @@ class FranchiseRepository:
         setup = FranchiseSetup(
             start_year=int(meta.get("start_year", "2025")),
             keep_full_league_save=meta.get("keep_full_league_save", "0") == "1",
-            llm_gm_team_indexes=tuple(team.team_index for team in teams),
+            llm_gm_team_indexes=llm_gm_team_indexes,
             fantasy_draft=meta.get("fantasy_draft", "0") == "1",
             user_team_index=int(meta.get("user_team_index", "0")),
         )
@@ -203,7 +267,225 @@ class FranchiseRepository:
             full_league_save_count=save_count,
             created_at=meta.get("created_at", ""),
             updated_at=meta.get("updated_at", ""),
+            franchise_id=meta.get("franchise_id", ""),
+            profile_directory=meta.get("profile_directory", ""),
         )
+
+    def load_sim_state(self) -> FranchiseSimState | None:
+        connection = self._connect()
+        try:
+            self.initialize(connection)
+            row = connection.execute(
+                """
+                SELECT sim_year, current_phase, status, expansion_draft_required,
+                       expected_next_phase, expected_next_year, required_user_action, updated_at
+                FROM franchise_sim_state
+                WHERE id = 1
+                """
+            ).fetchone()
+            connection.commit()
+        finally:
+            connection.close()
+        if row is None:
+            return None
+        return FranchiseSimState(
+            sim_year=int(row[0]),
+            current_phase=str(row[1]),
+            status=str(row[2]),
+            expansion_draft_required=bool(int(row[3])),
+            expected_next_phase=str(row[4]),
+            expected_next_year=int(row[5]),
+            required_user_action=str(row[6]),
+            updated_at=str(row[7]),
+        )
+
+    def ensure_sim_state(self) -> FranchiseSimState:
+        state = self.load_sim_state()
+        if state is not None:
+            return state
+        start_year = self.load().setup.start_year
+        return self.sync_sim_state(sim_year=start_year, current_phase="season")
+
+    def sync_sim_state(self, *, sim_year: int, current_phase: str) -> FranchiseSimState:
+        phase_label(current_phase)
+        existing_state = self.load_sim_state()
+        expansion_draft_required = bool(existing_state and existing_state.expansion_draft_required)
+        active_phase_keys = {
+            phase.key
+            for phase in franchise_phase_sequence(expansion_draft_required=expansion_draft_required)
+        }
+        if str(current_phase) not in active_phase_keys:
+            raise ValueError("Expansion Draft is only active when an expansion team was added.")
+        now = _utc_now_text()
+        connection = self._connect()
+        try:
+            self.initialize(connection)
+            connection.execute(
+                """
+                INSERT OR REPLACE INTO franchise_sim_state(
+                    id, sim_year, current_phase, status, expansion_draft_required,
+                    expected_next_phase, expected_next_year, required_user_action, updated_at
+                ) VALUES(1, ?, ?, ?, ?, '', ?, '', ?)
+                """,
+                (
+                    int(sim_year),
+                    str(current_phase),
+                    STATUS_READY,
+                    1 if expansion_draft_required else 0,
+                    int(sim_year),
+                    now,
+                ),
+            )
+            connection.execute("INSERT OR REPLACE INTO franchise_meta(key, value) VALUES(?, ?)", ("updated_at", now))
+            connection.commit()
+        finally:
+            connection.close()
+        state = self.load_sim_state()
+        if state is None:
+            raise RuntimeError("franchise simulation state was not saved")
+        return state
+
+    def set_expansion_draft_required(self, required: bool) -> FranchiseSimState:
+        state = self.ensure_sim_state()
+        if state.current_phase == "expansion_draft" and not required:
+            raise ValueError("Expansion Draft cannot be disabled while it is the current game phase.")
+        now = _utc_now_text()
+        connection = self._connect()
+        try:
+            self.initialize(connection)
+            connection.execute(
+                "UPDATE franchise_sim_state SET expansion_draft_required = ?, updated_at = ? WHERE id = 1",
+                (1 if required else 0, now),
+            )
+            connection.execute("INSERT OR REPLACE INTO franchise_meta(key, value) VALUES(?, ?)", ("updated_at", now))
+            connection.commit()
+        finally:
+            connection.close()
+        state = self.load_sim_state()
+        if state is None:
+            raise RuntimeError("franchise simulation state was not saved")
+        return state
+
+    def pause_for_game_advance(self) -> FranchiseSimState:
+        state = self.ensure_sim_state()
+        if state.status != STATUS_READY:
+            raise ValueError("franchise simulation is already paused")
+        next_phase, year_increment = next_franchise_phase(
+            state.current_phase,
+            expansion_draft_required=state.expansion_draft_required,
+        )
+        next_year = state.sim_year + year_increment
+        required_action = game_advance_instruction(next_phase, next_sim_year=next_year)
+        now = _utc_now_text()
+        connection = self._connect()
+        try:
+            self.initialize(connection)
+            connection.execute(
+                """
+                UPDATE franchise_sim_state
+                SET status = ?, expected_next_phase = ?, expected_next_year = ?,
+                    required_user_action = ?, updated_at = ?
+                WHERE id = 1
+                """,
+                (STATUS_WAITING_FOR_GAME_ADVANCE, next_phase, next_year, required_action, now),
+            )
+            connection.execute("INSERT OR REPLACE INTO franchise_meta(key, value) VALUES(?, ?)", ("updated_at", now))
+            connection.commit()
+        finally:
+            connection.close()
+        paused = self.load_sim_state()
+        if paused is None:
+            raise RuntimeError("franchise simulation pause was not saved")
+        return paused
+
+    def sync_and_resume(self, *, observed_phase: str, observed_sim_year: int) -> FranchiseSimState:
+        phase_label(observed_phase)
+        state = self.ensure_sim_state()
+        if state.status != STATUS_WAITING_FOR_GAME_ADVANCE:
+            raise ValueError("franchise simulation is not waiting for game progression")
+        if str(observed_phase) != state.expected_next_phase or int(observed_sim_year) != state.expected_next_year:
+            raise ValueError(
+                f"expected {phase_label(state.expected_next_phase)} for true sim year {state.expected_next_year}"
+            )
+        now = _utc_now_text()
+        expansion_required = False if str(observed_phase) == "season" else state.expansion_draft_required
+        connection = self._connect()
+        try:
+            self.initialize(connection)
+            connection.execute(
+                """
+                UPDATE franchise_sim_state
+                SET sim_year = ?, current_phase = ?, status = ?, expansion_draft_required = ?,
+                    expected_next_phase = '', expected_next_year = ?, required_user_action = '', updated_at = ?
+                WHERE id = 1
+                """,
+                (
+                    int(observed_sim_year),
+                    str(observed_phase),
+                    STATUS_READY,
+                    1 if expansion_required else 0,
+                    int(observed_sim_year),
+                    now,
+                ),
+            )
+            connection.execute("INSERT OR REPLACE INTO franchise_meta(key, value) VALUES(?, ?)", ("updated_at", now))
+            connection.commit()
+        finally:
+            connection.close()
+        resumed = self.load_sim_state()
+        if resumed is None:
+            raise RuntimeError("franchise simulation resume was not saved")
+        return resumed
+
+    def pause_for_user_trade(self, required_user_action: str) -> FranchiseSimState:
+        state = self.ensure_sim_state()
+        if state.status != STATUS_READY:
+            raise ValueError("franchise simulation is already paused")
+        now = _utc_now_text()
+        connection = self._connect()
+        try:
+            self.initialize(connection)
+            connection.execute(
+                """
+                UPDATE franchise_sim_state
+                SET status = ?, required_user_action = ?, updated_at = ?
+                WHERE id = 1
+                """,
+                (STATUS_WAITING_FOR_USER_TRADE, str(required_user_action), now),
+            )
+            connection.execute("INSERT OR REPLACE INTO franchise_meta(key, value) VALUES(?, ?)", ("updated_at", now))
+            connection.commit()
+        finally:
+            connection.close()
+        paused = self.load_sim_state()
+        if paused is None:
+            raise RuntimeError("user-team trade pause was not saved")
+        return paused
+
+    def resume_after_user_trade(self) -> FranchiseSimState:
+        state = self.ensure_sim_state()
+        if state.status != STATUS_WAITING_FOR_USER_TRADE:
+            raise ValueError("franchise simulation is not waiting for a user-team trade decision")
+        now = _utc_now_text()
+        connection = self._connect()
+        try:
+            self.initialize(connection)
+            connection.execute(
+                """
+                UPDATE franchise_sim_state
+                SET status = ?, required_user_action = '', updated_at = ?
+                WHERE id = 1
+                """,
+                (STATUS_READY, now),
+            )
+            connection.execute("INSERT OR REPLACE INTO franchise_meta(key, value) VALUES(?, ?)", ("updated_at", now))
+            connection.commit()
+        finally:
+            connection.close()
+        resumed = self.load_sim_state()
+        if resumed is None:
+            raise RuntimeError("user-team trade resume was not saved")
+        return resumed
 
     def start_fantasy_draft(self, *, team_count: int, user_team_index: int) -> FantasyDraftState:
         now = _utc_now_text()
@@ -379,8 +661,9 @@ class FranchiseRepository:
                 """
                 INSERT INTO team_recommendations(
                     team_index, team_label, recommended_action, reasoning,
-                    owner_approval_required, blocked_reason, raw_llm_response, status, created_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    owner_approval_required, trade_with_user_team, blocked_reason,
+                    raw_llm_response, status, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     int(recommendation.team_index),
@@ -388,6 +671,7 @@ class FranchiseRepository:
                     str(recommendation.recommended_action),
                     str(recommendation.reasoning),
                     1 if recommendation.owner_approval_required else 0,
+                    1 if recommendation.trade_with_user_team else 0,
                     str(recommendation.blocked_reason),
                     str(recommendation.raw_llm_response),
                     str(recommendation.status),
@@ -405,6 +689,7 @@ class FranchiseRepository:
             recommended_action=recommendation.recommended_action,
             reasoning=recommendation.reasoning,
             owner_approval_required=recommendation.owner_approval_required,
+            trade_with_user_team=recommendation.trade_with_user_team,
             blocked_reason=recommendation.blocked_reason,
             raw_llm_response=recommendation.raw_llm_response,
             status=recommendation.status,
@@ -419,7 +704,8 @@ class FranchiseRepository:
             rows = connection.execute(
                 """
                 SELECT id, team_index, team_label, recommended_action, reasoning,
-                       owner_approval_required, blocked_reason, raw_llm_response, status, created_at
+                       owner_approval_required, trade_with_user_team, blocked_reason,
+                       raw_llm_response, status, created_at
                 FROM team_recommendations
                 ORDER BY id
                 """
@@ -435,10 +721,11 @@ class FranchiseRepository:
                 recommended_action=str(row[3]),
                 reasoning=str(row[4]),
                 owner_approval_required=bool(int(row[5])),
-                blocked_reason=str(row[6]),
-                raw_llm_response=str(row[7]),
-                status=str(row[8]),
-                created_at=str(row[9]),
+                trade_with_user_team=bool(int(row[6])),
+                blocked_reason=str(row[7]),
+                raw_llm_response=str(row[8]),
+                status=str(row[9]),
+                created_at=str(row[10]),
             )
             for row in rows
         )

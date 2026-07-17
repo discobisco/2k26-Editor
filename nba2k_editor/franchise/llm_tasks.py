@@ -9,9 +9,6 @@ from nba2k_editor.franchise.llm_client import LLMClient
 from nba2k_editor.franchise.models import FranchiseRecord
 
 
-DEFAULT_TEAM_PROFILE_DIR = Path("nba2k_editor") / "franchise" / "team_profiles"
-
-
 @dataclass(frozen=True)
 class FranchiseTeamContext:
     team_index: int
@@ -45,18 +42,30 @@ def team_profile_payload(profile: TeamProfile, max_chars: int = 6000) -> dict[st
     }
 
 
+def franchise_team_profile_directory(
+    record: FranchiseRecord,
+    profile_dir: str | Path | None = None,
+) -> Path:
+    if profile_dir is not None:
+        return Path(profile_dir)
+    if record.profile_directory:
+        return Path(record.profile_directory)
+    raise ValueError("franchise team profile directory is not configured")
+
+
 def franchise_team_context(
     record: FranchiseRecord,
     team_index: int,
     *,
     team_label: str | None = None,
-    profile_dir: str | Path = DEFAULT_TEAM_PROFILE_DIR,
+    profile_dir: str | Path | None = None,
 ) -> FranchiseTeamContext:
     index = int(team_index)
+    resolved_profile_dir = franchise_team_profile_directory(record, profile_dir)
     return FranchiseTeamContext(
         team_index=index,
         team_label=str(team_label or franchise_team_label(record, index)),
-        profile=load_team_profile(index, profile_dir),
+        profile=load_team_profile(index, resolved_profile_dir),
     )
 
 

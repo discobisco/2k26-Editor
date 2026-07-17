@@ -27,6 +27,8 @@ class FranchiseRecord:
     full_league_save_count: int
     created_at: str
     updated_at: str
+    franchise_id: str = ""
+    profile_directory: str = ""
 
 
 @dataclass(frozen=True)
@@ -35,6 +37,18 @@ class FantasyDraftState:
     team_count: int
     user_team_index: int
     started_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class FranchiseSimState:
+    sim_year: int
+    current_phase: str
+    status: str
+    expansion_draft_required: bool
+    expected_next_phase: str
+    expected_next_year: int
+    required_user_action: str
     updated_at: str
 
 
@@ -63,6 +77,7 @@ class TeamRecommendation:
     recommended_action: str
     reasoning: str
     owner_approval_required: bool
+    trade_with_user_team: bool
     blocked_reason: str
     raw_llm_response: str = ""
     status: str = "pending"

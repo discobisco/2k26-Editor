@@ -42,6 +42,7 @@ from nba2k_editor.models.data_model import (
     RecordListItem,
     verify_edits,
 )
+from nba2k_editor.models.player_movement import PlayerMovement
 from nba2k_editor.models.team_record_routing import (
     TEAM_RECORD_SECTION_STAT_TABS,
     TEAM_RECORD_SIDE_NAV,
@@ -253,6 +254,8 @@ class QtEditorApp(QMainWindow):
         self.team_record_table: QTableWidget | None = None
         self.player_filter_combo: QComboBox | None = None
         self.player_search_input: QLineEdit | None = None
+        self.player_movement = PlayerMovement(model)
+        self.player_movement_team_combo: QComboBox | None = None
         self.operation_dialog: OperationDialog | None = None
         self.operation_worker = BackgroundOperationWorker()
         self.player_generator_display = import_module("nba2k_editor.Player Generator.display")
@@ -603,12 +606,35 @@ class QtEditorApp(QMainWindow):
             row = DetailRow(label)
             self.player_detail_rows[label] = row
             detail.addWidget(row)
+        detail.addWidget(self._build_player_movement_box())
         detail.addWidget(QPushButton("Edit Player", clicked=lambda: self._open_selected("Players")))
         detail.addWidget(QPushButton("Set All Loaded Current Stat IDs To 65535", clicked=self._set_all_players_stat_ids_to_no_stats))
         detail.addWidget(self._build_roster_snapshot_box())
         detail.addStretch(1)
         self._add_split_body(layout, record_list, detail_widget, left_width=520)
         return widget
+
+    def _build_player_movement_box(self) -> QWidget:
+        box = QGroupBox("Player Movement")
+        layout = QVBoxLayout(box)
+        team_combo = configure_combo_box(QComboBox())
+        team_combo.setObjectName("PlayerMovementTeamCombo")
+        team_combo.addItems(self.model.domain_item_labels("Teams"))
+        self.player_movement_team_combo = team_combo
+        layout.addWidget(QLabel("Assigned Team"))
+        layout.addWidget(team_combo)
+        buttons = QHBoxLayout()
+        add_button = QPushButton("Add to Team", clicked=self._add_selected_player_to_team)
+        add_button.setObjectName("AddPlayerToTeamButton")
+        remove_button = QPushButton("Remove from Team", clicked=self._remove_selected_player_from_team)
+        remove_button.setObjectName("RemovePlayerFromTeamButton")
+        trade_button = QPushButton("Trade Selected", clicked=self._trade_selected_players)
+        trade_button.setObjectName("TradeSelectedPlayersButton")
+        buttons.addWidget(add_button)
+        buttons.addWidget(remove_button)
+        buttons.addWidget(trade_button)
+        layout.addLayout(buttons)
+        return box
 
     def _build_roster_snapshot_box(self) -> QWidget:
         box = QGroupBox("Player Roster Snapshot")
@@ -890,6 +916,13 @@ class QtEditorApp(QMainWindow):
         self.player_filter_combo.setCurrentText(current)
         self.player_filter_combo.blockSignals(False)
         self.state.player_team_filter = current
+        if self.player_movement_team_combo is not None:
+            movement_current = self.player_movement_team_combo.currentText()
+            team_options = self.model.domain_item_labels("Teams")
+            self.player_movement_team_combo.clear()
+            self.player_movement_team_combo.addItems(team_options)
+            if movement_current in team_options:
+                self.player_movement_team_combo.setCurrentText(movement_current)
 
     def _sync_player_list(self) -> None:
         labels = self.model.player_item_labels_for_team_filter(self.state.player_team_filter, self.state.player_search_text)
@@ -977,6 +1010,57 @@ class QtEditorApp(QMainWindow):
             items = getattr(self.model, "loaded_items", {}).get(source.domain, {})
         selected_items = [item for label, item in items.items() if label in labels]
         return selected_items or [source]
+
+    def _selected_player_movement_items(self) -> list[RecordListItem]:
+        labels = self.state.selected_item_labels.get("Players", set())
+        items = self.model.player_items_for_team_filter(self.state.player_team_filter)
+        return [item for label, item in items.items() if label in labels]
+
+    def _add_selected_player_to_team(self) -> None:
+        players = self._selected_player_movement_items()
+        if len(players) != 1:
+            QMessageBox.warning(self, "Player Movement", "Select exactly one player to add.")
+            return
+        if self.player_movement_team_combo is None:
+            QMessageBox.warning(self, "Player Movement", "Load Teams before adding a player.")
+            return
+        team = self.model.loaded_items.get("Teams", {}).get(self.player_movement_team_combo.currentText())
+        if team is None:
+            QMessageBox.warning(self, "Player Movement", "Select an assigned team.")
+            return
+        try:
+            placement = self.player_movement.add_player(players[0], team)
+        except Exception as exc:
+            QMessageBox.warning(self, "Player Movement", str(exc))
+            return
+        self._sync_player_list()
+        QMessageBox.information(self, "Player Movement", f"Added {players[0].label} to {team.label} PLAYER{placement.slot}.")
+
+    def _remove_selected_player_from_team(self) -> None:
+        players = self._selected_player_movement_items()
+        if len(players) != 1:
+            QMessageBox.warning(self, "Player Movement", "Select exactly one player to remove.")
+            return
+        try:
+            placement = self.player_movement.remove_player(players[0])
+        except Exception as exc:
+            QMessageBox.warning(self, "Player Movement", str(exc))
+            return
+        self._sync_player_list()
+        QMessageBox.information(self, "Player Movement", f"Removed {players[0].label} from {placement.team.label}.")
+
+    def _trade_selected_players(self) -> None:
+        players = self._selected_player_movement_items()
+        if len(players) != 2:
+            QMessageBox.warning(self, "Player Movement", "Select exactly two players to trade.")
+            return
+        try:
+            self.player_movement.trade_players(players[0], players[1])
+        except Exception as exc:
+            QMessageBox.warning(self, "Player Movement", str(exc))
+            return
+        self._sync_player_list()
+        QMessageBox.information(self, "Player Movement", f"Traded {players[0].label} and {players[1].label}.")
 
     def _editor_window_label(self, source: RecordListItem) -> str:
         items = self._selected_editor_items(source)
@@ -1106,7 +1190,8 @@ class QtEditorApp(QMainWindow):
         layout.addWidget(tabs, 1)
         buttons = QHBoxLayout()
         buttons.addWidget(QPushButton("Save", clicked=lambda: self._save_item_editor(source, row_widgets)))
-        buttons.addWidget(QPushButton("Reset", clicked=lambda: self._reset_item_editor(source, row_widgets)))
+        if source.domain == "Players":
+            buttons.addWidget(QPushButton("Reset", clicked=lambda: self._reset_item_editor(source, row_widgets)))
         buttons.addWidget(QPushButton("Close", clicked=dialog.accept))
         layout.addLayout(buttons)
         dialog.exec()

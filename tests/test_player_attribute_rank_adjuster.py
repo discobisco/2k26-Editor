@@ -67,7 +67,7 @@ def test_align_attribute_totals_uses_real_per_when_available() -> None:
     )
 
     by_player = {proposal.player_id: proposal for proposal in result.proposals}
-    assert _attribute_total(by_player["HIGH"]) == 198
+    assert _attribute_total(by_player["HIGH"]) == 90
     assert _attribute_total(by_player["LOW"]) == 130
     assert by_player["HIGH"].field_candidates[2].display_value == 77
     assert by_player["LOW"].field_candidates[2].display_value == 77
@@ -89,8 +89,8 @@ def test_align_attribute_totals_uses_source_table_pseudo_per_before_real_per_cov
     )
 
     by_player = {proposal.player_id: proposal for proposal in result.proposals}
-    assert _attribute_total(by_player["fulksjo01"]) == 143
-    assert _attribute_total(by_player["mikange01"]) == 130
+    assert _attribute_total(by_player["fulksjo01"]) == 90
+    assert _attribute_total(by_player["mikange01"]) == 150
     changed = by_player["fulksjo01"].field_candidates[0]
     assert "attribute_rank_metric=generated_pseudo_per_1947_1951.generated_pseudo_per" in changed.evidence_keys
 
@@ -126,7 +126,7 @@ def test_alignment_skips_durability_potential_and_tendencies() -> None:
 
     by_player = {proposal.player_id: proposal for proposal in result.proposals}
     top_fields = {candidate.field_key: candidate.display_value for candidate in by_player["TOP"].field_candidates}
-    assert top_fields["Attributes/SPEED"] == 99
+    assert top_fields["Attributes/SPEED"] == 35
     assert top_fields["Attributes/BACKDURABILITY"] == 99
     assert top_fields["Attributes/POTENTIAL"] == 99
     assert top_fields["Tendencies/SHOT"] == 99
@@ -163,8 +163,8 @@ def test_alignment_skips_three_point_before_1969() -> None:
     by_player = {proposal.player_id: proposal for proposal in result.proposals}
     top_fields = {candidate.field_key: candidate.display_value for candidate in by_player["fulksjo01"].field_candidates}
     low_fields = {candidate.field_key: candidate.display_value for candidate in by_player["mikange01"].field_candidates}
-    assert top_fields["Attributes/SPEED"] == 88
-    assert low_fields["Attributes/SPEED"] == 80
+    assert top_fields["Attributes/SPEED"] == 35
+    assert low_fields["Attributes/SPEED"] == 90
     assert top_fields["Attributes/3POINT"] == 25
     assert low_fields["Attributes/3POINT"] == 99
 
@@ -197,5 +197,27 @@ def test_alignment_can_shift_three_point_from_1969_onward() -> None:
     by_player = {proposal.player_id: proposal for proposal in result.proposals}
     top_total = sum(candidate.display_value for candidate in by_player["TOP"].field_candidates if candidate.section == "Attributes")
     low_total = sum(candidate.display_value for candidate in by_player["LOW"].field_candidates if candidate.section == "Attributes")
-    assert top_total == 198
+    assert top_total == 70
     assert low_total == 179
+
+
+def test_alignment_does_not_floor_moderate_low_pseudo_per_players() -> None:
+    top = _proposal("fulksjo01", 1947, 130, team="PHW")
+    moderate_low = _proposal("gardnbe01", 1947, 130, team="FWZ")
+
+    result = align_attribute_totals_to_metric_ranks(
+        (top, moderate_low),
+        {
+            ("FULKSJO01", "PHW"): {},
+            ("GARDNBE01", "FWZ"): {},
+        },
+    )
+
+    by_player = {proposal.player_id: proposal for proposal in result.proposals}
+    assert _attribute_total(by_player["fulksjo01"]) == 150
+    assert _attribute_total(by_player["gardnbe01"]) == 130
+    assert all(
+        candidate.display_value > 25
+        for candidate in by_player["gardnbe01"].field_candidates
+        if candidate.section == "Attributes" and candidate.normalized_name not in {"POTENTIAL", "FREETHROW"}
+    )
