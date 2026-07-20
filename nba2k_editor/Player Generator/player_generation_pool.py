@@ -1116,7 +1116,8 @@ def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None
         for section_groups in grouped.values()
         for group_entries in section_groups.values()
         for entry in group_entries
-        if str(entry.normalized_name).upper() in {"HEIGHT", "WEIGHT", "WEIGHTKG"}
+        if str(entry.normalized_name).upper()
+        in {"HEIGHT", "WEIGHT", "WEIGHTKG", "PLAYTYPE1", "PLAYTYPE2", "PLAYTYPE3", "PLAYTYPE4"}
     }
     attribute_entries = [entry for group_entries in grouped.get("Attributes", {}).values() for entry in group_entries]
     tendency_entries = [entry for group_entries in grouped.get("Tendencies", {}).values() for entry in group_entries]
@@ -1176,6 +1177,11 @@ def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None
         stat_row["height_inches"] = "" if height_entry is None else _display(model.read_entry_value(height_entry, index=player.index))
         stat_row["weight_pounds"] = "" if weight_entry is None else _display(model.read_entry_value(weight_entry, index=player.index))
         stat_row["weight_kg"] = "" if weight_kg_entry is None else _display(model.read_entry_value(weight_kg_entry, index=player.index))
+        for play_type_number in range(1, 5):
+            entry = vital_entries.get(f"PLAYTYPE{play_type_number}")
+            stat_row[f"play_type_{play_type_number}"] = (
+                "" if entry is None else _display(model.read_entry_value(entry, index=player.index))
+            )
         if stat_id is not None and stat_id > 0 and stat_id != 0xFFFF:
             for entry in stat_detail_entries:
                 stat_row[entry.display_name] = _display(model.read_entry_value(entry, index=player.index, stat_selector=selector))

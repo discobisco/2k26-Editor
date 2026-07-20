@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 import player_rules_athleticism as athleticism
 import player_rules_defense as defense
@@ -35,6 +35,10 @@ class PlayerProfileResult:
 @dataclass(frozen=True)
 class PlayerRuleResult:
     values: dict[str, RuleValue]
+
+
+class LearnedRuleIntegrationError(ValueError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -347,6 +351,73 @@ def derive_player_rule_values(
         )
     for key, suggestion in hot_zone_neutral_values().items():
         values.setdefault(key, RuleValue(value=suggestion.value, source_rule=suggestion.source_rule, evidence_keys=suggestion.evidence_keys))
+    return PlayerRuleResult(values=values)
+
+
+def derive_learned_player_rule_values(
+    artifact: Mapping[str, Any],
+    evidence: PlayerEvidence,
+    positions: PositionSelection | None = None,
+    *,
+    direct_values: Mapping[str, RuleValue],
+    non_numeric_values: Mapping[str, RuleValue],
+    active_field_keys: set[str] | None = None,
+) -> PlayerRuleResult:
+    """Build the complete Option C field result without calling the old formula/neighbor path."""
+    from player_generation_models import predict_learned_fields_from_evidence
+
+    positions = positions or select_positions_from_evidence(
+        evidence.play_by_play,
+        evidence.season_info.get("pos") or evidence.identity.get("pos"),
+    )
+    position_weights = positions.position_weights or (((positions.primary, 1.0),) if positions.primary else ())
+    prediction = predict_learned_fields_from_evidence(
+        artifact,
+        position_weights=position_weights,
+        evidence=evidence,
+    )
+    if prediction["status"] != "ok":
+        raise LearnedRuleIntegrationError(f"learned field prediction is unresolved: {prediction['status']}")
+
+    allowed = (
+        set(active_field_keys)
+        if active_field_keys is not None
+        else {str(row["field_key"]) for row in artifact["field_ownership"]}
+    )
+    expected_direct = set(artifact["direct_fields"]) & allowed
+    expected_non_numeric = set(artifact["non_numeric_fields"]) & allowed
+    missing_direct = sorted(expected_direct - set(direct_values))
+    missing_non_numeric = sorted(expected_non_numeric - set(non_numeric_values))
+    if missing_direct or missing_non_numeric:
+        raise LearnedRuleIntegrationError(
+            f"incomplete non-learned ownership: direct={missing_direct}, non_numeric={missing_non_numeric}"
+        )
+
+    values = {
+        field_key: RuleValue(
+            value=value,
+            source_rule="learned_option_c_ridge",
+            evidence_keys=(
+                f"artifact_id={artifact['artifact_id']}",
+                f"pool_sha256={artifact['pool_sha256']}",
+                "position_weights="
+                + ",".join(f"{position}:{weight:.6f}" for position, weight in prediction["position_weights"]),
+                "old_generator_fallback=false",
+            ),
+        )
+        for field_key, value in prediction["values"].items()
+        if field_key in allowed
+    }
+    values.update({field_key: direct_values[field_key] for field_key in expected_direct})
+    for field_key in expected_non_numeric:
+        value = non_numeric_values[field_key]
+        if value.value not in {"Cold", "Neutral", "Hot"}:
+            raise LearnedRuleIntegrationError(f"invalid Hot Zone dropdown value for {field_key}: {value.value!r}")
+        values[field_key] = value
+
+    missing = sorted(allowed - set(values))
+    if missing:
+        raise LearnedRuleIntegrationError(f"learned rule result is missing active fields: {missing}")
     return PlayerRuleResult(values=values)
 
 

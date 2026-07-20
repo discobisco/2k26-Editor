@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import QPoint, QSize, Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -91,43 +91,61 @@ class OperationDialog(QDialog):
 
 
 class RecordListWidget(QListWidget):
-    def __init__(self, selection_callback: Callable[[set[str], str | None], None] | None = None) -> None:
+    def __init__(
+        self,
+        selection_callback: Callable[[set[int], int | None], None] | None = None,
+        context_callback: Callable[[int, QPoint], None] | None = None,
+    ) -> None:
         super().__init__()
         self.setObjectName("RecordList")
         self.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self._selection_callback = selection_callback
-        self._last_selected_labels: set[str] = set()
+        self._context_callback = context_callback
+        self._last_selected_indexes: set[int] = set()
         self.itemSelectionChanged.connect(self._emit_selection)
 
-    def set_labels(self, labels: list[str], selected: set[str] | None = None) -> None:
+    def set_records(self, records: list[tuple[int, str]], selected: set[int] | None = None) -> None:
         selected = selected or set()
-        label_set = set(labels)
+        available_indexes = {index for index, _label in records}
         self.blockSignals(True)
         self.clear()
-        for label in labels:
+        for index, label in records:
             item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, index)
             item.setSizeHint(QSize(0, 24))
-            item.setSelected(label in selected)
             self.addItem(item)
-        self._last_selected_labels = {label for label in selected if label in label_set}
+            item.setSelected(index in selected)
+        self._last_selected_indexes = selected & available_indexes
         self.blockSignals(False)
 
-    def selected_labels(self) -> set[str]:
-        return {item.text() for item in self.selectedItems()}
+    def selected_indexes(self) -> set[int]:
+        return {int(item.data(Qt.ItemDataRole.UserRole)) for item in self.selectedItems()}
 
-    def current_label(self) -> str | None:
+    def current_index(self) -> int | None:
         item = self.currentItem()
-        return None if item is None else item.text()
+        return None if item is None else int(item.data(Qt.ItemDataRole.UserRole))
 
     def _emit_selection(self) -> None:
         if self._selection_callback is None:
             return
-        selected = self.selected_labels()
-        if selected == self._last_selected_labels:
+        selected = self.selected_indexes()
+        if selected == self._last_selected_indexes:
             return
-        self._last_selected_labels = set(selected)
-        current = self.current_label()
+        self._last_selected_indexes = set(selected)
+        current = self.current_index()
         self._selection_callback(set(selected), current if current in selected else None)
+
+    def contextMenuEvent(self, event) -> None:
+        item = self.itemAt(event.pos())
+        if item is None or self._context_callback is None:
+            super().contextMenuEvent(event)
+            return
+        if not item.isSelected():
+            self.clearSelection()
+            item.setSelected(True)
+            self.setCurrentItem(item)
+        self._context_callback(int(item.data(Qt.ItemDataRole.UserRole)), event.globalPos())
+        event.accept()
 
 
 class DetailRow(QWidget):

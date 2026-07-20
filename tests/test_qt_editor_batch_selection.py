@@ -53,8 +53,8 @@ class FakeModel:
             RecordListItem(domain="Teams", index=1, address=0x3000, label="Team B"),
         )
         self.loaded_items = {
-            "Players": {item.display_label: item for item in self.items},
-            "Teams": {item.display_label: item for item in self.team_items},
+            "Players": {item.index: item for item in self.items},
+            "Teams": {item.index: item for item in self.team_items},
             "Staff": {},
             "Stadiums": {},
             "Jerseys": {},
@@ -69,8 +69,8 @@ class FakeModel:
     def runtime_status_text(self) -> str:
         return "not attached"
 
-    def player_team_filter_options(self) -> tuple[str, ...]:
-        return ("All Players",)
+    def player_team_filter_options(self) -> tuple[tuple[str, str], ...]:
+        return (("All Players", "All Players"),)
 
     def player_detail_labels(self) -> tuple[str, ...]:
         return ("OVR", "Team", "Position")
@@ -82,7 +82,10 @@ class FakeModel:
         return ("Team Name", "City Name", "City Abbrev")
 
     def domain_item_labels(self, domain: str) -> list[str]:
-        return list(self.loaded_items[domain])
+        return [item.display_label for item in self.loaded_items[domain].values()]
+
+    def domain_items(self, domain: str) -> list[RecordListItem]:
+        return list(self.loaded_items[domain].values())
 
     def domain_item_count(self, domain: str) -> int:
         return len(self.loaded_items[domain])
@@ -105,14 +108,14 @@ class FakeModel:
     def player_item_labels_for_team_filter(self, _team_filter: str | None, _search_text: str | None = None) -> list[str]:
         return self.domain_item_labels("Players")
 
-    def player_items_for_team_filter(self, _team_filter: str | None) -> dict[str, RecordListItem]:
+    def player_items_for_team_filter(self, _team_filter: str | int | None, _search_text: str | None = None) -> dict[int, RecordListItem]:
         return self.loaded_items["Players"]
 
-    def select_item_by_label(self, domain: str, selected_label: str | None) -> RecordListItem | None:
-        if selected_label is None:
+    def select_item_by_index(self, domain: str, selected_index: int | None, **_kwargs) -> RecordListItem | None:
+        if selected_index is None:
             self.selected_items[domain] = None
             return None
-        self.selected_items[domain] = self.loaded_items[domain].get(selected_label)
+        self.selected_items[domain] = self.loaded_items[domain].get(selected_index)
         return self.selected_items[domain]
 
     def grouped_fields(self, _domain: str) -> dict[str, dict[str, list[FieldEntry]]]:
@@ -141,20 +144,20 @@ class FakeModel:
     def editor_row_key(self, item: RecordListItem, save_key: str) -> str:
         return f"{item.domain}:{item.index}:{save_key}"
 
-    def selected_editor_items(self, source: RecordListItem, selected_labels=None, *, player_team_filter: str | None = None):
-        labels = set(selected_labels or ()) or {source.display_label}
+    def selected_editor_items(self, source: RecordListItem, selected_indexes=None, *, player_team_filter: str | int | None = None):
+        indexes = set(selected_indexes or ()) or {source.index}
         if source.domain == "Players":
             items = self.player_items_for_team_filter(player_team_filter)
         else:
             items = self.loaded_items[source.domain]
-        return [item for label, item in items.items() if label in labels] or [source]
+        return [item for index, item in items.items() if index in indexes] or [source]
 
-    def editor_window_label(self, source: RecordListItem, selected_labels=None, *, player_team_filter: str | None = None) -> str:
-        items = self.selected_editor_items(source, selected_labels, player_team_filter=player_team_filter)
+    def editor_window_label(self, source: RecordListItem, selected_indexes=None, *, player_team_filter: str | int | None = None) -> str:
+        items = self.selected_editor_items(source, selected_indexes, player_team_filter=player_team_filter)
         return f"{source.domain} [{len(items)} selected]" if len(items) > 1 else f"{source.domain} [{source.index}] {source.label}"
 
-    def save_editor_values(self, source: RecordListItem, changes, *, selected_labels=None, player_team_filter: str | None = None, stat_selectors=None):
-        targets = self.selected_editor_items(source, selected_labels, player_team_filter=player_team_filter)
+    def save_editor_values(self, source: RecordListItem, changes, *, selected_indexes=None, player_team_filter: str | int | None = None, stat_selectors=None):
+        targets = self.selected_editor_items(source, selected_indexes, player_team_filter=player_team_filter)
         results = {}
         for change in changes:
             for item in targets:
@@ -175,7 +178,7 @@ class QtEditorBatchSelectionTests(unittest.TestCase):
         save_key = model.editor_field_save_key(entry)
         row_key = model.editor_row_key(source, save_key)
         app.state.open_rows[row_key] = entry
-        app.state.selected_item_labels["Players"] = {item.display_label for item in model.items}
+        app.state.selected_item_indexes["Players"] = {item.index for item in model.items}
         app._mark_row_dirty(row_key)
 
         row = _Row("80", "80")
@@ -189,7 +192,7 @@ class QtEditorBatchSelectionTests(unittest.TestCase):
         model = FakeModel()
         app = QtEditorApp(model)  # type: ignore[arg-type]
         source = model.items[0]
-        app.state.selected_item_labels["Players"] = {item.display_label for item in model.items}
+        app.state.selected_item_indexes["Players"] = {item.index for item in model.items}
 
         label = app._editor_window_label(source)
 
@@ -200,7 +203,7 @@ class QtEditorBatchSelectionTests(unittest.TestCase):
         model = FakeModel()
         app = QtEditorApp(model)  # type: ignore[arg-type]
         source = model.items[0]
-        app.state.selected_item_labels["Players"] = {source.display_label}
+        app.state.selected_item_indexes["Players"] = {source.index}
 
         self.assertEqual("Players [0] Alpha", app._editor_window_label(source))
 
@@ -212,13 +215,38 @@ class QtEditorBatchSelectionTests(unittest.TestCase):
         save_key = model.editor_field_save_key(entry)
         row_key = model.editor_row_key(source, save_key)
         app.state.open_rows[row_key] = entry
-        app.state.selected_item_labels["Teams"] = {item.display_label for item in model.team_items}
+        app.state.selected_item_indexes["Teams"] = {item.index for item in model.team_items}
+        app._mark_row_dirty(row_key)
 
         row = _Row("Old City", "New City")
         app._save_item_editor(source, {row_key: row})  # type: ignore[arg-type]
 
         self.assertEqual([(0, "New City"), (1, "New City")], model.writes)
         self.assertEqual("saved 2 records", row.status.text)
+
+    def test_renaming_player_keeps_same_index_as_owner_for_later_height_write(self) -> None:
+        model = FakeModel()
+        app = QtEditorApp(model)  # type: ignore[arg-type]
+        source = model.items[0]
+        app.state.selected_item_indexes["Players"] = {source.index}
+
+        first_name = FieldEntry("Players", "Vitals", "Names", 1, {"display_name": "First Name", "normalized_name": "FIRSTNAME"})
+        first_name_key = model.editor_row_key(source, model.editor_field_save_key(first_name))
+        app.state.open_rows[first_name_key] = first_name
+        app._mark_row_dirty(first_name_key)
+        app._save_item_editor(source, {first_name_key: _Row("Alpha", "Renamed")})  # type: ignore[arg-type]
+
+        renamed = RecordListItem("Players", source.index, source.address, "Renamed")
+        model.loaded_items["Players"][source.index] = renamed
+
+        height = FieldEntry("Players", "Vitals", "Body", 2, {"display_name": "Height", "normalized_name": "HEIGHT"})
+        height_key = model.editor_row_key(source, model.editor_field_save_key(height))
+        app.state.open_rows[height_key] = height
+        app._mark_row_dirty(height_key)
+        app._save_item_editor(source, {height_key: _Row("75", "76")})  # type: ignore[arg-type]
+
+        self.assertEqual([(0, "Renamed"), (0, "76")], model.writes)
+        self.assertEqual({0}, app.state.selected_item_indexes["Players"])
 
 
 if __name__ == "__main__":

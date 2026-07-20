@@ -21,7 +21,7 @@ class SeasonSelectorModel:
         self.player_a = RecordListItem("Players", 0, 0x1000, "Alpha Guard")
         self.player_b = RecordListItem("Players", 1, 0x1100, "Beta Guard")
         self.loaded_items = {
-            "Players": {self.player_a.display_label: self.player_a, self.player_b.display_label: self.player_b},
+            "Players": {self.player_a.index: self.player_a, self.player_b.index: self.player_b},
             "Teams": {},
             "Staff": {},
             "Stadiums": {},
@@ -39,8 +39,8 @@ class SeasonSelectorModel:
     def runtime_status_text(self) -> str:
         return "not attached"
 
-    def player_team_filter_options(self) -> tuple[str, ...]:
-        return ("All Players",)
+    def player_team_filter_options(self) -> tuple[tuple[str, str], ...]:
+        return (("All Players", "All Players"),)
 
     def team_summary_labels(self) -> tuple[str, ...]:
         return ("Team Name", "City Name", "City Abbrev")
@@ -55,7 +55,10 @@ class SeasonSelectorModel:
         return {}
 
     def domain_item_labels(self, domain: str) -> list[str]:
-        return list(self.loaded_items[domain])
+        return [item.display_label for item in self.loaded_items[domain].values()]
+
+    def domain_items(self, domain: str) -> list[RecordListItem]:
+        return list(self.loaded_items[domain].values())
 
     def domain_item_count(self, domain: str) -> int:
         return len(self.loaded_items[domain])
@@ -64,16 +67,16 @@ class SeasonSelectorModel:
         return "loaded"
 
     def player_item_labels_for_team_filter(self, _team_filter: str | None, _search_text: str | None = None) -> list[str]:
-        return list(self.loaded_items["Players"])
+        return [item.display_label for item in self.loaded_items["Players"].values()]
 
-    def player_items_for_team_filter(self, _team_filter: str | None):
+    def player_items_for_team_filter(self, _team_filter: str | int | None, _search_text: str | None = None):
         return self.loaded_items["Players"]
 
     def selected_item(self, domain: str):
         return self.selected_items.get(domain)
 
-    def select_item_by_label(self, domain: str, selected_label: str | None):
-        self.selected_items[domain] = self.loaded_items[domain].get(str(selected_label or ""))
+    def select_item_by_index(self, domain: str, selected_index: int | None, **_kwargs):
+        self.selected_items[domain] = self.loaded_items[domain].get(selected_index) if selected_index is not None else None
         return self.selected_items[domain]
 
     def selected_detail_title(self, domain: str, label: str) -> str:
@@ -142,12 +145,12 @@ class SeasonSelectorModel:
     def editor_row_key(self, item: RecordListItem, save_key: str) -> str:
         return f"{item.domain}:{item.index}:{save_key}"
 
-    def selected_editor_items(self, source: RecordListItem, selected_labels=None, *, player_team_filter: str | None = None):
-        labels = set(selected_labels or ()) or {source.display_label}
-        return [item for label, item in self.loaded_items[source.domain].items() if label in labels] or [source]
+    def selected_editor_items(self, source: RecordListItem, selected_indexes=None, *, player_team_filter: str | int | None = None):
+        indexes = set(selected_indexes or ()) or {source.index}
+        return [item for index, item in self.loaded_items[source.domain].items() if index in indexes] or [source]
 
-    def editor_window_label(self, source: RecordListItem, selected_labels=None, *, player_team_filter: str | None = None) -> str:
-        items = self.selected_editor_items(source, selected_labels, player_team_filter=player_team_filter)
+    def editor_window_label(self, source: RecordListItem, selected_indexes=None, *, player_team_filter: str | int | None = None) -> str:
+        items = self.selected_editor_items(source, selected_indexes, player_team_filter=player_team_filter)
         return f"{source.domain} [{len(items)} selected]" if len(items) > 1 else f"{source.domain} [{source.index}] {source.label}"
 
     def editor_group_stat_selector(self, domain: str, index: int, group: str, entries, selected=None):
@@ -177,9 +180,9 @@ class SeasonSelectorModel:
     def editor_field_value(self, save_key: str, *, index: int, stat_selector: object | None = None):
         return self.read_entry_value(self._entry_for_save_key(save_key), index=index, stat_selector=stat_selector)
 
-    def save_editor_values(self, source: RecordListItem, changes, *, selected_labels=None, player_team_filter: str | None = None, stat_selectors=None):
+    def save_editor_values(self, source: RecordListItem, changes, *, selected_indexes=None, player_team_filter: str | int | None = None, stat_selectors=None):
         results = {}
-        targets = self.selected_editor_items(source, selected_labels, player_team_filter=player_team_filter)
+        targets = self.selected_editor_items(source, selected_indexes, player_team_filter=player_team_filter)
         stat_selectors = stat_selectors or {}
         for change in changes:
             save_key = change["save_key"]
@@ -223,7 +226,7 @@ class QtEditorSeasonStatSelectorTests(unittest.TestCase):
     def test_batch_save_reuses_source_active_season_stat_selector_for_other_selected_players(self) -> None:
         model = SeasonSelectorModel()
         app = QtEditorApp(model)  # type: ignore[arg-type]
-        app.state.selected_item_labels["Players"] = {model.player_a.display_label, model.player_b.display_label}
+        app.state.selected_item_indexes["Players"] = {model.player_a.index, model.player_b.index}
         row_key = app._row_key(model.player_a, model.points_entry)
         app.state.open_rows[row_key] = model.points_entry
         app.state.dirty_rows.add(row_key)

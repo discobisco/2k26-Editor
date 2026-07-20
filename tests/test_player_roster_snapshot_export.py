@@ -22,11 +22,11 @@ class RosterSlotModel(EditorDataModel):
         self.player_b = RecordListItem("Players", 3, 0x1300, "Beta")
         self.player_c = RecordListItem("Players", 4, 0x1400, "Gamma")
         self.draft_player = RecordListItem("Players", 5, 0x2500, "Draft Alpha")
-        self.loaded_items["Teams"] = {self.team.label: self.team, self.expansion_team.label: self.expansion_team}
+        self.loaded_items["Teams"] = {self.team.index: self.team, self.expansion_team.index: self.expansion_team}
         self.loaded_items["Players"] = {
-            self.player_a.display_label: self.player_a,
-            self.player_b.display_label: self.player_b,
-            self.player_c.display_label: self.player_c,
+            self.player_a.index: self.player_a,
+            self.player_b.index: self.player_b,
+            self.player_c.index: self.player_c,
         }
         self.loaded_items.setdefault("NBA History", {})
         self.loaded_items.setdefault("NBA Records", {})
@@ -78,8 +78,8 @@ class RosterSlotModel(EditorDataModel):
         self.address_writes.append((domain, record_addr, str(field.get("normalized_name")), value))
         return value
 
-    def _draft_class_player_items(self) -> dict[str, RecordListItem]:  # type: ignore[override]
-        return {self.draft_player.display_label: self.draft_player}
+    def _draft_class_player_items(self) -> dict[int, RecordListItem]:  # type: ignore[override]
+        return {self.draft_player.index: self.draft_player}
 
     def _field_version_payload(self, field: dict[str, Any]) -> dict[str, Any]:  # type: ignore[override]
         return dict(field.get("payload", {}))
@@ -120,9 +120,9 @@ class PlayerRosterSnapshotExportTests(unittest.TestCase):
         labels = model.player_item_labels_for_team_filter(PLAYER_TEAM_FILTER_BASE_TEAMS)
         items = model.player_items_for_team_filter(PLAYER_TEAM_FILTER_BASE_TEAMS)
 
-        self.assertIn(PLAYER_TEAM_FILTER_BASE_TEAMS, model.player_team_filter_options())
+        self.assertIn((PLAYER_TEAM_FILTER_BASE_TEAMS, PLAYER_TEAM_FILTER_BASE_TEAMS), model.player_team_filter_options())
         self.assertEqual([model.player_a.display_label, model.player_b.display_label], labels)
-        self.assertEqual({model.player_a.display_label: model.player_a, model.player_b.display_label: model.player_b}, items)
+        self.assertEqual({model.player_a.index: model.player_a, model.player_b.index: model.player_b}, items)
         self.assertNotIn(model.player_c.display_label, labels)
         self.assertEqual(0, model.current_team_reads)
 

@@ -204,7 +204,7 @@ class EditorDataModel:
         self.offsets = offsets_api
         self.target_executable = selected_target
         self.last_status = "not attached"
-        self.loaded_items: dict[str, dict[str, RecordListItem]] = {domain: {} for domain in _MODEL_DOMAINS}
+        self.loaded_items: dict[str, dict[int, RecordListItem]] = {domain: {} for domain in _MODEL_DOMAINS}
         self.selected_items: dict[str, RecordListItem | None] = {domain: None for domain in _MODEL_DOMAINS}
         self.domain_statuses: dict[str, str] = {domain: self.runtime_status_text() for domain in _MODEL_DOMAINS}
         self.refresh_events: queue.Queue[tuple[str, str]] = queue.Queue()
@@ -312,7 +312,10 @@ class EditorDataModel:
         return self.domain_statuses.get(domain, self.runtime_status_text())
 
     def domain_item_labels(self, domain: str) -> list[str]:
-        return list(self.loaded_items[domain])
+        return [item.display_label for item in self.loaded_items[domain].values()]
+
+    def domain_items(self, domain: str) -> list[RecordListItem]:
+        return list(self.loaded_items[domain].values())
 
     def domain_item_count(self, domain: str) -> int:
         return len(self.loaded_items[domain])
@@ -378,8 +381,15 @@ class EditorDataModel:
             )
         return {"count": len(records), "records": records}
 
-    def player_team_filter_options(self) -> tuple[str, ...]:
-        return (PLAYER_TEAM_FILTER_ALL, PLAYER_TEAM_FILTER_BASE_TEAMS, PLAYER_TEAM_FILTER_FREE_AGENTS, PLAYER_TEAM_FILTER_DRAFT_CLASS, *self.domain_item_labels("Teams"))
+    def player_team_filter_options(self) -> tuple[tuple[str, str | int], ...]:
+        fixed = (
+            (PLAYER_TEAM_FILTER_ALL, PLAYER_TEAM_FILTER_ALL),
+            (PLAYER_TEAM_FILTER_BASE_TEAMS, PLAYER_TEAM_FILTER_BASE_TEAMS),
+            (PLAYER_TEAM_FILTER_FREE_AGENTS, PLAYER_TEAM_FILTER_FREE_AGENTS),
+            (PLAYER_TEAM_FILTER_DRAFT_CLASS, PLAYER_TEAM_FILTER_DRAFT_CLASS),
+        )
+        teams = tuple((team.display_label, int(team.index)) for team in self.loaded_items["Teams"].values())
+        return (*fixed, *teams)
 
     def _team_player_slot_entries(self) -> list[tuple[int, FieldEntry]]:
         entries: list[tuple[int, FieldEntry]] = []
@@ -442,10 +452,10 @@ class EditorDataModel:
         value = self.read_entry_value(entry, index=item.index).get("raw_value")
         return bool(int(value or 0))
 
-    def _free_agent_player_items(self) -> dict[str, RecordListItem]:
+    def _free_agent_player_items(self) -> dict[int, RecordListItem]:
         return {
-            label: player
-            for label, player in self.loaded_items.get("Players", {}).items()
+            index: player
+            for index, player in self.loaded_items.get("Players", {}).items()
             if self._read_player_is_active(player) and self._player_current_team_pointer(player) == 0
         }
 
@@ -456,53 +466,49 @@ class EditorDataModel:
             if 0 <= int(team.index) <= 29
         )
 
-    def _base_team_player_items(self) -> dict[str, RecordListItem]:
+    def _base_team_player_items(self) -> dict[int, RecordListItem]:
         rows = self.player_roster_slot_items_for_team_items(self._base_team_items())
-        players: dict[str, RecordListItem] = {}
+        players: dict[int, RecordListItem] = {}
         for player, _placement in rows:
-            players.setdefault(player.display_label, player)
+            players.setdefault(int(player.index), player)
         return players
 
-    def _draft_class_player_items(self) -> dict[str, RecordListItem]:
+    def _draft_class_player_items(self) -> dict[int, RecordListItem]:
         try:
             items = self._scan_records_from_base_key("Players", _DRAFT_CLASS_BASE_KEY)
         except Exception as exc:
             self.domain_statuses["Players"] = self.runtime_status_text() if "not attached" in str(exc).lower() else f"draft class scan failed: {exc}"
             return {}
-        return {item.display_label: item for item in items}
+        return {int(item.index): item for item in items}
 
-    def _player_filter_items(self, selected_team_label: str | None) -> dict[str, RecordListItem]:
-        selected = str(selected_team_label or "").strip()
+    def _player_filter_items(self, selected_team: str | int | None) -> dict[int, RecordListItem]:
+        selected = selected_team if isinstance(selected_team, int) else str(selected_team or "").strip()
         if selected == PLAYER_TEAM_FILTER_BASE_TEAMS:
             return self._base_team_player_items()
         if selected == PLAYER_TEAM_FILTER_FREE_AGENTS:
             return self._free_agent_player_items()
         if selected == PLAYER_TEAM_FILTER_DRAFT_CLASS:
             return self._draft_class_player_items()
-        return self.loaded_items.get("Players", {})
-
-    def player_items_for_team_filter(self, selected_team_label: str | None) -> dict[str, RecordListItem]:
-        return self._player_filter_items(selected_team_label)
-
-    def player_item_labels_for_team_filter(self, selected_team_label: str | None, search_text: str | None = None) -> list[str]:
-        selected = str(selected_team_label or "").strip()
-        query = str(search_text or "").strip().lower()
-        if selected in {PLAYER_TEAM_FILTER_BASE_TEAMS, PLAYER_TEAM_FILTER_FREE_AGENTS, PLAYER_TEAM_FILTER_DRAFT_CLASS}:
-            labels = list(self._player_filter_items(selected))
-        elif not selected or selected == PLAYER_TEAM_FILTER_ALL:
-            labels = self.domain_item_labels("Players")
-        else:
+        if isinstance(selected, int):
             team = self.loaded_items["Teams"].get(selected)
             if team is None:
-                return []
-            labels = [
-                label
-                for label, player in self.loaded_items["Players"].items()
+                return {}
+            return {
+                index: player
+                for index, player in self.loaded_items["Players"].items()
                 if self._player_current_team_pointer(player) == team.address
-            ]
+            }
+        return self.loaded_items.get("Players", {})
+
+    def player_items_for_team_filter(self, selected_team: str | int | None, search_text: str | None = None) -> dict[int, RecordListItem]:
+        items = self._player_filter_items(selected_team)
+        query = str(search_text or "").strip().lower()
         if not query:
-            return labels
-        return [label for label in labels if query in label.lower()]
+            return items
+        return {index: item for index, item in items.items() if query in item.display_label.lower()}
+
+    def player_item_labels_for_team_filter(self, selected_team: str | int | None, search_text: str | None = None) -> list[str]:
+        return [item.display_label for item in self.player_items_for_team_filter(selected_team, search_text).values()]
 
     def is_player_season_id_selector_entry(self, entry: FieldEntry) -> bool:
         return _is_player_season_id_selector_entry(entry)
@@ -616,29 +622,33 @@ class EditorDataModel:
     def selected_item(self, domain: str) -> RecordListItem | None:
         return self.selected_items[domain]
 
-    def select_item_by_label(self, domain: str, selected_label: str | None) -> RecordListItem | None:
-        selected = str(selected_label or "")
-        if domain == "Players" and selected and selected not in self.loaded_items["Players"]:
-            draft_item = self._draft_class_player_items().get(selected)
-            if draft_item is not None:
-                self.selected_items[domain] = draft_item
-                return draft_item
-        self.selected_items[domain] = self.loaded_items[domain].get(selected)
+    def select_item_by_index(
+        self,
+        domain: str,
+        selected_index: int | None,
+        *,
+        player_team_filter: str | int | None = None,
+    ) -> RecordListItem | None:
+        if selected_index is None:
+            self.selected_items[domain] = None
+            return None
+        items = self._player_filter_items(player_team_filter) if domain == "Players" else self.loaded_items[domain]
+        self.selected_items[domain] = items.get(int(selected_index))
         return self.selected_items[domain]
 
     def refresh_domain_items(self, domain: str, *, limit: int | None = None) -> list[RecordListItem]:
         try:
             items = self.scan_records(domain, limit=limit)
-            by_label = {item.display_label: item for item in items}
-            self.loaded_items[domain] = by_label
+            by_index = {int(item.index): item for item in items}
+            self.loaded_items[domain] = by_index
             if domain == "Players":
                 self._player_team_pointer_cache.clear()
-            labels = list(by_label)
-            if labels:
+            indices = list(by_index)
+            if indices:
                 current = self.selected_items.get(domain)
-                selected_label = current.display_label if current is not None else labels[0]
-                self.selected_items[domain] = by_label.get(selected_label, by_label[labels[0]])
-                self.domain_statuses[domain] = f"loaded {len(labels)} {domain.lower()} records"
+                selected_index = int(current.index) if current is not None else indices[0]
+                self.selected_items[domain] = by_index.get(selected_index, by_index[indices[0]])
+                self.domain_statuses[domain] = f"loaded {len(indices)} {domain.lower()} records"
             else:
                 self.selected_items[domain] = None
                 self.domain_statuses[domain] = self.runtime_status_text()
@@ -1289,19 +1299,12 @@ class EditorDataModel:
 
     def _team_item_for_snapshot_row(self, row: dict[str, Any]) -> RecordListItem | None:
         team_index = row.get("team_index")
-        if team_index is not None:
-            try:
-                wanted_index = int(team_index)
-            except Exception:
-                wanted_index = None
-            if wanted_index is not None:
-                for team in self.loaded_items.get("Teams", {}).values():
-                    if int(team.index) == wanted_index:
-                        return team
-        team_label = str(row.get("team_label") or "").strip()
-        if team_label:
-            return self.loaded_items.get("Teams", {}).get(team_label)
-        return None
+        if team_index is None:
+            return None
+        try:
+            return self.loaded_items.get("Teams", {}).get(int(team_index))
+        except (TypeError, ValueError):
+            return None
 
     def _is_team_address_entry(self, entry: FieldEntry) -> bool:
         payload = self._field_version_payload(entry.field)
@@ -1357,12 +1360,11 @@ class EditorDataModel:
         use_target_item_addresses = "Draft Class" in snapshot_mode
         target_item_tuple = tuple(target_items) if target_items is not None else None
         target_indices = tuple(item.index for item in target_item_tuple) if target_item_tuple is not None else None
-        slot_target_indices: dict[tuple[object, str], int] = {}
+        slot_target_indices: dict[tuple[int, str], int] = {}
         if target_indices is None and getattr(self, "loaded_items", {}).get("Teams"):
             for player, placement in self.player_roster_slot_items_for_team_items(getattr(self, "loaded_items", {}).get("Teams", {}).values()):
                 slot_key = _field_identity(str(placement.get("team_slot_field") or f"PLAYER{placement.get('team_slot')}"))
                 slot_target_indices[(int(placement["team_index"]), slot_key)] = int(player.index)
-                slot_target_indices[(str(placement["team_label"]), slot_key)] = int(player.index)
         total = len(target_records) if target_indices is None else min(len(target_records), len(target_indices))
         if progress_callback is not None:
             progress_callback(0, total, "Applying player roster snapshot...")
@@ -1398,10 +1400,6 @@ class EditorDataModel:
                         index = slot_target_indices.get((int(team_index), slot_key))
                     except Exception:
                         index = None
-                if index is None:
-                    team_label = str(row.get("team_label") or "").strip()
-                    if team_label:
-                        index = slot_target_indices.get((team_label, slot_key))
                 if index is None:
                     skipped += len(fields)
                     continue

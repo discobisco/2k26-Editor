@@ -51,7 +51,11 @@ class PoolModel:
         ]
         self.player_entries = {
             "Stats": {"Season IDs": self.stat_entries},
-            "Vitals": {"Vitals": [Entry("Vitals", "Vitals", "POSITION", "Position"), Entry("Vitals", "Vitals", "HEIGHT", "Height")]},
+            "Vitals": {"Vitals": [
+                Entry("Vitals", "Vitals", "POSITION", "Position"),
+                Entry("Vitals", "Vitals", "HEIGHT", "Height"),
+                *(Entry("Vitals", "Vitals", f"PLAYTYPE{number}", f"Play Type {number}") for number in range(1, 5)),
+            ]},
             "Attributes": {"Attributes": [Entry("Attributes", "Attributes", "FREETHROW", "Free Throw")]},
             "Tendencies": {"Tendencies": [Entry("Tendencies", "Tendencies", "SHOT", "Shot")]},
         }
@@ -80,8 +84,10 @@ class PoolModel:
         return {"raw_value": 1, "display_value": "1"}
 
 
-def test_capture_active_roster_pool_rows_reads_team_stats_edit_teams_group() -> None:
-    _stats, _attributes, _tendencies, team_stats = capture_active_roster_pool_rows(PoolModel())
+def test_capture_active_roster_pool_rows_reads_team_stats_and_play_types() -> None:
+    stats, _attributes, _tendencies, team_stats = capture_active_roster_pool_rows(PoolModel())
+
+    assert [stats[0][f"play_type_{number}"] for number in range(1, 5)] == ["1", "1", "1", "1"]
 
     assert team_stats == [{
         "team_slot": 0,

@@ -297,7 +297,7 @@ def _loaded_players_by_name_key(model: Any) -> dict[str, tuple[Any, ...]]:
     loaded = getattr(model, "loaded_items", {})
     players = loaded.get("Players", {}) if isinstance(loaded, dict) else {}
     if isinstance(players, dict):
-        iterable = players.items()
+        iterable = ((_safe_label(item), item) for item in players.values())
     elif isinstance(players, (list, tuple)):
         iterable = ((_safe_label(item), item) for item in players)
     else:

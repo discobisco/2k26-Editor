@@ -24,12 +24,12 @@ class RecordsModel:
         self.team_b = RecordListItem("Teams", 1, 0x3000, "Team B")
         self.loaded_items = {
             "Players": {},
-            "Teams": {self.team_a.display_label: self.team_a, self.team_b.display_label: self.team_b},
+            "Teams": {self.team_a.index: self.team_a, self.team_b.index: self.team_b},
             "Staff": {},
             "Stadiums": {},
             "Jerseys": {},
             "Shoes": {},
-            "NBA History": {self.history_a.display_label: self.history_a},
+            "NBA History": {self.history_a.index: self.history_a},
             "NBA Records": {},
         }
         self.selected_items = {domain: None for domain in self.loaded_items}
@@ -42,8 +42,8 @@ class RecordsModel:
     def runtime_status_text(self) -> str:
         return "not attached"
 
-    def player_team_filter_options(self) -> tuple[str, ...]:
-        return ("All Players",)
+    def player_team_filter_options(self) -> tuple[tuple[str, str], ...]:
+        return (("All Players", "All Players"),)
 
     def team_summary_labels(self) -> tuple[str, ...]:
         return ("Team Name", "City Name", "City Abbrev")
@@ -52,7 +52,10 @@ class RecordsModel:
         return ("OVR",)
 
     def domain_item_labels(self, domain: str) -> list[str]:
-        return list(self.loaded_items[domain])
+        return [item.display_label for item in self.loaded_items[domain].values()]
+
+    def domain_items(self, domain: str) -> list[RecordListItem]:
+        return list(self.loaded_items[domain].values())
 
     def domain_item_count(self, domain: str) -> int:
         return len(self.loaded_items[domain])
@@ -70,6 +73,9 @@ class RecordsModel:
     def player_item_labels_for_team_filter(self, _team_filter: str | None, _search_text: str | None = None) -> list[str]:
         return []
 
+    def player_items_for_team_filter(self, _team_filter: str | int | None, _search_text: str | None = None) -> dict[int, RecordListItem]:
+        return {}
+
     def selected_item(self, domain: str):
         return self.selected_items.get(domain)
 
@@ -77,8 +83,8 @@ class RecordsModel:
         self.selected_items[domain] = item
         return item
 
-    def select_item_by_label(self, domain: str, selected_label: str | None):
-        return self.select_item(domain, self.loaded_items[domain].get(str(selected_label or "")))
+    def select_item_by_index(self, domain: str, selected_index: int | None, **_kwargs):
+        return self.select_item(domain, self.loaded_items[domain].get(selected_index) if selected_index is not None else None)
 
     def selected_detail_title(self, domain: str, label: str) -> str:
         item = self.selected_items.get(domain)
@@ -210,7 +216,7 @@ class QtEditorRecordsScreenTests(unittest.TestCase):
             )
             return 0
 
-        with patch("nba2k_editor.ui.qt_app.team_record_rows", fake_team_record_rows), patch("nba2k_editor.ui.qt_app.team_record_indexes", return_value=[9100 + index for index in range(510)]), patch("nba2k_editor.ui.qt_app.QDialog.exec", capture_exec):
+        with patch("nba2k_editor.ui.qt_app.team_record_rows", fake_team_record_rows), patch("nba2k_editor.ui.qt_app.team_record_indexes", return_value=[9100 + index for index in range(510)]), patch("nba2k_editor.ui.qt_app.QDialog.show", capture_exec):
             app._open_editor_window(model.team_b)
 
         self.assertTrue(captured["team_records_tab"])

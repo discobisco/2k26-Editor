@@ -6,7 +6,7 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
-from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtCore import QPoint, QTimer, Qt
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -179,15 +180,17 @@ class EditorUiState:
     record_stat: str = "Points"
     team_record_section: str = "Single Game (Regular)"
     team_record_stat: str = "Points"
-    player_team_filter: str = "All Players"
+    player_team_filter: str | int = "All Players"
     player_search_text: str = ""
     player_roster_export_folder: str = str(PLAYER_ROSTER_EXPORTS_DIR)
     player_roster_snapshot_filename: str = PLAYER_ROSTER_DEFAULT_EXPORT_FILE
     player_roster_export_mode: str = PLAYER_ROSTER_EXPORT_MODES[0]
     player_roster_team_start: str = "0"
     player_roster_team_end: str = "29"
-    selected_item_labels: dict[str, set[str]] = field(default_factory=dict)
-    selection_anchors: dict[str, str | None] = field(default_factory=dict)
+    selected_item_indexes: dict[str, set[int]] = field(default_factory=dict)
+    selection_anchors: dict[str, int | None] = field(default_factory=dict)
+    pending_trade_player_index: int | None = None
+    pending_trade_team_index: int | None = None
     dirty_rows: set[str] = field(default_factory=set)
     open_rows: dict[str, Any] = field(default_factory=dict)
     row_raw_values: dict[str, Any] = field(default_factory=dict)
@@ -255,7 +258,6 @@ class QtEditorApp(QMainWindow):
         self.player_filter_combo: QComboBox | None = None
         self.player_search_input: QLineEdit | None = None
         self.player_movement = PlayerMovement(model)
-        self.player_movement_team_combo: QComboBox | None = None
         self.operation_dialog: OperationDialog | None = None
         self.operation_worker = BackgroundOperationWorker()
         self.player_generator_display = import_module("nba2k_editor.Player Generator.display")
@@ -555,7 +557,7 @@ class QtEditorApp(QMainWindow):
 
     def _build_generic_domain_screen(self, domain: str) -> QWidget:
         widget, layout = self._base_domain_screen(domain)
-        record_list = RecordListWidget(lambda labels, current, d=domain: self._select_item_labels(d, labels, current))
+        record_list = RecordListWidget(lambda indexes, current, d=domain: self._select_item_indexes(d, indexes, current))
         self.domain_lists[domain] = record_list
         detail_widget = QWidget()
         detail = QVBoxLayout(detail_widget)
@@ -577,8 +579,9 @@ class QtEditorApp(QMainWindow):
         widget, layout = self._base_domain_screen("Players")
         controls = QHBoxLayout()
         player_filter_combo = configure_combo_box(QComboBox())
-        player_filter_combo.addItems(list(self.model.player_team_filter_options()))
-        player_filter_combo.currentTextChanged.connect(self._set_player_team_filter)
+        for label, value in self.model.player_team_filter_options():
+            player_filter_combo.addItem(label, value)
+        player_filter_combo.currentIndexChanged.connect(lambda _index: self._set_player_team_filter(player_filter_combo.currentData()))
         player_search_input = QLineEdit()
         player_search_input.setPlaceholderText("Search players")
         player_search_input.textChanged.connect(self._set_player_search_text)
@@ -589,7 +592,10 @@ class QtEditorApp(QMainWindow):
         controls.addWidget(QLabel("Search"))
         controls.addWidget(player_search_input)
         layout.addLayout(controls)
-        record_list = RecordListWidget(lambda labels, current: self._select_item_labels("Players", labels, current))
+        record_list = RecordListWidget(
+            lambda indexes, current: self._select_item_indexes("Players", indexes, current),
+            self._show_player_movement_menu,
+        )
         self.domain_lists["Players"] = record_list
         detail_widget = QWidget()
         detail = QVBoxLayout(detail_widget)
@@ -606,7 +612,6 @@ class QtEditorApp(QMainWindow):
             row = DetailRow(label)
             self.player_detail_rows[label] = row
             detail.addWidget(row)
-        detail.addWidget(self._build_player_movement_box())
         detail.addWidget(QPushButton("Edit Player", clicked=lambda: self._open_selected("Players")))
         detail.addWidget(QPushButton("Set All Loaded Current Stat IDs To 65535", clicked=self._set_all_players_stat_ids_to_no_stats))
         detail.addWidget(self._build_roster_snapshot_box())
@@ -614,27 +619,6 @@ class QtEditorApp(QMainWindow):
         self._add_split_body(layout, record_list, detail_widget, left_width=520)
         return widget
 
-    def _build_player_movement_box(self) -> QWidget:
-        box = QGroupBox("Player Movement")
-        layout = QVBoxLayout(box)
-        team_combo = configure_combo_box(QComboBox())
-        team_combo.setObjectName("PlayerMovementTeamCombo")
-        team_combo.addItems(self.model.domain_item_labels("Teams"))
-        self.player_movement_team_combo = team_combo
-        layout.addWidget(QLabel("Assigned Team"))
-        layout.addWidget(team_combo)
-        buttons = QHBoxLayout()
-        add_button = QPushButton("Add to Team", clicked=self._add_selected_player_to_team)
-        add_button.setObjectName("AddPlayerToTeamButton")
-        remove_button = QPushButton("Remove from Team", clicked=self._remove_selected_player_from_team)
-        remove_button.setObjectName("RemovePlayerFromTeamButton")
-        trade_button = QPushButton("Trade Selected", clicked=self._trade_selected_players)
-        trade_button.setObjectName("TradeSelectedPlayersButton")
-        buttons.addWidget(add_button)
-        buttons.addWidget(remove_button)
-        buttons.addWidget(trade_button)
-        layout.addLayout(buttons)
-        return box
 
     def _build_roster_snapshot_box(self) -> QWidget:
         box = QGroupBox("Player Roster Snapshot")
@@ -658,7 +642,7 @@ class QtEditorApp(QMainWindow):
 
     def _build_teams_screen(self) -> QWidget:
         widget, layout = self._base_domain_screen("Teams")
-        record_list = RecordListWidget(lambda labels, current: self._select_item_labels("Teams", labels, current))
+        record_list = RecordListWidget(lambda indexes, current: self._select_item_indexes("Teams", indexes, current))
         self.domain_lists["Teams"] = record_list
         detail_widget = QWidget()
         detail = QVBoxLayout(detail_widget)
@@ -798,11 +782,13 @@ class QtEditorApp(QMainWindow):
 
     def _set_target(self, selected: str) -> None:
         self.model.select_target_executable(_target_executable(str(selected)))
-        self.state.selected_item_labels.clear()
+        self.state.selected_item_indexes.clear()
         self.state.selection_anchors.clear()
+        self.state.pending_trade_player_index = None
+        self.state.pending_trade_team_index = None
         self._refresh_status_labels()
         for domain, record_list in self.domain_lists.items():
-            record_list.set_labels([])
+            record_list.set_records([])
             self._set_count(domain, f"{self._display_label(domain)}: 0")
         self._sync_player_team_filter()
         self._sync_player_list()
@@ -887,7 +873,7 @@ class QtEditorApp(QMainWindow):
             self.count_labels[domain].setText(text)
 
     def _sync_domain_list(self, domain: str) -> None:
-        labels = self.model.domain_item_labels(domain)
+        items = self.model.domain_items(domain)
         self._set_count(domain, f"{self._display_label(domain)}: {self.model.domain_item_count(domain)}")
         if domain in self.status_labels:
             self.status_labels[domain].setText(self.model.domain_status(domain))
@@ -899,9 +885,9 @@ class QtEditorApp(QMainWindow):
             self._show_record_screen_rows()
             self._refresh_dashboard_metrics()
             return
-        selected = self.state.selected_item_labels.get(domain, set())
+        selected = self.state.selected_item_indexes.get(domain, set())
         if domain in self.domain_lists:
-            self.domain_lists[domain].set_labels(labels, selected)
+            self.domain_lists[domain].set_records([(int(item.index), item.display_label) for item in items], selected)
         self._update_detail_panel(domain)
         self._refresh_dashboard_metrics()
 
@@ -909,44 +895,43 @@ class QtEditorApp(QMainWindow):
         if self.player_filter_combo is None:
             return
         options = list(self.model.player_team_filter_options())
-        current = self.state.player_team_filter if self.state.player_team_filter in options else (options[0] if options else PLAYER_TEAM_FILTER_ALL)
+        option_values = {value for _label, value in options}
+        current = self.state.player_team_filter if self.state.player_team_filter in option_values else (options[0][1] if options else PLAYER_TEAM_FILTER_ALL)
         self.player_filter_combo.blockSignals(True)
         self.player_filter_combo.clear()
-        self.player_filter_combo.addItems(options)
-        self.player_filter_combo.setCurrentText(current)
+        for label, value in options:
+            self.player_filter_combo.addItem(label, value)
+        self.player_filter_combo.setCurrentIndex(self.player_filter_combo.findData(current))
         self.player_filter_combo.blockSignals(False)
         self.state.player_team_filter = current
-        if self.player_movement_team_combo is not None:
-            movement_current = self.player_movement_team_combo.currentText()
-            team_options = self.model.domain_item_labels("Teams")
-            self.player_movement_team_combo.clear()
-            self.player_movement_team_combo.addItems(team_options)
-            if movement_current in team_options:
-                self.player_movement_team_combo.setCurrentText(movement_current)
 
     def _sync_player_list(self) -> None:
-        labels = self.model.player_item_labels_for_team_filter(self.state.player_team_filter, self.state.player_search_text)
-        self._set_count("Players", f"Players: {len(labels)}")
+        items = list(self.model.player_items_for_team_filter(self.state.player_team_filter, self.state.player_search_text).values())
+        self._set_count("Players", f"Players: {len(items)}")
         if "Players" in self.status_labels:
             self.status_labels["Players"].setText(self.model.domain_status("Players"))
-        selected = self.state.selected_item_labels.get("Players", set())
+        selected = self.state.selected_item_indexes.get("Players", set())
         if "Players" in self.domain_lists:
-            self.domain_lists["Players"].set_labels(labels, selected)
+            self.domain_lists["Players"].set_records([(int(item.index), item.display_label) for item in items], selected)
         self._update_detail_panel("Players")
         self._refresh_dashboard_metrics()
 
-    def _select_item_labels(self, domain: str, selected_labels: set[str], current_label: str | None = None) -> None:
-        self.state.selected_item_labels[domain] = set(selected_labels)
-        if not selected_labels:
-            self.model.select_item_by_label(domain, None)
+    def _select_item_indexes(self, domain: str, selected_indexes: set[int], current_index: int | None = None) -> None:
+        self.state.selected_item_indexes[domain] = set(selected_indexes)
+        if not selected_indexes:
+            self.model.select_item_by_index(domain, None)
             self._update_detail_panel(domain)
             return
-        primary_label = current_label if current_label in selected_labels else next(iter(selected_labels))
-        self.model.select_item_by_label(domain, primary_label)
+        primary_index = current_index if current_index in selected_indexes else next(iter(selected_indexes))
+        self.model.select_item_by_index(
+            domain,
+            primary_index,
+            player_team_filter=self.state.player_team_filter if domain == "Players" else None,
+        )
         self._update_detail_panel(domain)
 
-    def _set_player_team_filter(self, value: str) -> None:
-        self.state.player_team_filter = value or PLAYER_TEAM_FILTER_ALL
+    def _set_player_team_filter(self, value: object) -> None:
+        self.state.player_team_filter = value if isinstance(value, (str, int)) else PLAYER_TEAM_FILTER_ALL
         self._sync_player_list()
 
     def _set_player_search_text(self, value: str) -> None:
@@ -1003,30 +988,89 @@ class QtEditorApp(QMainWindow):
         self.state.dirty_rows.add(row_key)
 
     def _selected_editor_items(self, source: RecordListItem) -> list[RecordListItem]:
-        labels = self.state.selected_item_labels.get(source.domain) or {source.display_label}
+        indexes = self.state.selected_item_indexes.get(source.domain, set())
         if source.domain == "Players":
             items = self.model.player_items_for_team_filter(self.state.player_team_filter)
         else:
             items = getattr(self.model, "loaded_items", {}).get(source.domain, {})
-        selected_items = [item for label, item in items.items() if label in labels]
-        return selected_items or [source]
+        return [items[index] for index in sorted(indexes) if index in items]
 
-    def _selected_player_movement_items(self) -> list[RecordListItem]:
-        labels = self.state.selected_item_labels.get("Players", set())
+    def _player_movement_items(self, indexes: Iterable[int]) -> list[RecordListItem]:
+        items = self.model.loaded_items.get("Players", {})
+        return [items[index] for index in sorted(set(indexes)) if index in items]
+
+    def _show_player_movement_menu(self, player_index: int, position: QPoint) -> None:
         items = self.model.player_items_for_team_filter(self.state.player_team_filter)
-        return [item for label, item in items.items() if label in labels]
+        if player_index not in items:
+            return
+        selected_indexes = self.state.selected_item_indexes.get("Players", set())
+        if player_index not in selected_indexes:
+            selected_indexes = {player_index}
+            self._select_item_indexes("Players", selected_indexes, player_index)
 
-    def _add_selected_player_to_team(self) -> None:
-        players = self._selected_player_movement_items()
-        if len(players) != 1:
-            QMessageBox.warning(self, "Player Movement", "Select exactly one player to add.")
+        menu = QMenu(self)
+        menu.setObjectName("PlayerMovementContextMenu")
+        add_menu = menu.addMenu("Add to Team")
+        add_menu.menuAction().setObjectName("AddPlayerToTeamMenu")
+        teams = self.model.domain_items("Teams")
+        add_menu.setEnabled(bool(teams))
+        for team in teams:
+            action = add_menu.addAction(team.display_label)
+            action.setData(int(team.index))
+            action.triggered.connect(
+                lambda _checked=False, p=player_index, t=int(team.index): self._add_player_to_team(p, t)
+            )
+
+        remove_action = menu.addAction("Remove from Team")
+        remove_action.setObjectName("RemovePlayerFromTeamAction")
+        remove_action.triggered.connect(lambda _checked=False, p=player_index: self._remove_player_from_team(p))
+
+        pending_index = self.state.pending_trade_player_index
+        if pending_index is None:
+            trade_menu = menu.addMenu("Trade Player")
+            trade_menu.menuAction().setObjectName("TradePlayerMenu")
+            trade_menu.setEnabled(bool(teams))
+            for team in teams:
+                action = trade_menu.addAction(team.display_label)
+                action.setData(int(team.index))
+                action.triggered.connect(
+                    lambda _checked=False, p=player_index, t=int(team.index): self._begin_player_trade(p, t)
+                )
+        else:
+            trade_action = menu.addAction("Trade Player")
+            trade_action.setObjectName("TradePlayerAction")
+            trade_action.triggered.connect(lambda _checked=False, p=player_index: self._complete_player_trade(p))
+        menu.exec(position)
+
+    def _begin_player_trade(self, player_index: int, team_index: int) -> None:
+        player = self.model.loaded_items.get("Players", {}).get(player_index)
+        team = self.model.loaded_items.get("Teams", {}).get(team_index)
+        if player is None or team is None:
+            QMessageBox.warning(self, "Player Movement", "The selected player or destination team is not loaded.")
             return
-        if self.player_movement_team_combo is None:
-            QMessageBox.warning(self, "Player Movement", "Load Teams before adding a player.")
-            return
-        team = self.model.loaded_items.get("Teams", {}).get(self.player_movement_team_combo.currentText())
-        if team is None:
-            QMessageBox.warning(self, "Player Movement", "Select an assigned team.")
+        self.state.pending_trade_player_index = player_index
+        self.state.pending_trade_team_index = team_index
+        self.state.selected_item_indexes["Players"] = set()
+        self.model.select_item_by_index("Players", None)
+        self.state.player_team_filter = team_index
+        self.state.player_search_text = ""
+        if self.player_search_input is not None:
+            self.player_search_input.blockSignals(True)
+            self.player_search_input.clear()
+            self.player_search_input.blockSignals(False)
+        self._sync_player_team_filter()
+        self._sync_player_list()
+        QMessageBox.information(
+            self,
+            "Player Movement",
+            f"Select a player on {team.label}, right-click, and choose Trade Player.",
+        )
+
+    def _add_player_to_team(self, player_index: int, team_index: int) -> None:
+        players = self._player_movement_items((player_index,))
+        team = self.model.loaded_items.get("Teams", {}).get(team_index)
+        if len(players) != 1 or team is None:
+            QMessageBox.warning(self, "Player Movement", "The selected player or team is not loaded.")
             return
         try:
             placement = self.player_movement.add_player(players[0], team)
@@ -1036,10 +1080,10 @@ class QtEditorApp(QMainWindow):
         self._sync_player_list()
         QMessageBox.information(self, "Player Movement", f"Added {players[0].label} to {team.label} PLAYER{placement.slot}.")
 
-    def _remove_selected_player_from_team(self) -> None:
-        players = self._selected_player_movement_items()
+    def _remove_player_from_team(self, player_index: int) -> None:
+        players = self._player_movement_items((player_index,))
         if len(players) != 1:
-            QMessageBox.warning(self, "Player Movement", "Select exactly one player to remove.")
+            QMessageBox.warning(self, "Player Movement", "The selected player is not loaded.")
             return
         try:
             placement = self.player_movement.remove_player(players[0])
@@ -1049,16 +1093,29 @@ class QtEditorApp(QMainWindow):
         self._sync_player_list()
         QMessageBox.information(self, "Player Movement", f"Removed {players[0].label} from {placement.team.label}.")
 
-    def _trade_selected_players(self) -> None:
-        players = self._selected_player_movement_items()
-        if len(players) != 2:
-            QMessageBox.warning(self, "Player Movement", "Select exactly two players to trade.")
+    def _complete_player_trade(self, second_player_index: int) -> None:
+        first_player_index = self.state.pending_trade_player_index
+        destination_team_index = self.state.pending_trade_team_index
+        if first_player_index is None or destination_team_index is None:
+            QMessageBox.warning(self, "Player Movement", "Choose a destination team for the first player.")
+            return
+        destination_items = self.model.player_items_for_team_filter(destination_team_index)
+        if second_player_index not in destination_items:
+            QMessageBox.warning(self, "Player Movement", "Select a player from the chosen destination team.")
+            return
+        players = self._player_movement_items((first_player_index, second_player_index))
+        if len(players) != 2 or first_player_index == second_player_index:
+            QMessageBox.warning(self, "Player Movement", "Select a different loaded player to complete the trade.")
             return
         try:
             self.player_movement.trade_players(players[0], players[1])
         except Exception as exc:
             QMessageBox.warning(self, "Player Movement", str(exc))
             return
+        self.state.pending_trade_player_index = None
+        self.state.pending_trade_team_index = None
+        self.state.selected_item_indexes["Players"] = set()
+        self.model.select_item_by_index("Players", None)
         self._sync_player_list()
         QMessageBox.information(self, "Player Movement", f"Traded {players[0].label} and {players[1].label}.")
 
@@ -1194,13 +1251,13 @@ class QtEditorApp(QMainWindow):
             buttons.addWidget(QPushButton("Reset", clicked=lambda: self._reset_item_editor(source, row_widgets)))
         buttons.addWidget(QPushButton("Close", clicked=dialog.accept))
         layout.addLayout(buttons)
-        dialog.exec()
+        dialog.show()
 
     def _save_item_editor(self, source: RecordListItem, row_widgets: dict[str, EditableFieldRow]) -> None:
         targets = self._selected_editor_items(source)
         for row_key, row in row_widgets.items():
             entry = self.state.open_rows[row_key]
-            if row_key not in self.state.dirty_rows and row.value_text() == row.current.text():
+            if row_key not in self.state.dirty_rows:
                 continue
             value = row.value_text()
             succeeded = 0
@@ -1460,7 +1517,7 @@ class QtEditorApp(QMainWindow):
             return
         if domain == "NBA Records":
             return
-        self.model.select_item_by_label(domain, item.display_label)
+        self.model.select_item_by_index(domain, int(item.index))
         self._update_detail_panel(domain)
 
     def _fill_table(self, table: QTableWidget, rows: list[dict[str, str]]) -> None:
@@ -1491,37 +1548,27 @@ class QtEditorApp(QMainWindow):
         return int(self.state.player_roster_team_start), int(self.state.player_roster_team_end)
 
     def _team_items_by_index_range(self, start: int, end: int) -> list[RecordListItem]:
-        previous = self.model.selected_item("Teams")
-        teams: list[RecordListItem] = []
-        for label in self.model.domain_item_labels("Teams"):
-            item = self.model.select_item_by_label("Teams", label)
-            if item is not None and start <= item.index <= end:
-                teams.append(item)
-        self.model.select_item_by_label("Teams", previous.display_label if previous is not None else None)
-        return teams
+        return [item for item in self.model.domain_items("Teams") if start <= int(item.index) <= end]
 
-    def _team_item_by_label(self, label: str) -> RecordListItem | None:
-        previous = self.model.selected_item("Teams")
-        item = self.model.select_item_by_label("Teams", label)
-        self.model.select_item_by_label("Teams", previous.display_label if previous is not None else None)
-        return item
+    def _team_item_by_index(self, index: int) -> RecordListItem | None:
+        return self.model.loaded_items.get("Teams", {}).get(int(index))
 
     def _player_roster_export_items(self, mode: str) -> tuple[str, list[RecordListItem], Iterable[dict[str, Any] | None] | None]:
         if mode == "Draft Class":
             return mode, list(self.model.player_items_for_team_filter(PLAYER_TEAM_FILTER_DRAFT_CLASS).values()), None
         if mode == "Selected Players":
-            selected_labels = self.state.selected_item_labels.get("Players", set())
-            items = [item for label, item in self.model.player_items_for_team_filter(PLAYER_TEAM_FILTER_ALL).items() if label in selected_labels]
+            selected_indexes = self.state.selected_item_indexes.get("Players", set())
+            items = [item for index, item in self.model.player_items_for_team_filter(PLAYER_TEAM_FILTER_ALL).items() if int(index) in selected_indexes]
             return mode, items, None
         if mode in {"Players From Team Range", "Players From Single Team"}:
             start, end = self._player_roster_team_range()
             if mode == "Players From Single Team":
-                selected = str(self.state.player_team_filter or "").strip()
-                if not selected or selected == PLAYER_TEAM_FILTER_ALL:
+                selected = self.state.player_team_filter
+                if not isinstance(selected, int):
                     raise ValueError("select a loaded team in the Team dropdown for single-team export")
-                team = self._team_item_by_label(selected)
+                team = self._team_item_by_index(selected)
                 if team is None:
-                    raise ValueError(f"selected team is not loaded: {selected}")
+                    raise ValueError(f"selected team index is not loaded: {selected}")
                 teams = [team]
             else:
                 teams = self._team_items_by_index_range(start, end)
@@ -1535,8 +1582,8 @@ class QtEditorApp(QMainWindow):
         if mode == "Draft Class":
             return list(self.model.player_items_for_team_filter(PLAYER_TEAM_FILTER_DRAFT_CLASS).values())
         if mode == "Selected Players":
-            labels = self.state.selected_item_labels.get("Players", set())
-            return [item for label, item in self.model.player_items_for_team_filter(PLAYER_TEAM_FILTER_ALL).items() if label in labels]
+            indexes = self.state.selected_item_indexes.get("Players", set())
+            return [item for index, item in self.model.player_items_for_team_filter(PLAYER_TEAM_FILTER_ALL).items() if int(index) in indexes]
         return None
 
     def _export_player_roster_snapshot(self) -> None:
@@ -1795,17 +1842,17 @@ class QtEditorApp(QMainWindow):
 
             self._start_background_operation("Import Generated Players", worker, done_callback=self._sync_player_generator_status)
 
-    def _confirm_missing_generator_import(self, summary: dict[str, Any]) -> bool:
+    def _confirm_missing_generator_import(self, summary: dict[str, Any], on_accept: Callable[[], None]) -> None:
         names = tuple(str(name) for name in summary.get("names", ()))
         missing_count = int(summary.get("missing_count") or len(names))
         target_count = int(summary.get("target_count") or 0)
         skipped_existing = int(summary.get("skipped_existing") or 0)
         if missing_count <= 0:
             QMessageBox.information(self, "Add Missing Players", f"No missing generated players found. Skipped {skipped_existing} generated players already active.")
-            return False
+            return
         if target_count <= 0:
             QMessageBox.warning(self, "Add Missing Players", "No active A Z players are available as import targets.")
-            return False
+            return
         import_count = min(missing_count, target_count)
         dialog = QDialog(self)
         dialog.setWindowTitle("Add Missing Players")
@@ -1823,40 +1870,45 @@ class QtEditorApp(QMainWindow):
         import_button = QPushButton("Import Listed Players")
         cancel_button.clicked.connect(dialog.reject)
         import_button.clicked.connect(dialog.accept)
+        dialog.accepted.connect(on_accept)
         buttons.addStretch(1)
         buttons.addWidget(cancel_button)
         buttons.addWidget(import_button)
         layout.addLayout(buttons)
         dialog.resize(560, 420)
-        return dialog.exec() == QDialog.DialogCode.Accepted
+        dialog.show()
 
     def _import_missing_generator_to_game_display(self) -> None:
         display = self._generator_display_module()
         if hasattr(display, "import_missing_generator_to_game_display_state"):
             self._refresh_player_generator_dropdowns()
+
+            def start_import() -> None:
+                state_snapshot = self.player_generator_state
+
+                def worker() -> str:
+                    try:
+                        self.player_generator_state = display.import_missing_generator_to_game_display_state(
+                            self.model,
+                            state_snapshot,
+                            progress_callback=self._background_operation_progress,
+                        )
+                    except Exception as exc:
+                        self.player_generator_state = display.empty_generator_display_state(f"Add missing players failed: {exc}")
+                        raise
+                    return str(getattr(self.player_generator_state, "status", "Add missing players complete."))
+
+                self._start_background_operation("Add Missing Players", worker, done_callback=self._sync_player_generator_status)
+
             if hasattr(display, "missing_generator_import_preview"):
                 try:
                     summary = display.missing_generator_import_preview(self.model, self.player_generator_state)
                 except Exception as exc:
                     QMessageBox.warning(self, "Add Missing Players", str(exc))
                     return
-                if not self._confirm_missing_generator_import(summary):
-                    return
-            state_snapshot = self.player_generator_state
-
-            def worker() -> str:
-                try:
-                    self.player_generator_state = display.import_missing_generator_to_game_display_state(
-                        self.model,
-                        state_snapshot,
-                        progress_callback=self._background_operation_progress,
-                    )
-                except Exception as exc:
-                    self.player_generator_state = display.empty_generator_display_state(f"Add missing players failed: {exc}")
-                    raise
-                return str(getattr(self.player_generator_state, "status", "Add missing players complete."))
-
-            self._start_background_operation("Add Missing Players", worker, done_callback=self._sync_player_generator_status)
+                self._confirm_missing_generator_import(summary, start_import)
+                return
+            start_import()
 
     def _generator_grid_text(self) -> str:
         return str(getattr(self.player_generator_state, "player_rows", ""))

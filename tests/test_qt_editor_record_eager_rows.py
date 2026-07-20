@@ -28,8 +28,8 @@ class EagerRecordModel:
     def runtime_status_text(self) -> str:
         return "not attached"
 
-    def player_team_filter_options(self) -> tuple[str, ...]:
-        return ("All Players",)
+    def player_team_filter_options(self) -> tuple[tuple[str, str], ...]:
+        return (("All Players", "All Players"),)
 
     def team_summary_labels(self) -> tuple[str, ...]:
         return ("Team Name", "City Name", "City Abbrev")
@@ -43,13 +43,19 @@ class EagerRecordModel:
     def domain_item_labels(self, domain: str) -> list[str]:
         return []
 
+    def domain_items(self, domain: str) -> list[Any]:
+        return []
+
+    def player_items_for_team_filter(self, _team_filter: str | int | None, _search_text: str | None = None) -> dict[int, Any]:
+        return {}
+
     def domain_item_count(self, domain: str) -> int:
         return 0
 
     def selected_item(self, domain: str) -> Any:
         return None
 
-    def select_item_by_label(self, domain: str, selected_label: str | None) -> Any:
+    def select_item_by_index(self, domain: str, selected_index: int | None, **_kwargs) -> Any:
         return None
 
     def domain_status(self, domain: str) -> str:

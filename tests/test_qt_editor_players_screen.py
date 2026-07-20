@@ -6,8 +6,9 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtCore import QItemSelection, QItemSelectionModel
-from PyQt6.QtWidgets import QApplication, QComboBox, QMessageBox, QPushButton, QWidget
+from PyQt6.QtCore import QItemSelection, QItemSelectionModel, QPoint, Qt
+from PyQt6.QtGui import QContextMenuEvent
+from PyQt6.QtWidgets import QApplication, QComboBox, QMenu, QMessageBox, QPushButton, QWidget
 
 from nba2k_editor.models.schema import FieldEntry, RecordListItem
 from nba2k_editor.ui.qt_app import QtEditorApp
@@ -25,8 +26,8 @@ class PlayerScreenModel:
         self.team_a = RecordListItem("Teams", 0, 0x2000, "Team A")
         self.team_b = RecordListItem("Teams", 1, 0x3000, "Team B")
         self.loaded_items = {
-            "Players": {self.player.display_label: self.player},
-            "Teams": {self.team_a.display_label: self.team_a, self.team_b.display_label: self.team_b},
+            "Players": {self.player.index: self.player},
+            "Teams": {self.team_a.index: self.team_a, self.team_b.index: self.team_b},
             "Staff": {},
             "Stadiums": {},
             "Jerseys": {},
@@ -41,8 +42,8 @@ class PlayerScreenModel:
     def runtime_status_text(self) -> str:
         return "not attached"
 
-    def player_team_filter_options(self) -> tuple[str, ...]:
-        return ("All Players", self.team_a.display_label, self.team_b.display_label)
+    def player_team_filter_options(self) -> tuple[tuple[str, str | int], ...]:
+        return (("All Players", "All Players"), (self.team_a.display_label, self.team_a.index), (self.team_b.display_label, self.team_b.index))
 
     def team_summary_labels(self) -> tuple[str, ...]:
         return ("Team Name", "City Name", "City Abbrev")
@@ -71,15 +72,18 @@ class PlayerScreenModel:
         self.selected_items[domain] = item
         return item
 
-    def select_item_by_label(self, domain: str, selected_label: str | None):
-        if selected_label is None:
+    def select_item_by_index(self, domain: str, selected_index: int | None, **_kwargs):
+        if selected_index is None:
             self.selected_items[domain] = None
         else:
-            self.selected_items[domain] = self.loaded_items[domain][selected_label]
+            self.selected_items[domain] = self.loaded_items[domain][selected_index]
         return self.selected_items[domain]
 
     def domain_item_labels(self, domain: str) -> list[str]:
-        return list(self.loaded_items[domain])
+        return [item.display_label for item in self.loaded_items[domain].values()]
+
+    def domain_items(self, domain: str) -> list[RecordListItem]:
+        return list(self.loaded_items[domain].values())
 
     def domain_item_count(self, domain: str) -> int:
         return len(self.loaded_items[domain])
@@ -88,10 +92,13 @@ class PlayerScreenModel:
         return "loaded"
 
     def player_item_labels_for_team_filter(self, _team_filter: str | None, _search_text: str | None = None) -> list[str]:
-        return list(self.loaded_items["Players"])
+        return [item.display_label for item in self.loaded_items["Players"].values()]
 
-    def player_items_for_team_filter(self, _team_filter: str | None):
-        return self.loaded_items["Players"]
+    def player_items_for_team_filter(self, _team_filter: str | int | None, search_text: str | None = None):
+        if not search_text:
+            return self.loaded_items["Players"]
+        query = search_text.lower()
+        return {index: item for index, item in self.loaded_items["Players"].items() if query in item.display_label.lower()}
 
     def player_roster_slot_items_for_team_items(self, teams):
         team_list = list(teams)
@@ -138,10 +145,10 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
         self.assertEqual("PG", app.player_detail_rows["Position"].value.text())
         self.assertEqual("0x1700", app.detail_addresses["Players"].text())
 
-    def test_player_movement_controls_wire_add_remove_and_trade_actions(self) -> None:
+    def test_player_right_click_menu_wires_add_remove_and_trade_actions(self) -> None:
         model = PlayerScreenModel()
         second_player = RecordListItem("Players", 8, 0x1800, "Beta Forward")
-        model.loaded_items["Players"][second_player.display_label] = second_player
+        model.loaded_items["Players"][second_player.index] = second_player
         app = QtEditorApp(model)  # type: ignore[arg-type]
         calls: list[tuple[object, ...]] = []
 
@@ -159,19 +166,61 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
                 return ()
 
         app.player_movement = MovementRecorder()
-        self.assertEqual(
-            [model.team_a.display_label, model.team_b.display_label],
-            [app.player_movement_team_combo.itemText(index) for index in range(app.player_movement_team_combo.count())],
-        )
-        app.player_movement_team_combo.setCurrentText(model.team_b.display_label)
-        app.state.selected_item_labels["Players"] = {model.player.display_label}
+        app.state.selected_item_indexes["Players"] = {model.player.index, second_player.index}
+        app._sync_player_list()
         model.select_item("Players", model.player)
 
-        with patch.object(QMessageBox, "information"):
-            app.findChild(QPushButton, "AddPlayerToTeamButton").click()
-            app.findChild(QPushButton, "RemovePlayerFromTeamButton").click()
-            app.state.selected_item_labels["Players"] = {model.player.display_label, second_player.display_label}
-            app.findChild(QPushButton, "TradeSelectedPlayersButton").click()
+        menu_calls = 0
+
+        def trigger_actions(menu: QMenu, _position: QPoint) -> None:
+            nonlocal menu_calls
+            menu_calls += 1
+            actions = {action.text(): action for action in menu.actions()}
+            if menu_calls == 1:
+                add_menu = actions["Add to Team"].menu()
+                assert add_menu is not None
+                self.assertEqual(
+                    [model.team_a.display_label, model.team_b.display_label],
+                    [action.text() for action in add_menu.actions()],
+                )
+                next(action for action in add_menu.actions() if action.data() == model.team_b.index).trigger()
+                actions["Remove from Team"].trigger()
+                trade_menu = actions["Trade Player"].menu()
+                assert trade_menu is not None
+                self.assertEqual(
+                    [model.team_a.display_label, model.team_b.display_label],
+                    [action.text() for action in trade_menu.actions()],
+                )
+                next(action for action in trade_menu.actions() if action.data() == model.team_b.index).trigger()
+                return
+            self.assertIsNone(actions["Trade Player"].menu())
+            actions["Trade Player"].trigger()
+
+        record_list = app.domain_lists["Players"]
+        first_item = next(
+            record_list.item(row)
+            for row in range(record_list.count())
+            if int(record_list.item(row).data(Qt.ItemDataRole.UserRole)) == model.player.index
+        )
+        first_position = record_list.visualItemRect(first_item).center()
+        first_event = QContextMenuEvent(QContextMenuEvent.Reason.Mouse, first_position, record_list.mapToGlobal(first_position))
+        with patch.object(QMessageBox, "information"), patch("nba2k_editor.ui.qt_app.QMenu.exec", trigger_actions):
+            record_list.contextMenuEvent(first_event)
+            self.assertEqual(model.team_b.index, app.state.player_team_filter)
+            assert app.player_filter_combo is not None
+            self.assertEqual(model.team_b.index, app.player_filter_combo.currentData())
+            self.assertEqual(model.player.index, app.state.pending_trade_player_index)
+            second_item = next(
+                record_list.item(row)
+                for row in range(record_list.count())
+                if int(record_list.item(row).data(Qt.ItemDataRole.UserRole)) == second_player.index
+            )
+            second_position = record_list.visualItemRect(second_item).center()
+            second_event = QContextMenuEvent(QContextMenuEvent.Reason.Mouse, second_position, record_list.mapToGlobal(second_position))
+            record_list.contextMenuEvent(second_event)
+
+        self.assertIsNone(app.state.pending_trade_player_index)
+        self.assertIsNone(app.state.pending_trade_team_index)
 
         self.assertEqual(
             [
@@ -181,11 +230,14 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
             ],
             calls,
         )
+        self.assertIsNone(app.findChild(QPushButton, "AddPlayerToTeamButton"))
+        self.assertIsNone(app.findChild(QPushButton, "RemovePlayerFromTeamButton"))
+        self.assertIsNone(app.findChild(QPushButton, "TradeSelectedPlayersButton"))
 
     def test_single_team_roster_export_uses_selected_team_filter_not_start_range(self) -> None:
         model = PlayerScreenModel()
         app = QtEditorApp(model)  # type: ignore[arg-type]
-        app.state.player_team_filter = model.team_b.display_label
+        app.state.player_team_filter = model.team_b.index
         app.roster_start_input.setText("0")
         app.roster_end_input.setText("0")
 
@@ -210,7 +262,7 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
         model = PlayerScreenModel()
         for index in range(30):
             player = RecordListItem("Players", index + 100, 0x4000 + index, f"Bench {index}")
-            model.loaded_items["Players"][player.display_label] = player
+            model.loaded_items["Players"][player.index] = player
         detail_reads = 0
 
         def selected_player_detail_values() -> dict[str, str]:
@@ -229,7 +281,7 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
         qt_app().processEvents()
 
         self.assertEqual(1, detail_reads)
-        self.assertEqual(record_list.count(), len(app.state.selected_item_labels["Players"]))
+        self.assertEqual(record_list.count(), len(app.state.selected_item_indexes["Players"]))
 
     def test_player_popout_starts_smaller_and_can_shrink(self) -> None:
         model = PlayerScreenModel()
@@ -241,7 +293,7 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
             captured["minimum"] = (dialog.minimumWidth(), dialog.minimumHeight())
             return 0
 
-        with patch("nba2k_editor.ui.qt_app.QDialog.exec", capture_exec):
+        with patch("nba2k_editor.ui.qt_app.QDialog.show", capture_exec):
             app._open_editor_window(model.player)
 
         self.assertEqual((820, 560), captured["size"])
@@ -257,7 +309,7 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
             captured["options"] = [combo.itemText(index) for index in range(combo.count())]
             return 0
 
-        with patch("nba2k_editor.ui.qt_app.QDialog.exec", capture_exec):
+        with patch("nba2k_editor.ui.qt_app.QDialog.show", capture_exec):
             app._open_editor_window(model.player)
 
         self.assertEqual(["PG", "SG", "SF"], captured["options"])
@@ -283,7 +335,7 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
 
         app._build_team_records_widget = lambda: QWidget()  # type: ignore[method-assign]
         app._show_team_record_rows = lambda: None  # type: ignore[method-assign]
-        with patch("nba2k_editor.ui.qt_app.QDialog.exec", capture_exec):
+        with patch("nba2k_editor.ui.qt_app.QDialog.show", capture_exec):
             for source in sources:
                 current_domain = source.domain
                 app._open_editor_window(source)
@@ -296,7 +348,7 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
     def test_generic_staff_edit_button_preserves_domain_when_clicked_signal_sends_checked_arg(self) -> None:
         model = PlayerScreenModel()
         staff = RecordListItem("Staff", 3, 0x3300, "Coach Test")
-        model.loaded_items["Staff"] = {staff.display_label: staff}
+        model.loaded_items["Staff"] = {staff.index: staff}
         model.selected_items["Staff"] = staff
         app = QtEditorApp(model)  # type: ignore[arg-type]
         opened: list[RecordListItem] = []

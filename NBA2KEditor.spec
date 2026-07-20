@@ -13,6 +13,7 @@ from pathlib import Path
 project_root = Path(SPECPATH).resolve()
 package_root = project_root / "nba2k_editor"
 player_generator_dir = package_root / "Player Generator"
+franchise_dir = package_root / "franchise"
 core_offsets_dir = package_root / "core" / "Offsets"
 player_data_dir = player_generator_dir / "NBA Player Data"
 player_pool_dir = player_data_dir / "player_generation_pool"
@@ -38,6 +39,16 @@ def _player_generator_modules() -> list[str]:
     # - qt_app imports nba2k_editor.Player Generator.display dynamically.
     # - display.py then puts the folder on sys.path and imports contracts/etc.
     return [*(f"nba2k_editor.Player Generator.{stem}" for stem in stems), *stems]
+
+
+def _franchise_modules() -> list[str]:
+    if not franchise_dir.exists():
+        return []
+    return sorted(
+        f"nba2k_editor.franchise.{path.stem}"
+        for path in franchise_dir.glob("*.py")
+        if path.stem != "__init__"
+    )
 
 
 datas: list[tuple[str, str]] = []
@@ -69,6 +80,7 @@ hiddenimports = [
     "PyQt6.QtCore",
     "PyQt6.QtGui",
     "PyQt6.QtWidgets",
+    *_franchise_modules(),
     *_player_generator_modules(),
 ]
 
