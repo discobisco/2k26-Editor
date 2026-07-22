@@ -388,7 +388,7 @@ class FranchiseScreen(QWidget):
             if kind != "done":
                 continue
             handled = True
-            message, status, _done_callback = payload
+            _request_id, message, status, _done_callback = payload
             launched_franchise_id = self._profile_generation_franchise_id
             self._profile_generation_franchise_id = ""
             try:

@@ -22,13 +22,6 @@ _MATCH_DISPLAY_COLUMNS: tuple[tuple[str, str], ...] = (
 _MULTI_TEAM_MARKERS = {"TOT", "2TM", "3TM", "4TM", "5TM"}
 
 
-def _pre_nba_season_options() -> tuple[str, ...]:
-    _ensure_generator_import_path()
-    from pre_nba_source import pre_nba_seasons
-
-    return tuple(str(season) for season in pre_nba_seasons(_SOURCE_ROOT))
-
-
 @dataclass(frozen=True)
 class GeneratorFieldDisplayRow:
     section: str
@@ -500,7 +493,6 @@ def _season_options(database: Path) -> tuple[str, ...]:
     with sqlite3.connect(database) as connection:
         rows = connection.execute(f'SELECT DISTINCT season FROM "{table}" WHERE season IS NOT NULL ORDER BY season DESC').fetchall()
     seasons = {str(int(row[0])) for row in rows}
-    seasons.update(_pre_nba_season_options())
     return tuple(sorted(seasons, key=lambda value: int(value), reverse=True))
 
 

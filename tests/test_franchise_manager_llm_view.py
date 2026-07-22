@@ -225,30 +225,6 @@ def test_fantasy_draft_pool_uses_active_player_offset_only() -> None:
     assert model.write_called is False
 
 
-def test_fantasy_draft_prompt_uses_ranked_board_with_player_facts() -> None:
-    model = ReadOnlyFranchiseModel()
-    late_star = FakeItem("Players", 12, 12000, "Late Star", "[12] Late Star")
-    model.loaded_items["Players"][late_star.display_label] = late_star
-    model.player_values[8]["ISACTIVE"] = (1, "Yes")
-    model.player_values[12] = {"ISACTIVE": (1, "Yes"), "OVERALL": (96, "96"), "POSITION": (3, "SF"), "BIRTHYEAR": (1971, "1971")}
-    pool = build_active_player_draft_pool(model, team_count=30)
-
-    prompt = build_fantasy_draft_pick_prompt(
-        record=_franchise_record_for_recommendations(),
-        position=draft_position(1, team_order=(0,)),
-        team_profile=TeamProfile(0, "", False, "Team Zero Staff", ""),
-        available_players=pool,
-        drafted_picks=(),
-    )
-    payload = json.loads(prompt)
-
-    assert [player["player_label"] for player in payload["available_players"]] == ["[12] Late Star", "[4] Player Four", "[8] Unused Player"]
-    assert payload["available_players"][0]["draft_rank"] == 1
-    assert payload["available_players"][0]["draft_facts"] == {"overall": "96", "position": "SF", "birth_year": "1971"}
-    assert payload["available_players"][1]["draft_facts"]["overall"] == "88"
-    assert any("higher overall-rated real players first" in rule for rule in payload["rules"])
-
-
 def test_fantasy_draft_board_loads_on_clock_team_profile(tmp_path: Path) -> None:
     (tmp_path / "team_00_profile.md").write_text("---\nname: Team Zero Profile\n---\n# Team Zero\nDraft guards\n", encoding="utf-8")
 

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import queue
 import re
-import threading
 from collections import OrderedDict
 from typing import Any, Iterable
 
@@ -21,6 +19,7 @@ from nba2k_editor.core.field_io import (
     _write_authored_value,
 )
 from nba2k_editor.memory.game_memory import GameMemory
+from nba2k_editor.memory.read_buffer import ReadOnlyMemoryBuffer
 from nba2k_editor.models.schema import (
     FieldEntry,
     RecordListItem,
@@ -34,6 +33,7 @@ from nba2k_editor.models.schema import (
     _stat_role,
     _STAT_ROLE_SELECTOR,
 )
+from nba2k_editor.models.view_data import DomainRefreshView, PlayerListView
 
 _DOMAIN_BASE_KEYS: dict[str, str] = {
     "Players": "Player",
@@ -207,8 +207,7 @@ class EditorDataModel:
         self.loaded_items: dict[str, dict[int, RecordListItem]] = {domain: {} for domain in _MODEL_DOMAINS}
         self.selected_items: dict[str, RecordListItem | None] = {domain: None for domain in _MODEL_DOMAINS}
         self.domain_statuses: dict[str, str] = {domain: self.runtime_status_text() for domain in _MODEL_DOMAINS}
-        self.refresh_events: queue.Queue[tuple[str, str]] = queue.Queue()
-        self.refresh_thread: threading.Thread | None = None
+        self._data_version = 0
         self._history_screen_rows: dict[tuple[str, str], list[dict[str, str]]] = {}
         self._record_screen_rows: dict[tuple[str, str], list[dict[str, str]]] = {}
         self._layout_cache: dict[str, dict[str, Any]] = {}
@@ -216,6 +215,10 @@ class EditorDataModel:
         self._field_context_cache: dict[str, dict[int, tuple[str, str]]] = {}
         self._field_lookup_cache: dict[str, dict[str, FieldEntry]] = {}
         self._player_team_pointer_cache: dict[int, int] = {}
+        self._player_filter_items_by_key: dict[str | int, tuple[RecordListItem, ...]] = {}
+        self._player_search_keys: dict[int, str] = {}
+        self._player_filter_index_ready = False
+        self._player_free_agent_filter_ready = False
 
     def _active_config(self) -> dict[str, Any]:
         self.offsets.initialize_offsets(self.target_executable, force=False)
@@ -303,6 +306,7 @@ class EditorDataModel:
         self._field_context_cache.clear()
         self._field_lookup_cache.clear()
         self._player_team_pointer_cache.clear()
+        self._invalidate_player_filter_index()
         self.loaded_items = {domain: {} for domain in _MODEL_DOMAINS}
         self.selected_items = {domain: None for domain in _MODEL_DOMAINS}
         self.last_status = self.runtime_status_text()
@@ -440,11 +444,6 @@ class EditorDataModel:
         entry = self._field_by_normalized_name("Players", "CURRENTTEAM")
         return int(self.read_entry_value(entry, index=item.index).get("raw_value"))
 
-    def _player_current_team_pointer(self, item: RecordListItem) -> int:
-        if item.index not in self._player_team_pointer_cache:
-            self._player_team_pointer_cache[item.index] = self._read_player_current_team_pointer(item)
-        return self._player_team_pointer_cache[item.index]
-
     def _read_player_is_active(self, item: RecordListItem) -> bool:
         entry = self._field_by_normalized_name("Players", "ISACTIVE")
         if entry is None:
@@ -452,63 +451,153 @@ class EditorDataModel:
         value = self.read_entry_value(entry, index=item.index).get("raw_value")
         return bool(int(value or 0))
 
-    def _free_agent_player_items(self) -> dict[int, RecordListItem]:
-        return {
-            index: player
-            for index, player in self.loaded_items.get("Players", {}).items()
-            if self._read_player_is_active(player) and self._player_current_team_pointer(player) == 0
-        }
+    def _invalidate_player_filter_index(self) -> None:
+        self._player_filter_items_by_key.clear()
+        self._player_search_keys.clear()
+        self._player_filter_index_ready = False
+        self._player_free_agent_filter_ready = False
 
-    def _base_team_items(self) -> tuple[RecordListItem, ...]:
-        return tuple(
-            team
-            for team in self.loaded_items.get("Teams", {}).values()
-            if 0 <= int(team.index) <= 29
+    def _field_invalidates_player_filter_index(self, domain: str, field: dict[str, Any]) -> bool:
+        identity = _field_identity(field.get("normalized_name") or field.get("display_name"))
+        return (domain == "Players" and identity in {"CURRENTTEAM", "ISACTIVE"}) or (
+            domain == "Teams" and identity.startswith("PLAYER") and identity.removeprefix("PLAYER").isdigit()
         )
 
-    def _base_team_player_items(self) -> dict[int, RecordListItem]:
-        rows = self.player_roster_slot_items_for_team_items(self._base_team_items())
-        players: dict[int, RecordListItem] = {}
-        for player, _placement in rows:
-            players.setdefault(int(player.index), player)
-        return players
-
-    def _draft_class_player_items(self) -> dict[int, RecordListItem]:
-        try:
-            items = self._scan_records_from_base_key("Players", _DRAFT_CLASS_BASE_KEY)
-        except Exception as exc:
-            self.domain_statuses["Players"] = self.runtime_status_text() if "not attached" in str(exc).lower() else f"draft class scan failed: {exc}"
+    def _player_filter_source_values(
+        self,
+        players: tuple[RecordListItem, ...],
+    ) -> dict[int, tuple[int, bool]]:
+        if not players:
             return {}
-        return {int(item.index): item for item in items}
+        current_team_entry = self._field_by_normalized_name("Players", "CURRENTTEAM")
+        active_entry = self._field_by_normalized_name("Players", "ISACTIVE")
+        if current_team_entry is None or active_entry is None:
+            raise KeyError("Players filter requires CURRENTTEAM and ISACTIVE")
+        current_team_payload = self._field_version_payload(current_team_entry.field)
+        active_payload = self._field_version_payload(active_entry.field)
+        first_address = min(int(player.address) for player in players)
+        last_address = max(int(player.address) for player in players)
+        stride = self.domain_stride("Players")
+        current_team_address = _field_address(
+            self.memory,
+            first_address,
+            current_team_payload,
+            parent_payload=self._parent_payload("Players", current_team_payload),
+        )
+        active_address = _field_address(
+            self.memory,
+            first_address,
+            active_payload,
+            parent_payload=self._parent_payload("Players", active_payload),
+        )
+        current_team_offset = int(current_team_address) - first_address
+        active_offset = int(active_address) - first_address
+        if not (0 <= current_team_offset < stride and 0 <= active_offset < stride):
+            raise ValueError("Players filter fields must resolve inside the player record")
+        memory = ReadOnlyMemoryBuffer.capture(
+            self.memory,
+            first_address,
+            last_address - first_address + stride,
+        )
+        return {
+            int(player.index): (
+                int(_read_authored_value(memory, int(player.address) + current_team_offset, current_team_payload)),
+                bool(int(_read_authored_value(memory, int(player.address) + active_offset, active_payload) or 0)),
+            )
+            for player in players
+        }
+
+    def _build_free_agent_filter(self, players: tuple[RecordListItem, ...]) -> tuple[RecordListItem, ...]:
+        free_agents: list[RecordListItem] = []
+        self._player_team_pointer_cache.clear()
+        source_values = self._player_filter_source_values(players)
+        for player in players:
+            current_team, is_active = source_values[int(player.index)]
+            self._player_team_pointer_cache[int(player.index)] = current_team
+            if is_active and current_team == 0:
+                free_agents.append(player)
+        result = tuple(free_agents)
+        self._player_filter_items_by_key[PLAYER_TEAM_FILTER_FREE_AGENTS] = result
+        self._player_free_agent_filter_ready = True
+        return result
+
+    def build_player_filter_index(self, *, include_free_agents: bool = True) -> PlayerListView:
+        players = tuple(self.loaded_items.get("Players", {}).values())
+        players_by_address = {int(player.address): player for player in players}
+        team_buckets: dict[int, list[RecordListItem]] = {
+            int(team.index): [] for team in self.loaded_items.get("Teams", {}).values()
+        }
+        base_team_players: dict[int, RecordListItem] = {}
+        slot_entries = self._team_player_slot_entries()
+
+        for team in self.loaded_items.get("Teams", {}).values():
+            bucket = team_buckets[int(team.index)]
+            seen: set[int] = set()
+            for _slot, entry in slot_entries:
+                try:
+                    player_pointer = int(self.read_entry_value(entry, index=team.index).get("raw_value") or 0)
+                except Exception:
+                    continue
+                player = players_by_address.get(player_pointer)
+                if player is None or int(player.index) in seen:
+                    continue
+                seen.add(int(player.index))
+                bucket.append(player)
+                if 0 <= int(team.index) <= 29:
+                    base_team_players.setdefault(int(player.index), player)
+
+        try:
+            draft_class = tuple(self._scan_records_from_base_key("Players", _DRAFT_CLASS_BASE_KEY))
+        except Exception:
+            draft_class = ()
+
+        indexes: dict[str | int, tuple[RecordListItem, ...]] = {
+            PLAYER_TEAM_FILTER_ALL: players,
+            PLAYER_TEAM_FILTER_BASE_TEAMS: tuple(base_team_players.values()),
+            PLAYER_TEAM_FILTER_FREE_AGENTS: (),
+            PLAYER_TEAM_FILTER_DRAFT_CLASS: draft_class,
+        }
+        indexes.update({team_index: tuple(items) for team_index, items in team_buckets.items()})
+        self._player_filter_items_by_key = indexes
+        self._player_search_keys = {
+            int(item.address): item.display_label.casefold()
+            for items in indexes.values()
+            for item in items
+        }
+        self._player_filter_index_ready = True
+        self._player_free_agent_filter_ready = False
+        if include_free_agents:
+            self._build_free_agent_filter(players)
+        self._data_version += 1
+        return self.player_list_view(PLAYER_TEAM_FILTER_ALL)
+
+    def prepare_player_list_view(self, selected_team: str | int | None, search_text: str | None = None) -> PlayerListView:
+        selected = selected_team if isinstance(selected_team, int) else str(selected_team or PLAYER_TEAM_FILTER_ALL).strip()
+        if not self._player_filter_index_ready:
+            self.build_player_filter_index(include_free_agents=selected == PLAYER_TEAM_FILTER_FREE_AGENTS)
+        elif selected == PLAYER_TEAM_FILTER_FREE_AGENTS and not self._player_free_agent_filter_ready:
+            self._build_free_agent_filter(tuple(self.loaded_items.get("Players", {}).values()))
+        return self.player_list_view(selected, search_text)
+
+    def player_list_view(self, selected_team: str | int | None, search_text: str | None = None) -> PlayerListView:
+        selected = selected_team if isinstance(selected_team, int) else str(selected_team or PLAYER_TEAM_FILTER_ALL).strip()
+        if not self._player_filter_index_ready:
+            items = tuple(self.loaded_items.get("Players", {}).values()) if selected == PLAYER_TEAM_FILTER_ALL else ()
+        else:
+            items = self._player_filter_items_by_key.get(selected, ())
+        query = str(search_text or "").strip().casefold()
+        if query:
+            items = tuple(item for item in items if query in self._player_search_keys.get(int(item.address), item.display_label.casefold()))
+        return PlayerListView(filter_key=selected, query=query, items=tuple(items), version=self._data_version)
 
     def _player_filter_items(self, selected_team: str | int | None) -> dict[int, RecordListItem]:
-        selected = selected_team if isinstance(selected_team, int) else str(selected_team or "").strip()
-        if selected == PLAYER_TEAM_FILTER_BASE_TEAMS:
-            return self._base_team_player_items()
-        if selected == PLAYER_TEAM_FILTER_FREE_AGENTS:
-            return self._free_agent_player_items()
-        if selected == PLAYER_TEAM_FILTER_DRAFT_CLASS:
-            return self._draft_class_player_items()
-        if isinstance(selected, int):
-            team = self.loaded_items["Teams"].get(selected)
-            if team is None:
-                return {}
-            return {
-                index: player
-                for index, player in self.loaded_items["Players"].items()
-                if self._player_current_team_pointer(player) == team.address
-            }
-        return self.loaded_items.get("Players", {})
+        return {int(item.index): item for item in self.player_list_view(selected_team).items}
 
     def player_items_for_team_filter(self, selected_team: str | int | None, search_text: str | None = None) -> dict[int, RecordListItem]:
-        items = self._player_filter_items(selected_team)
-        query = str(search_text or "").strip().lower()
-        if not query:
-            return items
-        return {index: item for index, item in items.items() if query in item.display_label.lower()}
+        return {int(item.index): item for item in self.player_list_view(selected_team, search_text).items}
 
     def player_item_labels_for_team_filter(self, selected_team: str | int | None, search_text: str | None = None) -> list[str]:
-        return [item.display_label for item in self.player_items_for_team_filter(selected_team, search_text).values()]
+        return [item.display_label for item in self.player_list_view(selected_team, search_text).items]
 
     def is_player_season_id_selector_entry(self, entry: FieldEntry) -> bool:
         return _is_player_season_id_selector_entry(entry)
@@ -641,8 +730,11 @@ class EditorDataModel:
             items = self.scan_records(domain, limit=limit)
             by_index = {int(item.index): item for item in items}
             self.loaded_items[domain] = by_index
+            self._data_version += 1
             if domain == "Players":
                 self._player_team_pointer_cache.clear()
+            if domain in {"Players", "Teams"}:
+                self._invalidate_player_filter_index()
             indices = list(by_index)
             if indices:
                 current = self.selected_items.get(domain)
@@ -655,40 +747,39 @@ class EditorDataModel:
             return items
         except Exception as exc:
             self.loaded_items[domain] = {}
+            self._data_version += 1
             self.selected_items[domain] = None
             if domain == "Players":
                 self._player_team_pointer_cache.clear()
+            if domain in {"Players", "Teams"}:
+                self._invalidate_player_filter_index()
             self.domain_statuses[domain] = self.runtime_status_text() if "not attached" in str(exc).lower() else f"scan failed: {exc}"
             return []
 
-    def start_background_refresh(self, domains: tuple[str, ...]) -> bool:
-        if self.refresh_thread is not None and self.refresh_thread.is_alive():
-            return False
-        self.refresh_thread = threading.Thread(target=self._background_refresh_worker, args=(domains,), name="nba2k-editor-model-refresh", daemon=True)
-        self.refresh_thread.start()
-        return True
-
-    def _background_refresh_worker(self, domains: tuple[str, ...]) -> None:
-        try:
-            self.attach()
-            self.refresh_events.put(("status", ""))
-            for domain in domains:
-                self.domain_statuses[domain] = "Loading records..."
-                self.refresh_events.put(("start", domain))
-                self.refresh_domain_items(domain)
-                self.refresh_events.put(("domain", domain))
-        except Exception as exc:
-            self.refresh_events.put(("error", str(exc)))
-        finally:
-            self.refresh_events.put(("done", ""))
-
-    def pop_refresh_events(self) -> list[tuple[str, str]]:
-        events: list[tuple[str, str]] = []
-        while True:
-            try:
-                events.append(self.refresh_events.get_nowait())
-            except queue.Empty:
-                return events
+    def refresh_domains(
+        self,
+        domains: tuple[str, ...],
+        progress_callback: Any | None = None,
+    ) -> tuple[DomainRefreshView, ...]:
+        self.attach()
+        views: list[DomainRefreshView] = []
+        total = len(domains)
+        for position, domain in enumerate(domains, start=1):
+            self.domain_statuses[domain] = "Loading records..."
+            items = tuple(self.refresh_domain_items(domain))
+            views.append(
+                DomainRefreshView(
+                    domain=domain,
+                    items=items,
+                    status=self.domain_status(domain),
+                    version=self._data_version,
+                )
+            )
+            if progress_callback is not None:
+                progress_callback(position, total, f"Loaded {domain}")
+        if self.loaded_items.get("Players") and {"Players", "Teams"}.intersection(domains):
+            self.build_player_filter_index(include_free_agents=False)
+        return tuple(views)
 
     def player_detail_labels(self) -> tuple[str, ...]:
         return tuple(label for label, _ in PLAYER_DETAIL_FIELD_SPECS)
@@ -1162,6 +1253,9 @@ class EditorDataModel:
             self.write_entry_value(entry, index=item.index, value=value, stat_selector=stat_selector)
             return
         raw_value = self._write_field_at_record_address(entry.domain, item.address, entry.field, value)
+        self._data_version += 1
+        if self._field_invalidates_player_filter_index(entry.domain, entry.field):
+            self._invalidate_player_filter_index()
         if entry.domain == "Players" and _field_identity(entry.field.get("normalized_name") or entry.field.get("display_name")) == "CURRENTTEAM":
             try:
                 self._player_team_pointer_cache[item.index] = int(raw_value)
@@ -1333,6 +1427,9 @@ class EditorDataModel:
             return
         if target_record_addr is not None:
             raw_value = self._write_field_at_record_address(entry.domain, int(target_record_addr), entry.field, value)
+            self._data_version += 1
+            if self._field_invalidates_player_filter_index(entry.domain, entry.field):
+                self._invalidate_player_filter_index()
             if entry.domain == "Players" and _field_identity(entry.field.get("normalized_name") or entry.field.get("display_name")) == "CURRENTTEAM":
                 try:
                     self._player_team_pointer_cache[index] = int(raw_value)
@@ -1515,6 +1612,9 @@ class EditorDataModel:
 
     def write_value(self, domain: str, *, index: int, field: dict[str, Any], value: Any) -> None:
         raw_value = self._write_field_at_record_address(domain, self.record_address(domain, index), field, value)
+        self._data_version += 1
+        if self._field_invalidates_player_filter_index(domain, field):
+            self._invalidate_player_filter_index()
         if domain == "Players" and _field_identity(field.get("normalized_name") or field.get("display_name")) == "CURRENTTEAM":
             try:
                 self._player_team_pointer_cache[index] = int(raw_value)

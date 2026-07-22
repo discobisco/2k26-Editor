@@ -6,348 +6,636 @@ import math
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
+from typing import Any
 
-import numpy as np
+from player_generation_models import (
+    THREE_POINT_CAPTURE_FIELDS,
+    THREE_POINT_FIELD_CONTRACTS,
+    THREE_POINT_RUNTIME_FIELDS,
+    TWO_POINT_CAPTURE_FIELDS,
+    TWO_POINT_FIELD_CONTRACTS,
+    TWO_POINT_RUNTIME_FIELDS,
+)
 
-POSITIONS: tuple[str, ...] = ("PG", "SG", "SF", "PF", "C")
-BASELINE_RUN_ID = "editor_capture_026"
-RAW_MINUTES_KEY = "Minutes"
-RAW_VOLUME_STATS: tuple[str, ...] = (
-    "Assists",
-    "Blocks",
-    "Defensive Rebounds",
-    "Field Goals Attempted",
-    "Field Goals Made",
-    "Fouls",
-    "Free Throws Attempted",
-    "Free Throws Made",
-    "Offensive Rebounds",
-    "Points",
-    "Steals",
-    "Three Pointers Attempted",
-    "Three Pointers Made",
-    "Turnovers",
-)
-REQUIRED_TABLES: tuple[str, ...] = (
-    "candidate_pool",
-    "candidate_fields",
-    "pool_export_rows",
-    "pool_export_snapshots",
-)
+FREE_THROW_CAPTURE_FIELD = "Offense / Free Throws"
+_SENTINEL_STAT_VALUE = 65535.0
 
 
 @dataclass(frozen=True)
-class PoolAnalysisData:
-    pool_path: Path
-    pool_sha256: str
-    package_keys: tuple[tuple[str, int], ...]
-    run_ids: np.ndarray
-    player_indices: np.ndarray
-    positions: np.ndarray
-    field_keys: tuple[str, ...]
-    field_types: tuple[str, ...]
-    field_values: np.ndarray
-    sim_stat_names: tuple[str, ...]
-    sim_values: np.ndarray
-    raw_stat_names: tuple[str, ...]
-    raw_values: np.ndarray
-    minutes: np.ndarray
-    baseline_mask: np.ndarray
-    column_lineage: Mapping[str, str]
+class FreeThrowResponseExample:
+    """One immutable 2K package used by the free-throw execution model.
+
+    ``run_id`` and ``player_index`` are grouping/provenance only. The model input
+    is the exact captured Free Throw attribute; the outputs are raw made and
+    attempted free throws. Names and Tendencies are intentionally absent.
+    """
+
+    run_id: str
+    player_index: int
+    free_throw_rating: int
+    free_throws_made: float
+    free_throws_attempted: float
 
     @property
-    def package_count(self) -> int:
-        return len(self.package_keys)
-
-    def field_indices(self, field_type: str | None = None) -> tuple[int, ...]:
-        if field_type is None:
-            return tuple(range(len(self.field_keys)))
-        return tuple(i for i, value in enumerate(self.field_types) if value == field_type)
+    def observed_make_probability(self) -> float:
+        return self.free_throws_made / self.free_throws_attempted
 
 
-def default_pool_path() -> Path:
-    return (
-        Path(__file__).resolve().parent
-        / "NBA Player Data"
-        / "player_generation_pool"
-        / "player_generation_pool.sqlite"
-    )
+@dataclass(frozen=True)
+class FreeThrowResponseData:
+    pool_path: Path
+    pool_fingerprint: str
+    pool_file_hashes: tuple[tuple[str, str], ...]
+    pool_files_unchanged: bool
+    examples: tuple[FreeThrowResponseExample, ...]
+    candidate_packages: int
+    excluded_missing_stats: int
+    excluded_zero_attempts: int
+    excluded_invalid_totals: int
+    excluded_invalid_rating: int
 
 
-def sha256_file(path: Path) -> str:
+@dataclass(frozen=True)
+class ThreePointResponseExample:
+    """One complete 3PT input package and its aggregate shooting response."""
+
+    run_id: str
+    player_index: int
+    field_values: tuple[int, ...]
+    three_pointers_made: float
+    three_pointers_attempted: float
+    field_goals_attempted: float
+
+    def field_mapping(self) -> dict[str, int]:
+        return dict(zip(THREE_POINT_RUNTIME_FIELDS, self.field_values, strict=True))
+
+    @property
+    def observed_make_probability(self) -> float | None:
+        if self.three_pointers_attempted <= 0.0:
+            return None
+        return self.three_pointers_made / self.three_pointers_attempted
+
+    @property
+    def observed_attempt_share(self) -> float:
+        return self.three_pointers_attempted / self.field_goals_attempted
+
+
+@dataclass(frozen=True)
+class ThreePointResponseData:
+    pool_path: Path
+    pool_fingerprint: str
+    pool_file_hashes: tuple[tuple[str, str], ...]
+    pool_files_unchanged: bool
+    examples: tuple[ThreePointResponseExample, ...]
+    candidate_packages: int
+    excluded_missing_input_fields: int
+    excluded_invalid_input_values: int
+    excluded_missing_stats: int
+    excluded_zero_field_goal_attempts: int
+    excluded_invalid_totals: int
+
+
+@dataclass(frozen=True)
+class TwoPointResponseExample:
+    """One complete 2PT field package and its aggregate 2PT response."""
+
+    run_id: str
+    player_index: int
+    field_values: tuple[int, ...]
+    two_points_made: float
+    two_points_attempted: float
+    minutes: float
+    height_inches: float
+    weight_pounds: float
+    position: str
+
+    def field_mapping(self) -> dict[str, int]:
+        return dict(zip(TWO_POINT_RUNTIME_FIELDS, self.field_values, strict=True))
+
+    def player_context(self) -> dict[str, Any]:
+        return {
+            "height_inches": self.height_inches,
+            "weight_pounds": self.weight_pounds,
+            "position": self.position,
+        }
+
+    @property
+    def observed_make_probability(self) -> float | None:
+        if self.two_points_attempted <= 0.0:
+            return None
+        return self.two_points_made / self.two_points_attempted
+
+    @property
+    def observed_attempts_per_36(self) -> float:
+        return 36.0 * self.two_points_attempted / self.minutes
+
+
+@dataclass(frozen=True)
+class TwoPointResponseData:
+    pool_path: Path
+    pool_fingerprint: str
+    pool_file_hashes: tuple[tuple[str, str], ...]
+    pool_files_unchanged: bool
+    examples: tuple[TwoPointResponseExample, ...]
+    candidate_packages: int
+    excluded_missing_input_fields: int
+    excluded_invalid_input_values: int
+    excluded_missing_stats: int
+    excluded_missing_stat_values: int
+    excluded_missing_context: int
+    excluded_invalid_context: int
+    excluded_nonpositive_minutes: int
+    excluded_invalid_totals: int
+
+
+def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
+    with path.open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
 
 
-def _read_only_connection(path: Path) -> sqlite3.Connection:
-    resolved = path.resolve()
-    if not resolved.is_file():
-        raise FileNotFoundError(f"missing player generation pool: {resolved}")
-    connection = sqlite3.connect(f"{resolved.as_uri()}?mode=ro", uri=True)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA query_only = ON")
-    return connection
+def _pool_file_hashes(pool_path: Path) -> tuple[tuple[str, str], ...]:
+    files = [pool_path]
+    wal_path = Path(f"{pool_path}-wal")
+    if wal_path.exists() and wal_path.stat().st_size > 0:
+        files.append(wal_path)
+    return tuple((path.name, _sha256(path)) for path in files)
 
 
-def _float_or_nan(value: object) -> float:
-    if value is None or value == "":
-        return math.nan
+def _pool_fingerprint(file_hashes: tuple[tuple[str, str], ...]) -> str:
+    payload = json.dumps(file_hashes, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(payload.encode("ascii")).hexdigest()
+
+
+def _read_numeric(payload: dict[str, Any], key: str) -> float | None:
+    raw = payload.get(key)
+    if raw is None or isinstance(raw, bool):
+        return None
     try:
-        number = float(str(value))
+        value = float(str(raw).strip())
     except (TypeError, ValueError):
-        return math.nan
-    return number if math.isfinite(number) else math.nan
+        return None
+    return value if math.isfinite(value) else None
 
 
-def _required_tables(connection: sqlite3.Connection) -> None:
-    available = {
-        str(row[0])
-        for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
-    }
-    missing = sorted(set(REQUIRED_TABLES) - available)
-    if missing:
-        raise RuntimeError(f"pool is missing required tables: {missing}")
+def _read_rating(raw: Any) -> int | None:
+    return _read_bounded_integer(raw, 25, 99)
 
 
-def classify_candidate_pool_columns(columns: Sequence[str]) -> dict[str, str]:
-    lineage: dict[str, str] = {}
-    for column in columns:
-        if column in {"run_id", "player_index"}:
-            lineage[column] = "capture_local_package_key"
-        elif column in {"player_label", "master_player"}:
-            lineage[column] = "forbidden_2k_or_source_name"
-        elif column == "master_player_id":
-            lineage[column] = "forbidden_source_identity"
-        elif column == "position":
-            lineage[column] = "position_partition_key"
-        elif column.startswith("master_"):
-            lineage[column] = "source_feature_candidate_not_analysis_outcome"
-        elif column.startswith("sim_"):
-            lineage[column] = "captured_sim_outcome_for_analysis_only"
-        else:
-            lineage[column] = "legacy_merged_feature_forbidden_until_lineage_proven"
-    return lineage
+def _read_bounded_integer(raw: Any, minimum: int, maximum: int) -> int | None:
+    if isinstance(raw, bool):
+        return None
+    try:
+        numeric = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(numeric) or not numeric.is_integer():
+        return None
+    value = int(numeric)
+    return value if minimum <= value <= maximum else None
 
 
-def _field_identity(value: object) -> str:
-    return "".join(character for character in str(value or "").upper() if character.isalnum())
+def load_free_throw_response_data(pool_path: str | Path) -> FreeThrowResponseData:
+    """Load the Free Throw attribute response slice from the Pool, read-only.
 
-
-def _authored_field_keys() -> dict[tuple[str, str, str], str]:
-    from nba2k_editor.core import offsets as offsets_mod
-
-    players = offsets_mod.get_editor_layout_for_super("Players")
-    authored: dict[tuple[str, str, str], str] = {}
-    for section, groups in players.items():
-        if section not in {"Attributes", "Tendencies"} or not isinstance(groups, dict):
-            continue
-        for group, fields in groups.items():
-            if not isinstance(fields, list):
-                continue
-            for field in fields:
-                if not isinstance(field, dict):
-                    continue
-                normalized = str(field.get("normalized_name") or "").strip()
-                display = str(field.get("display_name") or normalized).strip()
-                if not normalized:
-                    continue
-                for field_name in (normalized, display):
-                    key = (_field_identity(section), _field_identity(group), _field_identity(field_name))
-                    existing = authored.get(key)
-                    field_key = f"{section}/{normalized}"
-                    if existing is not None and existing != field_key:
-                        raise ValueError(f"ambiguous authored field identity: {key}")
-                    authored[key] = field_key
-    return authored
-
-
-def _exact_field_map(
-    pairs: Iterable[tuple[str, str]],
-) -> dict[tuple[str, str], str]:
-    authored = _authored_field_keys()
-    mapped: dict[tuple[str, str], str] = {}
-    for field_type, input_field in sorted(set(pairs)):
-        section = (
-            "Attributes"
-            if field_type == "Attribute"
-            else "Tendencies"
-            if field_type == "Tendency"
-            else ""
-        )
-        if not section or "/" not in input_field:
-            raise ValueError(f"unsupported candidate field: {(field_type, input_field)!r}")
-        group_text, field_text = (part.strip() for part in input_field.split("/", 1))
-        key = authored.get((_field_identity(section), _field_identity(group_text), _field_identity(field_text)))
-        if key is None:
-            raise KeyError(f"candidate field is not in authored offsets: {(field_type, input_field)!r}")
-        if key in mapped.values():
-            raise ValueError(f"multiple candidate fields resolve to {key}")
-        mapped[(field_type, input_field)] = key
-    return mapped
-
-
-def _load_raw_stats_by_package(
-    connection: sqlite3.Connection,
-) -> dict[tuple[str, int], dict[str, object]]:
-    # Deliberately reproduce player_generation_pool._stored_snapshot_rows:
-    # ORDER BY rowid and last row wins for a repeated capture-local player_index.
-    rows: dict[tuple[str, int], dict[str, object]] = {}
-    query = """
-        SELECT snapshot_id, row_json
-        FROM pool_export_rows
-        WHERE row_type = 'stats'
-        ORDER BY rowid
+    Raw stat rows use the capture writer's canonical last-row-wins rule for each
+    ``(snapshot_id, player_index)``. Packages with no free-throw attempts carry
+    no execution information and are reported, not used as observations.
     """
-    for row in connection.execute(query):
-        payload = json.loads(str(row["row_json"]))
-        key = (str(row["snapshot_id"]), int(payload["player_index"]))
-        rows[key] = payload
-    return rows
 
+    path = Path(pool_path).resolve()
+    before_hashes = _pool_file_hashes(path)
+    connection = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)
+    try:
+        connection.execute("PRAGMA query_only=ON")
+        integrity = connection.execute("PRAGMA integrity_check").fetchone()
+        if integrity is None or integrity[0] != "ok":
+            raise ValueError(f"Pool integrity check failed: {integrity!r}")
 
-def load_pool_analysis_data(pool_path: Path | str | None = None) -> PoolAnalysisData:
-    path = Path(pool_path) if pool_path is not None else default_pool_path()
-    before_hash = sha256_file(path)
+        candidate_rows = connection.execute(
+            """
+            SELECT run_id, player_index, value
+            FROM candidate_fields
+            WHERE field_type = 'Attribute' AND input_field = ?
+            ORDER BY run_id, player_index
+            """,
+            (FREE_THROW_CAPTURE_FIELD,),
+        ).fetchall()
 
-    with _read_only_connection(path) as connection:
-        _required_tables(connection)
-        table_info = list(connection.execute("PRAGMA table_info(candidate_pool)"))
-        candidate_columns = tuple(str(row[1]) for row in table_info)
-        lineage = classify_candidate_pool_columns(candidate_columns)
-        sim_stat_names = tuple(column for column in candidate_columns if column.startswith("sim_"))
-        if not sim_stat_names:
-            raise RuntimeError("candidate_pool has no sim_* analysis outcomes")
+        canonical_stats: dict[tuple[str, int], dict[str, Any]] = {}
+        for snapshot_id, row_json in connection.execute(
+            """
+            SELECT snapshot_id, row_json
+            FROM pool_export_rows
+            WHERE row_type = 'stats'
+            ORDER BY rowid
+            """
+        ):
+            payload = json.loads(row_json)
+            player_index = payload.get("player_index")
+            if isinstance(player_index, bool):
+                continue
+            try:
+                index = int(player_index)
+            except (TypeError, ValueError):
+                continue
+            canonical_stats[(str(snapshot_id), index)] = payload
+    finally:
+        connection.close()
 
-        select_columns = ("run_id", "player_index", "position", *sim_stat_names)
-        quoted = ", ".join(f'"{column}"' for column in select_columns)
-        candidate_rows = list(
-            connection.execute(
-                f"SELECT {quoted} FROM candidate_pool ORDER BY run_id, player_index"
-            )
-        )
-        package_keys = tuple(
-            (str(row["run_id"]), int(row["player_index"])) for row in candidate_rows
-        )
-        if len(package_keys) != len(set(package_keys)):
-            raise RuntimeError("candidate_pool contains duplicate (run_id, player_index) packages")
-        package_index = {key: i for i, key in enumerate(package_keys)}
+    examples: list[FreeThrowResponseExample] = []
+    missing_stats = 0
+    zero_attempts = 0
+    invalid_totals = 0
+    invalid_rating = 0
+    seen_packages: set[tuple[str, int]] = set()
+    for run_id_raw, player_index_raw, rating_raw in candidate_rows:
+        run_id = str(run_id_raw)
+        player_index = int(player_index_raw)
+        package_key = (run_id, player_index)
+        if package_key in seen_packages:
+            raise ValueError(f"Duplicate Free Throw candidate package: {package_key!r}")
+        seen_packages.add(package_key)
 
-        run_ids = np.asarray([key[0] for key in package_keys], dtype=object)
-        player_indices = np.asarray([key[1] for key in package_keys], dtype=np.int64)
-        positions = np.asarray([str(row["position"]).strip().upper() for row in candidate_rows], dtype=object)
-        invalid_positions = sorted(set(positions.tolist()) - set(POSITIONS))
-        if invalid_positions:
-            raise ValueError(f"candidate_pool has unsupported positions: {invalid_positions}")
-
-        sim_values = np.full((len(candidate_rows), len(sim_stat_names)), np.nan, dtype=np.float64)
-        for row_index, row in enumerate(candidate_rows):
-            for stat_index, stat_name in enumerate(sim_stat_names):
-                sim_values[row_index, stat_index] = _float_or_nan(row[stat_name])
-
-        field_rows = list(
-            connection.execute(
-                """
-                SELECT run_id, player_index, position, field_type, input_field, value
-                FROM candidate_fields
-                ORDER BY run_id, player_index, field_type, input_field
-                """
-            )
-        )
-        pairs = {
-            (str(row["field_type"]), str(row["input_field"])) for row in field_rows
-        }
-        field_map = _exact_field_map(pairs)
-        ordered_fields = sorted(
-            (
-                field_key,
-                field_type,
-                input_field,
-            )
-            for (field_type, input_field), field_key in field_map.items()
-        )
-        field_keys = tuple(item[0] for item in ordered_fields)
-        field_types = tuple(item[1] for item in ordered_fields)
-        field_index = {key: i for i, key in enumerate(field_keys)}
-        pair_to_index = {
-            (field_type, input_field): field_index[field_key]
-            for field_key, field_type, input_field in ordered_fields
-        }
-        field_values = np.full((len(candidate_rows), len(field_keys)), np.nan, dtype=np.float64)
-        seen_field_cells: set[tuple[int, int]] = set()
-        for row in field_rows:
-            key = (str(row["run_id"]), int(row["player_index"]))
-            row_index = package_index.get(key)
-            if row_index is None:
-                raise KeyError(f"candidate_fields package is missing from candidate_pool: {key}")
-            position = str(row["position"]).strip().upper()
-            if position != positions[row_index]:
-                raise ValueError(f"position mismatch for package {key}: {position} != {positions[row_index]}")
-            pair = (str(row["field_type"]), str(row["input_field"]))
-            column_index = pair_to_index[pair]
-            cell = (row_index, column_index)
-            if cell in seen_field_cells:
-                raise RuntimeError(f"duplicate candidate field cell: {key}, {pair}")
-            seen_field_cells.add(cell)
-            field_values[row_index, column_index] = _float_or_nan(row["value"])
-
-        raw_by_package = _load_raw_stats_by_package(connection)
-
-    raw_stat_names = RAW_VOLUME_STATS
-    raw_values = np.full((len(package_keys), len(raw_stat_names)), np.nan, dtype=np.float64)
-    minutes = np.full(len(package_keys), np.nan, dtype=np.float64)
-    for row_index, key in enumerate(package_keys):
-        payload = raw_by_package.get(key)
-        if payload is None:
+        rating = _read_rating(rating_raw)
+        if rating is None:
+            invalid_rating += 1
             continue
-        minutes[row_index] = _float_or_nan(payload.get(RAW_MINUTES_KEY))
-        for stat_index, stat_name in enumerate(raw_stat_names):
-            raw_values[row_index, stat_index] = _float_or_nan(payload.get(stat_name))
-
-    after_hash = sha256_file(path)
-    if after_hash != before_hash:
-        raise RuntimeError("pool changed while read-only analysis data was loading")
-
-    if len(field_keys) != 159:
-        raise RuntimeError(f"expected 159 exact fields, found {len(field_keys)}")
-    attribute_count = sum(value == "Attribute" for value in field_types)
-    tendency_count = sum(value == "Tendency" for value in field_types)
-    if (attribute_count, tendency_count) != (52, 107):
-        raise RuntimeError(
-            f"expected 52 Attributes and 107 Tendencies, found {attribute_count} and {tendency_count}"
+        stats = canonical_stats.get(package_key)
+        if stats is None:
+            missing_stats += 1
+            continue
+        made = _read_numeric(stats, "Free Throws Made")
+        attempted = _read_numeric(stats, "Free Throws Attempted")
+        if (
+            made is None
+            or attempted is None
+            or made < 0.0
+            or attempted < 0.0
+            or made > attempted
+            or made >= _SENTINEL_STAT_VALUE
+            or attempted >= _SENTINEL_STAT_VALUE
+        ):
+            invalid_totals += 1
+            continue
+        if attempted == 0.0:
+            zero_attempts += 1
+            continue
+        examples.append(
+            FreeThrowResponseExample(
+                run_id=run_id,
+                player_index=player_index,
+                free_throw_rating=rating,
+                free_throws_made=made,
+                free_throws_attempted=attempted,
+            )
         )
 
-    return PoolAnalysisData(
-        pool_path=path.resolve(),
-        pool_sha256=before_hash,
-        package_keys=package_keys,
-        run_ids=run_ids,
-        player_indices=player_indices,
-        positions=positions,
-        field_keys=field_keys,
-        field_types=field_types,
-        field_values=field_values,
-        sim_stat_names=sim_stat_names,
-        sim_values=sim_values,
-        raw_stat_names=raw_stat_names,
-        raw_values=raw_values,
-        minutes=minutes,
-        baseline_mask=run_ids == BASELINE_RUN_ID,
-        column_lineage=lineage,
+    after_hashes = _pool_file_hashes(path)
+    if after_hashes != before_hashes:
+        raise RuntimeError("Pool files changed during the read-only Free Throw load")
+    return FreeThrowResponseData(
+        pool_path=path,
+        pool_fingerprint=_pool_fingerprint(before_hashes),
+        pool_file_hashes=before_hashes,
+        pool_files_unchanged=True,
+        examples=tuple(examples),
+        candidate_packages=len(candidate_rows),
+        excluded_missing_stats=missing_stats,
+        excluded_zero_attempts=zero_attempts,
+        excluded_invalid_totals=invalid_totals,
+        excluded_invalid_rating=invalid_rating,
     )
 
 
-__all__ = [
-    "BASELINE_RUN_ID",
-    "POSITIONS",
-    "PoolAnalysisData",
-    "RAW_MINUTES_KEY",
-    "RAW_VOLUME_STATS",
-    "classify_candidate_pool_columns",
-    "default_pool_path",
-    "load_pool_analysis_data",
-    "sha256_file",
-]
+def load_three_point_response_data(pool_path: str | Path) -> ThreePointResponseData:
+    """Load the complete 3PT Attribute/Tendency group and aggregate responses."""
+
+    path = Path(pool_path).resolve()
+    before_hashes = _pool_file_hashes(path)
+    contract_by_capture = {
+        capture_field: (runtime_field, field_type, minimum, maximum, index)
+        for index, (runtime_field, field_type, capture_field, minimum, maximum) in enumerate(
+            THREE_POINT_FIELD_CONTRACTS
+        )
+    }
+    placeholders = ",".join("?" for _field in THREE_POINT_CAPTURE_FIELDS)
+    connection = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)
+    try:
+        connection.execute("PRAGMA query_only=ON")
+        integrity = connection.execute("PRAGMA integrity_check").fetchone()
+        if integrity is None or integrity[0] != "ok":
+            raise ValueError(f"Pool integrity check failed: {integrity!r}")
+        candidate_rows = connection.execute(
+            f"""
+            SELECT run_id, player_index, field_type, input_field, value
+            FROM candidate_fields
+            WHERE input_field IN ({placeholders})
+            ORDER BY run_id, player_index, input_field
+            """,
+            THREE_POINT_CAPTURE_FIELDS,
+        ).fetchall()
+        canonical_stats: dict[tuple[str, int], dict[str, Any]] = {}
+        for snapshot_id, row_json in connection.execute(
+            """
+            SELECT snapshot_id, row_json
+            FROM pool_export_rows
+            WHERE row_type = 'stats'
+            ORDER BY rowid
+            """
+        ):
+            payload = json.loads(row_json)
+            player_index = payload.get("player_index")
+            if isinstance(player_index, bool):
+                continue
+            try:
+                index = int(player_index)
+            except (TypeError, ValueError):
+                continue
+            canonical_stats[(str(snapshot_id), index)] = payload
+    finally:
+        connection.close()
+
+    package_values: dict[tuple[str, int], dict[str, Any]] = {}
+    invalid_packages: set[tuple[str, int]] = set()
+    for run_id_raw, player_index_raw, field_type_raw, capture_field_raw, value in candidate_rows:
+        package_key = (str(run_id_raw), int(player_index_raw))
+        capture_field = str(capture_field_raw)
+        contract = contract_by_capture.get(capture_field)
+        if contract is None or str(field_type_raw) != contract[1]:
+            invalid_packages.add(package_key)
+            continue
+        values = package_values.setdefault(package_key, {})
+        if capture_field in values:
+            invalid_packages.add(package_key)
+            continue
+        values[capture_field] = value
+
+    examples: list[ThreePointResponseExample] = []
+    missing_input_fields = 0
+    invalid_input_values = 0
+    missing_stats = 0
+    zero_field_goal_attempts = 0
+    invalid_totals = 0
+    for package_key in sorted(package_values):
+        values = package_values[package_key]
+        if package_key in invalid_packages:
+            invalid_input_values += 1
+            continue
+        if any(capture_field not in values for capture_field in THREE_POINT_CAPTURE_FIELDS):
+            missing_input_fields += 1
+            continue
+        parsed_values: list[int] = []
+        for _runtime_field, _field_type, capture_field, minimum, maximum in THREE_POINT_FIELD_CONTRACTS:
+            parsed = _read_bounded_integer(values[capture_field], minimum, maximum)
+            if parsed is None:
+                break
+            parsed_values.append(parsed)
+        if len(parsed_values) != len(THREE_POINT_FIELD_CONTRACTS):
+            invalid_input_values += 1
+            continue
+        stats = canonical_stats.get(package_key)
+        if stats is None:
+            missing_stats += 1
+            continue
+        three_made = _read_numeric(stats, "Three Pointers Made")
+        three_attempted = _read_numeric(stats, "Three Pointers Attempted")
+        field_made = _read_numeric(stats, "Field Goals Made")
+        field_attempted = _read_numeric(stats, "Field Goals Attempted")
+        if (
+            three_made is None
+            or three_attempted is None
+            or field_made is None
+            or field_attempted is None
+            or any(
+                value < 0.0 or value >= _SENTINEL_STAT_VALUE
+                for value in (three_made, three_attempted, field_made, field_attempted)
+            )
+            or three_made > three_attempted
+            or three_attempted > field_attempted
+            or three_made > field_made
+            or field_made > field_attempted
+        ):
+            invalid_totals += 1
+            continue
+        if field_attempted == 0.0:
+            zero_field_goal_attempts += 1
+            continue
+        examples.append(
+            ThreePointResponseExample(
+                run_id=package_key[0],
+                player_index=package_key[1],
+                field_values=tuple(parsed_values),
+                three_pointers_made=three_made,
+                three_pointers_attempted=three_attempted,
+                field_goals_attempted=field_attempted,
+            )
+        )
+
+    after_hashes = _pool_file_hashes(path)
+    if after_hashes != before_hashes:
+        raise RuntimeError("Pool files changed during the read-only 3PT load")
+    return ThreePointResponseData(
+        pool_path=path,
+        pool_fingerprint=_pool_fingerprint(before_hashes),
+        pool_file_hashes=before_hashes,
+        pool_files_unchanged=True,
+        examples=tuple(examples),
+        candidate_packages=len(package_values),
+        excluded_missing_input_fields=missing_input_fields,
+        excluded_invalid_input_values=invalid_input_values,
+        excluded_missing_stats=missing_stats,
+        excluded_zero_field_goal_attempts=zero_field_goal_attempts,
+        excluded_invalid_totals=invalid_totals,
+    )
+
+
+def load_two_point_response_data(pool_path: str | Path) -> TwoPointResponseData:
+    """Load the complete 2PT field group and derive aggregate 2PT responses."""
+
+    path = Path(pool_path).resolve()
+    before_hashes = _pool_file_hashes(path)
+    contract_by_capture = {
+        capture_field: (runtime_field, field_type, minimum, maximum)
+        for runtime_field, field_type, capture_field, minimum, maximum in TWO_POINT_FIELD_CONTRACTS
+    }
+    placeholders = ",".join("?" for _field in TWO_POINT_CAPTURE_FIELDS)
+    connection = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)
+    try:
+        connection.execute("PRAGMA query_only=ON")
+        integrity = connection.execute("PRAGMA integrity_check").fetchone()
+        if integrity is None or integrity[0] != "ok":
+            raise ValueError(f"Pool integrity check failed: {integrity!r}")
+        candidate_rows = connection.execute(
+            f"""
+            SELECT run_id, player_index, field_type, input_field, value
+            FROM candidate_fields
+            WHERE input_field IN ({placeholders})
+            ORDER BY run_id, player_index, input_field
+            """,
+            TWO_POINT_CAPTURE_FIELDS,
+        ).fetchall()
+        candidate_context = {
+            (str(run_id), int(player_index)): (height_inches, weight_pounds, position)
+            for run_id, player_index, height_inches, weight_pounds, position in connection.execute(
+                """
+                SELECT run_id, player_index, height_inches, weight_pounds, position
+                FROM candidate_pool
+                ORDER BY run_id, player_index
+                """
+            )
+        }
+        canonical_stats: dict[tuple[str, int], dict[str, Any]] = {}
+        for snapshot_id, row_json in connection.execute(
+            """
+            SELECT snapshot_id, row_json
+            FROM pool_export_rows
+            WHERE row_type = 'stats'
+            ORDER BY rowid
+            """
+        ):
+            payload = json.loads(row_json)
+            player_index = payload.get("player_index")
+            if isinstance(player_index, bool):
+                continue
+            try:
+                index = int(player_index)
+            except (TypeError, ValueError):
+                continue
+            canonical_stats[(str(snapshot_id), index)] = payload
+    finally:
+        connection.close()
+
+    package_values: dict[tuple[str, int], dict[str, Any]] = {}
+    invalid_packages: set[tuple[str, int]] = set()
+    for run_id_raw, player_index_raw, field_type_raw, capture_field_raw, value in candidate_rows:
+        package_key = (str(run_id_raw), int(player_index_raw))
+        capture_field = str(capture_field_raw)
+        contract = contract_by_capture.get(capture_field)
+        if contract is None or str(field_type_raw) != contract[1]:
+            invalid_packages.add(package_key)
+            continue
+        values = package_values.setdefault(package_key, {})
+        if capture_field in values:
+            invalid_packages.add(package_key)
+            continue
+        values[capture_field] = value
+
+    examples: list[TwoPointResponseExample] = []
+    missing_input_fields = 0
+    invalid_input_values = 0
+    missing_stats = 0
+    missing_stat_values = 0
+    missing_context = 0
+    invalid_context = 0
+    nonpositive_minutes = 0
+    invalid_totals = 0
+    for package_key in sorted(package_values):
+        values = package_values[package_key]
+        if package_key in invalid_packages:
+            invalid_input_values += 1
+            continue
+        if any(capture_field not in values for capture_field in TWO_POINT_CAPTURE_FIELDS):
+            missing_input_fields += 1
+            continue
+        parsed_values: list[int] = []
+        for _runtime_field, _field_type, capture_field, minimum, maximum in TWO_POINT_FIELD_CONTRACTS:
+            parsed = _read_bounded_integer(values[capture_field], minimum, maximum)
+            if parsed is None:
+                break
+            parsed_values.append(parsed)
+        if len(parsed_values) != len(TWO_POINT_FIELD_CONTRACTS):
+            invalid_input_values += 1
+            continue
+        stats = canonical_stats.get(package_key)
+        if stats is None:
+            missing_stats += 1
+            continue
+        context = candidate_context.get(package_key)
+        if context is None:
+            missing_context += 1
+            continue
+        height_raw, weight_raw, position_raw = context
+        try:
+            height_inches = float(height_raw)
+            weight_pounds = float(weight_raw)
+        except (TypeError, ValueError):
+            invalid_context += 1
+            continue
+        position = str(position_raw or "").strip().upper()
+        if (
+            not math.isfinite(height_inches)
+            or not math.isfinite(weight_pounds)
+            or position not in {"PG", "SG", "SF", "PF", "C"}
+        ):
+            invalid_context += 1
+            continue
+        field_made = _read_numeric(stats, "Field Goals Made")
+        field_attempted = _read_numeric(stats, "Field Goals Attempted")
+        three_made = _read_numeric(stats, "Three Pointers Made")
+        three_attempted = _read_numeric(stats, "Three Pointers Attempted")
+        minutes = _read_numeric(stats, "Minutes")
+        if (
+            field_made is None
+            or field_attempted is None
+            or three_made is None
+            or three_attempted is None
+            or minutes is None
+        ):
+            missing_stat_values += 1
+            continue
+        if minutes <= 0.0:
+            nonpositive_minutes += 1
+            continue
+        if (
+            any(
+                value < 0.0 or value >= _SENTINEL_STAT_VALUE
+                for value in (field_made, field_attempted, three_made, three_attempted, minutes)
+            )
+            or field_made > field_attempted
+            or three_made > three_attempted
+            or three_made > field_made
+            or three_attempted > field_attempted
+        ):
+            invalid_totals += 1
+            continue
+        two_made = field_made - three_made
+        two_attempted = field_attempted - three_attempted
+        if two_made < 0.0 or two_attempted < 0.0 or two_made > two_attempted:
+            invalid_totals += 1
+            continue
+        examples.append(
+            TwoPointResponseExample(
+                run_id=package_key[0],
+                player_index=package_key[1],
+                field_values=tuple(parsed_values),
+                two_points_made=two_made,
+                two_points_attempted=two_attempted,
+                minutes=minutes,
+                height_inches=height_inches,
+                weight_pounds=weight_pounds,
+                position=position,
+            )
+        )
+
+    after_hashes = _pool_file_hashes(path)
+    if after_hashes != before_hashes:
+        raise RuntimeError("Pool files changed during the read-only 2PT load")
+    return TwoPointResponseData(
+        pool_path=path,
+        pool_fingerprint=_pool_fingerprint(before_hashes),
+        pool_file_hashes=before_hashes,
+        pool_files_unchanged=True,
+        examples=tuple(examples),
+        candidate_packages=len(package_values),
+        excluded_missing_input_fields=missing_input_fields,
+        excluded_invalid_input_values=invalid_input_values,
+        excluded_missing_stats=missing_stats,
+        excluded_missing_stat_values=missing_stat_values,
+        excluded_missing_context=missing_context,
+        excluded_invalid_context=invalid_context,
+        excluded_nonpositive_minutes=nonpositive_minutes,
+        excluded_invalid_totals=invalid_totals,
+    )

@@ -92,20 +92,6 @@ class PlayerEditorResetTests(unittest.TestCase):
         self.assertNotIn("Stats/ISUSED", fields)
 
 
-    def test_reset_player_editor_values_does_not_include_stats_fields(self) -> None:
-        model = ResetRecordingModel()
-
-        result = model.reset_player_editor_values(index=12, stat_selector="[42] Active")
-
-        self.assertEqual({"attempted": 6, "succeeded": 6, "failed": 0}, result)
-        written_names = [write[2] for write in model.writes]
-        self.assertIn("MIDRANGE", written_names)
-        self.assertIn("SHOT", written_names)
-        self.assertIn("BULLDOZER", written_names)
-        self.assertNotIn("CURRENTYEARSTATID", written_names)
-        self.assertNotIn("STATSID1", written_names)
-        self.assertNotIn("POINTS", written_names)
-
     def test_apply_player_roster_snapshot_ignores_stats_by_default(self) -> None:
         model = ResetRecordingModel()
 

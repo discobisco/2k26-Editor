@@ -37,7 +37,7 @@ class RecordsModel:
         self.zero_writes: list[tuple[int, str]] = []
         self.data_entry = FieldEntry("NBA Records", "Records", "Records", 0, {"normalized_name": "DATA", "display_name": "Data"})
         self.team_entry = FieldEntry("Teams", "Vitals", "Info", 0, {"normalized_name": "TEAMNAME", "display_name": "Team Name"})
-        self.background_refresh_domains: tuple[str, ...] | None = None
+
 
     def runtime_status_text(self) -> str:
         return "not attached"
@@ -63,12 +63,6 @@ class RecordsModel:
     def domain_status(self, domain: str) -> str:
         return "loaded"
 
-    def start_background_refresh(self, domains: tuple[str, ...]) -> bool:
-        self.background_refresh_domains = domains
-        return True
-
-    def pop_refresh_events(self):
-        return []
 
     def player_item_labels_for_team_filter(self, _team_filter: str | None, _search_text: str | None = None) -> list[str]:
         return []
@@ -309,9 +303,10 @@ class QtEditorRecordsScreenTests(unittest.TestCase):
         model.loaded_items["NBA History"] = {}
         app = QtEditorApp(model)  # type: ignore[arg-type]
 
-        app._load_history_screen_rows()
+        with patch.object(app, "_start_background_scan") as start_scan:
+            app._load_history_screen_rows()
 
-        self.assertEqual(("NBA History",), model.background_refresh_domains)
+        start_scan.assert_called_once_with(("NBA History",))
 
     def test_history_nav_click_does_not_reload_rows(self) -> None:
         model = RecordsModel()

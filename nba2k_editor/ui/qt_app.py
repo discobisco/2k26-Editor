@@ -44,6 +44,7 @@ from nba2k_editor.models.data_model import (
     verify_edits,
 )
 from nba2k_editor.models.player_movement import PlayerMovement
+from nba2k_editor.models.view_data import DomainRefreshView, PlayerListRequest, PlayerListView
 from nba2k_editor.models.team_record_routing import (
     TEAM_RECORD_SECTION_STAT_TABS,
     TEAM_RECORD_SIDE_NAV,
@@ -66,6 +67,7 @@ PLAYER_ROSTER_EXPORT_MODES: tuple[str, ...] = (
 )
 PLAYER_ROSTER_EXPORTS_DIR = Path("outputs") / "exports"
 PLAYER_ROSTER_DEFAULT_EXPORT_FILE = "player_roster_snapshot.json"
+
 
 HISTORY_SIDE_NAV: tuple[str, ...] = ("Season Awards", "Past Champions", "League Leaders", "Hall of Famers")
 HISTORY_AWARD_TABS: tuple[str, ...] = (
@@ -248,6 +250,7 @@ class QtEditorApp(QMainWindow):
         self.status_labels: dict[str, QLabel] = {}
         self.count_labels: dict[str, QLabel] = {}
         self.dashboard_metric_labels: dict[str, QLabel] = {}
+        self._domain_counts: dict[str, int] = {domain: 0 for domain in EDITOR_DOMAINS}
         self.detail_titles: dict[str, QLabel] = {}
         self.detail_addresses: dict[str, QLabel] = {}
         self.player_detail_rows: dict[str, DetailRow] = {}
@@ -260,6 +263,11 @@ class QtEditorApp(QMainWindow):
         self.player_movement = PlayerMovement(model)
         self.operation_dialog: OperationDialog | None = None
         self.operation_worker = BackgroundOperationWorker()
+        self._operation_targets_by_request: dict[int, str] = {}
+        self._latest_operation_request_ids: dict[str, int] = {}
+        self._operation_progress_requests: set[int] = set()
+        self._pending_player_list_request: tuple[int, PlayerListRequest] | None = None
+        self._player_list_request_serial = 0
         self.player_generator_display = import_module("nba2k_editor.Player Generator.display")
         self.player_generator_state = self.player_generator_display.empty_generator_display_state()
         self.generator_text: QTextEdit | None = None
@@ -269,8 +277,6 @@ class QtEditorApp(QMainWindow):
         self.generator_source_team_combo: QComboBox | None = None
         self.generator_player_combo: QComboBox | None = None
         self._build_ui()
-        self.scan_timer = QTimer(self)
-        self.scan_timer.timeout.connect(self._poll_background_scan)
         self.operation_timer = QTimer(self)
         self.operation_timer.timeout.connect(self._poll_background_operation)
 
@@ -805,7 +811,7 @@ class QtEditorApp(QMainWindow):
     def _refresh_dashboard_metrics(self) -> None:
         if not self.dashboard_metric_labels:
             return
-        domain_counts = {domain: self.model.domain_item_count(domain) for domain in EDITOR_DOMAINS}
+        domain_counts = self._domain_counts
         loaded_domains = sum(1 for domain in EDITOR_DOMAINS if domain_counts.get(domain, 0) > 0)
         total_domains = max(1, len(EDITOR_DOMAINS))
         metrics = {
@@ -833,40 +839,56 @@ class QtEditorApp(QMainWindow):
 
     def _start_background_scan(self, domains: tuple[str, ...]) -> None:
         scan_domains = self._scan_domains_for_request(domains)
-        if not self.model.start_background_refresh(scan_domains):
-            self.home_target_status.setText("Scan already running...")
-            return
         self.home_target_status.setText("Loading record lists...")
         for domain in scan_domains:
             if domain in self.status_labels:
                 self.status_labels[domain].setText("Queued for scan...")
 
-    def _poll_background_scan(self) -> None:
-        events = self.model.pop_refresh_events() if hasattr(self.model, "pop_refresh_events") else []
-        for event, value in events:
-            if event == "start":
-                domain = str(value)
-                if domain in self.status_labels:
-                    self.status_labels[domain].setText("Loading records...")
-            elif event == "domain":
-                domain = str(value)
-                if domain in {"Players", "Teams"}:
-                    if domain == "Teams":
-                        self._sync_domain_list(domain)
-                    self._sync_player_team_filter()
-                    self._sync_player_list()
-                elif domain == "NBA History":
-                    self._show_history_screen_rows()
-                elif domain == "NBA Records":
-                    self._show_record_screen_rows()
-                elif domain in self.domain_lists:
-                    self._sync_domain_list(domain)
-            elif event == "error":
-                self.home_target_status.setText(str(value))
-            elif event in {"status", "done"}:
-                self._refresh_status_labels()
-        if events:
-            self._refresh_status_labels()
+        def worker() -> object:
+            return self.model.refresh_domains(scan_domains, progress_callback=self._background_operation_progress)
+
+        self._start_background_operation(
+            "Load Record Lists",
+            worker,
+            done_callback=self._apply_domain_refresh_views,
+            presentation_target="domain-refresh",
+        )
+
+    def _apply_domain_refresh_views(self, result: object) -> None:
+        views = tuple(result) if isinstance(result, tuple) else ()
+        if not all(isinstance(view, DomainRefreshView) for view in views):
+            raise TypeError("domain refresh did not return DomainRefreshView payloads")
+        for view in views:
+            domain = view.domain
+            items = view.items
+            self._domain_counts[domain] = len(items)
+            player_filter_active = domain == "Players" and (
+                self.state.player_team_filter != PLAYER_TEAM_FILTER_ALL or self.state.player_search_text.strip()
+            )
+            if not player_filter_active:
+                self._set_count(domain, f"{self._display_label(domain)}: {len(items)}")
+            if domain in self.status_labels:
+                self.status_labels[domain].setText(view.status)
+            if domain in self.domain_lists:
+                selected = self.state.selected_item_indexes.get(domain, set())
+                records = [(int(item.index), item.display_label) for item in items]
+                if domain == "Players":
+                    visible_indexes = self.domain_lists[domain].visible_indexes() if player_filter_active else None
+                    self.domain_lists[domain].set_all_records(
+                        records,
+                        selected,
+                        visible_indexes=visible_indexes,
+                    )
+                else:
+                    self.domain_lists[domain].set_records(records, selected)
+        if any(view.domain == "Teams" for view in views):
+            self._sync_player_team_filter()
+        if any(view.domain == "Players" for view in views) and (
+            self.state.player_team_filter != PLAYER_TEAM_FILTER_ALL or self.state.player_search_text.strip()
+        ):
+            self._request_player_list_view()
+        self.home_target_status.setText("Record lists loaded.")
+        self._refresh_dashboard_metrics()
 
     def _set_count(self, domain: str, text: str) -> None:
         if domain in self.count_labels:
@@ -874,6 +896,7 @@ class QtEditorApp(QMainWindow):
 
     def _sync_domain_list(self, domain: str) -> None:
         items = self.model.domain_items(domain)
+        self._domain_counts[domain] = len(items)
         self._set_count(domain, f"{self._display_label(domain)}: {self.model.domain_item_count(domain)}")
         if domain in self.status_labels:
             self.status_labels[domain].setText(self.model.domain_status(domain))
@@ -906,15 +929,47 @@ class QtEditorApp(QMainWindow):
         self.state.player_team_filter = current
 
     def _sync_player_list(self) -> None:
-        items = list(self.model.player_items_for_team_filter(self.state.player_team_filter, self.state.player_search_text).values())
-        self._set_count("Players", f"Players: {len(items)}")
-        if "Players" in self.status_labels:
-            self.status_labels["Players"].setText(self.model.domain_status("Players"))
+        self._request_player_list_view()
+
+    def _request_player_list_view(self) -> None:
+        self._player_list_request_serial += 1
+        request = PlayerListRequest(
+            filter_key=self.state.player_team_filter,
+            query=self.state.player_search_text,
+        )
+        self._pending_player_list_request = (self._player_list_request_serial, request)
+        self._start_pending_player_list_request()
+
+    def _start_pending_player_list_request(self) -> None:
+        if self._pending_player_list_request is None or self.operation_worker.is_running():
+            return
+        serial, request = self._pending_player_list_request
+        self._pending_player_list_request = None
+
+        def worker() -> object:
+            return self.model.prepare_player_list_view(request.filter_key, request.query)
+
+        self._start_background_operation(
+            "Prepare Player List",
+            worker,
+            done_callback=lambda result: self._apply_player_list_view(serial, result),
+            presentation_target="player-list",
+            show_progress=False,
+            warn_if_busy=False,
+        )
+
+    def _apply_player_list_view(self, serial: int, result: object) -> None:
+        if serial != self._player_list_request_serial:
+            return
+        if not isinstance(result, PlayerListView):
+            raise TypeError("player list request did not return PlayerListView")
+        self._set_count("Players", f"Players: {len(result.items)}")
         selected = self.state.selected_item_indexes.get("Players", set())
         if "Players" in self.domain_lists:
-            self.domain_lists["Players"].set_records([(int(item.index), item.display_label) for item in items], selected)
-        self._update_detail_panel("Players")
-        self._refresh_dashboard_metrics()
+            self.domain_lists["Players"].set_visible_records(
+                [(int(item.index), item.display_label) for item in result.items],
+                selected,
+            )
 
     def _select_item_indexes(self, domain: str, selected_indexes: set[int], current_index: int | None = None) -> None:
         self.state.selected_item_indexes[domain] = set(selected_indexes)
@@ -1632,13 +1687,30 @@ class QtEditorApp(QMainWindow):
             self.operation_dialog.message.setText("Cancelling...")
             self.operation_dialog.cancel_button.setEnabled(False)
 
-    def _start_background_operation(self, title: str, worker: Callable[[], str], *, done_callback: Callable[[], None] | None = None) -> None:
-        if not self.operation_worker.start(title, worker, done_callback=done_callback):
-            QMessageBox.warning(self, title, "Another operation is already running.")
-            return
-        self._show_operation_popup(f"{title}...", progress=0.0, overlay="0%")
+    def _start_background_operation(
+        self,
+        title: str,
+        worker: Callable[[], object],
+        *,
+        done_callback: Callable[[object], None] | None = None,
+        presentation_target: str | None = None,
+        show_progress: bool = True,
+        warn_if_busy: bool = True,
+    ) -> int | None:
+        request_id = self.operation_worker.start(title, worker, done_callback=done_callback)
+        if request_id is None:
+            if warn_if_busy:
+                QMessageBox.warning(self, title, "Another operation is already running.")
+            return None
+        target = presentation_target or title
+        self._operation_targets_by_request[request_id] = target
+        self._latest_operation_request_ids[target] = request_id
+        if show_progress:
+            self._operation_progress_requests.add(request_id)
+            self._show_operation_popup(f"{title}...", progress=0.0, overlay="0%")
         if not self.operation_timer.isActive():
             self.operation_timer.start(50)
+        return request_id
 
     def _show_operation_popup(self, message: str, *, progress: float = 0.0, overlay: str = "") -> None:
         if self.operation_dialog is None:
@@ -1657,24 +1729,34 @@ class QtEditorApp(QMainWindow):
     def _poll_background_operation(self) -> None:
         for event, value in self._pop_operation_events():
             if event == "progress":
-                current, total, message = value
-                progress = 1.0 if total <= 0 else max(0.0, min(1.0, current / total))
-                self._show_operation_popup(message, progress=progress, overlay=f"{int(round(progress * 100))}%")
+                request_id, current, total, message = value
+                if request_id in self._operation_progress_requests:
+                    progress = 1.0 if total <= 0 else max(0.0, min(1.0, current / total))
+                    self._show_operation_popup(message, progress=progress, overlay=f"{int(round(progress * 100))}%")
             elif event == "done":
-                message, overlay, done_callback = value
+                request_id, result, overlay, done_callback = value
+                show_progress = request_id in self._operation_progress_requests
+                self._operation_progress_requests.discard(request_id)
+                target = self._operation_targets_by_request.pop(request_id, "")
+                is_current = not target or self._latest_operation_request_ids.get(target) == request_id
+                message = str(result)
                 if overlay == "complete":
-                    if done_callback is not None:
-                        done_callback()
-                    if self.operation_dialog is not None:
+                    if is_current and done_callback is not None:
+                        done_callback(result)
+                    if show_progress and self.operation_dialog is not None:
                         self.operation_dialog.hide()
                     if self.operation_timer.isActive():
                         self.operation_timer.stop()
                     continue
-                self._show_operation_popup(message, progress=1.0, overlay=overlay)
-                if done_callback is not None:
-                    done_callback()
+                if show_progress:
+                    self._show_operation_popup(message, progress=1.0, overlay=overlay)
+                else:
+                    self.home_target_status.setText(message)
                 if self.operation_timer.isActive():
                     self.operation_timer.stop()
+        self._start_pending_player_list_request()
+        if self.operation_worker.is_running() and not self.operation_timer.isActive():
+            self.operation_timer.start(50)
 
     def _refresh_player_generator_display(self) -> None:
         if self.generator_text is not None:
@@ -1941,7 +2023,7 @@ class QtEditorApp(QMainWindow):
         lines.extend(separator.join(row[index].ljust(widths[index]) for index in range(len(headers))) for row in body)
         return lines
 
-    def _sync_player_generator_status(self) -> None:
+    def _sync_player_generator_status(self, _result: object | None = None) -> None:
         state = self.player_generator_state
         combo_values = (
             (self.generator_year_combo, list(getattr(state, "seasons", ())), str(getattr(state, "selected_season", ""))),
@@ -1975,7 +2057,6 @@ class QtEditorApp(QMainWindow):
         print("QT_OPENED NBA2K Editor", flush=True)
         if load_on_start:
             self._attach_and_load_all()
-        self.scan_timer.start(50)
         self.operation_timer.start(50)
         return int(app.exec())
 

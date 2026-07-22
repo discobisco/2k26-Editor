@@ -749,15 +749,7 @@ def _features_for_field(field_key: str) -> tuple[str, ...]:
     is_tendency = section_key == "TENDENCIES"
 
     # Availability / body / durability. These should not fall through to star-impact stats.
-    three_zone_keys = {"CENTER3", "LEFT3", "RIGHT3", "3CENTER", "3LEFT", "3LEFTCENTER", "3RIGHT", "3RIGHTCENTER"}
-    mid_zone_keys = {"MIDRANGECENTER", "MIDRANGELEFT", "MIDRANGELEFTCENTER", "MIDRANGERIGHT", "MIDRANGERIGHTCENTER"}
-    close_zone_keys = {"CLOSELEFT", "CLOSEMIDDLE", "CLOSERIGHT", "UNDERBASKET"}
-    if key in three_zone_keys:
-        return ("fg_percent_from_x3p_range", "corner_3_point_percent", "percent_corner_3s_of_3pa", "x3p_pct")
-    if key in mid_zone_keys:
-        return ("fg_percent_from_x10_16_range", "fg_percent_from_x16_3p_range", "avg_dist_fga")
-    if key in close_zone_keys:
-        return ("fg_percent_from_x0_3_range", "fg_percent_from_x3_10_range", "percent_fga_from_x0_3_range")
+
     if "DURABILITY" in key:
         return ("games", "mp_per_game")
     if key == "STAMINA":
@@ -785,61 +777,7 @@ def _features_for_field(field_key: str) -> tuple[str, ...]:
     if "DEFENSECONSISTENCY" in key or key == "PICKANDROLLDEFENSEIQ":
         return ("dbpm", "dws", "stl_percent", "blk_percent", "drb_percent", "all_defense", "dpoy_share")
 
-    # Shot-location skill vs behavior. Attributes use efficiency; tendencies use frequency/location.
-    if "3PT" in key or "3POINT" in key or "THREE" in key:
-        return (
-            "x3pa_per100",
-            "percent_fga_from_x3p_range",
-            "x3p_ar",
-            "percent_corner_3s_of_3pa",
-            "avg_dist_fga",
-        ) if is_tendency else (
-            "x3p_pct",
-            "fg_percent_from_x3p_range",
-            "corner_3_point_percent",
-        )
-    if "MIDRANGE" in key or key.startswith("MID") or "MID" in key or "FADE" in key:
-        return (
-            "percent_fga_from_x10_16_range",
-            "percent_fga_from_x16_3p_range",
-            "avg_dist_fga",
-        ) if is_tendency else (
-            "fg_percent_from_x10_16_range",
-            "fg_percent_from_x16_3p_range",
-            "fg_pct",
-        )
-    if "CLOSE" in key or "BASKETUNDER" in key or "UNDERBASKET" in key:
-        return (
-            "percent_fga_from_x0_3_range",
-            "percent_fga_from_x3_10_range",
-            "fta_per100",
-            "f_tr",
-        ) if is_tendency else (
-            "fg_percent_from_x0_3_range",
-            "fg_percent_from_x2p_range",
-            "ts_percent",
-            "height_inches",
-            "weight_pounds",
-        )
-    if "LAYUP" in key or "FLOATER" in key or "EUROSTEP" in key or "HOPSTEP" in key or "STEPTHROUGH" in key or "USEGLASS" in key:
-        return (
-            "percent_fga_from_x0_3_range",
-            "percent_fga_from_x3_10_range",
-            "f_tr",
-            "percent_assisted_x2p_fg",
-        ) if is_tendency else (
-            "fg_percent_from_x0_3_range",
-            "fg_percent_from_x3_10_range",
-            "ts_percent",
-        )
-    if "DUNK" in key or "ALLEYOOP" in key:
-        return ("percent_dunks_of_fga", "num_of_dunks", "percent_fga_from_x0_3_range", "height_inches", "weight_pounds")
-
-    # Post fields are close/mid/self-created proxies, not general points.
-    if "POSTHOOK" in key or "HOOK" in key:
-        return ("fg_percent_from_x3_10_range", "fg_percent_from_x0_3_range", "height_inches", "weight_pounds")
-    if "POSTFADE" in key:
-        return ("fg_percent_from_x10_16_range", "fg_percent_from_x16_3p_range", "percent_assisted_x2p_fg", "height_inches")
+    # Retained post setup fields use body and interior-opportunity context.
     if "POST" in key:
         return (
             "percent_fga_from_x0_3_range",
@@ -868,8 +806,6 @@ def _features_for_field(field_key: str) -> tuple[str, ...]:
         return ("drb_percent", "drb_per100", "height_inches", "weight_pounds")
     if "REBOUND" in key or "BOXOUT" in key:
         return ("orb_percent", "drb_percent", "trb_percent", "orb_per100", "drb_per100", "height_inches", "weight_pounds")
-    if "PUTBACK" in key:
-        return ("orb_percent", "orb_per100", "percent_fga_from_x0_3_range", "height_inches", "weight_pounds")
 
     if "STEAL" in key:
         return ("stl_per100", "pf_per100") if is_tendency else ("stl_percent", "stl_per100", "dbpm", "dws")
@@ -888,8 +824,6 @@ def _features_for_field(field_key: str) -> tuple[str, ...]:
     if key == "PLAYDISCIPLINE":
         return ("tov_percent", "pf_per100", "team_tov_percent")
 
-    if "FREE" in key:
-        return ("ft_pct",)
     if "DRAWFOUL" in key or "DRAW" in key:
         return ("fta_per100", "f_tr")
     if "SHOT" in key or "JUMPER" in key or key == "IQSHOT":

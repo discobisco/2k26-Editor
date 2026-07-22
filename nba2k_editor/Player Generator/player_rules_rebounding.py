@@ -96,10 +96,4 @@ def derive_attribute_offensiverebound(evidence: Any, *, league_player_rows: Any 
 def derive_tendency_crash(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any]:
     return _tendency('derive_tendency_crash', evidence, league_player_rows, (('advanced.orb_percent', 0.45), ('per_game.orb_per_game', 0.35), ('per_game.trb_per_game', 0.2)))
 
-def derive_tendency_putback(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any]:
-    return _tendency('derive_tendency_putback', evidence, league_player_rows, (('advanced.orb_percent', 0.45), ('per_game.orb_per_game', 0.35), ('per_game.fg_percent', 0.2)))
-
-def derive_tendency_putbackdunk(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any]:
-    return _tendency('derive_tendency_putbackdunk', evidence, league_player_rows, (('advanced.orb_percent', 0.35), ('per_game.orb_per_game', 0.25), ('identity.ht_in_in', 0.25), ('identity.wt', 0.15)))
-
-__all__ = ['derive_attribute_defenserebound', 'derive_attribute_offensiverebound', 'derive_tendency_crash', 'derive_tendency_putback', 'derive_tendency_putbackdunk']
+__all__ = ['derive_attribute_defenserebound', 'derive_attribute_offensiverebound', 'derive_tendency_crash']

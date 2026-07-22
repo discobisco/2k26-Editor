@@ -42,6 +42,13 @@ class PlayerMovementModel:
             0,
             {"normalized_name": "CURRENTTEAM", "display_name": "Current Team"},
         )
+        self.contract_team_entry = FieldEntry(
+            "Players",
+            "Contract",
+            "Contract Terms",
+            1,
+            {"normalized_name": "CONTRACTTEAM", "display_name": "Contract Team"},
+        )
         self.slot_entries = [
             FieldEntry(
                 "Teams",
@@ -65,6 +72,7 @@ class PlayerMovementModel:
             self.player_f.index: self.team_b.address,
             self.free_agent.index: 0,
         }
+        self.contract_teams = dict(self.current_teams)
         self.writes: list[tuple[str, int, str, int]] = []
 
     def _team_player_slot_entries(self) -> list[tuple[int, FieldEntry]]:
@@ -73,12 +81,16 @@ class PlayerMovementModel:
     def _field_by_normalized_name(self, domain: str, name: str) -> FieldEntry | None:
         if domain == "Players" and name == "CURRENTTEAM":
             return self.current_team_entry
+        if domain == "Players" and name == "CONTRACTTEAM":
+            return self.contract_team_entry
         return None
 
     def read_entry_value_for_item(self, entry: FieldEntry, item: RecordListItem, *, stat_selector=None):
         if entry.domain == "Teams":
             slot_index = int(entry.normalized_name.removeprefix("PLAYER")) - 1
             value = self.slot_values[item.index][slot_index]
+        elif entry.normalized_name == "CONTRACTTEAM":
+            value = self.contract_teams[item.index]
         else:
             value = self.current_teams[item.index]
         return {"raw_value": value, "display_value": value}
@@ -89,6 +101,8 @@ class PlayerMovementModel:
         if entry.domain == "Teams":
             slot_index = int(entry.normalized_name.removeprefix("PLAYER")) - 1
             self.slot_values[item.index][slot_index] = numeric
+        elif entry.normalized_name == "CONTRACTTEAM":
+            self.contract_teams[item.index] = numeric
         else:
             self.current_teams[item.index] = numeric
 
@@ -107,9 +121,11 @@ class PlayerMovementTests(unittest.TestCase):
             model.slot_values[model.team_a.index],
         )
         self.assertEqual(0, model.current_teams[model.player_b.index])
+        self.assertEqual(0, model.contract_teams[model.player_b.index])
         self.assertEqual(
             [
                 ("Players", model.player_b.index, "CURRENTTEAM", 0),
+                ("Players", model.player_b.index, "CONTRACTTEAM", 0),
                 ("Teams", model.team_a.index, "PLAYER2", model.player_c.address),
                 ("Teams", model.team_a.index, "PLAYER3", 0),
             ],
@@ -143,7 +159,7 @@ class PlayerMovementTests(unittest.TestCase):
 
         self.assertEqual([], model.writes)
 
-    def test_add_uses_first_open_slot_and_sets_current_team(self) -> None:
+    def test_add_uses_first_open_slot_and_sets_current_and_contract_team(self) -> None:
         model = PlayerMovementModel()
         movement = PlayerMovement(model)
 
@@ -153,10 +169,12 @@ class PlayerMovementTests(unittest.TestCase):
         self.assertEqual(4, placement.slot)
         self.assertEqual(model.free_agent.address, model.slot_values[model.team_a.index][3])
         self.assertEqual(model.team_a.address, model.current_teams[model.free_agent.index])
+        self.assertEqual(model.team_a.address, model.contract_teams[model.free_agent.index])
         self.assertEqual(
             [
-                ("Teams", model.team_a.index, "PLAYER4", model.free_agent.address),
                 ("Players", model.free_agent.index, "CURRENTTEAM", model.team_a.address),
+                ("Players", model.free_agent.index, "CONTRACTTEAM", model.team_a.address),
+                ("Teams", model.team_a.index, "PLAYER4", model.free_agent.address),
             ],
             model.writes,
         )
@@ -194,6 +212,8 @@ class PlayerMovementTests(unittest.TestCase):
         )
         self.assertEqual(model.team_b.address, model.current_teams[model.player_a.index])
         self.assertEqual(model.team_a.address, model.current_teams[model.player_d.index])
+        self.assertEqual(model.team_b.address, model.contract_teams[model.player_a.index])
+        self.assertEqual(model.team_a.address, model.contract_teams[model.player_d.index])
         first_none_write = model.writes.index(("Players", model.player_a.index, "CURRENTTEAM", 0))
         second_none_write = model.writes.index(("Players", model.player_d.index, "CURRENTTEAM", 0))
         first_add_write = model.writes.index(("Players", model.player_a.index, "CURRENTTEAM", model.team_b.address))

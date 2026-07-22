@@ -102,20 +102,77 @@ class RecordListWidget(QListWidget):
         self._selection_callback = selection_callback
         self._context_callback = context_callback
         self._last_selected_indexes: set[int] = set()
+        self._record_items: dict[int, QListWidgetItem] = {}
         self.itemSelectionChanged.connect(self._emit_selection)
 
     def set_records(self, records: list[tuple[int, str]], selected: set[int] | None = None) -> None:
+        self.set_all_records(records, selected)
+
+    def set_all_records(
+        self,
+        records: list[tuple[int, str]],
+        selected: set[int] | None = None,
+        *,
+        visible_indexes: set[int] | None = None,
+    ) -> None:
         selected = selected or set()
         available_indexes = {index for index, _label in records}
+        shown_indexes = available_indexes if visible_indexes is None else available_indexes & visible_indexes
+        current_records = [
+            (int(self.item(row).data(Qt.ItemDataRole.UserRole)), self.item(row).text())
+            for row in range(self.count())
+        ]
         self.blockSignals(True)
-        self.clear()
+        if current_records != records:
+            self.clear()
+            self._record_items.clear()
+            for index, label in records:
+                item = QListWidgetItem(label)
+                item.setData(Qt.ItemDataRole.UserRole, index)
+                item.setSizeHint(QSize(0, 24))
+                self.addItem(item)
+                self._record_items[index] = item
+        for index, item in self._record_items.items():
+            visible = index in shown_indexes
+            item.setHidden(not visible)
+            item.setSelected(visible and index in selected)
+        self._last_selected_indexes = selected & shown_indexes
+        self.blockSignals(False)
+
+    def visible_indexes(self) -> set[int]:
+        return {
+            index
+            for index, item in self._record_items.items()
+            if not item.isHidden()
+        }
+
+    def set_visible_indexes(self, indexes: set[int], selected: set[int] | None = None) -> None:
+        records = [
+            (index, item.text())
+            for index, item in self._record_items.items()
+            if index in indexes
+        ]
+        self.set_visible_records(records, selected)
+
+    def set_visible_records(self, records: list[tuple[int, str]], selected: set[int] | None = None) -> None:
+        selected = selected or set()
+        visible_indexes = {index for index, _label in records}
+        self.blockSignals(True)
         for index, label in records:
-            item = QListWidgetItem(label)
-            item.setData(Qt.ItemDataRole.UserRole, index)
-            item.setSizeHint(QSize(0, 24))
-            self.addItem(item)
-            item.setSelected(index in selected)
-        self._last_selected_indexes = selected & available_indexes
+            item = self._record_items.get(index)
+            if item is None:
+                item = QListWidgetItem(label)
+                item.setData(Qt.ItemDataRole.UserRole, index)
+                item.setSizeHint(QSize(0, 24))
+                self.addItem(item)
+                self._record_items[index] = item
+            else:
+                item.setText(label)
+        for index, item in self._record_items.items():
+            visible = index in visible_indexes
+            item.setHidden(not visible)
+            item.setSelected(visible and index in selected)
+        self._last_selected_indexes = selected & visible_indexes
         self.blockSignals(False)
 
     def selected_indexes(self) -> set[int]:

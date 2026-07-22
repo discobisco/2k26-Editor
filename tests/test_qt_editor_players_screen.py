@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -11,6 +13,7 @@ from PyQt6.QtGui import QContextMenuEvent
 from PyQt6.QtWidgets import QApplication, QComboBox, QMenu, QMessageBox, QPushButton, QWidget
 
 from nba2k_editor.models.schema import FieldEntry, RecordListItem
+from nba2k_editor.models.view_data import DomainRefreshView, PlayerListView
 from nba2k_editor.ui.qt_app import QtEditorApp
 from nba2k_editor.ui.qt_theme import editor_stylesheet
 from nba2k_editor.ui.qt_widgets import COMBO_BOX_MAX_VISIBLE_ITEMS, COMBO_BOX_POPUP_MAX_HEIGHT, configure_combo_box
@@ -100,6 +103,13 @@ class PlayerScreenModel:
         query = search_text.lower()
         return {index: item for index, item in self.loaded_items["Players"].items() if query in item.display_label.lower()}
 
+    def prepare_player_list_view(self, team_filter: str | int | None, search_text: str | None = None) -> PlayerListView:
+        return self.player_list_view(team_filter, search_text)
+
+    def player_list_view(self, team_filter: str | int | None, search_text: str | None = None) -> PlayerListView:
+        items = tuple(self.player_items_for_team_filter(team_filter, search_text).values())
+        return PlayerListView(team_filter or "All Players", str(search_text or "").casefold(), items, 1)
+
     def player_roster_slot_items_for_team_items(self, teams):
         team_list = list(teams)
         self.slot_requests.append(team_list)
@@ -132,10 +142,22 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
     def setUp(self) -> None:
         qt_app()
 
+    def apply_loaded_players(self, app: QtEditorApp, model: PlayerScreenModel) -> None:
+        app._apply_domain_refresh_views(
+            (
+                DomainRefreshView(
+                    "Players",
+                    tuple(model.loaded_items["Players"].values()),
+                    "loaded",
+                    1,
+                ),
+            )
+        )
+
     def test_selected_player_detail_values_render_in_player_detail_panel(self) -> None:
         model = PlayerScreenModel()
         app = QtEditorApp(model)  # type: ignore[arg-type]
-        app._sync_player_list()
+        self.apply_loaded_players(app, model)
 
         app.domain_lists["Players"].setCurrentRow(0)
         qt_app().processEvents()
@@ -167,7 +189,7 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
 
         app.player_movement = MovementRecorder()
         app.state.selected_item_indexes["Players"] = {model.player.index, second_player.index}
-        app._sync_player_list()
+        self.apply_loaded_players(app, model)
         model.select_item("Players", model.player)
 
         menu_calls = 0
@@ -250,13 +272,82 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
 
     def test_background_domain_event_populates_players_list(self) -> None:
         model = PlayerScreenModel()
-        model.pop_refresh_events = lambda: [("domain", "Players"), ("done", "")]  # type: ignore[attr-defined]
         app = QtEditorApp(model)  # type: ignore[arg-type]
 
-        app._poll_background_scan()
+        self.apply_loaded_players(app, model)
 
         self.assertEqual("Players: 1", app.count_labels["Players"].text())
         self.assertEqual([model.player.display_label], [app.domain_lists["Players"].item(index).text() for index in range(app.domain_lists["Players"].count())])
+
+    def test_player_search_runs_on_worker_and_only_changes_item_visibility(self) -> None:
+        model = PlayerScreenModel()
+        second = RecordListItem("Players", 8, 0x1800, "Beta Forward")
+        model.loaded_items["Players"][second.index] = second
+        worker_threads: list[int] = []
+        original_player_list_view = model.player_list_view
+
+        def player_list_view(team_filter, search_text=None):
+            worker_threads.append(threading.get_ident())
+            return original_player_list_view(team_filter, search_text)
+
+        model.player_list_view = player_list_view  # type: ignore[method-assign]
+        app = QtEditorApp(model)  # type: ignore[arg-type]
+        self.apply_loaded_players(app, model)
+        record_list = app.domain_lists["Players"]
+        item_ids = [id(record_list.item(row)) for row in range(record_list.count())]
+
+        app._set_player_search_text("guard")
+        deadline = time.monotonic() + 2.0
+        while app.operation_worker.is_running() and time.monotonic() < deadline:
+            time.sleep(0.01)
+            app._poll_background_operation()
+
+        self.assertEqual([model.player.index], [
+            int(record_list.item(row).data(Qt.ItemDataRole.UserRole))
+            for row in range(record_list.count())
+            if not record_list.item(row).isHidden()
+        ])
+        self.assertEqual(item_ids, [id(record_list.item(row)) for row in range(record_list.count())])
+        self.assertEqual("Players: 1", app.count_labels["Players"].text())
+        self.assertTrue(worker_threads)
+        self.assertTrue(all(thread_id != threading.get_ident() for thread_id in worker_threads))
+
+    def test_player_refresh_preserves_filtered_visibility_until_refreshed_filter_result_is_applied(self) -> None:
+        model = PlayerScreenModel()
+        second = RecordListItem("Players", 8, 0x1800, "Beta Forward")
+        model.loaded_items["Players"][second.index] = second
+        app = QtEditorApp(model)  # type: ignore[arg-type]
+        self.apply_loaded_players(app, model)
+
+        app._set_player_search_text("guard")
+        deadline = time.monotonic() + 2.0
+        while app.operation_worker.is_running() and time.monotonic() < deadline:
+            time.sleep(0.01)
+            app._poll_background_operation()
+
+        refreshed = RecordListItem("Players", 9, 0x1900, "Gamma Center")
+        model.loaded_items["Players"][refreshed.index] = refreshed
+        app._apply_domain_refresh_views(
+            (
+                DomainRefreshView(
+                    "Players",
+                    tuple(model.loaded_items["Players"].values()),
+                    "loaded",
+                    2,
+                ),
+            )
+        )
+
+        record_list = app.domain_lists["Players"]
+        self.assertEqual(
+            [model.player.index],
+            [
+                int(record_list.item(row).data(Qt.ItemDataRole.UserRole))
+                for row in range(record_list.count())
+                if not record_list.item(row).isHidden()
+            ],
+        )
+        self.assertEqual("Players: 1", app.count_labels["Players"].text())
 
     def test_player_range_selection_updates_model_once_for_selection_snapshot(self) -> None:
         model = PlayerScreenModel()
@@ -272,7 +363,7 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
 
         model.selected_player_detail_values = selected_player_detail_values  # type: ignore[method-assign]
         app = QtEditorApp(model)  # type: ignore[arg-type]
-        app._sync_player_list()
+        self.apply_loaded_players(app, model)
 
         record_list = app.domain_lists["Players"]
         record_list.setCurrentRow(record_list.count() - 1, QItemSelectionModel.SelectionFlag.NoUpdate)

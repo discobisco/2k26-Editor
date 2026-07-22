@@ -105,9 +105,6 @@ def derive_attribute_maxovr(evidence: Any, *, league_player_rows: Any = ()) -> d
 def derive_attribute_minovr(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any]:
     return _attribute('derive_attribute_minovr', evidence, league_player_rows, (('advanced.per', 0.35), ('advanced.ws', 0.35), ('per_game.pts_per_game', 0.3)))
 
-def derive_attribute_postfadeaway(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any]:
-    return _attribute('derive_attribute_postfadeaway', evidence, league_player_rows, (('identity.ht_in_in', 0.3), ('identity.wt', 0.25), ('per_game.x2p_percent', 0.25), ('per_game.ft_percent', 0.2)))
-
 def derive_attribute_potential(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any]:
     return _attribute('derive_attribute_potential', evidence, league_player_rows, (('!season_info.age', 0.4), ('advanced.ws', 0.25), ('advanced.per', 0.2), ('per_game.g', 0.15)))
 
@@ -135,4 +132,4 @@ def derive_tendency_touches(evidence: Any, *, league_player_rows: Any = ()) -> d
 def derive_tendency_transitionspotup(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any]:
     return _tendency('derive_tendency_transitionspotup', evidence, league_player_rows, (('per_game.x3pa_per_game', 0.45), ('team_summary.pace', 0.3), ('per_game.fga_per_game', 0.25)))
 
-__all__ = ['derive_attribute_hands', 'derive_attribute_hustle', 'derive_attribute_intangibles', 'derive_attribute_cachcedovr', 'derive_attribute_maxovr', 'derive_attribute_minovr', 'derive_attribute_postfadeaway', 'derive_attribute_potential', 'derive_tendency_isovsaveragedefender', 'derive_tendency_isovselitedefender', 'derive_tendency_isovsgooddefender', 'derive_tendency_isovspoordefender', 'derive_tendency_playdiscipline', 'derive_tendency_rollvspop', 'derive_tendency_touches', 'derive_tendency_transitionspotup']
+__all__ = ['derive_attribute_hands', 'derive_attribute_hustle', 'derive_attribute_intangibles', 'derive_attribute_cachcedovr', 'derive_attribute_maxovr', 'derive_attribute_minovr', 'derive_attribute_potential', 'derive_tendency_isovsaveragedefender', 'derive_tendency_isovselitedefender', 'derive_tendency_isovsgooddefender', 'derive_tendency_isovspoordefender', 'derive_tendency_playdiscipline', 'derive_tendency_rollvspop', 'derive_tendency_touches', 'derive_tendency_transitionspotup']

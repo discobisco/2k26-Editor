@@ -43,7 +43,12 @@ class RosterSlotModel(EditorDataModel):
         self.writes: list[tuple[str, int, Any]] = []
         self.address_reads: list[tuple[str, int, str]] = []
         self.address_writes: list[tuple[str, int, str, Any]] = []
+        self._data_version = 0
         self._player_team_pointer_cache: dict[int, int] = {}
+        self._player_filter_items_by_key: dict[str | int, tuple[RecordListItem, ...]] = {}
+        self._player_search_keys: dict[int, str] = {}
+        self._player_filter_index_ready = False
+        self.build_player_filter_index(include_free_agents=False)
 
     def grouped_fields(self, domain: str):  # type: ignore[override]
         if domain == "Teams":
@@ -78,8 +83,15 @@ class RosterSlotModel(EditorDataModel):
         self.address_writes.append((domain, record_addr, str(field.get("normalized_name")), value))
         return value
 
-    def _draft_class_player_items(self) -> dict[int, RecordListItem]:  # type: ignore[override]
-        return {self.draft_player.index: self.draft_player}
+    def _read_player_current_team_pointer(self, item: RecordListItem) -> int:  # type: ignore[override]
+        self.current_team_reads += 1
+        return self.expansion_team.address if item is self.player_c else self.team.address
+
+    def _read_player_is_active(self, item: RecordListItem) -> bool:  # type: ignore[override]
+        return True
+
+    def _scan_records_from_base_key(self, domain: str, base_key: str, *, limit=None):  # type: ignore[override]
+        return [self.draft_player]
 
     def _field_version_payload(self, field: dict[str, Any]) -> dict[str, Any]:  # type: ignore[override]
         return dict(field.get("payload", {}))
@@ -101,6 +113,7 @@ class RosterSlotModel(EditorDataModel):
 class PlayerRosterSnapshotExportTests(unittest.TestCase):
     def test_team_exports_use_team_player_slots_not_currentteam_scan(self) -> None:
         model = RosterSlotModel()
+        initial_current_team_reads = model.current_team_reads
 
         rows = model.player_roster_slot_items_for_team_items((model.team,))
 
@@ -112,7 +125,7 @@ class PlayerRosterSnapshotExportTests(unittest.TestCase):
             ],
             [placement for _player, placement in rows],
         )
-        self.assertEqual(0, model.current_team_reads)
+        self.assertEqual(initial_current_team_reads, model.current_team_reads)
 
     def test_base_team_filter_lists_only_players_in_team_slots_zero_to_twenty_nine(self) -> None:
         model = RosterSlotModel()

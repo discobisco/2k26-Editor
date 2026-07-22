@@ -13,7 +13,7 @@ class PlayerPlacement:
 
 
 class PlayerMovement:
-    """Orchestrates player CURRENTTEAM and Team PLAYER# slot writes."""
+    """Orchestrates player team pointers and Team PLAYER# slot writes."""
 
     def __init__(self, model: Any) -> None:
         self.model = model
@@ -23,6 +23,13 @@ class PlayerMovement:
         if entry is None:
             raise ValueError("Players CURRENTTEAM field is not available")
         return entry
+
+    def _contract_team_entry(self) -> FieldEntry:
+        entry = self.model._field_by_normalized_name("Players", "CONTRACTTEAM")
+        if entry is None:
+            raise ValueError("Players CONTRACTTEAM field is not available")
+        return entry
+
 
     def _slot_entries(self) -> tuple[tuple[int, FieldEntry], ...]:
         entries = tuple(self.model._team_player_slot_entries())
@@ -55,6 +62,7 @@ class PlayerMovement:
         return PlayerPlacement(team=team, slot=matching_slots[0])
 
     def remove_player(self, player: RecordListItem) -> PlayerPlacement:
+        contract_team_entry = self._contract_team_entry()
         placement = self._placement(player)
         slot_entries = self._slot_entries()
         values = [
@@ -68,6 +76,7 @@ class PlayerMovement:
         ]
         compacted_values.extend([0] * (len(values) - len(compacted_values)))
         self.model.write_entry_value_for_item(self._current_team_entry(), player, value=0)
+        self.model.write_entry_value_for_item(contract_team_entry, player, value=0)
         for index, (old_value, new_value) in enumerate(zip(values, compacted_values, strict=True)):
             if old_value != new_value:
                 self.model.write_entry_value_for_item(
@@ -76,21 +85,34 @@ class PlayerMovement:
         return placement
 
     def add_player(self, player: RecordListItem, team: RecordListItem) -> PlayerPlacement:
+        current_team_entry = self._current_team_entry()
+        contract_team_entry = self._contract_team_entry()
         current_team = int(
-            self.model.read_entry_value_for_item(self._current_team_entry(), player).get("raw_value") or 0
+            self.model.read_entry_value_for_item(current_team_entry, player).get("raw_value") or 0
         )
         if current_team:
             assigned_team = self._team_for_address(current_team)
             raise ValueError(f"{player.label} is already assigned to {assigned_team.label}")
+        contract_team = int(
+            self.model.read_entry_value_for_item(contract_team_entry, player).get("raw_value") or 0
+        )
+        if contract_team:
+            contracted_team = self._team_for_address(contract_team)
+            raise ValueError(f"{player.label} is already contracted to {contracted_team.label}")
+
+        open_slot: tuple[int, FieldEntry] | None = None
         for slot, entry in self._slot_entries():
             value = self.model.read_entry_value_for_item(entry, team).get("raw_value")
             if int(value or 0) == 0:
-                self.model.write_entry_value_for_item(entry, team, value=int(player.address))
-                self.model.write_entry_value_for_item(
-                    self._current_team_entry(), player, value=int(team.address)
-                )
-                return PlayerPlacement(team=team, slot=slot)
-        raise ValueError(f"{team.label} has no open player slot")
+                open_slot = (slot, entry)
+                break
+        if open_slot is None:
+            raise ValueError(f"{team.label} has no open player slot")
+
+        self.model.write_entry_value_for_item(current_team_entry, player, value=int(team.address))
+        self.model.write_entry_value_for_item(contract_team_entry, player, value=int(team.address))
+        self.model.write_entry_value_for_item(open_slot[1], team, value=int(player.address))
+        return PlayerPlacement(team=team, slot=open_slot[0])
 
     def trade_players(
         self,

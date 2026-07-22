@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import sqlite3
 from dataclasses import dataclass, replace
@@ -14,6 +15,16 @@ from nba2k_editor.models.schema import FieldEntry
 from contracts import GeneratorInputContract
 from player_attribute_rank_adjuster import align_attribute_totals_to_metric_ranks
 from player_evidence import PlayerEvidence
+from player_generation_models import (
+    FREE_THROW_FIELD_KEY,
+    SHOT_LOCATION_TENDENCY_GROUPS,
+    TWO_POINT_RUNTIME_FIELDS,
+    FreeThrowExecutionArtifact,
+    TwoPointShootingArtifact,
+    load_free_throw_execution_artifact,
+    load_two_point_shooting_artifact,
+    normalize_shot_location_tendency_percentages,
+)
 from player_rules import (
     PlayerProfileResult,
     PlayerRuleResult,
@@ -24,7 +35,6 @@ from player_rules import (
 )
 from stat_neighbor_framework import select_positions_from_evidence
 from workbook_sqlite import ensure_workbook_sqlite_database, iter_workbook_sqlite_sheet_rows, query_rows_for_season, workbook_sqlite_sheet_names
-from pre_nba_source import build_pre_nba_evidence_by_key, has_pre_nba_season, pre_nba_context_rows, pre_nba_seasons
 
 _GENERATOR_DIR = Path(__file__).resolve().parent
 _DEFAULT_OFFSETS_PLAYERS_PATH = _GENERATOR_DIR.parent / "core" / "Offsets" / "offsets_players.json"
@@ -70,6 +80,13 @@ _PLAYER_CAREER_CONTEXT_SHEETS = {
     "All team Voting",
 }
 
+
+
+@dataclass(frozen=True)
+class TwoPointMasterTargets:
+    make_probability: float
+    attempts_per_36: float
+    evidence_keys: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -201,6 +218,8 @@ def generate_player_proposal(
     offsets_path: str | Path | None = None,
     field_index: dict[str, FieldEntry] | None = None,
     league_player_rows: Any = (),
+    free_throw_artifact: FreeThrowExecutionArtifact | None = None,
+    two_point_artifact: TwoPointShootingArtifact | None = None,
 ) -> GeneratedPlayerProposal:
     source_team = str(evidence.team or "").strip().upper()
     positions = select_positions_from_evidence(evidence.play_by_play, evidence.season_info.get("pos") or evidence.identity.get("pos"))
@@ -212,6 +231,19 @@ def generate_player_proposal(
         league_player_rows=league_player_rows,
         active_field_keys=active_field_keys,
     )
+    rule_result = _with_model_authored_free_throw(
+        rule_result,
+        evidence=evidence,
+        active_field_keys=active_field_keys,
+        artifact=free_throw_artifact,
+    )
+    rule_result = _with_model_authored_two_point(
+        rule_result,
+        evidence=evidence,
+        active_field_keys=active_field_keys,
+        artifact=two_point_artifact,
+    )
+    rule_result = _with_percentage_shot_locations(rule_result)
     player_match_identity = _player_match_identity_values(evidence, positions)
     candidates = player_field_candidates_from_results(profile_result, rule_result, offsets_path=offsets_path, field_index=field_index)
     return GeneratedPlayerProposal(
@@ -230,6 +262,205 @@ def generate_player_proposal(
         },
         field_candidates=candidates,
     )
+
+
+def _with_model_authored_free_throw(
+    rule_result: PlayerRuleResult,
+    *,
+    evidence: PlayerEvidence,
+    active_field_keys: set[str] | None,
+    artifact: FreeThrowExecutionArtifact | None,
+) -> PlayerRuleResult:
+    if active_field_keys is not None and FREE_THROW_FIELD_KEY not in active_field_keys:
+        return rule_result
+    target = evidence.per_game.get("ft_percent")
+    target_evidence = ("PlayerEvidence.per_game.ft_percent",)
+    if target is None:
+        fta_per_game = _float(evidence.per_game.get("fta_per_game"))
+        if fta_per_game != 0.0:
+            return rule_result
+        target = 0.0
+        target_evidence = (
+            "PlayerEvidence.per_game.ft_percent=null",
+            "PlayerEvidence.per_game.fta_per_game=0",
+            "zero_attempt_free_throw_target=0",
+        )
+    response = artifact or load_free_throw_execution_artifact()
+    solved = response.solve_rating(target)
+    if not solved.resolved or solved.rating is None:
+        return rule_result
+    if FREE_THROW_FIELD_KEY in rule_result.values:
+        raise RuntimeError(f"multiple authors for {FREE_THROW_FIELD_KEY}")
+    assert solved.predicted_make_probability is not None
+    assert solved.absolute_error is not None
+    values = dict(rule_result.values)
+    values[FREE_THROW_FIELD_KEY] = RuleValue(
+        value=solved.rating,
+        source_rule="model_free_throw_inverse",
+        evidence_keys=target_evidence
+        + (
+            f"target_make_probability={solved.target_make_probability:.12g}",
+            f"predicted_make_probability={solved.predicted_make_probability:.12g}",
+            f"absolute_response_error={solved.absolute_error:.12g}",
+            "objective=minimum_absolute_forward_response_error",
+            "tie_break=middle_supported_rating_then_lower",
+            "tied_ratings=" + ",".join(str(rating) for rating in solved.tied_ratings),
+            f"boundary_limited={str(solved.boundary_limited).lower()}",
+            f"pool_fingerprint={response.pool_fingerprint}",
+        ),
+    )
+    return PlayerRuleResult(values=values)
+
+
+def two_point_targets_from_evidence(evidence: PlayerEvidence) -> TwoPointMasterTargets | None:
+    """Normalize exact Master 2PT efficiency and volume targets."""
+
+    per_game = evidence.per_game
+    attempts = _finite_float(per_game.get("x2pa_per_game"))
+    make_probability = _finite_float(per_game.get("x2p_percent"))
+    evidence_keys = (
+        "PlayerEvidence.per_game.x2p_percent",
+        "PlayerEvidence.per_game.x2pa_per_game",
+        "PlayerEvidence.per_game.mp_per_game",
+    )
+    if attempts is None and make_probability is None and _league_season_has_no_three_point_rule(evidence):
+        attempts = _finite_float(per_game.get("fga_per_game"))
+        make_probability = _finite_float(per_game.get("fg_percent"))
+        evidence_keys = (
+            "PlayerEvidence.per_game.fg_percent",
+            "PlayerEvidence.per_game.fga_per_game",
+            "PlayerEvidence.per_game.mp_per_game",
+            "two_point_attempts_equal_field_goal_attempts_no_three_point_rule",
+        )
+    minutes = _finite_float(per_game.get("mp_per_game"))
+    if (
+        attempts is None
+        or make_probability is None
+        or minutes is None
+        or attempts <= 0.0
+        or minutes <= 0.0
+        or not 0.0 <= make_probability <= 1.0
+    ):
+        return None
+    return TwoPointMasterTargets(
+        make_probability=make_probability,
+        attempts_per_36=36.0 * attempts / minutes,
+        evidence_keys=evidence_keys,
+    )
+
+
+def _league_season_has_no_three_point_rule(evidence: PlayerEvidence) -> bool:
+    league = str(evidence.per_game.get("lg") or evidence.season_info.get("lg") or "").strip().upper()
+    return league in {"BAA", "NBL"} or (league == "NBA" and int(evidence.season) <= 1979)
+
+
+def _finite_float(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    return numeric if math.isfinite(numeric) else None
+
+
+def two_point_context_from_evidence(evidence: PlayerEvidence) -> dict[str, Any] | None:
+    """Return exact Master physical/position context; missing values stay unresolved."""
+
+    height = _finite_float(evidence.identity.get("ht_in_in"))
+    weight = _finite_float(evidence.identity.get("wt"))
+    position = str(evidence.season_info.get("pos") or "").strip().upper()
+    if height is None or weight is None or position not in {"PG", "SG", "SF", "PF", "C"}:
+        return None
+    return {"height_inches": height, "weight_pounds": weight, "position": position}
+
+
+def _with_model_authored_two_point(
+    rule_result: PlayerRuleResult,
+    *,
+    evidence: PlayerEvidence,
+    active_field_keys: set[str] | None,
+    artifact: TwoPointShootingArtifact | None,
+) -> PlayerRuleResult:
+    owned_fields = set(TWO_POINT_RUNTIME_FIELDS)
+    if active_field_keys is not None:
+        owned_fields &= active_field_keys
+    if not owned_fields:
+        return rule_result
+    targets = two_point_targets_from_evidence(evidence)
+    if targets is None:
+        return rule_result
+    response = artifact or load_two_point_shooting_artifact()
+    player_context = two_point_context_from_evidence(evidence)
+    if player_context is None:
+        return rule_result
+    solved = response.solve_package(
+        targets.make_probability,
+        targets.attempts_per_36,
+        source_shooting=evidence.shooting,
+        player_context=player_context,
+    )
+    if not solved.resolved or solved.field_values is None:
+        return rule_result
+    overlap = owned_fields & set(rule_result.values)
+    if overlap:
+        raise RuntimeError("multiple authors for 2PT fields: " + ", ".join(sorted(overlap)))
+    assert solved.predicted_make_probability is not None
+    assert solved.predicted_attempts_per_36 is not None
+    evidence_keys = targets.evidence_keys + (
+        f"target_make_probability={targets.make_probability:.12g}",
+        f"target_attempts_per_36={targets.attempts_per_36:.12g}",
+        f"predicted_make_probability={solved.predicted_make_probability:.12g}",
+        f"predicted_attempts_per_36={solved.predicted_attempts_per_36:.12g}",
+        "inverse=master_action_mixture_then_conditional_attribute_solve",
+        "tendencies=0_to_100_action_probabilities",
+        "directional_shot_locations=active_group_integer_percentages_totaling_100",
+        "directional_shot_location_groups=close_3,mid_5,three_point_5",
+        "shot_under_basket=fixed_100",
+        "attributes=25_to_99_conditional_action_effectiveness",
+        "physical_context=unresolved_action_interactions_only",
+        "source_composition=" + (",".join(solved.source_conditioning_fields) or "unavailable"),
+        "direct_source_unobserved_splits=standing_vs_driving_dunk,hook_vs_fade,left_vs_right_post_moves",
+        "contextual_subtype_split=fitted_pool_height_weight_position_action_interactions",
+        "aggregate_targets_do_not_directly_observe_shot_subtypes",
+        "boundary_limited_targets=" + (",".join(solved.boundary_limited_targets) or "none"),
+        f"pool_fingerprint={response.pool_fingerprint}",
+    )
+    values = dict(rule_result.values)
+    for field_key in TWO_POINT_RUNTIME_FIELDS:
+        if field_key not in owned_fields:
+            continue
+        values[field_key] = RuleValue(
+            value=solved.field_values[field_key],
+            source_rule="model_two_point_correlated_inverse",
+            evidence_keys=evidence_keys,
+        )
+    return PlayerRuleResult(values=values)
+
+
+
+def _with_percentage_shot_locations(rule_result: PlayerRuleResult) -> PlayerRuleResult:
+    """Make each complete active close/mid/3PT directional group total 100."""
+
+    values = dict(rule_result.values)
+    for fields in SHOT_LOCATION_TENDENCY_GROUPS:
+        if any(field not in values for field in fields):
+            continue
+        raw = {field: int(values[field].value) for field in fields}
+        if sum(raw.values()) <= 0:
+            continue
+        normalized = normalize_shot_location_tendency_percentages(raw, (fields,))
+        group_contract = "directional_location_percentage_group=" + ",".join(fields)
+        for field in fields:
+            current = values[field]
+            values[field] = RuleValue(
+                value=normalized[field],
+                source_rule=current.source_rule,
+                evidence_keys=current.evidence_keys
+                + (group_contract, "directional_location_percentage_total=100"),
+            )
+    return PlayerRuleResult(values=values)
+
 
 
 def _player_match_identity_values(evidence: PlayerEvidence, positions: Any) -> dict[str, Any]:
@@ -445,7 +676,7 @@ def _person_keys_for_seasons(database: Path, seasons: Iterable[int]) -> set[str]
 
 
 def _available_source_seasons(database: Path) -> tuple[int, ...]:
-    seasons = set(pre_nba_seasons(database.parent))
+    seasons: set[int] = set()
     try:
         table_name = _workbook_table_name(database, _BASE_PLAYER_SEASON_SHEET)
     except Exception:
@@ -565,15 +796,6 @@ def season_context_index(
 def _cached_season_context_index(database_path: str, season: int, offsets_path: str) -> SeasonPlayerContextIndex:
     database = Path(database_path)
     field_index = _cached_authored_player_field_index(offsets_path)
-    if not _workbook_has_player_season(database, season) and has_pre_nba_season(database.parent, season):
-        evidence_by_key = build_pre_nba_evidence_by_key(database.parent, season)
-        return SeasonPlayerContextIndex(
-            season=season,
-            source_database_path=database,
-            comparison_rows=pre_nba_context_rows(database.parent, season),
-            evidence_by_key=evidence_by_key,
-            field_index=dict(field_index),
-        )
     sheet_names = workbook_sqlite_sheet_names(database)
     multi_team_primary = _multi_team_primary_teams(database, season)
     multi_team_shares = _multi_team_stat_shares(database, season, multi_team_primary)
@@ -682,13 +904,6 @@ def _season_sheet_rows(database: Path, sheet: str, season: int) -> tuple[dict[st
             for row in iter_workbook_sqlite_sheet_rows(database, sheet)
             if row.get("season") == int(season)
         )
-
-
-def _workbook_has_player_season(database: Path, season: int) -> bool:
-    table_name = _workbook_table_name(database, _BASE_PLAYER_SEASON_SHEET)
-    with sqlite3.connect(database) as connection:
-        row = connection.execute(f'SELECT 1 FROM "{table_name}" WHERE season = ? LIMIT 1', (int(season),)).fetchone()
-    return row is not None
 
 
 def _workbook_table_name(database: Path, sheet_name: str) -> str:

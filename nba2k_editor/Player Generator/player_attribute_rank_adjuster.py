@@ -271,6 +271,8 @@ def _adjustable_attribute_candidates(proposal: Any) -> tuple[Any, ...]:
     candidates: list[Any] = []
     season = _proposal_season(proposal)
     for candidate in getattr(proposal, "field_candidates", ()):
+        if str(getattr(candidate, "source_rule", "") or "").startswith("model_"):
+            continue
         if str(getattr(candidate, "section", "") or "") != "Attributes":
             continue
         field_key = str(getattr(candidate, "field_key", "") or "")
