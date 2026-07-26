@@ -58,6 +58,8 @@ class GeneratorDisplayState:
     player_rows: tuple[GeneratorPlayerDisplayRow, ...] = ()
     generated_proposals: tuple[Any, ...] = ()
     preview_target: str = "Players"
+    proposal_cache_season: str = ""
+    proposal_cache: tuple[Any, ...] = ()
 
 
 def empty_generator_display_state(status: str = "Load generator source data to display player options.") -> GeneratorDisplayState:
@@ -134,8 +136,9 @@ def update_generator_display_selection(
         player = state.selected_player if state.selected_player in players else (players[0] if players else "")
     else:
         player = _require_option(selected_player, players, "player")
+    season_changed = season != state.selected_season
     selection_changed = (
-        season != state.selected_season
+        season_changed
         or league != state.selected_league
         or position != state.selected_position
         or source_team != state.selected_source_team
@@ -157,13 +160,13 @@ def update_generator_display_selection(
         field_columns=() if selection_changed else state.field_columns,
         player_rows=() if selection_changed else state.player_rows,
         generated_proposals=() if selection_changed else state.generated_proposals,
+        proposal_cache_season="" if season_changed else state.proposal_cache_season,
+        proposal_cache=() if season_changed else state.proposal_cache,
         status=_option_status(season, league, position, source_team, players) if selection_changed else state.status,
     )
 
 
 def add_current_roster_to_pool_display_state(model: Any, state: GeneratorDisplayState, *, progress_callback: Any | None = None) -> GeneratorDisplayState:
-    if not state.source_loaded:
-        state = load_generator_display_state()
     _ensure_generator_import_path()
     from player_generation_pool import add_current_roster_to_player_generation_pool
 
@@ -175,31 +178,28 @@ def add_current_roster_to_pool_display_state(model: Any, state: GeneratorDisplay
             f"{pool_manifest.get('added_stats_rows', 0)} stats rows, "
             f"{pool_manifest.get('added_attribute_rows', 0)} attribute rows, "
             f"{pool_manifest.get('added_tendency_rows', 0)} tendency rows. "
-            "Use Sync Player Pool SQL to rebuild the neighbor model."
+            "Use Sync Player Pool SQL to rebuild offset-backed Pool columns."
         ),
     )
 
 
 def sync_generator_pool_display_state(state: GeneratorDisplayState, *, progress_callback: Any | None = None) -> GeneratorDisplayState:
-    if not state.source_loaded:
-        state = load_generator_display_state()
     _ensure_generator_import_path()
     from player_generation_pool import ensure_player_generation_pool_current
-    from stat_neighbor_framework import load_latest_stat_neighbor_model
 
-    pool_manifest = ensure_player_generation_pool_current(root=_GENERATOR_DIR.parents[1], progress_callback=progress_callback)
-    load_latest_stat_neighbor_model.cache_clear()
+    pool_manifest = ensure_player_generation_pool_current(progress_callback=progress_callback)
     return replace(
         state,
         rows=(),
         field_columns=(),
         player_rows=(),
         generated_proposals=(),
+        proposal_cache_season="",
+        proposal_cache=(),
         status=(
             f"Player pool SQL current: "
             f"{pool_manifest.get('candidate_rows', 0)} players, "
-            f"{pool_manifest.get('candidate_position_rows', 0)} position rows, "
-            f"model {pool_manifest.get('model_sqlite') or pool_manifest.get('output_dir')}. "
+            f"{pool_manifest.get('candidate_position_rows', 0)} position rows. "
             "Preview cleared; run Display Preview again before importing."
         ),
     )
@@ -220,13 +220,16 @@ def generate_generator_preview_display_state(state: GeneratorDisplayState) -> Ge
     from contracts import GeneratorInputContract, OutputTarget
     from player_generator import generate_player_proposals_from_index, season_context_index
 
-    contract = GeneratorInputContract(
-        season=int(selected.selected_season),
-        source_root=_SOURCE_ROOT,
-        output_target=OutputTarget.PREVIEW,
-    )
-    team_filter = None if selected.selected_source_team == _SOURCE_TEAM_ALL else selected.selected_source_team
-    batch = generate_player_proposals_from_index(season_context_index(contract), team_filter=team_filter)
+    cache_season = str(selected.selected_season)
+    if selected.proposal_cache_season == cache_season:
+        season_proposals = selected.proposal_cache
+    else:
+        contract = GeneratorInputContract(
+            season=int(selected.selected_season),
+            source_root=_SOURCE_ROOT,
+            output_target=OutputTarget.PREVIEW,
+        )
+        season_proposals = tuple(generate_player_proposals_from_index(season_context_index(contract)).proposals)
     selected_keys = {
         (player_id, source_team)
         for label in selected.players
@@ -234,7 +237,7 @@ def generate_generator_preview_display_state(state: GeneratorDisplayState) -> Ge
     }
     proposals = tuple(
         proposal
-        for proposal in batch.proposals
+        for proposal in season_proposals
         if (str(proposal.player_id).strip(), str(proposal.team).strip().upper()) in selected_keys
     )
     columns: list[str] = [label for label, _key in _MATCH_DISPLAY_COLUMNS]
@@ -251,7 +254,15 @@ def generate_generator_preview_display_state(state: GeneratorDisplayState) -> Ge
             values[column] = str(candidate.display_value)
         proposal_values[(str(proposal.player_id).strip(), str(proposal.team).strip().upper())] = values
     rows = [
-        GeneratorPlayerDisplayRow(player=player, source_team=source_team, player_id=player_id, values=tuple(proposal_values.get((player_id, source_team), {}).get(column, "") for column in columns))
+        GeneratorPlayerDisplayRow(
+            player=player,
+            source_team=source_team,
+            player_id=player_id,
+            values=tuple(
+                _nonblank_display_value(proposal_values.get((player_id, source_team), {}).get(column))
+                for column in columns
+            ),
+        )
         for label in selected.players
         for player_id, source_team, player in (_parse_player_label(label),)
     ]
@@ -262,6 +273,8 @@ def generate_generator_preview_display_state(state: GeneratorDisplayState) -> Ge
         player_rows=tuple(rows),
         generated_proposals=proposals,
         preview_target="Players",
+        proposal_cache_season=cache_season,
+        proposal_cache=season_proposals,
         status=(
             f"Displaying {len(rows)} generated players and {len(columns)} data columns for "
             f"{selected.selected_season} / {selected.selected_league} / {selected.selected_position} / {selected.selected_source_team}."
@@ -307,7 +320,7 @@ def generate_draft_class_display_state(state: GeneratorDisplayState) -> Generato
                 player=str(identity.get("player") or proposal.player_id),
                 source_team=str(getattr(proposal, "team", "") or ""),
                 player_id=str(getattr(proposal, "player_id", "") or ""),
-                values=tuple(values.get(column, "") for column in columns),
+                values=tuple(_nonblank_display_value(values.get(column)) for column in columns),
             )
         )
     return replace(
@@ -479,6 +492,11 @@ def _field_column(candidate: Any) -> str:
         for part in (getattr(candidate, "section", ""), getattr(candidate, "group", ""), getattr(candidate, "display_name", "") or getattr(candidate, "normalized_name", ""))
         if str(part).strip()
     )
+
+
+def _nonblank_display_value(value: Any) -> str:
+    text = "" if value is None else str(value).strip()
+    return text if text else "N/A"
 
 
 def _database_path() -> Path:

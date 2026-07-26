@@ -8,7 +8,7 @@ from typing import Any, Iterable
 from nba2k_editor.franchise.draft_room import TeamProfile
 from nba2k_editor.franchise.llm_view import build_franchise_llm_view, franchise_roster_payload_for_team
 from nba2k_editor.franchise.llm_tasks import FranchiseLlmTask, build_franchise_llm_task, franchise_team_context, run_franchise_llm_task, team_profile_payload
-from nba2k_editor.franchise.models import FranchiseRecord, FranchiseSimState, TeamRecommendation
+from nba2k_editor.franchise.models import LEAGUE_MODE_COLLEGE, FranchiseRecord, FranchiseSimState, TeamRecommendation
 from nba2k_editor.franchise.sim_phases import phase_label
 
 
@@ -28,9 +28,22 @@ def build_team_recommendation_prompt(
     roster: Iterable[dict[str, object]],
     profile: TeamProfile,
 ) -> str:
-    payload = {
-        "task": "franchise_team_gm_recommendation",
-        "rules": [
+    college_mode = record.setup.league_mode == LEAGUE_MODE_COLLEGE
+    rules = (
+        [
+            "You are acting only as the external LLM staff for the requested college basketball program.",
+            "The user controls all programs in NBA 2K; recommend one action only and do not claim it was applied.",
+            "Return only valid JSON. No markdown. No prose outside JSON.",
+            "Do not use functional filler players such as forty overall, A Z, or similar while any real player is available.",
+            "Use true_sim_year for era reasoning, not the in-game year label.",
+            "Make recommendations only for current_phase.",
+            "This is a college program. Do not recommend NBA trades, contracts, free-agent signings, releases, or draft actions.",
+            "Use true_sim_year to gate transfer, recruiting, eligibility, NIL, and postseason assumptions; do not apply modern rules to earlier eras.",
+            "Do not invent player eligibility, transfer status, recruiting commitments, scholarships, or academic facts that were not supplied.",
+            "Set trade_with_user_team false because college programs do not trade players.",
+        ]
+        if college_mode
+        else [
             "You are acting only as the external LLM front office for the requested team.",
             "The user controls all teams in NBA 2K; recommend one action only and do not claim it was applied.",
             "Return only valid JSON. No markdown. No prose outside JSON.",
@@ -39,22 +52,22 @@ def build_team_recommendation_prompt(
             "Make recommendations only for current_phase.",
             "Set trade_with_user_team true only when the recommendation proposes a trade with user_team_index.",
             "Use offseason_progression only for offseason player progression/development context, not fantasy draft decisions.",
-        ],
-        "franchise": {
-            "true_sim_year": sim_state.sim_year,
-            "current_phase": sim_state.current_phase,
-            "current_phase_label": phase_label(sim_state.current_phase),
-            "user_team_index": record.setup.user_team_index,
-            "llm_gm_team_indexes": list(record.setup.llm_gm_team_indexes),
-            "fantasy_draft": record.setup.fantasy_draft,
-        },
-        "team": {
-            "team_index": int(team_index),
-            "team_label": str(team_label),
-            "staff_profile": team_profile_payload(profile),
-            "current_roster": tuple(roster),
-        },
-        "allowed_recommendation_types": [
+        ]
+    )
+    allowed_types = (
+        [
+            "game_plan",
+            "rotation_need",
+            "recruiting_focus",
+            "transfer_evaluation",
+            "player_retention",
+            "player_development",
+            "season_goal",
+            "program_constraint",
+            "no_action",
+        ]
+        if college_mode
+        else [
             "draft_strategy",
             "trade_target",
             "trade_block",
@@ -66,7 +79,27 @@ def build_team_recommendation_prompt(
             "owner_constraint",
             "offseason_player_progression",
             "no_action",
-        ],
+        ]
+    )
+    payload = {
+        "task": "college_program_recommendation" if college_mode else "franchise_team_gm_recommendation",
+        "rules": rules,
+        "franchise": {
+            "league_mode": record.setup.league_mode,
+            "true_sim_year": sim_state.sim_year,
+            "current_phase": sim_state.current_phase,
+            "current_phase_label": phase_label(sim_state.current_phase, league_mode=record.setup.league_mode),
+            "user_team_index": record.setup.user_team_index,
+            "llm_gm_team_indexes": list(record.setup.llm_gm_team_indexes),
+            "fantasy_draft": record.setup.fantasy_draft,
+        },
+        "team": {
+            "team_index": int(team_index),
+            "team_label": str(team_label),
+            "staff_profile": team_profile_payload(profile),
+            "current_roster": tuple(roster),
+        },
+        "allowed_recommendation_types": allowed_types,
         "required_json_schema": {
             "team_index": int(team_index),
             "team_label": str(team_label),
@@ -110,9 +143,13 @@ def build_team_recommendation_requests(
                 team_label=context.team_label,
                 task=build_franchise_llm_task(
                     context,
-                    task_name="franchise_team_gm_recommendation",
+                    task_name="college_program_recommendation" if record.setup.league_mode == LEAGUE_MODE_COLLEGE else "franchise_team_gm_recommendation",
                     prompt=prompt,
-                    system_prompt="Return only valid JSON for the requested NBA2K franchise team-GM recommendation.",
+                    system_prompt=(
+                        "Return only valid JSON for the requested college basketball program recommendation."
+                        if record.setup.league_mode == LEAGUE_MODE_COLLEGE
+                        else "Return only valid JSON for the requested NBA2K franchise team-GM recommendation."
+                    ),
                 ),
             )
         )

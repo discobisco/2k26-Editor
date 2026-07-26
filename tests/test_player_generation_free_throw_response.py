@@ -25,7 +25,6 @@ from player_generation_training_data import (  # type: ignore[import-not-found]
     _pool_file_hashes,
     load_free_throw_response_data,
 )
-from player_attribute_rank_adjuster import _adjustable_attribute_candidates  # type: ignore[import-not-found]
 from player_generator import authored_player_field_index, generate_player_proposal  # type: ignore[import-not-found]
 import player_rules_offense  # type: ignore[import-not-found]
 from player_evidence import PlayerEvidence  # type: ignore[import-not-found]
@@ -292,10 +291,9 @@ def test_player_proposal_authors_free_throw_only_through_the_new_model_path() ->
     assert candidate.display_value == 73
     assert candidate.source_rule == "model_free_throw_inverse"
     assert "PlayerEvidence.per_game.ft_percent" in candidate.evidence_keys
-    assert candidate not in _adjustable_attribute_candidates(proposal)
 
 
-def test_player_proposal_leaves_free_throw_unresolved_without_master_target() -> None:
+def test_player_proposal_uses_legal_floor_without_master_target_instead_of_blank() -> None:
     artifact = FreeThrowExecutionArtifact(
         schema_version=1,
         field_key=FREE_THROW_FIELD_KEY,
@@ -312,7 +310,11 @@ def test_player_proposal_leaves_free_throw_unresolved_without_master_target() ->
         free_throw_artifact=artifact,
     )
 
-    assert FREE_THROW_FIELD_KEY not in proposal.by_field_key()
+    candidate = proposal.by_field_key()[FREE_THROW_FIELD_KEY]
+    assert candidate.display_value == 25
+    assert candidate.source_rule == "required_active_field_set_value"
+    assert "blank_prevention=active_field_must_resolve" in candidate.evidence_keys
+    assert "stale_game_value_allowed=false" in candidate.evidence_keys
 
 
 def test_zero_free_throw_attempts_mean_zero_target_not_missing_target() -> None:

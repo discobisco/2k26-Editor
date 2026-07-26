@@ -9,7 +9,14 @@ GENERATOR_DIR = Path(__file__).resolve().parents[1] / "nba2k_editor" / "Player G
 if str(GENERATOR_DIR) not in sys.path:
     sys.path.insert(0, str(GENERATOR_DIR))
 
-from game_port import apply_generated_players_to_game, missing_generated_players_and_active_placeholder_indices  # noqa: E402
+from game_port import (  # noqa: E402
+    _MATCHED_NAME_IMPORT_FIELD_KEYS,
+    _MATCHED_NAME_IMPORT_SECTIONS,
+    _generated_player_name_matches,
+    _generated_rows_for_import,
+    apply_generated_players_to_game,
+    missing_generated_players_and_active_placeholder_indices,
+)
 from display import GeneratorDisplayState, missing_generator_import_preview  # noqa: E402
 from nba2k_editor.models.schema import FieldEntry, RecordListItem  # noqa: E402
 
@@ -69,6 +76,81 @@ def generated_player(name: str, value: str):
 
 
 class PlayerGeneratorMissingImportTests(unittest.TestCase):
+    def test_matched_name_import_includes_only_season_age_from_vitals(self) -> None:
+        generated = SimpleNamespace(
+            field_candidates=(
+                SimpleNamespace(field_key="Vitals/FIRSTNAME", section="Vitals", display_value="John"),
+                SimpleNamespace(field_key="Vitals/AGE", section="Vitals", display_value=27),
+                SimpleNamespace(field_key="Vitals/HEIGHT", section="Vitals", display_value=78),
+                SimpleNamespace(field_key="Attributes/HANDS", section="Attributes", display_value=80),
+                SimpleNamespace(field_key="Tendencies/SHOT", section="Tendencies", display_value=75),
+            )
+        )
+
+        rows = tuple(
+            _generated_rows_for_import(
+                generated,
+                _MATCHED_NAME_IMPORT_SECTIONS,
+                _MATCHED_NAME_IMPORT_FIELD_KEYS,
+            )
+        )
+
+        self.assertEqual(
+            ("Vitals/AGE", "Attributes/HANDS", "Tendencies/SHOT"),
+            tuple(row.field_key for row in rows),
+        )
+        self.assertEqual(27, rows[0].display_value)
+
+    def test_matched_name_import_writes_season_age_without_other_vitals(self) -> None:
+        entries = {
+            "Vitals/AGE": FieldEntry("Players", "Vitals", "Identity", 0, {"normalized_name": "AGE", "display_name": "Age"}),
+            "Vitals/HEIGHT": FieldEntry("Players", "Vitals", "Body", 1, {"normalized_name": "HEIGHT", "display_name": "Height"}),
+            "Attributes/HANDS": FieldEntry("Players", "Attributes", "General", 2, {"normalized_name": "HANDS", "display_name": "Hands"}),
+            "Tendencies/SHOT": FieldEntry("Players", "Tendencies", "General", 3, {"normalized_name": "SHOT", "display_name": "Shot"}),
+        }
+
+        class MatchedAgeModel:
+            def __init__(self) -> None:
+                self.writes: list[tuple[int, str, int]] = []
+
+            def grouped_fields(self, domain: str):
+                assert domain == "Players"
+                return {
+                    "Vitals": {"Identity": [entries["Vitals/AGE"]], "Body": [entries["Vitals/HEIGHT"]]},
+                    "Attributes": {"General": [entries["Attributes/HANDS"]]},
+                    "Tendencies": {"General": [entries["Tendencies/SHOT"]]},
+                }
+
+            def write_entry_value(self, entry: FieldEntry, *, index: int, value: int):
+                self.writes.append((index, f"{entry.section}/{entry.normalized_name}", value))
+                return {"display_value": value}
+
+        generated = SimpleNamespace(
+            field_candidates=(
+                SimpleNamespace(field_key="Vitals/AGE", section="Vitals", display_value=27),
+                SimpleNamespace(field_key="Vitals/HEIGHT", section="Vitals", display_value=78),
+                SimpleNamespace(field_key="Attributes/HANDS", section="Attributes", display_value=80),
+                SimpleNamespace(field_key="Tendencies/SHOT", section="Tendencies", display_value=75),
+            )
+        )
+        model = MatchedAgeModel()
+
+        result = apply_generated_players_to_game(
+            model,
+            (generated,),
+            player_indices=(9,),
+            include_sections=_MATCHED_NAME_IMPORT_SECTIONS,
+            include_field_keys=_MATCHED_NAME_IMPORT_FIELD_KEYS,
+            stop_on_error=True,
+        )
+
+        self.assertTrue(result.ok)
+        self.assertCountEqual(
+            ((9, "Vitals/AGE", 27), (9, "Attributes/HANDS", 80), (9, "Tendencies/SHOT", 75)),
+            tuple(model.writes),
+        )
+        self.assertNotIn((9, "Vitals/HEIGHT", 78), model.writes)
+
     def test_missing_import_skips_active_existing_players_and_targets_active_a_z(self) -> None:
         model = MissingImportModel()
         generated = (
@@ -134,6 +216,22 @@ class PlayerGeneratorMissingImportTests(unittest.TestCase):
 
         self.assertEqual(1, skipped_existing)
         self.assertEqual(("Sam Foo",), tuple(item.identity["player"] for item in missing))
+
+    def test_regular_name_matching_uses_live_con_filter_variant(self) -> None:
+        model = MissingImportModel()
+        model.names_by_index[1] = ("Chuck", "Co nnors")
+
+        matches = _generated_player_name_matches(model, (generated_player("Chuck Conners", "Chuck"),))
+
+        self.assertEqual((1,), tuple(index for _generated, index in matches))
+
+    def test_regular_name_matching_uses_live_fuc_filter_variant(self) -> None:
+        model = MissingImportModel()
+        model.names_by_index[1] = ("Max", "Fu chs")
+
+        matches = _generated_player_name_matches(model, (generated_player("Max Fuchs", "Max"),))
+
+        self.assertEqual((1,), tuple(index for _generated, index in matches))
 
     def test_missing_preview_returns_names_for_confirmation_dialog(self) -> None:
         model = MissingImportModel()

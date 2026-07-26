@@ -274,12 +274,13 @@ class PlayerRosterSnapshotExportTests(unittest.TestCase):
         self.assertEqual(0, result["placement_succeeded"])
         self.assertEqual([("FIRSTNAME", model.player_a.index, "Alpha")], model.writes)
 
-    def test_weight_from_pounds_metadata_does_not_convert_in_field_io(self) -> None:
+    def test_weight_from_pounds_metadata_preserves_college_filler_weight(self) -> None:
         field = {"display_name": "Weight", "normalized_name": "WEIGHT"}
         payload = {"type": "float", "from_pounds": True}
 
-        self.assertEqual(225.0, _raw_to_display_value("Vitals", field, payload, 225.0))
-        self.assertEqual(225.0, _display_to_raw_value("Vitals", field, payload, 225.0))
+        self.assertEqual(100.0, _raw_to_display_value("Vitals", field, payload, 100.0))
+        self.assertEqual(100.0, _display_to_raw_value("Vitals", field, payload, 100.0))
+        self.assertEqual(100.0, _display_to_raw_value("Vitals", field, payload, 99.0))
 
     def test_wingspan_uses_same_raw_inches_conversion_as_height(self) -> None:
         field = {"display_name": "Wingspan", "normalized_name": "WINGSPAN"}

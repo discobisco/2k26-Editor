@@ -14,7 +14,10 @@ from nba2k_editor.franchise.models import (
     FranchiseSetup,
     FranchiseSimState,
     FranchiseTeamOption,
+    LEAGUE_MODE_COLLEGE,
+    LEAGUE_MODE_NBA,
     TeamRecommendation,
+    normalize_league_mode,
 )
 from nba2k_editor.franchise.sim_phases import (
     STATUS_READY,
@@ -22,6 +25,7 @@ from nba2k_editor.franchise.sim_phases import (
     STATUS_WAITING_FOR_USER_TRADE,
     game_advance_instruction,
     franchise_phase_sequence,
+    initial_phase,
     next_franchise_phase,
     phase_label,
 )
@@ -138,6 +142,158 @@ class FranchiseRepository:
                 status TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS college_conferences (
+                conference_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE
+            );
+            CREATE TABLE IF NOT EXISTS college_programs (
+                program_id TEXT PRIMARY KEY,
+                conference_id TEXT NOT NULL REFERENCES college_conferences(conference_id),
+                name TEXT NOT NULL UNIQUE,
+                short_name TEXT NOT NULL,
+                team_fields_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS college_players (
+                player_id TEXT PRIMARY KEY,
+                program_id TEXT NOT NULL REFERENCES college_programs(program_id),
+                display_name TEXT NOT NULL,
+                roster_order INTEGER NOT NULL,
+                eligibility_remaining INTEGER NOT NULL CHECK (eligibility_remaining BETWEEN 0 AND 4),
+                status TEXT NOT NULL CHECK (status IN ('active', 'departed')),
+                player_fields_json TEXT NOT NULL,
+                entry_year INTEGER NOT NULL,
+                departure_year INTEGER
+            );
+            CREATE TABLE IF NOT EXISTS college_seasons (
+                true_sim_year INTEGER PRIMARY KEY,
+                user_program_id TEXT NOT NULL REFERENCES college_programs(program_id),
+                random_seed INTEGER NOT NULL,
+                eligibility_advanced INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS college_team_projection (
+                true_sim_year INTEGER NOT NULL REFERENCES college_seasons(true_sim_year) ON DELETE CASCADE,
+                game_team_index INTEGER NOT NULL CHECK (game_team_index BETWEEN 0 AND 29),
+                program_id TEXT NOT NULL REFERENCES college_programs(program_id),
+                selection_reason TEXT NOT NULL CHECK (selection_reason IN ('user', 'conference', 'nonconference')),
+                PRIMARY KEY(true_sim_year, game_team_index),
+                UNIQUE(true_sim_year, program_id)
+            );
+            CREATE TABLE IF NOT EXISTS college_player_projection (
+                true_sim_year INTEGER NOT NULL,
+                stage TEXT NOT NULL CHECK (stage IN ('season', 'sweet16')),
+                game_team_index INTEGER NOT NULL CHECK (game_team_index BETWEEN 0 AND 29),
+                roster_slot INTEGER NOT NULL CHECK (roster_slot BETWEEN 1 AND 15),
+                slot_field TEXT NOT NULL,
+                game_player_index INTEGER NOT NULL,
+                canonical_player_id TEXT REFERENCES college_players(player_id),
+                PRIMARY KEY(true_sim_year, stage, game_team_index, roster_slot),
+                UNIQUE(true_sim_year, stage, game_player_index)
+            );
+            CREATE TABLE IF NOT EXISTS college_departures (
+                player_id TEXT PRIMARY KEY REFERENCES college_players(player_id),
+                program_id TEXT NOT NULL REFERENCES college_programs(program_id),
+                true_sim_year INTEGER NOT NULL,
+                reason TEXT NOT NULL,
+                game_player_index INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS college_tournament_entries (
+                true_sim_year INTEGER NOT NULL,
+                bracket_slot INTEGER NOT NULL CHECK (bracket_slot BETWEEN 1 AND 64),
+                program_id TEXT NOT NULL REFERENCES college_programs(program_id),
+                PRIMARY KEY(true_sim_year, bracket_slot),
+                UNIQUE(true_sim_year, program_id)
+            );
+            CREATE TABLE IF NOT EXISTS college_tournament_games (
+                true_sim_year INTEGER NOT NULL,
+                round_number INTEGER NOT NULL CHECK (round_number BETWEEN 1 AND 6),
+                game_number INTEGER NOT NULL,
+                first_program_id TEXT NOT NULL REFERENCES college_programs(program_id),
+                second_program_id TEXT NOT NULL REFERENCES college_programs(program_id),
+                winner_program_id TEXT REFERENCES college_programs(program_id),
+                PRIMARY KEY(true_sim_year, round_number, game_number)
+            );
+            CREATE TABLE IF NOT EXISTS college_sweet16_projection (
+                true_sim_year INTEGER NOT NULL,
+                bracket_order INTEGER NOT NULL CHECK (bracket_order BETWEEN 1 AND 16),
+                game_team_index INTEGER NOT NULL CHECK (game_team_index BETWEEN 0 AND 29),
+                program_id TEXT NOT NULL REFERENCES college_programs(program_id),
+                PRIMARY KEY(true_sim_year, bracket_order),
+                UNIQUE(true_sim_year, game_team_index),
+                UNIQUE(true_sim_year, program_id)
+            );
+            """
+        )
+        college_players_sql_row = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'college_players'"
+        ).fetchone()
+        college_games_sql_row = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'college_tournament_games'"
+        ).fetchone()
+        rebuild_college_players = bool(
+            college_players_sql_row and "UNIQUE(program_id, roster_order)" in str(college_players_sql_row[0])
+        )
+        rebuild_college_games = bool(
+            college_games_sql_row and "round_number IN (1, 2)" in str(college_games_sql_row[0])
+        )
+        if rebuild_college_players or rebuild_college_games:
+            connection.commit()
+            connection.execute("PRAGMA foreign_keys = OFF")
+            if rebuild_college_players:
+                connection.executescript(
+                    """
+                    CREATE TABLE college_players_new (
+                        player_id TEXT PRIMARY KEY,
+                        program_id TEXT NOT NULL REFERENCES college_programs(program_id),
+                        display_name TEXT NOT NULL,
+                        roster_order INTEGER NOT NULL,
+                        eligibility_remaining INTEGER NOT NULL CHECK (eligibility_remaining BETWEEN 0 AND 4),
+                        status TEXT NOT NULL CHECK (status IN ('active', 'departed')),
+                        player_fields_json TEXT NOT NULL,
+                        entry_year INTEGER NOT NULL,
+                        departure_year INTEGER
+                    );
+                    INSERT INTO college_players_new(
+                        player_id, program_id, display_name, roster_order, eligibility_remaining,
+                        status, player_fields_json, entry_year, departure_year
+                    )
+                    SELECT player_id, program_id, display_name, roster_order, eligibility_remaining,
+                           status, player_fields_json, entry_year, departure_year
+                    FROM college_players;
+                    DROP TABLE college_players;
+                    ALTER TABLE college_players_new RENAME TO college_players;
+                    """
+                )
+            if rebuild_college_games:
+                connection.executescript(
+                    """
+                    CREATE TABLE college_tournament_games_new (
+                        true_sim_year INTEGER NOT NULL,
+                        round_number INTEGER NOT NULL CHECK (round_number BETWEEN 1 AND 6),
+                        game_number INTEGER NOT NULL,
+                        first_program_id TEXT NOT NULL REFERENCES college_programs(program_id),
+                        second_program_id TEXT NOT NULL REFERENCES college_programs(program_id),
+                        winner_program_id TEXT REFERENCES college_programs(program_id),
+                        PRIMARY KEY(true_sim_year, round_number, game_number)
+                    );
+                    INSERT INTO college_tournament_games_new(
+                        true_sim_year, round_number, game_number, first_program_id,
+                        second_program_id, winner_program_id
+                    )
+                    SELECT true_sim_year, round_number, game_number, first_program_id,
+                           second_program_id, winner_program_id
+                    FROM college_tournament_games;
+                    DROP TABLE college_tournament_games;
+                    ALTER TABLE college_tournament_games_new RENAME TO college_tournament_games;
+                    """
+                )
+            connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_college_players_active_roster
+            ON college_players(program_id, roster_order)
+            WHERE status = 'active'
             """
         )
         recommendation_columns = {
@@ -146,6 +302,13 @@ class FranchiseRepository:
         if "trade_with_user_team" not in recommendation_columns:
             connection.execute(
                 "ALTER TABLE team_recommendations ADD COLUMN trade_with_user_team INTEGER NOT NULL DEFAULT 0"
+            )
+        college_season_columns = {
+            str(row[1]) for row in connection.execute("PRAGMA table_info(college_seasons)")
+        }
+        if "eligibility_advanced" not in college_season_columns:
+            connection.execute(
+                "ALTER TABLE college_seasons ADD COLUMN eligibility_advanced INTEGER NOT NULL DEFAULT 0"
             )
 
     def replace_franchise(
@@ -156,6 +319,9 @@ class FranchiseRepository:
         league_snapshot: dict[str, Any] | None = None,
         target_executable: str = "",
     ) -> FranchiseRecord:
+        league_mode = normalize_league_mode(setup.league_mode)
+        if league_mode == LEAGUE_MODE_COLLEGE and setup.fantasy_draft:
+            raise ValueError("College mode does not use the NBA fantasy draft workflow.")
         options_by_index = {int(option.team_index): option for option in team_options}
         llm_indexes = {int(index) for index in setup.llm_gm_team_indexes}
         llm_indexes.discard(int(setup.user_team_index))
@@ -171,6 +337,19 @@ class FranchiseRepository:
         connection = self._connect()
         try:
             self.initialize(connection)
+            for table in (
+                "college_player_projection",
+                "college_sweet16_projection",
+                "college_tournament_games",
+                "college_tournament_entries",
+                "college_departures",
+                "college_team_projection",
+                "college_seasons",
+                "college_players",
+                "college_programs",
+                "college_conferences",
+            ):
+                connection.execute(f"DELETE FROM {table}")
             connection.execute("DELETE FROM franchise_meta")
             connection.execute("DELETE FROM franchise_teams")
             connection.execute("DELETE FROM llm_gm_teams")
@@ -186,6 +365,7 @@ class FranchiseRepository:
                 "user_team_index": str(int(setup.user_team_index)),
                 "keep_full_league_save": "1" if setup.keep_full_league_save else "0",
                 "fantasy_draft": "1" if setup.fantasy_draft else "0",
+                "league_mode": league_mode,
                 "created_at": now,
                 "updated_at": now,
             }
@@ -195,9 +375,9 @@ class FranchiseRepository:
                 INSERT INTO franchise_sim_state(
                     id, sim_year, current_phase, status, expansion_draft_required,
                     expected_next_phase, expected_next_year, required_user_action, updated_at
-                ) VALUES(1, ?, 'season', ?, 0, '', ?, '', ?)
+                ) VALUES(1, ?, ?, ?, 0, '', ?, '', ?)
                 """,
-                (int(setup.start_year), STATUS_READY, int(setup.start_year), now),
+                (int(setup.start_year), initial_phase(league_mode), STATUS_READY, int(setup.start_year), now),
             )
             connection.executemany(
                 "INSERT INTO franchise_teams(team_index, label, display_label) VALUES(?, ?, ?)",
@@ -259,6 +439,7 @@ class FranchiseRepository:
             llm_gm_team_indexes=llm_gm_team_indexes,
             fantasy_draft=meta.get("fantasy_draft", "0") == "1",
             user_team_index=int(meta.get("user_team_index", "0")),
+            league_mode=normalize_league_mode(meta.get("league_mode", LEAGUE_MODE_NBA)),
         )
         return FranchiseRecord(
             setup=setup,
@@ -303,16 +484,20 @@ class FranchiseRepository:
         state = self.load_sim_state()
         if state is not None:
             return state
-        start_year = self.load().setup.start_year
-        return self.sync_sim_state(sim_year=start_year, current_phase="season")
+        setup = self.load().setup
+        return self.sync_sim_state(sim_year=setup.start_year, current_phase=initial_phase(setup.league_mode))
 
     def sync_sim_state(self, *, sim_year: int, current_phase: str) -> FranchiseSimState:
-        phase_label(current_phase)
+        league_mode = self.load().setup.league_mode
+        phase_label(current_phase, league_mode=league_mode)
         existing_state = self.load_sim_state()
         expansion_draft_required = bool(existing_state and existing_state.expansion_draft_required)
         active_phase_keys = {
             phase.key
-            for phase in franchise_phase_sequence(expansion_draft_required=expansion_draft_required)
+            for phase in franchise_phase_sequence(
+                expansion_draft_required=expansion_draft_required,
+                league_mode=league_mode,
+            )
         }
         if str(current_phase) not in active_phase_keys:
             raise ValueError("Expansion Draft is only active when an expansion team was added.")
@@ -346,6 +531,8 @@ class FranchiseRepository:
         return state
 
     def set_expansion_draft_required(self, required: bool) -> FranchiseSimState:
+        if self.load().setup.league_mode == LEAGUE_MODE_COLLEGE and required:
+            raise ValueError("College mode does not use the NBA Expansion Draft phase.")
         state = self.ensure_sim_state()
         if state.current_phase == "expansion_draft" and not required:
             raise ValueError("Expansion Draft cannot be disabled while it is the current game phase.")
@@ -367,15 +554,21 @@ class FranchiseRepository:
         return state
 
     def pause_for_game_advance(self) -> FranchiseSimState:
+        league_mode = self.load().setup.league_mode
         state = self.ensure_sim_state()
         if state.status != STATUS_READY:
             raise ValueError("franchise simulation is already paused")
         next_phase, year_increment = next_franchise_phase(
             state.current_phase,
             expansion_draft_required=state.expansion_draft_required,
+            league_mode=league_mode,
         )
         next_year = state.sim_year + year_increment
-        required_action = game_advance_instruction(next_phase, next_sim_year=next_year)
+        required_action = game_advance_instruction(
+            next_phase,
+            next_sim_year=next_year,
+            league_mode=league_mode,
+        )
         now = _utc_now_text()
         connection = self._connect()
         try:
@@ -399,16 +592,17 @@ class FranchiseRepository:
         return paused
 
     def sync_and_resume(self, *, observed_phase: str, observed_sim_year: int) -> FranchiseSimState:
-        phase_label(observed_phase)
+        league_mode = self.load().setup.league_mode
+        phase_label(observed_phase, league_mode=league_mode)
         state = self.ensure_sim_state()
         if state.status != STATUS_WAITING_FOR_GAME_ADVANCE:
             raise ValueError("franchise simulation is not waiting for game progression")
         if str(observed_phase) != state.expected_next_phase or int(observed_sim_year) != state.expected_next_year:
             raise ValueError(
-                f"expected {phase_label(state.expected_next_phase)} for true sim year {state.expected_next_year}"
+                f"expected {phase_label(state.expected_next_phase, league_mode=league_mode)} for true sim year {state.expected_next_year}"
             )
         now = _utc_now_text()
-        expansion_required = False if str(observed_phase) == "season" else state.expansion_draft_required
+        expansion_required = False if str(observed_phase) == initial_phase(league_mode) else state.expansion_draft_required
         connection = self._connect()
         try:
             self.initialize(connection)

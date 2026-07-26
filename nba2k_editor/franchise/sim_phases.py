@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from nba2k_editor.franchise.models import LEAGUE_MODE_COLLEGE, LEAGUE_MODE_NBA, normalize_league_mode
+
 
 STATUS_READY = "ready"
 STATUS_WAITING_FOR_GAME_ADVANCE = "waiting_for_game_advance"
@@ -39,24 +41,57 @@ FRANCHISE_PHASES = (
     FranchisePhase("advance_to_next_season", "Advance to Next Season"),
 )
 
-_PHASE_BY_KEY = {phase.key: phase for phase in FRANCHISE_PHASES}
+COLLEGE_PHASES = (
+    FranchisePhase("preseason", "Preseason"),
+    FranchisePhase("regular_season", "Regular Season"),
+    FranchisePhase("postseason", "Postseason"),
+    FranchisePhase("roster_departures", "Roster Departures"),
+    FranchisePhase("player_transfers", "Player Transfers"),
+    FranchisePhase("recruiting", "Recruiting"),
+    FranchisePhase("player_development", "Player Development"),
+    FranchisePhase("advance_to_next_season", "Advance to Next Season"),
+)
 
 
-def phase_label(phase_key: str) -> str:
-    try:
-        return _PHASE_BY_KEY[str(phase_key)].label
-    except KeyError as exc:
-        raise ValueError(f"unknown franchise phase: {phase_key}") from exc
+def initial_phase(league_mode: str = LEAGUE_MODE_NBA) -> str:
+    return "preseason" if normalize_league_mode(league_mode) == LEAGUE_MODE_COLLEGE else "season"
 
 
-def franchise_phase_sequence(*, expansion_draft_required: bool) -> tuple[FranchisePhase, ...]:
+def franchise_phase_sequence(
+    *,
+    expansion_draft_required: bool,
+    league_mode: str = LEAGUE_MODE_NBA,
+) -> tuple[FranchisePhase, ...]:
+    mode = normalize_league_mode(league_mode)
+    if mode == LEAGUE_MODE_COLLEGE:
+        if expansion_draft_required:
+            raise ValueError("College mode does not use the NBA Expansion Draft phase.")
+        return COLLEGE_PHASES
     if expansion_draft_required:
         return FRANCHISE_PHASES
     return tuple(phase for phase in FRANCHISE_PHASES if phase.key != "expansion_draft")
 
 
-def next_franchise_phase(current_phase: str, *, expansion_draft_required: bool) -> tuple[str, int]:
-    sequence = franchise_phase_sequence(expansion_draft_required=expansion_draft_required)
+def phase_label(phase_key: str, *, league_mode: str = LEAGUE_MODE_NBA) -> str:
+    mode = normalize_league_mode(league_mode)
+    phases = COLLEGE_PHASES if mode == LEAGUE_MODE_COLLEGE else FRANCHISE_PHASES
+    phase_by_key = {phase.key: phase for phase in phases}
+    try:
+        return phase_by_key[str(phase_key)].label
+    except KeyError as exc:
+        raise ValueError(f"unknown {mode} phase: {phase_key}") from exc
+
+
+def next_franchise_phase(
+    current_phase: str,
+    *,
+    expansion_draft_required: bool,
+    league_mode: str = LEAGUE_MODE_NBA,
+) -> tuple[str, int]:
+    sequence = franchise_phase_sequence(
+        expansion_draft_required=expansion_draft_required,
+        league_mode=league_mode,
+    )
     keys = tuple(phase.key for phase in sequence)
     try:
         index = keys.index(str(current_phase))
@@ -64,11 +99,16 @@ def next_franchise_phase(current_phase: str, *, expansion_draft_required: bool) 
         raise ValueError(f"phase {current_phase!r} is not active in this franchise cycle") from exc
     if index + 1 < len(keys):
         return keys[index + 1], 0
-    return "season", 1
+    return initial_phase(league_mode), 1
 
 
-def game_advance_instruction(next_phase: str, *, next_sim_year: int) -> str:
+def game_advance_instruction(
+    next_phase: str,
+    *,
+    next_sim_year: int,
+    league_mode: str = LEAGUE_MODE_NBA,
+) -> str:
     return (
-        f"Progress NBA 2K to {phase_label(next_phase)} for true sim year {int(next_sim_year)}, "
+        f"Progress NBA 2K to {phase_label(next_phase, league_mode=league_mode)} for true sim year {int(next_sim_year)}, "
         "then select that observed phase and click Sync and Resume."
     )

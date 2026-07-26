@@ -42,6 +42,7 @@ class GamePortResult:
 
 
 _MATCHED_NAME_IMPORT_SECTIONS: frozenset[str] = frozenset({"Attributes", "Tendencies"})
+_MATCHED_NAME_IMPORT_FIELD_KEYS: frozenset[str] = frozenset({"Vitals/AGE"})
 
 
 @dataclass(frozen=True)
@@ -129,6 +130,7 @@ def import_generated_players_to_game(
         player_indices=player_indices,
         field_index=field_index,
         include_sections=_MATCHED_NAME_IMPORT_SECTIONS if match_existing_player_names else None,
+        include_field_keys=_MATCHED_NAME_IMPORT_FIELD_KEYS if match_existing_player_names else None,
         stop_on_error=stop_on_error,
         progress_callback=progress_callback,
     )
@@ -196,6 +198,7 @@ def apply_generated_players_to_game(
     offsets_path: str | Path | None = None,
     extra_rows: Iterable[Any] = (),
     include_sections: Iterable[str] | None = None,
+    include_field_keys: Iterable[str] | None = None,
     stop_on_error: bool = False,
     progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> GamePortBatchResult:
@@ -208,6 +211,7 @@ def apply_generated_players_to_game(
     player_results: list[GamePortResult] = []
     extra_row_tuple = tuple(extra_rows)
     allowed_sections = frozenset(str(section) for section in include_sections) if include_sections is not None else None
+    allowed_field_keys = frozenset(str(field_key) for field_key in include_field_keys) if include_field_keys is not None else None
     total_players = len(generated_tuple)
     if progress_callback is not None:
         progress_callback(0, total_players, f"Preparing to import {total_players} generated players")
@@ -215,7 +219,7 @@ def apply_generated_players_to_game(
         player_results.append(
             apply_generated_rows_to_game(
                 model,
-                (*tuple(_generated_rows_for_import(generated, allowed_sections)), *extra_row_tuple),
+                (*tuple(_generated_rows_for_import(generated, allowed_sections, allowed_field_keys)), *extra_row_tuple),
                 player_index=player_index,
                 field_index=field_index,
                 offsets_path=offsets_path,
@@ -303,7 +307,7 @@ def _loaded_players_by_name_key(model: Any) -> dict[str, tuple[Any, ...]]:
     else:
         iterable = ()
     for label, item in iterable:
-        for value in _loaded_player_name_values(label, item):
+        for value in (*_loaded_player_name_values(label, item), *_live_player_name_values(model, item)):
             try:
                 keys = _person_name_keys(value)
             except Exception:
@@ -455,6 +459,7 @@ def _person_name_keys(*values: object) -> tuple[str, ...]:
         without_suffix = tuple(token for token in tokens if token not in _NAME_SUFFIXES)
         if without_suffix and without_suffix != tokens:
             keys.append("".join(without_suffix))
+        keys.extend(_profanity_fragment_name_keys(without_suffix))
         if len(without_suffix) >= 2:
             first = without_suffix[0]
             last = without_suffix[-1]
@@ -997,16 +1002,23 @@ def _row_value(row: Any) -> int | str:
     raise AttributeError("generated row is missing display_value/value")
 
 
-def _generated_rows_for_import(generated: Any, allowed_sections: frozenset[str] | None) -> Iterable[Any]:
+def _generated_rows_for_import(
+    generated: Any,
+    allowed_sections: frozenset[str] | None,
+    allowed_field_keys: frozenset[str] | None = None,
+) -> Iterable[Any]:
     for row in _generated_rows(generated):
-        if allowed_sections is None:
+        if allowed_sections is None and allowed_field_keys is None:
+            yield row
+            continue
+        field_key = str(getattr(row, "field_key", ""))
+        if allowed_field_keys is not None and field_key in allowed_field_keys:
             yield row
             continue
         section = str(getattr(row, "section", ""))
         if not section:
-            field_key = str(getattr(row, "field_key", ""))
             section = field_key.split("/", 1)[0]
-        if section in allowed_sections:
+        if allowed_sections is not None and section in allowed_sections:
             yield row
 
 

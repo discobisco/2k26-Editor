@@ -400,7 +400,7 @@ def _exact_field_match_rows_for_field(
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
-    for group in _field_match_blend_groups(section_features):
+    for group in _field_match_blend_groups(section_features, field_key=field_key):
         for row in match_rows_by_group.get(group, ()):
             candidate = row.get("candidate", {})
             if field_key not in candidate.get("fields", {}):
@@ -439,7 +439,7 @@ def _blend_suggestion_with_player_matches(
     if individual_number is None:
         return individual_value, ("player_match_blend=skipped_non_numeric",)
     values: list[tuple[str, float]] = [("individual", float(individual_number))]
-    for group in _field_match_blend_groups(section_features):
+    for group in _field_match_blend_groups(section_features, field_key=field_key):
         group_value = _match_group_field_average(match_rows_by_group.get(group, ()), field_key)
         if group_value is not None:
             values.append((group, group_value))
@@ -452,7 +452,9 @@ def _blend_suggestion_with_player_matches(
     )
 
 
-def _field_match_blend_groups(section_features: tuple[str, ...]) -> tuple[str, ...]:
+def _field_match_blend_groups(section_features: tuple[str, ...], *, field_key: str) -> tuple[str, ...]:
+    if _identity(field_key) in {"ATTRIBUTESINTERIORDEFENSE", "ATTRIBUTESPERIMETERDEFENSE"}:
+        return ()
     defensive = sum(1 for feature in section_features if feature in DEFENSIVE_PLAYER_MATCH_FEATURES)
     offensive = sum(1 for feature in section_features if feature in OFFENSIVE_PLAYER_MATCH_FEATURES)
     groups = ["player"]
@@ -587,36 +589,62 @@ def select_positions_from_evidence(play_by_play: dict[str, Any], fallback_pos: o
     return PositionSelection(primary=primary, secondary=secondary, all_positions=parsed)
 
 
-@lru_cache(maxsize=1)
+@dataclass(frozen=True)
+class _StatNeighborModelLoadResult:
+    model: StatNeighborModel | None
+    error: str = ""
+
+
 def load_latest_stat_neighbor_model() -> StatNeighborModel:
-    model_dir = _latest_model_dir()
+    result = _load_latest_stat_neighbor_model_cached(_model_inventory_signature())
+    if result.model is None:
+        raise FileNotFoundError(result.error)
+    return result.model
+
+
+@lru_cache(maxsize=2)
+def _load_latest_stat_neighbor_model_cached(
+    _inventory_signature: tuple[str, bool, int, bool, int, int],
+) -> _StatNeighborModelLoadResult:
+    try:
+        model_dir = _latest_model_dir()
+    except FileNotFoundError as exc:
+        return _StatNeighborModelLoadResult(model=None, error=str(exc))
     field_map = _field_key_map()
     candidates_by_position = _load_candidate_pool(model_dir, field_map)
     scales_by_position = _scale_by_position(candidates_by_position)
-    return StatNeighborModel(
-        path=model_dir,
-        candidates_by_position=candidates_by_position,
-        scales_by_position=scales_by_position,
+    return _StatNeighborModelLoadResult(
+        model=StatNeighborModel(
+            path=model_dir,
+            candidates_by_position=candidates_by_position,
+            scales_by_position=scales_by_position,
+        )
     )
 
 
-@lru_cache(maxsize=1)
-def hot_zone_neutral_values() -> dict[str, NeighborFieldSuggestion]:
-    values: dict[str, NeighborFieldSuggestion] = {}
-    for section, group, normalized, _display in _offset_entries():
-        if section == "Tendencies" and _identity(group) == "HOTZONES":
-            field_key = f"{section}/{normalized}"
-            values[field_key] = NeighborFieldSuggestion(
-                field_key=field_key,
-                value="Neutral",
-                source_rule="hot_zone_neutral_default",
-                evidence_keys=("hot_zones_default_neutral",),
-            )
-    return values
+def _model_inventory_signature() -> tuple[str, bool, int, bool, int, int]:
+    base = _model_base()
+    base_exists = base.is_dir()
+    base_mtime_ns = base.stat().st_mtime_ns if base_exists else 0
+    merged = base / "POSITION_STAT_NEIGHBOR_MODEL.sqlite"
+    merged_exists = merged.is_file()
+    merged_stat = merged.stat() if merged_exists else None
+    return (
+        str(base),
+        base_exists,
+        base_mtime_ns,
+        merged_exists,
+        merged_stat.st_mtime_ns if merged_stat is not None else 0,
+        merged_stat.st_size if merged_stat is not None else 0,
+    )
+
+
+def _model_base() -> Path:
+    return _repo_root() / "nba2k_editor" / "Player Generator" / "NBA Player Data" / "player_generation_pool"
 
 
 def _latest_model_dir() -> Path:
-    base = _repo_root() / "nba2k_editor" / "Player Generator" / "NBA Player Data" / "player_generation_pool"
+    base = _model_base()
     merged_sqlite = base / "POSITION_STAT_NEIGHBOR_MODEL.sqlite"
     if merged_sqlite.is_file():
         return merged_sqlite
@@ -770,9 +798,13 @@ def _features_for_field(field_key: str) -> tuple[str, ...]:
         return ("dbpm", "dws", "pf_per100", "team_d_rtg")
     if key in {"FOUL", "HARDFOUL"}:
         return ("pf_per100", "player_d_rtg")
-    if "PERIMETERDEFENSE" in key or "LATERAL" in key:
+    if "PERIMETERDEFENSE" in key:
+        return ("dws",)
+    if "LATERAL" in key:
         return ("stl_percent", "dbpm", "dws", "pf_per100")
-    if "INTERIORDEFENSE" in key or "HELPDEFENSE" in key:
+    if "INTERIORDEFENSE" in key:
+        return ("dws",)
+    if "HELPDEFENSE" in key:
         return ("blk_percent", "drb_percent", "dbpm", "dws", "height_inches", "weight_pounds", "all_defense", "dpoy_share")
     if "DEFENSECONSISTENCY" in key or key == "PICKANDROLLDEFENSEIQ":
         return ("dbpm", "dws", "stl_percent", "blk_percent", "drb_percent", "all_defense", "dpoy_share")
@@ -1085,7 +1117,6 @@ __all__ = [
     "NeighborFieldSuggestion",
     "PositionSelection",
     "StatNeighborModel",
-    "hot_zone_neutral_values",
     "load_latest_stat_neighbor_model",
     "select_positions_from_evidence",
     "target_features_from_evidence",

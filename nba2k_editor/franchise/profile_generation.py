@@ -14,7 +14,7 @@ from nba2k_editor.franchise.llm_tasks import (
     run_franchise_llm_task,
 )
 from nba2k_editor.franchise.llm_view import build_franchise_llm_view, franchise_roster_payload_for_team
-from nba2k_editor.franchise.models import FranchiseRecord, FranchiseTeamOption
+from nba2k_editor.franchise.models import LEAGUE_MODE_COLLEGE, LEAGUE_MODE_NBA, FranchiseRecord, FranchiseTeamOption
 
 
 @dataclass(frozen=True)
@@ -23,6 +23,7 @@ class TeamProfileGenerationRequest:
     team_label: str
     gm_control: str
     task: FranchiseLlmTask
+    league_mode: str = LEAGUE_MODE_NBA
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,26 @@ class GeneratedTeamProfile:
     coach: str
     scout: str
     raw_response: str
+    league_mode: str = LEAGUE_MODE_NBA
+
+
+def _profile_headings(league_mode: str, gm_control: str) -> tuple[str, ...]:
+    control_heading = "Human-controlled" if gm_control == "human" else "LLM-controlled"
+    if league_mode == LEAGUE_MODE_COLLEGE:
+        return (
+            "## Program Identity",
+            "## Athletic Department (LLM-controlled)",
+            f"## Program Decision-Maker ({control_heading})",
+            "## Coaching Staff (LLM-controlled)",
+            "## Recruiting Staff (LLM-controlled)",
+        )
+    return (
+        "## Organizational Identity",
+        "## Owner (LLM-controlled)",
+        f"## General Manager ({control_heading})",
+        "## Coach (LLM-controlled)",
+        "## Scout (LLM-controlled)",
+    )
 
 
 def team_profile_path(record: FranchiseRecord, team_index: int) -> Path:
@@ -50,14 +71,7 @@ def team_profile_is_valid(record: FranchiseRecord, team: FranchiseTeamOption) ->
     except OSError:
         return False
     gm_control = "human" if int(team.team_index) == int(record.setup.user_team_index) else "llm"
-    gm_heading = "Human-controlled" if gm_control == "human" else "LLM-controlled"
-    headings = (
-        "## Organizational Identity",
-        "## Owner (LLM-controlled)",
-        f"## General Manager ({gm_heading})",
-        "## Coach (LLM-controlled)",
-        "## Scout (LLM-controlled)",
-    )
+    headings = _profile_headings(record.setup.league_mode, gm_control)
     required_markers = (
         f"team_index: {int(team.team_index)}",
         f"team_label: {json.dumps(team.label)}",
@@ -94,25 +108,71 @@ def build_team_profile_generation_prompt(
     team_label: str,
     roster: Iterable[dict[str, object]],
 ) -> str:
+    college_mode = record.setup.league_mode == LEAGUE_MODE_COLLEGE
     gm_control = "human" if int(team_index) == int(record.setup.user_team_index) else "llm"
-    gm_rule = (
-        "The human user is this team's General Manager. Do not invent an autonomous GM persona; describe how the Owner, Coach, and Scout work with the human GM."
-        if gm_control == "human"
-        else "Create a persistent LLM-controlled General Manager identity for this CPU-controlled team."
+    if college_mode:
+        gm_rule = (
+            "The human user is this program's decision-maker. Do not invent an autonomous replacement; describe how the athletic department, coaching staff, and recruiting staff work with the user."
+            if gm_control == "human"
+            else "Create a persistent LLM-controlled program decision-maker identity for this CPU-controlled college program."
+        )
+        role_rule = "Athletic department, coaching staff, and recruiting staff are LLM-controlled for every program."
+    else:
+        gm_rule = (
+            "The human user is this team's General Manager. Do not invent an autonomous GM persona; describe how the Owner, Coach, and Scout work with the human GM."
+            if gm_control == "human"
+            else "Create a persistent LLM-controlled General Manager identity for this CPU-controlled team."
+        )
+        role_rule = "Owner, Coach, and Scout are LLM-controlled on every team."
+    profile_schema = (
+        {
+            "team_index": int(team_index),
+            "team_label": str(team_label),
+            "gm_control": gm_control,
+            "organizational_identity": "durable college program identity and priorities",
+            "owner": "persistent athletic-department identity, goals, constraints, and oversight style",
+            "general_manager": "human working relationship when gm_control is human; otherwise persistent LLM program decision-maker identity",
+            "coach": "persistent coaching-staff identity, system, priorities, and program relationship",
+            "scout": "persistent recruiting-staff evaluation philosophy, biases, and program relationship",
+        }
+        if college_mode
+        else {
+            "team_index": int(team_index),
+            "team_label": str(team_label),
+            "gm_control": gm_control,
+            "organizational_identity": "durable team identity and priorities",
+            "owner": "persistent Owner identity, goals, constraints, and management style",
+            "general_manager": "human-GM working relationship when gm_control is human; otherwise persistent LLM GM identity and roster-building philosophy",
+            "coach": "persistent Coach identity, system, priorities, and relationship with the GM",
+            "scout": "persistent Scout identity, evaluation philosophy, biases, and relationship with the GM",
+        }
     )
     payload = {
-        "task": "generate_persistent_franchise_team_profile",
+        "task": "generate_persistent_college_program_profile" if college_mode else "generate_persistent_franchise_team_profile",
         "rules": [
-            "Create a distinct persistent staff identity for this one franchise team.",
-            "Owner, Coach, and Scout are LLM-controlled on every team.",
+            (
+                "Create a distinct persistent staff identity for this one college basketball program."
+                if college_mode
+                else "Create a distinct persistent staff identity for this one franchise team."
+            ),
+            role_rule,
             gm_rule,
             "Ground basketball context in the supplied true simulation year, team label, and current roster.",
             "Do not invent player facts, contracts, transactions, records, or staff employment facts that are not supplied.",
             "The profile persists across phases and seasons, so write durable identities, decision styles, priorities, tensions, and working relationships rather than a one-turn recommendation.",
             "Return only valid JSON. No markdown and no prose outside JSON.",
+            *(
+                [
+                    "This is a college basketball program. Do not invent NBA contracts, trades, free agency, or draft control.",
+                    "Use true_sim_year for era context and do not assume modern transfer, NIL, recruiting, eligibility, or postseason rules in earlier eras.",
+                ]
+                if college_mode
+                else []
+            ),
         ],
         "franchise": {
             "franchise_id": record.franchise_id,
+            "league_mode": record.setup.league_mode,
             "true_sim_year": record.setup.start_year,
             "user_team_index": record.setup.user_team_index,
             "fantasy_draft": record.setup.fantasy_draft,
@@ -123,16 +183,7 @@ def build_team_profile_generation_prompt(
             "gm_control": gm_control,
             "current_roster": tuple(roster),
         },
-        "required_json_schema": {
-            "team_index": int(team_index),
-            "team_label": str(team_label),
-            "gm_control": gm_control,
-            "organizational_identity": "durable team identity and priorities",
-            "owner": "persistent Owner identity, goals, constraints, and management style",
-            "general_manager": "human-GM working relationship when gm_control is human; otherwise persistent LLM GM identity and roster-building philosophy",
-            "coach": "persistent Coach identity, system, priorities, and relationship with the GM",
-            "scout": "persistent Scout identity, evaluation philosophy, biases, and relationship with the GM",
-        },
+        "required_json_schema": profile_schema,
     }
     return json.dumps(payload, indent=2, sort_keys=True)
 
@@ -171,10 +222,19 @@ def build_team_profile_generation_requests(
                 gm_control=gm_control,
                 task=build_franchise_llm_task(
                     context,
-                    task_name="generate_persistent_franchise_team_profile",
+                    task_name=(
+                        "generate_persistent_college_program_profile"
+                        if record.setup.league_mode == LEAGUE_MODE_COLLEGE
+                        else "generate_persistent_franchise_team_profile"
+                    ),
                     prompt=prompt,
-                    system_prompt="Return only valid JSON for the requested persistent NBA2K franchise team profile.",
+                    system_prompt=(
+                        "Return only valid JSON for the requested persistent college basketball program profile."
+                        if record.setup.league_mode == LEAGUE_MODE_COLLEGE
+                        else "Return only valid JSON for the requested persistent NBA2K franchise team profile."
+                    ),
                 ),
+                league_mode=record.setup.league_mode,
             )
         )
     unknown_indexes = requested_indexes.difference(request.team_index for request in requests)
@@ -233,35 +293,37 @@ def generated_team_profile_from_response(
         coach=str(payload["coach"]).strip(),
         scout=str(payload["scout"]).strip(),
         raw_response=response,
+        league_mode=request.league_mode,
     )
 
 
 def render_generated_team_profile(profile: GeneratedTeamProfile) -> str:
-    gm_heading = "Human-controlled" if profile.gm_control == "human" else "LLM-controlled"
+    headings = _profile_headings(profile.league_mode, profile.gm_control)
+    profile_kind = "College Program Staff" if profile.league_mode == LEAGUE_MODE_COLLEGE else "Franchise Staff"
     return "\n".join(
         (
             "---",
-            f"name: {json.dumps(profile.team_label + ' Franchise Staff')}",
+            f"name: {json.dumps(profile.team_label + ' ' + profile_kind)}",
             f"team_index: {profile.team_index}",
             f"team_label: {json.dumps(profile.team_label)}",
             f"gm_control: {profile.gm_control}",
             "status: active",
             "---",
-            f"# {profile.team_label} Franchise Staff",
+            f"# {profile.team_label} {profile_kind}",
             "",
-            "## Organizational Identity",
+            headings[0],
             profile.organizational_identity,
             "",
-            "## Owner (LLM-controlled)",
+            headings[1],
             profile.owner,
             "",
-            f"## General Manager ({gm_heading})",
+            headings[2],
             profile.general_manager,
             "",
-            "## Coach (LLM-controlled)",
+            headings[3],
             profile.coach,
             "",
-            "## Scout (LLM-controlled)",
+            headings[4],
             profile.scout,
             "",
         )

@@ -3161,6 +3161,13 @@
               "length": 8,
               "startBit": 0,
               "type": "number"
+            },
+            "2K26": {
+              "address": 4119,
+              "hex": "0x1017",
+              "length": 8,
+              "startBit": 0,
+              "type": "number"
             }
           }
         },
@@ -3351,6 +3358,13 @@
             "2K22,2K23,2K24": {
               "address": 3246,
               "hex": "0xCAE",
+              "length": 8,
+              "startBit": 0,
+              "type": "number"
+            },
+            "2K26": {
+              "address": 4114,
+              "hex": "0x1012",
               "length": 8,
               "startBit": 0,
               "type": "number"

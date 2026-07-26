@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import queue
 import threading
 from pathlib import Path
@@ -9,6 +10,7 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFileDialog,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -20,6 +22,14 @@ from PyQt6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
+)
+
+from nba2k_editor.franchise.college_dynasty import (
+    PROJECTION_STAGE_SEASON,
+    PROJECTION_STAGE_SWEET16,
+    CollegeDynastyRepository,
+    load_college_catalog,
+    load_college_player_updates,
 )
 
 from nba2k_editor.franchise.draft_room import (
@@ -34,7 +44,16 @@ from nba2k_editor.franchise.draft_room import (
     team_labels_from_model,
 )
 from nba2k_editor.franchise.llm_pick_runner import LlmDraftPickResult, run_llm_fantasy_draft_pick
-from nba2k_editor.franchise.models import FantasyDraftState, FranchiseRecord, FranchiseSetup, FranchiseTeamOption, TeamRecommendation
+from nba2k_editor.franchise.models import (
+    LEAGUE_MODE_COLLEGE,
+    LEAGUE_MODE_NBA,
+    FantasyDraftState,
+    FranchiseRecord,
+    FranchiseSetup,
+    FranchiseTeamOption,
+    TeamRecommendation,
+    league_mode_label,
+)
 from nba2k_editor.franchise.profile_generation import (
     build_team_profile_generation_requests,
     generate_team_profiles,
@@ -43,7 +62,6 @@ from nba2k_editor.franchise.profile_generation import (
 )
 from nba2k_editor.franchise.recommendations import build_team_recommendation_requests, run_team_recommendation_requests
 from nba2k_editor.franchise.sim_phases import (
-    FRANCHISE_PHASES,
     STATUS_READY,
     STATUS_WAITING_FOR_GAME_ADVANCE,
     STATUS_WAITING_FOR_USER_TRADE,
@@ -73,6 +91,7 @@ class FranchiseScreen(QWidget):
         self.team_checkboxes: dict[int, QCheckBox] = {}
         self.user_team_combo: QComboBox | None = None
         self.start_year_input: QLineEdit | None = None
+        self.league_mode_combo: QComboBox | None = None
         self.full_league_save_checkbox: QCheckBox | None = None
         self.fantasy_draft_checkbox: QCheckBox | None = None
         self.dashboard_text: QTextEdit | None = None
@@ -98,6 +117,10 @@ class FranchiseScreen(QWidget):
         self.draft_status_text: QTextEdit | None = None
         self.draft_player_combo: QComboBox | None = None
         self.draft_action_buttons: list[QPushButton] = []
+        self.college_status_text: QTextEdit | None = None
+        self.college_program_combo: QComboBox | None = None
+        self.college_seed_input: QLineEdit | None = None
+        self.college_playoff_indexes_input: QLineEdit | None = None
         self._llm_pick_thread: threading.Thread | None = None
         self._llm_pick_events: queue.Queue[tuple[str, object]] = queue.Queue()
         self._llm_pick_timer = QTimer(self)
@@ -160,13 +183,18 @@ class FranchiseScreen(QWidget):
         layout.addWidget(
             self._header(
                 "New Franchise Setup",
-                "Set the true franchise start year, select your team, choose whether to save the full loaded league dataset, select AI league teams, and mark fantasy draft starts.",
+                "Choose NBA or College mode, set the true start year, select your program/team, choose whether to save the full loaded league dataset, and select AI-controlled teams.",
             )
         )
         self.team_options = team_options_from_model(self.model)
         form_box = QGroupBox("League Setup")
         form = QFormLayout(form_box)
         self.start_year_input = QLineEdit("2025")
+        league_mode_combo = QComboBox()
+        league_mode_combo.addItem("NBA", LEAGUE_MODE_NBA)
+        league_mode_combo.addItem("College", LEAGUE_MODE_COLLEGE)
+        league_mode_combo.currentIndexChanged.connect(lambda _index: self._sync_league_mode_controls())
+        self.league_mode_combo = league_mode_combo
         user_team_combo = QComboBox()
         for option in self.team_options:
             user_team_combo.addItem(option.display_label, option.team_index)
@@ -178,6 +206,7 @@ class FranchiseScreen(QWidget):
         self.user_team_combo = user_team_combo
         self.full_league_save_checkbox = QCheckBox("Keep a full loaded league save using all known offsets")
         self.fantasy_draft_checkbox = QCheckBox("League starts with a fantasy draft")
+        form.addRow("League Mode", self.league_mode_combo)
         form.addRow("Start Year", self.start_year_input)
         form.addRow("Your Team", self.user_team_combo)
         form.addRow("Full League Save", self.full_league_save_checkbox)
@@ -187,6 +216,7 @@ class FranchiseScreen(QWidget):
         for checkbox in self.team_checkboxes.values():
             checkbox.setChecked(True)
         self._sync_user_team_llm_checkbox()
+        self._sync_league_mode_controls()
         buttons = QHBoxLayout()
         buttons.addWidget(QPushButton("Start Franchise", clicked=self._start_franchise))
         if self.repository.exists():
@@ -232,6 +262,24 @@ class FranchiseScreen(QWidget):
             checkbox.setEnabled(not is_user_team)
             checkbox.setToolTip("User-controlled team" if is_user_team else "Checked teams join the league as AI-controlled teams; unchecked teams are excluded")
 
+    def _selected_league_mode(self) -> str:
+        if self.league_mode_combo is None or self.league_mode_combo.currentData() is None:
+            return LEAGUE_MODE_NBA
+        return str(self.league_mode_combo.currentData())
+
+    def _sync_league_mode_controls(self) -> None:
+        if self.fantasy_draft_checkbox is None:
+            return
+        college_mode = self._selected_league_mode() == LEAGUE_MODE_COLLEGE
+        if college_mode:
+            self.fantasy_draft_checkbox.setChecked(False)
+        self.fantasy_draft_checkbox.setEnabled(not college_mode)
+        self.fantasy_draft_checkbox.setToolTip(
+            "College mode uses its own program calendar and does not use the NBA fantasy draft workflow."
+            if college_mode
+            else "Start this NBA franchise with a fantasy draft."
+        )
+
     def _current_setup(self) -> FranchiseSetup:
         if self.start_year_input is None or self.full_league_save_checkbox is None or self.fantasy_draft_checkbox is None:
             raise ValueError("franchise setup form is not active")
@@ -244,6 +292,7 @@ class FranchiseScreen(QWidget):
             llm_gm_team_indexes=self._selected_team_indexes(),
             fantasy_draft=self.fantasy_draft_checkbox.isChecked(),
             user_team_index=self._selected_user_team_index(),
+            league_mode=self._selected_league_mode(),
         )
 
     def _start_franchise(self) -> None:
@@ -285,10 +334,15 @@ class FranchiseScreen(QWidget):
         self.draft_status_text = None
         widget = QWidget()
         layout = QVBoxLayout(widget)
+        college_mode = record.setup.league_mode == LEAGUE_MODE_COLLEGE
         layout.addWidget(
             self._header(
-                "Franchise Team Profiles",
-                "Every active team receives persistent Owner, GM, Coach, and Scout context before the franchise session begins. The user controls only the selected team's GM role.",
+                "College Program Profiles" if college_mode else "Franchise Team Profiles",
+                (
+                    "Every active program receives persistent athletic-department, program-decision, coaching, and recruiting context before the session begins."
+                    if college_mode
+                    else "Every active team receives persistent Owner, GM, Coach, and Scout context before the franchise session begins. The user controls only the selected team's GM role."
+                ),
             )
         )
         controls = QHBoxLayout()
@@ -329,9 +383,11 @@ class FranchiseScreen(QWidget):
             team_index = int(team.team_index)
             gm_control = "human user" if team_index == int(record.setup.user_team_index) else "LLM"
             status = "missing" if team_index in missing else "ready"
-            lines.append(
-                f"[{status}] [{team_index}] {team.label}: Owner=LLM, GM={gm_control}, Coach=LLM, Scout=LLM"
-            )
+            if record.setup.league_mode == LEAGUE_MODE_COLLEGE:
+                role_status = f"Athletic Department=LLM, Program={gm_control}, Coaching=LLM, Recruiting=LLM"
+            else:
+                role_status = f"Owner=LLM, GM={gm_control}, Coach=LLM, Scout=LLM"
+            lines.append(f"[{status}] [{team_index}] {team.label}: {role_status}")
         if self._profile_generation_running():
             lines.extend(("", "Generating missing profiles through Hermes API Server..."))
         elif missing:
@@ -419,13 +475,15 @@ class FranchiseScreen(QWidget):
         self.draft_action_buttons = []
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        layout.addWidget(self._header("Franchise Systems", f"Database: {record.database_path}"))
+        page_title = "College Program Systems" if record.setup.league_mode == LEAGUE_MODE_COLLEGE else "Franchise Systems"
+        layout.addWidget(self._header(page_title, f"Database: {record.database_path}"))
         text = QTextEdit()
         text.setReadOnly(True)
         text.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
         text.setMaximumHeight(220)
         lines = [
-            "# Franchise",
+            "# College Program" if record.setup.league_mode == LEAGUE_MODE_COLLEGE else "# Franchise",
+            f"League Mode: {league_mode_label(record.setup.league_mode)}",
             f"Start Year: {record.setup.start_year}",
             f"User Team: {self._team_label(record.setup.user_team_index)}",
             f"Full League Save: {'yes' if record.setup.keep_full_league_save else 'no'}",
@@ -446,10 +504,16 @@ class FranchiseScreen(QWidget):
         for team in ai_teams:
             lines.append(f"[{team.team_index}] {team.label}")
         lines.append("")
-        lines.append("Unchecked teams are excluded from this franchise league.")
+        lines.append(
+            "Unchecked teams are excluded from this college league."
+            if record.setup.league_mode == LEAGUE_MODE_COLLEGE
+            else "Unchecked teams are excluded from this franchise league."
+        )
         text.setPlainText("\n".join(lines))
         self.dashboard_text = text
         layout.addWidget(text)
+        if record.setup.league_mode == LEAGUE_MODE_COLLEGE:
+            layout.addWidget(self._build_college_dynasty_widget(record), 1)
         layout.addWidget(self._build_phase_controller_widget(record))
         layout.addWidget(self._build_team_recommendations_widget(record), 1)
         self._refresh_phase_controller()
@@ -484,8 +548,351 @@ class FranchiseScreen(QWidget):
         self._replace_body(widget)
         self._refresh_draft_room()
 
+    def _college_repository(self) -> CollegeDynastyRepository:
+        return CollegeDynastyRepository(self.repository)
+
+    def _build_college_dynasty_widget(self, record: FranchiseRecord) -> QWidget:
+        box = QGroupBox("College Dynasty Universe")
+        box.setObjectName("CollegeDynastyUniverse")
+        layout = QVBoxLayout(box)
+        form = QFormLayout()
+        program_combo = QComboBox()
+        self.college_program_combo = program_combo
+        seed_input = QLineEdit(str(record.setup.start_year))
+        self.college_seed_input = seed_input
+        playoff_indexes = QLineEdit()
+        playoff_indexes.setPlaceholderText("16 unique team indexes, comma-separated")
+        self.college_playoff_indexes_input = playoff_indexes
+        form.addRow("User Program", program_combo)
+        form.addRow("Season Selection Seed", seed_input)
+        form.addRow("Sweet 16 Playoff Team Indexes", playoff_indexes)
+        layout.addLayout(form)
+
+        first_controls = QHBoxLayout()
+        for label, callback in (
+            ("Import 365-Program Catalog", self._import_college_catalog),
+            ("Import Player Updates", self._import_college_player_updates),
+            ("Plan 30-Team Season", self._plan_college_season),
+            ("Capture 450 Linked Slots", self._capture_college_season_slots),
+        ):
+            first_controls.addWidget(QPushButton(label, clicked=callback))
+        first_controls.addStretch(1)
+        layout.addLayout(first_controls)
+
+        second_controls = QHBoxLayout()
+        for label, callback in (
+            ("Sync Season Players Out", self._sync_college_players_out),
+            ("Record FA Departures", self._record_college_fa_departures),
+            ("Advance Eligibility", self._advance_college_eligibility),
+            ("Import 64-Team Bracket", self._import_college_bracket),
+            ("Import Opening-Round Results", self._import_college_opening_results),
+            ("Import In-Game Playoff Results", self._import_college_ingame_results),
+        ):
+            second_controls.addWidget(QPushButton(label, clicked=callback))
+        second_controls.addStretch(1)
+        layout.addLayout(second_controls)
+
+        third_controls = QHBoxLayout()
+        for label, callback in (
+            ("Map Sweet 16", self._map_college_sweet16),
+            ("Capture 240 Sweet 16 Slots", self._capture_college_sweet16_slots),
+            ("Refresh", self._refresh_college_dynasty),
+        ):
+            third_controls.addWidget(QPushButton(label, clicked=callback))
+        third_controls.addStretch(1)
+        layout.addLayout(third_controls)
+
+        status = QTextEdit()
+        status.setReadOnly(True)
+        status.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        status.setMaximumHeight(320)
+        self.college_status_text = status
+        layout.addWidget(status)
+        self._refresh_college_dynasty()
+        return box
+
+    def _college_true_sim_year(self) -> int:
+        return int(self.repository.ensure_sim_state().sim_year)
+
+    def _selected_college_program_id(self) -> str:
+        if self.college_program_combo is None or self.college_program_combo.currentData() is None:
+            raise ValueError("Import the 365-program catalog and select a user program first.")
+        return str(self.college_program_combo.currentData())
+
+    def _selected_college_seed(self) -> int:
+        if self.college_seed_input is None:
+            raise ValueError("Season selection seed is unavailable.")
+        text = self.college_seed_input.text().strip()
+        if not text or not text.lstrip("-").isdigit():
+            raise ValueError("Season Selection Seed must be an integer.")
+        return int(text)
+
+    def _selected_playoff_team_indexes(self) -> tuple[int, ...]:
+        if self.college_playoff_indexes_input is None:
+            raise ValueError("Sweet 16 playoff team indexes are unavailable.")
+        values = tuple(
+            int(part.strip())
+            for part in self.college_playoff_indexes_input.text().split(",")
+            if part.strip()
+        )
+        if len(values) != 16:
+            raise ValueError("Enter exactly 16 comma-separated in-game playoff team indexes.")
+        return values
+
+    def _refresh_college_dynasty(self) -> None:
+        if self.college_status_text is None or self.college_program_combo is None:
+            return
+        college = self._college_repository()
+        conference_count, program_count, player_count = college.catalog_counts()
+        prior_program_id = self.college_program_combo.currentData()
+        programs = college.list_programs()
+        self.college_program_combo.blockSignals(True)
+        self.college_program_combo.clear()
+        for program in programs:
+            self.college_program_combo.addItem(program.name, program.program_id)
+        if prior_program_id is not None:
+            prior_index = self.college_program_combo.findData(prior_program_id)
+            if prior_index >= 0:
+                self.college_program_combo.setCurrentIndex(prior_index)
+        year = self._college_true_sim_year()
+        season_projection = college.list_team_projection(year)
+        if season_projection:
+            user_projection = next((row for row in season_projection if row.selection_reason == "user"), None)
+            if user_projection is not None:
+                user_index = self.college_program_combo.findData(user_projection.program_id)
+                if user_index >= 0:
+                    self.college_program_combo.setCurrentIndex(user_index)
+        self.college_program_combo.blockSignals(False)
+        season_players = college.list_player_projection(year, stage=PROJECTION_STAGE_SEASON)
+        round_one = college.list_tournament_games(year, round_number=1)
+        round_two = college.list_tournament_games(year, round_number=2)
+        in_game_rounds = tuple(
+            game
+            for round_number in range(3, 7)
+            for game in college.list_tournament_games(year, round_number=round_number)
+        )
+        sweet16 = college.sweet16_program_ids(year)
+        sweet16_mapping = college.list_sweet16_projection(year)
+        sweet16_players = college.list_player_projection(year, stage=PROJECTION_STAGE_SWEET16)
+        lines = [
+            "# Canonical College Universe",
+            f"True Sim Year: {year}",
+            f"Conferences: {conference_count}/31",
+            f"Programs: {program_count}/365",
+            f"Canonical Players: {player_count}",
+            f"Season Teams: {len(season_projection)}/30",
+            f"Reserved Season Player Records: {len(season_players)}/450",
+            "",
+            "## External Tournament",
+            f"Round 1: {sum(game.winner_program_id is not None for game in round_one)}/{len(round_one) or 32} results",
+            f"Round 2: {sum(game.winner_program_id is not None for game in round_two)}/{len(round_two) or 16} results",
+            f"Sweet 16 Winners: {len(sweet16)}/16",
+            f"Sweet 16 Team Mapping: {len(sweet16_mapping)}/16",
+            f"Reserved Sweet 16 Player Records: {len(sweet16_players)}/240",
+            f"In-Game Playoff Results Reconciled: {sum(game.winner_program_id is not None for game in in_game_rounds)}/15",
+            f"National Champion: {college.champion_program_id(year) or 'pending'}",
+            "",
+            "The first two tournament rounds are recorded outside NBA 2K. Only the Sweet 16 is projected into the game's 16 playoff teams.",
+        ]
+        self.college_status_text.setPlainText("\n".join(lines))
+
+    def _import_college_catalog(self) -> None:
+        path, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Import College Catalog",
+            str(Path.cwd()),
+            "JSON Files (*.json)",
+        )
+        if not path:
+            return
+        try:
+            conferences, programs, players = load_college_catalog(path)
+            self._college_repository().replace_catalog(conferences, programs, players)
+        except Exception as exc:
+            QMessageBox.warning(self, "College catalog", str(exc))
+            return
+        self._refresh_college_dynasty()
+
+    def _import_college_player_updates(self) -> None:
+        path, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Import College Player Updates",
+            str(Path.cwd()),
+            "JSON Files (*.json)",
+        )
+        if not path:
+            return
+        try:
+            players = load_college_player_updates(path)
+            updated = self._college_repository().upsert_players(players)
+        except Exception as exc:
+            QMessageBox.warning(self, "College player updates", str(exc))
+            return
+        QMessageBox.information(self, "College player updates", f"Updated {len(updated)} canonical players.")
+        self._refresh_college_dynasty()
+
+    def _plan_college_season(self) -> None:
+        try:
+            self._college_repository().plan_season(
+                true_sim_year=self._college_true_sim_year(),
+                user_program_id=self._selected_college_program_id(),
+                random_seed=self._selected_college_seed(),
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "College season projection", str(exc))
+            return
+        self._refresh_college_dynasty()
+
+
+    def _capture_college_projection_slots(self, stage: str) -> None:
+        try:
+            self._college_repository().capture_projection_slots(
+                self.model,
+                true_sim_year=self._college_true_sim_year(),
+                stage=stage,
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "College projection slots", str(exc))
+            return
+        self._refresh_college_dynasty()
+
+    def _capture_college_season_slots(self) -> None:
+        self._capture_college_projection_slots(PROJECTION_STAGE_SEASON)
+
+    def _capture_college_sweet16_slots(self) -> None:
+        self._capture_college_projection_slots(PROJECTION_STAGE_SWEET16)
+
+
+    def _sync_college_players_out(self) -> None:
+        try:
+            synced = self._college_repository().sync_projected_players_from_game(
+                self.model,
+                true_sim_year=self._college_true_sim_year(),
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "College player sync", str(exc))
+            return
+        QMessageBox.information(self, "College player sync", f"Synced {len(synced)} projected players into canonical storage.")
+        self._refresh_college_dynasty()
+
+    def _record_college_fa_departures(self) -> None:
+        try:
+            departed = self._college_repository().record_free_agent_departures(
+                self.model,
+                true_sim_year=self._college_true_sim_year(),
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "College departures", str(exc))
+            return
+        QMessageBox.information(self, "College departures", f"Recorded {len(departed)} Free Agency departures.")
+        self._refresh_college_dynasty()
+
+    def _advance_college_eligibility(self) -> None:
+        answer = QMessageBox.question(
+            self,
+            "Advance College Eligibility",
+            "Advance every active canonical player by one eligibility year? This can run only once for the current true sim year.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            exhausted = self._college_repository().advance_eligibility(
+                true_sim_year=self._college_true_sim_year()
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "College eligibility", str(exc))
+            return
+        QMessageBox.information(self, "College eligibility", f"Eligibility advanced; {len(exhausted)} players exhausted eligibility.")
+        self._refresh_college_dynasty()
+
+    def _load_json_file(self, title: str) -> dict[str, Any] | None:
+        path, _selected_filter = QFileDialog.getOpenFileName(self, title, str(Path.cwd()), "JSON Files (*.json)")
+        if not path:
+            return None
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("JSON root must be an object")
+        return payload
+
+    def _import_college_bracket(self) -> None:
+        try:
+            payload = self._load_json_file("Import 64-Team College Bracket")
+            if payload is None:
+                return
+            program_ids = payload.get("bracket_program_ids")
+            if not isinstance(program_ids, list):
+                raise ValueError("bracket JSON requires bracket_program_ids array")
+            self._college_repository().create_tournament(
+                true_sim_year=self._college_true_sim_year(),
+                bracket_program_ids=(str(value) for value in program_ids),
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "College tournament", str(exc))
+            return
+        self._refresh_college_dynasty()
+
+    def _import_college_opening_results(self) -> None:
+        try:
+            payload = self._load_json_file("Import College Opening-Round Results")
+            if payload is None:
+                return
+            results = payload.get("results")
+            if not isinstance(results, list) or any(not isinstance(row, dict) for row in results):
+                raise ValueError("results JSON requires an array of result objects")
+            if any(int(row["round_number"]) not in {1, 2} for row in results):
+                raise ValueError("opening-round results may contain only rounds 1 and 2")
+            college = self._college_repository()
+            for row in sorted(results, key=lambda item: (int(item["round_number"]), int(item["game_number"]))):
+                college.record_tournament_winner(
+                    true_sim_year=self._college_true_sim_year(),
+                    round_number=int(row["round_number"]),
+                    game_number=int(row["game_number"]),
+                    winner_program_id=str(row["winner_program_id"]),
+                )
+        except Exception as exc:
+            QMessageBox.warning(self, "College tournament results", str(exc))
+            return
+        self._refresh_college_dynasty()
+
+    def _import_college_ingame_results(self) -> None:
+        try:
+            payload = self._load_json_file("Import In-Game College Playoff Results")
+            if payload is None:
+                return
+            results = payload.get("results")
+            if not isinstance(results, list) or any(not isinstance(row, dict) for row in results):
+                raise ValueError("results JSON requires an array of result objects")
+            if any(int(row["round_number"]) not in {3, 4, 5, 6} for row in results):
+                raise ValueError("in-game playoff results may contain only rounds 3 through 6")
+            college = self._college_repository()
+            for row in sorted(results, key=lambda item: (int(item["round_number"]), int(item["game_number"]))):
+                college.record_tournament_winner(
+                    true_sim_year=self._college_true_sim_year(),
+                    round_number=int(row["round_number"]),
+                    game_number=int(row["game_number"]),
+                    winner_program_id=str(row["winner_program_id"]),
+                )
+        except Exception as exc:
+            QMessageBox.warning(self, "In-game college playoff results", str(exc))
+            return
+        self._refresh_college_dynasty()
+
+    def _map_college_sweet16(self) -> None:
+        try:
+            self._college_repository().plan_sweet16_projection(
+                true_sim_year=self._college_true_sim_year(),
+                playoff_team_indexes=self._selected_playoff_team_indexes(),
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Sweet 16 projection", str(exc))
+            return
+        self._refresh_college_dynasty()
+
     def _build_phase_controller_widget(self, _record: FranchiseRecord) -> QWidget:
-        box = QGroupBox("Franchise Phase Controller")
+        college_mode = _record.setup.league_mode == LEAGUE_MODE_COLLEGE
+        box = QGroupBox("College Program Phase Controller" if college_mode else "Franchise Phase Controller")
         box.setObjectName("FranchisePhaseController")
         layout = QVBoxLayout(box)
 
@@ -493,12 +900,16 @@ class FranchiseScreen(QWidget):
         year_input = QLineEdit()
         self.phase_year_input = year_input
         phase_combo = QComboBox()
-        for phase in FRANCHISE_PHASES:
+        for phase in franchise_phase_sequence(
+            expansion_draft_required=False,
+            league_mode=_record.setup.league_mode,
+        ):
             phase_combo.addItem(phase.label, phase.key)
         self.phase_combo = phase_combo
         expansion_checkbox = QCheckBox("An expansion team was added; run Expansion Draft before NBA Draft")
         expansion_checkbox.clicked.connect(self._set_phase_expansion_draft)
         self.phase_expansion_checkbox = expansion_checkbox
+        expansion_checkbox.setVisible(not college_mode)
         sync_form.addRow("Observed True Sim Year", year_input)
         sync_form.addRow("Observed Game Phase", phase_combo)
         sync_form.addRow("Conditional Expansion", expansion_checkbox)
@@ -583,6 +994,7 @@ class FranchiseScreen(QWidget):
             or self.phase_expansion_checkbox is None
         ):
             return
+        record = self.repository.load()
         state = self.repository.ensure_sim_state()
         displayed_phase = state.expected_next_phase if state.status == STATUS_WAITING_FOR_GAME_ADVANCE else state.current_phase
         displayed_year = state.expected_next_year if state.status == STATUS_WAITING_FOR_GAME_ADVANCE else state.sim_year
@@ -600,19 +1012,26 @@ class FranchiseScreen(QWidget):
             STATUS_WAITING_FOR_USER_TRADE: "WAITING FOR USER-TEAM TRADE DECISION",
         }
         lines = [
-            "# Franchise Phase Controller",
+            "# College Program Phase Controller" if record.setup.league_mode == LEAGUE_MODE_COLLEGE else "# Franchise Phase Controller",
+            f"League Mode: {league_mode_label(record.setup.league_mode)}",
             f"True Sim Year: {state.sim_year}",
-            f"Current Phase: {phase_label(state.current_phase)}",
+            f"Current Phase: {phase_label(state.current_phase, league_mode=record.setup.league_mode)}",
             f"Status: {status_labels[state.status]}",
-            f"Expansion Draft This Offseason: {'yes' if state.expansion_draft_required else 'no'}",
         ]
+        if record.setup.league_mode != LEAGUE_MODE_COLLEGE:
+            lines.append(f"Expansion Draft This Offseason: {'yes' if state.expansion_draft_required else 'no'}")
         if state.expected_next_phase:
-            lines.append(f"Expected Next Phase: {phase_label(state.expected_next_phase)}")
+            lines.append(
+                f"Expected Next Phase: {phase_label(state.expected_next_phase, league_mode=record.setup.league_mode)}"
+            )
             lines.append(f"Expected True Sim Year: {state.expected_next_year}")
         if state.required_user_action:
             lines.extend(("", "Required User Action:", state.required_user_action))
         lines.extend(("", "## Active Simulation Sequence"))
-        for phase in franchise_phase_sequence(expansion_draft_required=state.expansion_draft_required):
+        for phase in franchise_phase_sequence(
+            expansion_draft_required=state.expansion_draft_required,
+            league_mode=record.setup.league_mode,
+        ):
             marker = ">" if phase.key == state.current_phase else " "
             lines.append(f"{marker} {phase.label}")
         self.phase_status_text.setPlainText("\n".join(lines))
@@ -620,16 +1039,19 @@ class FranchiseScreen(QWidget):
         self.phase_action_buttons[1].setEnabled(state.status != STATUS_WAITING_FOR_USER_TRADE)
         self.phase_action_buttons[2].setEnabled(state.status == STATUS_READY)
         self.phase_action_buttons[3].setEnabled(state.status == STATUS_WAITING_FOR_USER_TRADE)
-        self.phase_expansion_checkbox.setEnabled(state.status == STATUS_READY)
+        self.phase_expansion_checkbox.setEnabled(
+            state.status == STATUS_READY and record.setup.league_mode != LEAGUE_MODE_COLLEGE
+        )
 
     def _build_team_recommendations_widget(self, _record: FranchiseRecord) -> QWidget:
-        box = QGroupBox("Team GM Recommendations")
+        college_mode = _record.setup.league_mode == LEAGUE_MODE_COLLEGE
+        box = QGroupBox("College Program Recommendations" if college_mode else "Team GM Recommendations")
         box.setObjectName("TeamGMRecommendationsPage")
         layout = QVBoxLayout(box)
         controls = QHBoxLayout()
         self.recommendation_action_buttons = []
         for label, callback in (
-            ("Generate Team Recommendations", self._run_team_recommendations),
+            ("Generate Program Recommendations" if college_mode else "Generate Team Recommendations", self._run_team_recommendations),
             ("Refresh Recommendations", self._refresh_team_recommendations),
         ):
             button = QPushButton(label, clicked=callback)
@@ -651,11 +1073,13 @@ class FranchiseScreen(QWidget):
         record = self.repository.load()
         sim_state = self.repository.ensure_sim_state()
         recommendations = self.repository.list_team_recommendations()
+        college_mode = record.setup.league_mode == LEAGUE_MODE_COLLEGE
         lines = [
-            "# Team GM Recommendations",
+            "# College Program Recommendations" if college_mode else "# Team GM Recommendations",
             "Mode: recommendation-only. No game-memory write, preview, apply, save, import, trade, signing, release, or roster move is performed here.",
+            f"League Mode: {league_mode_label(record.setup.league_mode)}",
             f"True Sim Year: {sim_state.sim_year}",
-            f"Current Phase: {phase_label(sim_state.current_phase)}",
+            f"Current Phase: {phase_label(sim_state.current_phase, league_mode=record.setup.league_mode)}",
             f"User Team: {self._team_label(record.setup.user_team_index)}",
             f"AI Teams: {', '.join(str(index) for index in record.setup.llm_gm_team_indexes) or 'none'}",
             "",
@@ -665,9 +1089,10 @@ class FranchiseScreen(QWidget):
             lines.append("None")
         for recommendation in recommendations[-30:]:
             approval = "yes" if recommendation.owner_approval_required else "no"
+            approval_label = "athletic approval" if college_mode else "owner approval"
             lines.append(
                 f"#{recommendation.recommendation_id} Team {recommendation.team_index} {recommendation.team_label} "
-                f"[{recommendation.status}] owner approval: {approval}"
+                f"[{recommendation.status}] {approval_label}: {approval}"
             )
             lines.append(f"Action: {recommendation.recommended_action}")
             lines.append(f"Reasoning: {recommendation.reasoning}")

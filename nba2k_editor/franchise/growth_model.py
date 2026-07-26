@@ -38,38 +38,18 @@ def master_player_for_live_index(
     data_root: str | Path | None = None,
     run_id: str | None = None,
 ) -> tuple[str, str, str]:
-    """Return (master_player_id, master_player, run_id) from the latest Pool SQL capture.
-
-    This is an exact existing player-index mapping from Pool SQL. It does not use
-    names as a matching signal here; names are returned only as proof/display.
-    """
+    """Return no Master mapping; Pool packages intentionally contain no identity link."""
 
     path = _pool_path(data_root)
     if not path.is_file():
         return "", "", ""
     with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as connection:
-        connection.row_factory = sqlite3.Row
         selected_run_id = run_id
         if selected_run_id is None:
             row = connection.execute("SELECT run_id FROM pool_runs ORDER BY run_id DESC LIMIT 1").fetchone()
-            selected_run_id = str(row["run_id"]) if row is not None else ""
-        if not selected_run_id:
-            return "", "", ""
-        row = connection.execute(
-            """
-            SELECT master_player_id, master_player, run_id
-              FROM candidate_pool
-             WHERE run_id = ? AND player_index = ?
-             LIMIT 1
-            """,
-            (selected_run_id, int(player_index)),
-        ).fetchone()
-    if row is None:
-        return "", "", selected_run_id
-    master_player_id = _valid_master_player_id(row["master_player_id"])
-    if not master_player_id:
-        return "", str(row["master_player"] or ""), selected_run_id
-    return master_player_id, str(row["master_player"] or ""), selected_run_id
+            selected_run_id = str(row[0]) if row is not None else ""
+    _ = player_index
+    return "", "", selected_run_id or ""
 
 
 def growth_facts_for_master_player(
@@ -139,9 +119,8 @@ def franchise_growth_facts_for_player(
 ) -> tuple[tuple[str, str], ...]:
     """Growth-model facts for a live franchise player index.
 
-    The only live-to-master bridge used here is the existing Pool SQL
-    `player_index -> master_player_id` row from the latest capture. If that exact
-    mapping is unavailable, no facts are returned.
+    Pool player names and Master IDs are intentionally not mapping evidence, so
+    no facts are returned until a separate exact identity source exists.
     """
 
     master_player_id, master_player, run_id = master_player_for_live_index(player_index, data_root=data_root)
