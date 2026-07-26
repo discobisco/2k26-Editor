@@ -13,10 +13,6 @@ from nba2k_editor.core import offsets as offsets_mod
 from nba2k_editor.models.schema import FieldEntry
 from contracts import GeneratorInputContract
 from player_evidence import PlayerEvidence
-from player_generation_1947_alignment import (
-    align_pre_per_proposals,
-    uses_pre_per_alignment,
-)
 from player_generation_models import (
     FREE_THROW_FIELD_KEY,
     FreeThrowExecutionArtifact,
@@ -407,18 +403,11 @@ def generate_player_proposals_from_index(
     *,
     team_filter: str | None = None,
 ) -> GeneratedPlayerBatch:
-    # The 1947-1951 pre-PER rank contract is league-relative, so a team-filtered
-    # preview must still be aligned against the complete season/league population.
-    generation_filter = None if uses_pre_per_alignment(context.season) else team_filter
-    proposals = [
+    proposals = tuple(
         generate_player_proposal_from_index(context, player_id=player_id, team=team)
-        for player_id, team in context.player_keys(team_filter=generation_filter)
-    ]
-    proposals = list(align_pre_per_proposals(proposals, context.evidence_by_key))
-    selected_team = str(team_filter or "").strip().upper()
-    if selected_team:
-        proposals = [proposal for proposal in proposals if str(proposal.team).strip().upper() == selected_team]
-    return GeneratedPlayerBatch(season=context.season, proposals=tuple(proposals))
+        for player_id, team in context.player_keys(team_filter=team_filter)
+    )
+    return GeneratedPlayerBatch(season=context.season, proposals=proposals)
 
 
 def generate_draft_class_proposals(

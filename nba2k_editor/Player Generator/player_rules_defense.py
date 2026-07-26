@@ -914,8 +914,57 @@ def derive_tendency_foul(evidence: Any, *, league_player_rows: Any = ()) -> dict
     return _derive("derive_tendency_foul", "t_foul", evidence, league_player_rows)
 
 
+_HARD_FOUL_LOW_CONTACT_EXCEPTION_MAX_SCORE = 0.20
+
+
 def derive_tendency_hardfoul(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:
-    return _derive("derive_tendency_hardfoul", "t_hard_foul", evidence, league_player_rows)
+    games = _games_played(evidence)
+    if games is None:
+        return None
+    era = player_era_context(evidence)
+    if era.season < 1960:
+        return {
+            "value": 100,
+            "source_rule": "derive_tendency_hardfoul_universal_pre_1960_maximum",
+            "evidence_keys": (
+                games[1],
+                *era.evidence_keys,
+                "season_boundary=season_ending_year<1960",
+                "HARDFOUL=100",
+                "scale_meaning=maximum_2K_propensity_not_literal_event_probability",
+            ),
+        }
+
+    result = _derive("derive_tendency_hardfoul", "t_hard_foul", evidence, league_player_rows)
+    if result is None or not 1970 <= era.season < 1990:
+        return result
+
+    score = result.get("score")
+    if score is not None and float(score) <= _HARD_FOUL_LOW_CONTACT_EXCEPTION_MAX_SCORE:
+        return {
+            **result,
+            "source_rule": f"{result['source_rule']}_1970s_1980s_low_contact_exception",
+            "evidence_keys": tuple(result["evidence_keys"]) + (
+                *era.evidence_keys,
+                f"hard_foul_contact_score={float(score):.8f}",
+                "exception_policy=bottom_20_percent_same_season_contact_score_retains_player_evidence_value",
+            ),
+        }
+
+    base_value = int(result["value"])
+    return {
+        **result,
+        "value": 100,
+        "source_rule": "derive_tendency_hardfoul_1970s_1980s_most_players_maximum",
+        "evidence_keys": tuple(result["evidence_keys"]) + (
+            *era.evidence_keys,
+            f"player_evidence_hard_foul_value={base_value}",
+            "exception_policy=bottom_20_percent_same_season_contact_score_retains_player_evidence_value",
+            "exception_not_established=true" if score is None else f"hard_foul_contact_score={float(score):.8f}",
+            "HARDFOUL=100",
+            "scale_meaning=maximum_2K_propensity_not_literal_event_probability",
+        ),
+    }
 
 
 def derive_tendency_onballsteal(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:

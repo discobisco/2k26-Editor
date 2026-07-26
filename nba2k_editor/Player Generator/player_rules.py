@@ -446,6 +446,8 @@ def _formula_has_live_input(
         return True
     if _is_approved_pre_line_value(evidence, value):
         return True
+    if _is_approved_historical_hard_foul(evidence, field_key, value):
+        return True
     if _is_approved_intangibles_floor(evidence, field_key, value):
         return True
     if _is_approved_zero_attempt_three_point(evidence, field_key, value):
@@ -489,6 +491,22 @@ def _is_approved_pre_line_value(evidence: PlayerEvidence, value: RuleValue) -> b
     if value.source_rule.startswith("derive_tendency_") and "3point" in value.source_rule:
         return value.value == 0
     return False
+
+
+def _is_approved_historical_hard_foul(
+    evidence: PlayerEvidence,
+    field_key: str,
+    value: RuleValue,
+) -> bool:
+    if field_key != "Tendencies/HARDFOUL" or int(evidence.season) >= 1960:
+        return False
+    if value.value != 100 or value.source_rule != "derive_tendency_hardfoul_universal_pre_1960_maximum":
+        return False
+    return {
+        "season_boundary=season_ending_year<1960",
+        "HARDFOUL=100",
+        "scale_meaning=maximum_2K_propensity_not_literal_event_probability",
+    }.issubset(value.evidence_keys)
 
 
 def _is_approved_zero_attempt_three_point(

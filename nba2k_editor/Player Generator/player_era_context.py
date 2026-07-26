@@ -17,6 +17,8 @@ class PlayerEraContext:
     expects_steals_and_blocks: bool
     expects_player_turnovers: bool
     expects_public_tracking: bool
+    dunk_attempt_multiplier: float
+    hard_foul_regime: str
 
     @property
     def evidence_keys(self) -> tuple[str, ...]:
@@ -24,6 +26,8 @@ class PlayerEraContext:
             f"era_context={self.era_key}",
             f"league={self.league or 'UNKNOWN'}",
             f"three_point_line={self.three_point_line}",
+            f"dunk_attempt_multiplier={self.dunk_attempt_multiplier:.2f}",
+            f"hard_foul_regime={self.hard_foul_regime}",
         )
 
 
@@ -61,7 +65,29 @@ def player_era_context(evidence: Any) -> PlayerEraContext:
         expects_steals_and_blocks=(league == "NBA" and season >= 1974) or (league == "ABA" and season >= 1973),
         expects_player_turnovers=(league == "NBA" and season >= 1978) or league == "ABA",
         expects_public_tracking=league == "NBA" and season >= 2014,
+        dunk_attempt_multiplier=_dunk_attempt_multiplier(season),
+        hard_foul_regime=_hard_foul_regime(season),
     )
+
+
+def _dunk_attempt_multiplier(season: int) -> float:
+    if season < 1950:
+        return 0.15
+    if season < 1960:
+        return 0.30
+    if season < 1970:
+        return 0.65
+    return 1.0
+
+
+def _hard_foul_regime(season: int) -> str:
+    if season < 1960:
+        return "universal_maximum_pre_1960"
+    if season < 1970:
+        return "unspecified_1960s_use_player_evidence"
+    if season < 1990:
+        return "maximum_for_most_with_low_contact_exceptions"
+    return "use_player_evidence"
 
 
 def filter_same_league_rows(evidence: Any, rows: Iterable[dict[str, Any]]) -> tuple[dict[str, Any], ...]:

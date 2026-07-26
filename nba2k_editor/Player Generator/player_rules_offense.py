@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 from player_era_context import filter_same_league_rows, player_era_context
+from player_rules_athleticism import derive_attribute_vertical
 
 
 _POPULATION_CACHE: dict[
@@ -97,20 +98,15 @@ _TENDENCY_CALIBRATION: dict[str, tuple[float, float]] = {
 }
 
 # User-observed NBA 2K mid-range response anchors. Each context is the expected
-# make probability at the same MIDRANGE Attribute. The equally weighted mean is
-# the aggregate response used to invert historical FT% / 2 into MIDRANGE.
+# make probability at the same MIDRANGE Attribute. Runtime historical inversion
+# is explicitly the wide-open stationary spot-up/set-shot context; contexts are
+# never averaged or normalized into attempt shares.
 _MIDRANGE_RESPONSE_ANCHORS: dict[str, tuple[tuple[int, float], ...]] = {
     "spot_up": ((25, 0.0015), (80, 0.45), (99, 0.55)),
     "off_screen": ((25, 0.0015), (80, 0.40), (99, 0.50)),
     "pull_up": ((25, 0.0015), (80, 0.40), (99, 0.50)),
     "contested": ((25, 0.0015), (80, 0.35), (99, 0.45)),
 }
-_MIDRANGE_AGGREGATE_RESPONSE_ANCHORS: tuple[tuple[int, float], ...] = (
-    (25, 0.0015),
-    (80, 0.40),
-    (99, 0.50),
-)
-
 
 def _piecewise_linear_response(
     x: float,
@@ -127,18 +123,14 @@ def _piecewise_linear_response(
     return anchors[-1][1]
 
 
-def midrange_make_probability_for_rating(rating: int, *, context: str = "aggregate") -> float:
-    anchors = (
-        _MIDRANGE_AGGREGATE_RESPONSE_ANCHORS
-        if context == "aggregate"
-        else _MIDRANGE_RESPONSE_ANCHORS[context]
-    )
+def midrange_make_probability_for_rating(rating: int, *, context: str) -> float:
+    anchors = _MIDRANGE_RESPONSE_ANCHORS[context]
     return _piecewise_linear_response(float(max(25, min(99, rating))), anchors)
 
 
-def midrange_rating_for_make_probability(make_probability: float) -> int:
+def midrange_rating_for_make_probability(make_probability: float, *, context: str) -> int:
     target = max(0.0, min(1.0, float(make_probability)))
-    anchors = _MIDRANGE_AGGREGATE_RESPONSE_ANCHORS
+    anchors = _MIDRANGE_RESPONSE_ANCHORS[context]
     if target <= anchors[0][1]:
         return anchors[0][0]
     for (rating0, probability0), (rating1, probability1) in zip(anchors, anchors[1:]):
@@ -499,7 +491,7 @@ _RECIPE_REQUIRED_DIRECT_EVIDENCE: dict[str, tuple[str, ...]] = {
     "location_close_execution": ("shooting.fg_percent_from_x0_3_range", "shooting.fg_percent_from_x3_10_range"),
     "tracked_driving_finish": ("shooting.fg_percent_from_x0_3_range", "derived.and1_per_game", "derived.blocked_attempt_rate", "derived.dunk_rate"),
     "tracked_driving_layup_finish": ("shooting.fg_percent_from_x0_3_range", "derived.blocked_attempt_rate", "derived.and1_per_game"),
-    "location_midrange_execution": ("shooting.fg_percent_from_x10_16_range", "shooting.fg_percent_from_x16_3p_range", "shooting.fg_percent_from_x3_10_range"),
+    "location_midrange_execution": ("shooting.fg_percent_from_x10_16_range", "shooting.fg_percent_from_x16_3p_range"),
     "tracked_post_security": ("derived.lost_ball_per_game", "advanced.tov_percent", "derived.unassisted_two_rate"),
     "location_post_fade_execution": ("shooting.fg_percent_from_x10_16_range", "shooting.fg_percent_from_x3_10_range"),
     "location_post_hook_execution": ("shooting.fg_percent_from_x3_10_range", "shooting.fg_percent_from_x0_3_range"),
@@ -884,14 +876,13 @@ def _absolute_attribute_adjustment(field: str, evidence: Any, relative_value: fl
         reliability = fga / (fga + 100.0) if fga is not None else 0.0
         absolute_value = 25.0 + slope * fg_percent
         anchor = f"25+{slope:.0f}*FG%({fg_percent:.6f})"
-    elif field in {"MIDRANGE", "POSTFADE"} and (ft_percent is not None or fg_percent is not None):
+    elif field == "POSTFADE" and (ft_percent is not None or fg_percent is not None):
         touch = ft_percent if ft_percent is not None else fg_percent
         assert touch is not None
         exposure = fta if ft_percent is not None else fga
         reliability = exposure / (exposure + 40.0) if exposure is not None else 0.0
-        slope = 70.0 if field == "MIDRANGE" else 55.0
-        absolute_value = 25.0 + slope * touch
-        anchor = f"25+{slope:.0f}*{'FT%' if ft_percent is not None else 'FG%'}({touch:.6f})"
+        absolute_value = 25.0 + 55.0 * touch
+        anchor = f"25+55*{'FT%' if ft_percent is not None else 'FG%'}({touch:.6f})"
 
     if absolute_value is None:
         return relative_value, ()
@@ -950,7 +941,7 @@ _ATTR_RECIPES: dict[str, tuple[_Recipe, ...]] = {
         _Recipe("historical_driving_layup_finish", (("per_game.fg_percent", 0.45), ("per_game.ft_percent", 0.20), ("derived.foul_pressure", 0.20), ("role.guard", 0.15)), "driving-layup make, block, and and-one events", "recorded finishing efficiency, touch, foul pressure, and continuous perimeter participation", "the substitute remains finishing-oriented and does not use attempt share as execution"),
     ),
     "MIDRANGE": (
-        _Recipe("location_midrange_execution", (("shooting.fg_percent_from_x10_16_range", 0.55), ("shooting.fg_percent_from_x16_3p_range", 0.35), ("shooting.fg_percent_from_x3_10_range", 0.10))),
+        _Recipe("location_midrange_execution", (("shooting.fg_percent_from_x10_16_range", 0.55 / 0.90), ("shooting.fg_percent_from_x16_3p_range", 0.35 / 0.90))),
         _Recipe("historical_midrange_touch", (("per_game.ft_percent", 0.45), ("per_game.fg_percent", 0.35), ("role.wing", 0.20)), "10-16 and 16-foot-to-line make results", "free-throw touch, observed field-goal execution, and continuous perimeter/wing context", "free-throw accuracy is a stationary touch substitute, not an attempt-frequency or scoring-share signal"),
     ),
     "POSTCONTROL": (
@@ -965,10 +956,6 @@ _ATTR_RECIPES: dict[str, tuple[_Recipe, ...]] = {
     "POSTHOOK": (
         _Recipe("location_post_hook_execution", (("shooting.fg_percent_from_x3_10_range", 0.45), ("shooting.fg_percent_from_x0_3_range", 0.30), ("role.post", 0.15), ("identity.ht_in_in", 0.10))),
         _Recipe("historical_post_hook_finish", (("per_game.fg_percent", 0.45), ("role.post", 0.30), ("identity.ht_in_in", 0.15), ("per_game.ft_percent", 0.10)), "post-hook make results", "observed finishing with continuous post/reach context", "hook range and reach differ from fade touch, keeping the two post skills semantically separate"),
-    ),
-    "STANDINGDUNK": (
-        _Recipe("tracked_standing_finish", (("derived.dunk_rate", 0.35), ("shooting.fg_percent_from_x0_3_range", 0.30), ("role.interior", 0.20), ("identity.ht_in_in", 0.15))),
-        _Recipe("historical_standing_finish", (("role.interior", 0.35), ("identity.ht_in_in", 0.25), ("per_game.fg_percent", 0.30), ("advanced.f_tr", 0.10)), "standing-dunk attempts and makes", "continuous interior/reach context plus recorded finishing", "standing access depends on reach and interior role, but execution remains anchored by makes"),
     ),
 }
 
@@ -1084,11 +1071,7 @@ _TENDENCY_RECIPES.update(
         "CLOSEMIDDLESHOT": (_Recipe("middle_close_location", (("derived.rim_attempt_rate", 0.65), ("role.interior", 0.35)), "middle-close events", "recorded rim share and interior participation", "central rim opportunity is the closest available location evidence"), _Recipe("historical_middle_close", (("role.interior", 0.55), ("derived.attempt_share", 0.45)), "close-location events", "continuous interior role and shooting responsibility", "no efficiency value authors frequency")),
         "CLOSERIGHTSHOT": (_Recipe("right_close_location", (("derived.short_attempt_rate", 0.75), ("role.interior", 0.25)), "right-close events", "recorded short-shot share and interior participation", "public data has no left/right split"), _Recipe("historical_right_close", (("derived.attempt_share", 0.50), ("role.interior", 0.50)), "close-location events", "shooting responsibility and continuous interior role", "laterality remains uncertain")),
         "CONTESTEDJUMPER3POINT": (_Recipe("contested_three", (("derived.three_attempt_rate", 0.35), ("shooting.percent_assisted_x3p_fg", -0.25), ("role.creator", 0.25), ("derived.attempt_share", 0.15)), "contested-three events", "three volume, self-created context, and shooting responsibility", "self-created high-volume threes are the narrowest season-level contested-shot substitute"),),
-        "CONTESTEDJUMPERMID": (_Recipe("contested_mid_alias", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.35), ("role.creator", 0.20), ("derived.attempt_share", 0.10)), "contested-mid events and a captured field-exact alias", "self-created midrange behavior and the captured Contested Jumper Mid-Range distribution", "the active alias has no separate Pool label"),),
-        "CONTESTEDJUMPERMIDRANGE": (_Recipe("contested_midrange", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.35), ("role.creator", 0.20), ("derived.attempt_share", 0.10)), "contested-midrange events", "self-created midrange behavior", "self-created midrange volume is the closest season-level contested-shot evidence"),),
         "DRIVEPULLUP3POINT": (_Recipe("drive_pullup_three", (("derived.three_attempt_rate", 0.30), ("shooting.percent_assisted_x3p_fg", -0.30), ("role.creator", 0.25), ("derived.foul_pressure", 0.15)), "pull-up-three events", "unassisted three context and live-dribble creator pressure", "the substitute separates pull-ups from spot-ups"),),
-        "DRIVEPULLUPMID": (_Recipe("drive_pullup_mid_alias", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.35), ("role.creator", 0.20), ("derived.foul_pressure", 0.10)), "pull-up-mid events and a captured field-exact alias", "self-created midrange drive behavior and the captured Drive Pull Up Mid-Range distribution", "the active alias has no separate Pool label"),),
-        "DRIVEPULLUPMIDRANGE": (_Recipe("drive_pullup_midrange", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.35), ("role.creator", 0.20), ("derived.foul_pressure", 0.10)), "pull-up-midrange events", "self-created midrange drive behavior", "the sources identify pull-up opportunity, not makes"),),
         "DRIVINGDUNK": (_Recipe("driving_dunk_frequency", (("derived.dunk_rate", 0.50), ("derived.rim_attempt_rate", 0.25), ("derived.foul_pressure", 0.15), ("role.creator", 0.10)), "driving-dunk attempt events", "dunk/rim frequency and drive pressure", "makes count as observed action frequency here, never execution"), _Recipe("historical_driving_dunk_frequency", (("derived.foul_pressure", 0.35), ("role.interior", 0.30), ("derived.attempt_share", 0.20), ("identity.ht_in_in", 0.15)), "driving-dunk and rim events", "drive pressure, continuous role/reach, and attempt responsibility", "no fixed athlete template is used")),
         "DRIVINGLAYUP": (_Recipe("driving_layup_frequency", (("derived.rim_attempt_rate", 0.45), ("derived.foul_pressure", 0.25), ("derived.dunk_rate", -0.15), ("role.creator", 0.15)), "driving-layup events", "rim pressure excluding dunk share plus creator role", "the sources describe action selection"), _Recipe("historical_driving_layup_frequency", (("derived.foul_pressure", 0.40), ("role.creator", 0.30), ("derived.attempt_share", 0.30)), "driving-layup and rim events", "drive pressure and offensive responsibility", "no make efficiency authors frequency")),
         "EUROSTEPLAYUP": (_Recipe("euro_step_frequency", (("derived.rim_attempt_rate", 0.25), ("derived.foul_pressure", 0.30), ("derived.unassisted_two_rate", 0.25), ("role.creator", 0.20)), "Euro-step events", "self-created rim/foul pressure", "the field-exact low-frequency calibration distinguishes the move"), _Recipe("historical_euro_step", (("derived.foul_pressure", 0.40), ("role.creator", 0.35), ("derived.attempt_share", 0.25)), "Euro-step and drive events", "drive pressure and creator responsibility", "no constant move package is inserted")),
@@ -1097,8 +1080,6 @@ _TENDENCY_RECIPES.update(
         "FROMPOSTSHOT": (_Recipe("shoot_from_post", (("role.post", 0.35), ("derived.short_attempt_rate", 0.25), ("derived.mid_attempt_rate", 0.25), ("derived.attempt_share", 0.15)), "post-shot events", "post role and recorded short/mid attempt mass", "the target is post shot selection"), _Recipe("historical_shoot_from_post", (("role.post", 0.50), ("derived.attempt_share", 0.30), ("identity.wt", 0.20)), "post-shot and location events", "continuous post role, responsibility, and leverage", "no efficiency score authors the tendency")),
         "HOPPOSTSHOT": (_Recipe("hop_post_shot", (("role.post", 0.30), ("derived.mid_attempt_rate", 0.30), ("derived.unassisted_two_rate", 0.25), ("per_game.ft_percent", 0.15)), "post-hop-shot events", "self-created post/midrange behavior", "the exact low-frequency target keeps the move rare"), _Recipe("historical_hop_post_shot", (("role.post", 0.45), ("per_game.ft_percent", 0.30), ("derived.attempt_share", 0.25)), "post-hop and location events", "post role, touch, and responsibility", "no generic constant is used")),
         "HOPSTEPLAYUP": (_Recipe("hop_step_layup", (("derived.rim_attempt_rate", 0.25), ("derived.foul_pressure", 0.30), ("derived.unassisted_two_rate", 0.25), ("role.creator", 0.20)), "hop-step layup events", "self-created rim/foul pressure", "3-10 foot attempts are deliberately excluded"), _Recipe("historical_hop_step_layup", (("derived.foul_pressure", 0.40), ("role.creator", 0.35), ("derived.attempt_share", 0.25)), "hop-step and drive events", "drive pressure and creator responsibility", "the field remains a behavior tendency")),
-        "MIDOFFSCREENSHOT": (_Recipe("off_screen_mid", (("derived.mid_attempt_rate", 0.35), ("shooting.percent_assisted_x2p_fg", 0.35), ("role.wing", 0.20), ("role.creator", -0.10)), "off-screen-mid events", "assisted midrange and off-ball wing context", "the substitute separates off-screen from pull-up behavior"), _Recipe("historical_off_screen_mid", (("derived.attempt_share", 0.40), ("role.wing", 0.40), ("role.creator", -0.20)), "off-screen and assisted-shot events", "wing responsibility with reduced primary creation", "no make percentage authors frequency")),
-        "MIDSPOTUPSHOT": (_Recipe("spot_up_mid", (("derived.mid_attempt_rate", 0.40), ("shooting.percent_assisted_x2p_fg", 0.40), ("role.creator", -0.20)), "spot-up-mid events", "assisted midrange with reduced primary creation", "the inputs describe catch-and-shoot opportunity"), _Recipe("historical_spot_up_mid", (("derived.attempt_share", 0.45), ("role.wing", 0.35), ("role.creator", -0.20)), "spot-up and assisted-shot events", "wing scoring responsibility with reduced creator role", "no efficiency value is used")),
         "POSTDROPSTEP": (_Recipe("post_drop_step", (("role.post", 0.35), ("derived.short_attempt_rate", 0.30), ("identity.wt", 0.20), ("derived.foul_pressure", 0.15)), "drop-step events", "post role, short frequency, leverage, and foul pressure", "all inputs describe move opportunity"), _Recipe("historical_post_drop_step", (("role.post", 0.45), ("identity.wt", 0.30), ("derived.attempt_share", 0.25)), "drop-step and post-touch events", "continuous post role, leverage, and responsibility", "no hard big-man gate is used")),
         "POSTFADELEFT": (_Recipe("post_fade_left", (("role.post", 0.30), ("derived.mid_attempt_rate", 0.35), ("per_game.ft_percent", 0.20), ("derived.unassisted_two_rate", 0.15)), "left post-fade events", "post self-created midrange touch", "public data has no left/right split; laterality remains uncertain"), _Recipe("historical_post_fade_left", (("role.post", 0.40), ("per_game.ft_percent", 0.35), ("derived.attempt_share", 0.25)), "post-fade and directional events", "post role, touch, and responsibility", "laterality is not fabricated")),
         "POSTFADERIGHT": (_Recipe("post_fade_right", (("role.post", 0.30), ("derived.mid_attempt_rate", 0.35), ("per_game.ft_percent", 0.20), ("derived.unassisted_two_rate", 0.15)), "right post-fade events", "post self-created midrange touch", "public data has no left/right split; laterality remains uncertain"), _Recipe("historical_post_fade_right", (("role.post", 0.40), ("per_game.ft_percent", 0.35), ("derived.attempt_share", 0.25)), "post-fade and directional events", "post role, touch, and responsibility", "laterality is not fabricated")),
@@ -1109,7 +1090,6 @@ _TENDENCY_RECIPES.update(
         "POSTUPANDUNDER": (_Recipe("post_up_and_under", (("role.post", 0.30), ("derived.short_attempt_rate", 0.30), ("derived.foul_pressure", 0.20), ("derived.unassisted_two_rate", 0.20)), "up-and-under events", "post short-area self-creation and foul pressure", "the inputs identify move frequency"), _Recipe("historical_post_up_and_under", (("role.post", 0.45), ("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.25)), "up-and-under and post-touch events", "post role, foul pressure, and responsibility", "no execution output is reused")),
         "SPINJUMPER": (_Recipe("spin_jumper", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.30), ("role.creator", 0.20), ("derived.foul_pressure", 0.15)), "spin-jumper events", "self-created midrange and live-drive pressure", "the tendency remains distinct from driving spin"), _Recipe("historical_spin_jumper", (("role.creator", 0.35), ("per_game.ft_percent", 0.30), ("derived.attempt_share", 0.35)), "spin-jumper and pull-up events", "creator role, touch, and responsibility", "no fixed move package is inserted")),
         "SPINLAYUP": (_Recipe("spin_layup", (("derived.rim_attempt_rate", 0.25), ("derived.foul_pressure", 0.30), ("derived.unassisted_two_rate", 0.25), ("role.creator", 0.20)), "spin-layup events", "self-created rim/foul pressure", "3-10 foot location is deliberately excluded"), _Recipe("historical_spin_layup", (("derived.foul_pressure", 0.40), ("role.creator", 0.35), ("derived.attempt_share", 0.25)), "spin-layup and drive events", "drive pressure and creator responsibility", "no make efficiency authors frequency")),
-        "STANDINGDUNK": (_Recipe("standing_dunk_frequency", (("derived.dunk_rate", 0.40), ("role.interior", 0.30), ("identity.ht_in_in", 0.20), ("derived.rim_attempt_rate", 0.10)), "standing-dunk events", "dunk/rim frequency and continuous reach/interior context", "the target is action selection"), _Recipe("historical_standing_dunk_frequency", (("role.interior", 0.45), ("identity.ht_in_in", 0.30), ("derived.attempt_share", 0.25)), "standing-dunk and rim events", "continuous interior/reach context and responsibility", "no hard height threshold is used")),
         "STEPBACKJUMPER3POINT": (_Recipe("stepback_three", (("derived.three_attempt_rate", 0.30), ("shooting.percent_assisted_x3p_fg", -0.30), ("role.creator", 0.25), ("derived.attempt_share", 0.15)), "stepback-three events", "self-created three frequency and creator responsibility", "the field-exact low target keeps the move rare"),),
         "STEPBACKJUMPERMID": (_Recipe("stepback_mid_alias", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.35), ("role.creator", 0.20), ("derived.attempt_share", 0.10)), "stepback-mid events and a captured field-exact alias", "self-created midrange behavior and the captured Stepback Jumper Mid-Range distribution", "the active alias has no separate Pool label"),),
         "STEPBACKJUMPERMIDRANGE": (_Recipe("stepback_midrange", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.35), ("role.creator", 0.20), ("derived.attempt_share", 0.10)), "stepback-midrange events", "self-created midrange and creator responsibility", "the target is attempt behavior"),),
@@ -1134,19 +1114,6 @@ _SHOT_EXECUTION_FIELDS = {
 def _attribute(field: str, evidence: Any, league_player_rows: Any) -> dict[str, Any] | None:
     if _gp(evidence) is None:
         return None
-    if field == "STANDINGDUNK":
-        height_in = _basic_value(evidence, "identity.ht_in_in")
-        if height_in is not None and height_in < 76.0:
-            return {
-                "value": 25,
-                "source_rule": "derive_attribute_standingdunk_under_6_4_height_gate",
-                "evidence_keys": (
-                    "identity.ht_in_in",
-                    f"height_in={height_in:.6f}",
-                    "standing_dunk_height_threshold_in=76",
-                    "standing_dunk_height_gate=height_below_6_4_resolves_to_25",
-                ),
-            }
     attempts = _estimated_total(evidence, "fga")
     if field in _SHOT_EXECUTION_FIELDS and attempts is not None and attempts <= 0.0:
         return {
@@ -1163,8 +1130,30 @@ def _attribute(field: str, evidence: Any, league_player_rows: Any) -> dict[str, 
     return _derive(f"derive_attribute_{field.lower()}", field, evidence, league_player_rows, _ATTR_RECIPES[field])
 
 
+_DUNK_ATTEMPT_TENDENCY_FIELDS = {"DRIVINGDUNK", "STANDINGDUNK"}
+
+
 def _tendency(field: str, evidence: Any, league_player_rows: Any) -> dict[str, Any] | None:
-    return _derive(f"derive_tendency_{field.lower()}", field, evidence, league_player_rows, _TENDENCY_RECIPES[field], tendency=True)
+    result = _derive(f"derive_tendency_{field.lower()}", field, evidence, league_player_rows, _TENDENCY_RECIPES[field], tendency=True)
+    if result is None or field not in _DUNK_ATTEMPT_TENDENCY_FIELDS:
+        return result
+    era = player_era_context(evidence)
+    if era.dunk_attempt_multiplier >= 1.0:
+        return result
+    unsuppressed = int(result["value"])
+    adjusted = max(0, min(100, round(unsuppressed * era.dunk_attempt_multiplier)))
+    return {
+        **result,
+        "value": adjusted,
+        "source_rule": f"{result['source_rule']}_historical_dunk_attempt_suppression",
+        "evidence_keys": tuple(result["evidence_keys"]) + (
+            *era.evidence_keys,
+            f"unsuppressed_dunk_attempt_tendency={unsuppressed}",
+            f"historically_suppressed_dunk_attempt_tendency={adjusted}",
+            "attribute_unchanged=true",
+            "hard_foul_model_is_separate=true",
+        ),
+    }
 
 
 def derive_attribute_ballcontrol(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:
@@ -1260,7 +1249,6 @@ def derive_attribute_midrange(evidence: Any, *, league_player_rows: Any = ()) ->
     location_inputs = (
         ("shooting.fg_percent_from_x10_16_range", 0.55),
         ("shooting.fg_percent_from_x16_3p_range", 0.35),
-        ("shooting.fg_percent_from_x3_10_range", 0.10),
     )
     observed = [
         (key, value, weight)
@@ -1268,37 +1256,25 @@ def derive_attribute_midrange(evidence: Any, *, league_player_rows: Any = ()) ->
         if (value := _basic_value(evidence, key)) is not None
     ]
     if observed:
-        total_weight = sum(weight for _key, _value, weight in observed)
-        target = sum(value * weight for _key, value, weight in observed) / total_weight
-        rating = midrange_rating_for_make_probability(target)
-        return {
-            "value": rating,
-            "source_rule": "derive_attribute_midrange_direct_make_probability_response_map",
-            "evidence_keys": (
-                *tuple(key for key, _value, _weight in observed),
-                f"target_midrange_make_probability={target:.8f}",
-                "response_anchor_25=aggregate_0.0015",
-                "response_anchor_80=aggregate_0.40",
-                "response_anchor_99=aggregate_0.50",
-                "mapping=inverse_piecewise_linear_midrange_response",
-            ),
-        }
+        return _attribute("MIDRANGE", evidence, league_player_rows)
 
     ft_percent = _basic_value(evidence, "per_game.ft_percent")
     if ft_percent is not None:
         target = max(0.0, min(1.0, ft_percent)) * 0.5
-        rating = midrange_rating_for_make_probability(target)
+        rating = midrange_rating_for_make_probability(target, context="spot_up")
         return {
             "value": rating,
-            "source_rule": "derive_attribute_midrange_historical_ft_half_response_map",
+            "source_rule": "derive_attribute_midrange_historical_ft_half_open_spot_up_response_map",
             "evidence_keys": (
                 "per_game.ft_percent",
                 f"historical_ft_percent={ft_percent:.8f}",
-                f"target_midrange_make_probability=0.5*FT%={target:.8f}",
-                "response_anchor_25=aggregate_0.0015",
-                "response_anchor_80=aggregate_0.40",
-                "response_anchor_99=aggregate_0.50",
-                "mapping=inverse_piecewise_linear_midrange_response",
+                f"target_open_spot_up_make_probability=0.5*FT%={target:.8f}",
+                "response_anchor_25=spot_up_0.0015",
+                "response_anchor_80=spot_up_0.45",
+                "response_anchor_99=spot_up_0.55",
+                "mapping=inverse_piecewise_linear_open_spot_up_response",
+                "context_weighting=none",
+                "ft_percent_does_not_author_action_tendencies=true",
             ),
         }
 
@@ -1317,8 +1293,96 @@ def derive_attribute_posthook(evidence: Any, *, league_player_rows: Any = ()) ->
     return _attribute("POSTHOOK", evidence, league_player_rows)
 
 
+def _standing_dunk_frame_score(source: Any) -> float | None:
+    height_in = _basic_value(source, "identity.ht_in_in")
+    weight_lb = _basic_value(source, "identity.wt")
+    if height_in is None or weight_lb is None:
+        return None
+    return 5.0 * (height_in - 76.0) + 0.12 * (weight_lb - 180.0)
+
+
 def derive_attribute_standingdunk(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:
-    return _attribute("STANDINGDUNK", evidence, league_player_rows)
+    if _gp(evidence) is None:
+        return None
+    height_in = _basic_value(evidence, "identity.ht_in_in")
+    weight_lb = _basic_value(evidence, "identity.wt")
+    if height_in is None or weight_lb is None:
+        return None
+    if height_in < 76.0:
+        return {
+            "value": 25,
+            "source_rule": "derive_attribute_standingdunk_under_6_4_height_gate",
+            "evidence_keys": (
+                "identity.ht_in_in",
+                f"height_in={height_in:.6f}",
+                "standing_dunk_height_threshold_in=76",
+                "standing_dunk_height_gate=height_below_6_4_resolves_to_25",
+            ),
+        }
+
+    vertical_result = derive_attribute_vertical(evidence, league_player_rows=league_player_rows)
+    if vertical_result is None:
+        return None
+    vertical = int(vertical_result["value"])
+    if height_in <= 79.0 and vertical <= 40:
+        return {
+            "value": 25,
+            "source_rule": "derive_attribute_standingdunk_lower_height_vertical_gate",
+            "evidence_keys": (
+                "identity.ht_in_in",
+                "identity.wt",
+                *tuple(vertical_result["evidence_keys"]),
+                f"height_in={height_in:.6f}",
+                f"generated_VERTICAL={vertical}",
+                "lower_height_boundary=through_6_7",
+                "generated_VERTICAL<=40_resolves_to_25",
+            ),
+        }
+
+    population = _population(evidence, league_player_rows)
+    population_scores = sorted(
+        score
+        for row in population
+        if (score := _standing_dunk_frame_score(row)) is not None
+    )
+    frame_score = _standing_dunk_frame_score(evidence)
+    if frame_score is None or not population_scores:
+        return None
+    left = bisect.bisect_left(population_scores, frame_score)
+    right = bisect.bisect_right(population_scores, frame_score)
+    frame_percentile = (left + right) / (2.0 * len(population_scores))
+    value = 25.0 + 74.0 * frame_percentile**0.55 + 0.25 * (vertical - 65.0)
+
+    lower_height_cap: float | None = None
+    if height_in <= 77.0:
+        lower_height_cap = 40.0 + 0.80 * max(0.0, vertical - 40.0)
+    elif height_in <= 79.0:
+        lower_height_cap = 25.0 + 1.20 * max(0.0, vertical - 40.0)
+    if lower_height_cap is not None:
+        value = min(value, lower_height_cap)
+
+    stored = max(25, min(99, round(value)))
+    return {
+        "value": stored,
+        "source_rule": "derive_attribute_standingdunk_frame_vertical_field_specific_context_substitute",
+        "evidence_keys": (
+            "identity.ht_in_in",
+            "identity.wt",
+            *tuple(vertical_result["evidence_keys"]),
+            f"height_in={height_in:.6f}",
+            f"weight_lb={weight_lb:.6f}",
+            f"generated_VERTICAL={vertical}",
+            f"frame_score={frame_score:.8f}",
+            f"same_season_same_league_frame_percentile={frame_percentile:.8f}",
+            "frame_score=5*(height_in-76)+0.12*(weight_lb-180)",
+            "mapping=25+74*frame_percentile^0.55+0.25*(generated_VERTICAL-65)",
+            "lower_height_vertical_cap=active" if lower_height_cap is not None else "lower_height_vertical_cap=not_applicable",
+            "unavailable_direct_source=literal_stationary_dunk_execution_measurement",
+            "substitute_source=height_weight_leverage_plus_generated_VERTICAL_and_same_season_same_league_frame_rank",
+            "validity=standing_dunk_physical_execution_potential_only; no FG%, foul pressure, broad dunk total, or moving action evidence",
+            "DRIVINGDUNK_attribute_unchanged=true",
+        ),
+    }
 
 
 def derive_tendency_shot(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:
@@ -1643,14 +1707,29 @@ _EXTRA_THREE_POINT_FIELDS = {
     "TRANSITIONPULLUP3POINT",
 }
 
+# The available season source contract has broad range, assisted-shot, dunk,
+# body, and creator-role signals, but no exact event source for these action
+# contexts. Those generic signals cannot manufacture an action Tendency.
+# Returning unresolved lets the active-field completion owner write 0 until an
+# exact event source or explicitly approved researched action rule is wired.
+_EXACT_ACTION_EVIDENCE_ONLY_FIELDS = {
+    "CONTESTEDJUMPERMID",
+    "CONTESTEDJUMPERMIDRANGE",
+    "DRIVEPULLUPMID",
+    "DRIVEPULLUPMIDRANGE",
+    "MIDOFFSCREENSHOT",
+    "MIDSPOTUPSHOT",
+    "STANDINGDUNK",
+}
+
 
 def _install_tendency_rule(function_name: str, field: str) -> None:
-    if field in _EXTRA_THREE_POINT_FIELDS:
-        def rule(evidence: Any, *, league_player_rows: Any = (), _field: str = field) -> dict[str, Any] | None:
+    def rule(evidence: Any, *, league_player_rows: Any = (), _field: str = field) -> dict[str, Any] | None:
+        if _field in _EXACT_ACTION_EVIDENCE_ONLY_FIELDS:
+            return None
+        if _field in _EXTRA_THREE_POINT_FIELDS:
             return _three_point_tendency(_field, evidence, league_player_rows)
-    else:
-        def rule(evidence: Any, *, league_player_rows: Any = (), _field: str = field) -> dict[str, Any] | None:
-            return _tendency(_field, evidence, league_player_rows)
+        return _tendency(_field, evidence, league_player_rows)
     rule.__name__ = function_name
     rule.__qualname__ = function_name
     globals()[function_name] = rule

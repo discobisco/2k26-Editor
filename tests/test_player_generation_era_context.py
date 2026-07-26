@@ -12,6 +12,7 @@ if str(GENERATOR_DIR) not in sys.path:
 from player_era_context import filter_same_league_rows, player_era_context  # type: ignore[import-not-found]
 from player_rules import derive_player_profile_values  # type: ignore[import-not-found]
 from player_rules_offense import (  # type: ignore[import-not-found]
+    _recorded_assists_available,
     derive_attribute_3point,
     derive_attribute_closeshot,
     derive_attribute_midrange,
@@ -21,6 +22,11 @@ from player_rules_offense import (  # type: ignore[import-not-found]
     midrange_make_probability_for_rating,
     midrange_rating_for_make_probability,
 )
+
+
+def test_nbl_assist_absence_uses_the_same_1952_stat_boundary() -> None:
+    assert not _recorded_assists_available(SimpleNamespace(season=1949, season_info={"lg": "NBL"}, per_game={}))
+    assert _recorded_assists_available(SimpleNamespace(season=1952, season_info={"lg": "NBL"}, per_game={}))
 
 
 def _evidence(
@@ -192,6 +198,56 @@ def test_close_and_mid_fields_use_only_distance_data() -> None:
         assert "per_game.fga_per_game" not in result["evidence_keys"]
 
 
+def test_three_to_ten_changes_close_but_never_midrange() -> None:
+    base = {
+        "fg_percent_from_x0_3_range": 0.60,
+        "fg_percent_from_x10_16_range": 0.40,
+        "fg_percent_from_x16_3p_range": 0.38,
+        "percent_fga_from_x0_3_range": 0.20,
+        "percent_fga_from_x3_10_range": 0.20,
+        "percent_fga_from_x10_16_range": 0.20,
+        "percent_fga_from_x16_3p_range": 0.20,
+    }
+    low = _evidence(
+        season=2025,
+        league="NBA",
+        fga_per_game=20.0,
+        shooting={**base, "fg_percent_from_x3_10_range": 0.10},
+    )
+    high = _evidence(
+        season=2025,
+        league="NBA",
+        fga_per_game=20.0,
+        shooting={**base, "fg_percent_from_x3_10_range": 0.90},
+    )
+
+    rows = tuple(
+        {
+            "player_per_game.g": 82.0,
+            "player_season_info.season": 2025.0,
+            "player_season_info.lg": "NBA",
+            "player_shooting.fg_percent_from_x0_3_range": 0.45 + 0.05 * index,
+            "player_shooting.fg_percent_from_x3_10_range": 0.25 + 0.10 * index,
+            "player_shooting.fg_percent_from_x10_16_range": 0.30 + 0.05 * index,
+            "player_shooting.fg_percent_from_x16_3p_range": 0.28 + 0.05 * index,
+        }
+        for index in range(5)
+    )
+    mid_low = derive_attribute_midrange(low, league_player_rows=rows)
+    mid_high = derive_attribute_midrange(high, league_player_rows=rows)
+    close_low = derive_attribute_closeshot(low, league_player_rows=rows)
+    close_high = derive_attribute_closeshot(high, league_player_rows=rows)
+
+    assert mid_low is not None and mid_high is not None
+    assert close_low is not None and close_high is not None
+    assert mid_low["value"] == mid_high["value"]
+    assert "shooting.fg_percent_from_x3_10_range" not in mid_low["evidence_keys"]
+    assert "shooting.fg_percent_from_x3_10_range" not in mid_high["evidence_keys"]
+    assert close_low["value"] != close_high["value"]
+    assert "shooting.fg_percent_from_x3_10_range" in close_low["evidence_keys"]
+    assert "shooting.fg_percent_from_x3_10_range" in close_high["evidence_keys"]
+
+
 def test_midrange_response_map_matches_user_observed_context_anchors() -> None:
     expected = {
         25: {"spot_up": 0.0015, "off_screen": 0.0015, "pull_up": 0.0015, "contested": 0.0015},
@@ -204,7 +260,7 @@ def test_midrange_response_map_matches_user_observed_context_anchors() -> None:
 
 
 def test_historical_ft_half_maps_to_midrange_attribute() -> None:
-    expected = {0.50: 59, 0.60: 66, 0.70: 73, 0.80: 80, 0.90: 90, 1.00: 99}
+    expected = {0.50: 55, 0.60: 62, 0.70: 68, 0.80: 74, 0.90: 80, 1.00: 90}
     for ft_percent, rating in expected.items():
         result = derive_attribute_midrange(
             _evidence(season=1947, league="BAA", ft_percent=ft_percent),
@@ -212,16 +268,18 @@ def test_historical_ft_half_maps_to_midrange_attribute() -> None:
         )
         assert result is not None
         assert result["value"] == rating
-        assert result["source_rule"] == "derive_attribute_midrange_historical_ft_half_response_map"
+        assert result["source_rule"] == "derive_attribute_midrange_historical_ft_half_open_spot_up_response_map"
+        assert "context_weighting=none" in result["evidence_keys"]
+        assert "ft_percent_does_not_author_action_tendencies=true" in result["evidence_keys"]
 
 
-def test_midrange_aggregate_response_inverse_anchors() -> None:
-    assert midrange_make_probability_for_rating(25) == 0.0015
-    assert midrange_make_probability_for_rating(80) == 0.40
-    assert midrange_make_probability_for_rating(99) == 0.50
-    assert midrange_rating_for_make_probability(0.0015) == 25
-    assert midrange_rating_for_make_probability(0.40) == 80
-    assert midrange_rating_for_make_probability(0.50) == 99
+def test_midrange_open_spot_up_response_inverse_anchors() -> None:
+    assert midrange_make_probability_for_rating(25, context="spot_up") == 0.0015
+    assert midrange_make_probability_for_rating(80, context="spot_up") == 0.45
+    assert midrange_make_probability_for_rating(99, context="spot_up") == 0.55
+    assert midrange_rating_for_make_probability(0.0015, context="spot_up") == 25
+    assert midrange_rating_for_make_probability(0.45, context="spot_up") == 80
+    assert midrange_rating_for_make_probability(0.55, context="spot_up") == 99
 
 
 def test_profile_authors_selected_season_age_not_removed_birthyear_field() -> None:

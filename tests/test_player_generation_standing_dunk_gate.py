@@ -9,6 +9,7 @@ GENERATOR_DIR = Path(__file__).resolve().parents[1] / "nba2k_editor" / "Player G
 if str(GENERATOR_DIR) not in sys.path:
     sys.path.insert(0, str(GENERATOR_DIR))
 
+import player_rules_offense  # type: ignore[import-not-found]
 from player_rules_offense import derive_attribute_standingdunk  # type: ignore[import-not-found]
 
 
@@ -73,3 +74,48 @@ def test_standing_dunk_height_gate_stops_at_exactly_six_foot_four() -> None:
 
     assert result is not None
     assert result["source_rule"] != "derive_attribute_standingdunk_under_6_4_height_gate"
+
+
+def test_lower_height_generated_vertical_gate_resolves_to_floor(monkeypatch) -> None:
+    monkeypatch.setattr(
+        player_rules_offense,
+        "derive_attribute_vertical",
+        lambda *args, **kwargs: {"value": 40, "source_rule": "controlled_vertical", "evidence_keys": ("controlled.VERTICAL",)},
+    )
+    for height in (77.0, 79.0):
+        result = derive_attribute_standingdunk(_evidence(height), league_player_rows=_population_rows())
+        assert result is not None
+        assert result["value"] == 25
+        assert result["source_rule"] == "derive_attribute_standingdunk_lower_height_vertical_gate"
+
+
+def test_clearing_vertical_40_does_not_create_high_standing_dunk(monkeypatch) -> None:
+    monkeypatch.setattr(
+        player_rules_offense,
+        "derive_attribute_vertical",
+        lambda *args, **kwargs: {"value": 41, "source_rule": "controlled_vertical", "evidence_keys": ("controlled.VERTICAL",)},
+    )
+    result = derive_attribute_standingdunk(_evidence(77.0), league_player_rows=_population_rows())
+    assert result is not None
+    assert 25 <= result["value"] <= 41
+    assert "lower_height_vertical_cap=active" in result["evidence_keys"]
+
+
+def test_standing_dunk_attribute_excludes_generic_finishing_statistics(monkeypatch) -> None:
+    monkeypatch.setattr(
+        player_rules_offense,
+        "derive_attribute_vertical",
+        lambda *args, **kwargs: {"value": 70, "source_rule": "controlled_vertical", "evidence_keys": ("controlled.VERTICAL",)},
+    )
+    low = _evidence(84.0)
+    high = _evidence(84.0)
+    low.per_game.update({"fg_percent": 0.20, "fga_per_game": 1.0})
+    low.totals.update({"fga": 82.0})
+    high.per_game.update({"fg_percent": 0.90, "fga_per_game": 30.0})
+    high.totals.update({"fga": 2460.0})
+
+    low_result = derive_attribute_standingdunk(low, league_player_rows=_population_rows())
+    high_result = derive_attribute_standingdunk(high, league_player_rows=_population_rows())
+    assert low_result is not None and high_result is not None
+    assert low_result["value"] == high_result["value"]
+    assert "no FG%, foul pressure, broad dunk total, or moving action evidence" in low_result["evidence_keys"][-2]

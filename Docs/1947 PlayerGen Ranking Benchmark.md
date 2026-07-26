@@ -54,22 +54,9 @@ Instead, each named NBL player's generated Total Attributes must be at least Bob
 
 Additional historically established NBL players may be added explicitly by exact `player_id`; names remain display text rather than identity.
 
-## Production alignment
+## Diagnostic-only ranking
 
-The batch-generation path applies a narrowly bounded pre-PER adjustment in `player_generation_1947_alignment.py` before returning proposals. The boundary is 1947-1949 BAA and 1950-1951 NBA. Recorded PER begins in 1952, so 1952 and later proposals do not receive this adjustment. This boundary does not disable field-specific historical fallbacks when their corresponding direct shot-location or tracking evidence is still absent; those remain evidence-driven and explicitly provenanced.
-
-The benchmark comparisons and the production adjustment are intentionally different:
-
-- shooting, Offense, Defense, and total-Attribute rank comparisons remain diagnostic outputs;
-- production does not force exact `FG%`, `OWS`, `DWS`, or `WS` rank agreement;
-- every formula-authored Attribute is protected, including shooting, passing, rebounding, Interior/Perimeter Defense, Block, Steal, Pass Perception, athleticism, Stamina, Intangibles, durability, and exact-player rules;
-- `CACHCEDOVR`, `MAXOVR`, `MINOVR`, and `POTENTIAL` are never alignment targets;
-- the complete positive target allowlist is `Attributes/HANDS` and `Attributes/HUSTLE`;
-- an allowlisted field is adjustable only while its original source is `required_active_field_set_value`; adding a real field formula automatically protects it;
-- `WS` may raise those unresolved soft fields only within their legal `25..99` bounds; residual rank-total differences remain unresolved rather than spilling into protected fields;
-- candidates whose numeric value does not change retain their original source rule and evidence;
-- players outside the qualifying population and every NBL proposal remain unchanged by this pass;
-- a team-filtered pre-PER batch is evaluated against the complete qualifying league population before the requested team is returned.
+The benchmark comparisons are diagnostic outputs. Production proposals are not post-processed to force `FG%`, `OWS`, `DWS`, `WS`, shooting, Offense, Defense, or total-Attribute rank agreement. Every field retains its ordinary field owner and provenance, including `Attributes/HANDS` and `Attributes/HUSTLE`.
 
 The JSON shooting comparison includes all nine shooting Attribute values plus the broad under-basket, close, mid, driving-layup, driving-dunk, standing-dunk, post-up, and shoot-from-post Tendencies. These values are observed by the benchmark and are not rewritten by it.
 
@@ -81,4 +68,4 @@ Run from the repository root:
 python3 "nba2k_editor/Player Generator/playergen_1947_ranking_benchmark.py" --output .hermes/playergen_1947_ranking_benchmark.json
 ```
 
-The runner exercises the production generation/alignment path and writes the complete inspectable benchmark result. It does not alter source data.
+The runner exercises the production generation path and writes the complete inspectable benchmark result. It does not alter source data or rewrite proposals.
