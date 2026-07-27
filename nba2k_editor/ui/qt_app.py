@@ -38,6 +38,8 @@ from nba2k_editor.models.data_model import (
     PLAYER_TEAM_FILTER_ALL,
     PLAYER_TEAM_FILTER_BASE_TEAMS,
     PLAYER_TEAM_FILTER_DRAFT_CLASS,
+    PLAYER_POSITION_FILTER_ALL,
+    PLAYER_PRIMARY_POSITIONS,
     EditorDataModel,
     FieldEntry,
     RecordListItem,
@@ -183,6 +185,7 @@ class EditorUiState:
     team_record_section: str = "Single Game (Regular)"
     team_record_stat: str = "Points"
     player_team_filter: str | int = "All Players"
+    player_position_filter: str = PLAYER_POSITION_FILTER_ALL
     player_search_text: str = ""
     player_roster_export_folder: str = str(PLAYER_ROSTER_EXPORTS_DIR)
     player_roster_snapshot_filename: str = PLAYER_ROSTER_DEFAULT_EXPORT_FILE
@@ -259,6 +262,7 @@ class QtEditorApp(QMainWindow):
         self.team_summary_inputs: dict[str, QLineEdit] = {}
         self.team_record_table: QTableWidget | None = None
         self.player_filter_combo: QComboBox | None = None
+        self.player_position_filter_combo: QComboBox | None = None
         self.player_search_input: QLineEdit | None = None
         self.player_movement = PlayerMovement(model)
         self.operation_dialog: OperationDialog | None = None
@@ -588,13 +592,22 @@ class QtEditorApp(QMainWindow):
         for label, value in self.model.player_team_filter_options():
             player_filter_combo.addItem(label, value)
         player_filter_combo.currentIndexChanged.connect(lambda _index: self._set_player_team_filter(player_filter_combo.currentData()))
+        player_position_filter_combo = configure_combo_box(QComboBox())
+        for position in (PLAYER_POSITION_FILTER_ALL, *PLAYER_PRIMARY_POSITIONS):
+            player_position_filter_combo.addItem(position, position)
+        player_position_filter_combo.currentIndexChanged.connect(
+            lambda _index: self._set_player_position_filter(player_position_filter_combo.currentData())
+        )
         player_search_input = QLineEdit()
         player_search_input.setPlaceholderText("Search players")
         player_search_input.textChanged.connect(self._set_player_search_text)
         self.player_filter_combo = player_filter_combo
+        self.player_position_filter_combo = player_position_filter_combo
         self.player_search_input = player_search_input
         controls.addWidget(QLabel("Team"))
         controls.addWidget(player_filter_combo)
+        controls.addWidget(QLabel("Position"))
+        controls.addWidget(player_position_filter_combo)
         controls.addWidget(QLabel("Search"))
         controls.addWidget(player_search_input)
         layout.addLayout(controls)
@@ -864,7 +877,9 @@ class QtEditorApp(QMainWindow):
             items = view.items
             self._domain_counts[domain] = len(items)
             player_filter_active = domain == "Players" and (
-                self.state.player_team_filter != PLAYER_TEAM_FILTER_ALL or self.state.player_search_text.strip()
+                self.state.player_team_filter != PLAYER_TEAM_FILTER_ALL
+                or self.state.player_position_filter != PLAYER_POSITION_FILTER_ALL
+                or self.state.player_search_text.strip()
             )
             if not player_filter_active:
                 self._set_count(domain, f"{self._display_label(domain)}: {len(items)}")
@@ -885,7 +900,9 @@ class QtEditorApp(QMainWindow):
         if any(view.domain == "Teams" for view in views):
             self._sync_player_team_filter()
         if any(view.domain == "Players" for view in views) and (
-            self.state.player_team_filter != PLAYER_TEAM_FILTER_ALL or self.state.player_search_text.strip()
+            self.state.player_team_filter != PLAYER_TEAM_FILTER_ALL
+            or self.state.player_position_filter != PLAYER_POSITION_FILTER_ALL
+            or self.state.player_search_text.strip()
         ):
             self._request_player_list_view()
         self.home_target_status.setText("Record lists loaded.")
@@ -937,6 +954,7 @@ class QtEditorApp(QMainWindow):
         request = PlayerListRequest(
             filter_key=self.state.player_team_filter,
             query=self.state.player_search_text,
+            primary_position=self.state.player_position_filter,
         )
         self._pending_player_list_request = (self._player_list_request_serial, request)
         self._start_pending_player_list_request()
@@ -948,7 +966,7 @@ class QtEditorApp(QMainWindow):
         self._pending_player_list_request = None
 
         def worker() -> object:
-            return self.model.prepare_player_list_view(request.filter_key, request.query)
+            return self.model.prepare_player_list_view(request.filter_key, request.query, request.primary_position)
 
         self._start_background_operation(
             "Prepare Player List",
@@ -988,6 +1006,10 @@ class QtEditorApp(QMainWindow):
 
     def _set_player_team_filter(self, value: object) -> None:
         self.state.player_team_filter = value if isinstance(value, (str, int)) else PLAYER_TEAM_FILTER_ALL
+        self._sync_player_list()
+
+    def _set_player_position_filter(self, value: object) -> None:
+        self.state.player_position_filter = str(value) if isinstance(value, str) and value in PLAYER_PRIMARY_POSITIONS else PLAYER_POSITION_FILTER_ALL
         self._sync_player_list()
 
     def _set_player_search_text(self, value: str) -> None:
@@ -2038,6 +2060,14 @@ class QtEditorApp(QMainWindow):
             parts.append(f"\nSource players not loaded for {roster_check_season} ({len(missing_players)}):")
             parts.extend(str(player) for player in missing_players)
             if not missing_players:
+                parts.append("None")
+            out_of_season_players = tuple(getattr(state, "roster_check_out_of_season_players", ()))
+            parts.append(
+                f"\nActive loaded-roster players not in the {roster_check_season} source season "
+                f"({len(out_of_season_players)}):"
+            )
+            parts.extend(str(player) for player in out_of_season_players)
+            if not out_of_season_players:
                 parts.append("None")
         return "\n".join(part for part in parts if part)
 

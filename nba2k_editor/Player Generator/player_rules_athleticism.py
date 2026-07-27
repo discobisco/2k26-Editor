@@ -45,22 +45,6 @@ class _AthleticModel:
 
 
 _ATHLETIC_MODELS: dict[str, _AthleticModel] = {
-    "speed": _AthleticModel(
-        81.900000000,
-        1.078571429,
-        -1.464285714,
-        0.026238258,
-        0.392994912,
-        "pool_run3_no_stats.position_median_quadratic.speed+pool_gp765.overall_controlled_body",
-    ),
-    "agility": _AthleticModel(
-        83.714285714,
-        -1.042857143,
-        -0.857142857,
-        0.171603036,
-        0.178614451,
-        "pool_run3_no_stats.position_median_quadratic.agility+pool_gp765.overall_controlled_body",
-    ),
     "speed_with_ball": _AthleticModel(
         81.914285714,
         -2.671428571,
@@ -89,8 +73,6 @@ _ATHLETIC_MODELS: dict[str, _AthleticModel] = {
 
 
 _AGE_ADJUSTMENT: dict[str, Callable[[float], float]] = {
-    "speed": lambda age: 0.12 * max(25.0 - age, 0.0) - 0.35 * max(age - 28.0, 0.0),
-    "agility": lambda age: 0.18 * max(25.0 - age, 0.0) - 0.40 * max(age - 28.0, 0.0),
     "speed_with_ball": lambda age: -0.18 * max(age - 30.0, 0.0),
     "strength": lambda age: 0.22 * (min(max(age, 22.0), 30.0) - 22.0) - 0.10 * max(age - 32.0, 0.0),
     "vertical": lambda age: 0.22 * max(25.0 - age, 0.0) - 0.45 * max(age - 28.0, 0.0),
@@ -273,6 +255,36 @@ def _population_body_shift(
     return float(median(height_residuals)), float(median(weight_residuals)), len(height_residuals)
 
 
+def _population_body_extrema(
+    rows: Iterable[dict[str, Any]],
+) -> tuple[float, float, float, float, int, int] | None:
+    heights: list[float] = []
+    weights: list[float] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        games = _number(_row_value(row, "per_game", "player_per_game.g"))
+        if games is None or games <= 0.0:
+            continue
+        height = _number(_row_value(row, "identity", "player_info.ht_in_in"))
+        weight = _number(_row_value(row, "identity", "player_info.wt"))
+        if height is not None:
+            heights.append(height)
+        if weight is not None:
+            weights.append(weight)
+    if not heights or not weights:
+        return None
+    return min(heights), max(heights), min(weights), max(weights), len(heights), len(weights)
+
+
+def _inverse_min_max_rating(value: float, minimum: float, maximum: float) -> float | None:
+    span = maximum - minimum
+    if span <= 0.0:
+        return None
+    bounded = max(minimum, min(maximum, value))
+    return 99.0 - 74.0 * ((bounded - minimum) / span)
+
+
 def _athletic_context(
     evidence: Any,
     league_player_rows: Iterable[dict[str, Any]],
@@ -370,11 +382,54 @@ def _derive_athletic_field(
 
 
 def derive_attribute_speed(evidence: Any, _field_index: Any = None, league_player_rows: Iterable[dict[str, Any]] = (), _positions: Any = None) -> RuleOutput:
-    return _derive_athletic_field("speed", evidence, league_player_rows)
+    games = _games_played(evidence)
+    height = _height_inches(evidence)
+    weight = _weight_pounds(evidence)
+    extrema = _population_body_extrema(league_player_rows)
+    if games is None or games <= 0.0 or height is None or weight is None or extrema is None:
+        return None
+    min_height, max_height, min_weight, max_weight, height_count, weight_count = extrema
+    height_rating = _inverse_min_max_rating(height, min_height, max_height)
+    weight_rating = _inverse_min_max_rating(weight, min_weight, max_weight)
+    if height_rating is None or weight_rating is None:
+        return None
+    identity = getattr(evidence, "identity", {})
+    height_source = "identity.ht_in_in" if _dict_number(identity, "ht_in_in", "height_inches") is not None else "source_profile.height_inches"
+    weight_source = "identity.wt" if _dict_number(identity, "wt", "weight_pounds") is not None else "source_profile.weight_pounds"
+    return {
+        "value": _attribute(0.5 * height_rating + 0.5 * weight_rating),
+        "source_rule": "derive_attribute_speed_full_generated_pool_body_min_max",
+        "evidence_keys": (
+            "per_game.g",
+            f"games_played={games:.6g}",
+            height_source,
+            f"height_inches={height:.6g}",
+            weight_source,
+            f"weight_pounds={weight:.6g}",
+            f"population.full_generated_pool_height_rows={height_count}",
+            f"population.full_generated_pool_weight_rows={weight_count}",
+            f"population.min_height_inches={min_height:.6g}",
+            f"population.max_height_inches={max_height:.6g}",
+            f"population.min_weight_pounds={min_weight:.6g}",
+            f"population.max_weight_pounds={max_weight:.6g}",
+            f"inverse_height_min_max_rating={height_rating:.6g}",
+            f"inverse_weight_min_max_rating={weight_rating:.6g}",
+            "mapping=average_of_inverse_height_and_weight_min_max_ratings",
+            "rating_endpoints=minimum_body_measurement_99;maximum_body_measurement_25",
+            "population_scope=full_generated_pool_gp_positive_rows",
+        ),
+    }
 
 
 def derive_attribute_agility(evidence: Any, _field_index: Any = None, league_player_rows: Iterable[dict[str, Any]] = (), _positions: Any = None) -> RuleOutput:
-    return _derive_athletic_field("agility", evidence, league_player_rows)
+    result = derive_attribute_speed(evidence, league_player_rows=league_player_rows)
+    if result is None:
+        return None
+    return {
+        "value": result["value"],
+        "source_rule": "derive_attribute_agility_full_generated_pool_body_min_max",
+        "evidence_keys": tuple(result["evidence_keys"]),
+    }
 
 
 def derive_attribute_speedwithball(evidence: Any, _field_index: Any = None, league_player_rows: Iterable[dict[str, Any]] = (), _positions: Any = None) -> RuleOutput:
@@ -390,8 +445,8 @@ def derive_attribute_vertical(evidence: Any, _field_index: Any = None, league_pl
 
 
 def derive_attribute_acceleration(evidence: Any, _field_index: Any = None, league_player_rows: Iterable[dict[str, Any]] = (), _positions: Any = None) -> RuleOutput:
-    speed = _derive_athletic_field("speed", evidence, league_player_rows)
-    agility = _derive_athletic_field("agility", evidence, league_player_rows)
+    speed = derive_attribute_speed(evidence, league_player_rows=league_player_rows)
+    agility = derive_attribute_agility(evidence, league_player_rows=league_player_rows)
     if speed is None or agility is None:
         return None
     speed_value = int(speed["value"])

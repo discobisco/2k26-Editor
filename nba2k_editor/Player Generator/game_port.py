@@ -170,6 +170,57 @@ def missing_generated_players_and_active_placeholder_indices(
     return tuple(missing), placeholder_indices, skipped_existing
 
 
+def active_loaded_players_not_in_generated_source(
+    model: Any,
+    generated_players: Iterable[Any],
+    *,
+    placeholder_name: str = "A Z",
+) -> tuple[tuple[int, str], ...]:
+    generated_tuple = tuple(generated_players)
+    source_name_keys = {
+        key
+        for generated in generated_tuple
+        for key in _generated_player_name_keys(generated)
+    }
+    source_profanity_name_keys = {
+        key
+        for generated in generated_tuple
+        for key in _generated_player_profanity_name_keys(generated)
+    }
+    placeholder_keys = set(_person_name_keys(placeholder_name))
+    not_in_source: list[tuple[int, str]] = []
+    for player in _loaded_items(model, "Players"):
+        if not _player_is_active(model, player):
+            continue
+        name_values = _live_player_name_values(model, player)
+        player_name_keys = {
+            key
+            for value in name_values
+            for key in _person_name_keys(value)
+        }
+        if player_name_keys & placeholder_keys:
+            continue
+        if player_name_keys & source_name_keys:
+            continue
+        player_profanity_name_keys = {
+            key
+            for value in name_values
+            for key in _profanity_fragment_value_keys(value)
+        }
+        if player_profanity_name_keys & source_profanity_name_keys:
+            continue
+        player_name = next(
+            (
+                cleaned
+                for value in name_values
+                if (cleaned := _strip_record_index_prefix(value).strip())
+            ),
+            _safe_label(player),
+        )
+        not_in_source.append((int(getattr(player, "index")), player_name))
+    return tuple(not_in_source)
+
+
 def apply_generated_player_proposal_to_game(
     model: Any,
     proposal: GeneratedPlayerProposal,
@@ -1039,6 +1090,7 @@ __all__ = [
     "GamePortFieldResult",
     "GamePortResult",
     "GeneratedPlayerGameImportResult",
+    "active_loaded_players_not_in_generated_source",
     "apply_generated_player_proposal_to_game",
     "apply_generated_players_to_game",
     "apply_generated_rows_to_game",

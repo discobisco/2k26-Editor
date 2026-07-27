@@ -69,6 +69,8 @@ PLAYER_TEAM_FILTER_ALL = "All Players"
 PLAYER_TEAM_FILTER_BASE_TEAMS = "Teams 0-29"
 PLAYER_TEAM_FILTER_FREE_AGENTS = "Free Agents"
 PLAYER_TEAM_FILTER_DRAFT_CLASS = "Draft Class"
+PLAYER_POSITION_FILTER_ALL = "All Positions"
+PLAYER_PRIMARY_POSITIONS: tuple[str, ...] = ("PG", "SG", "SF", "PF", "C")
 _DRAFT_CLASS_BASE_KEY = "DraftClass"
 _PLAYER_EDITOR_RESET_SECTIONS: tuple[str, ...] = ("Vitals", "Attributes", "Tendencies", "Badges")
 
@@ -217,7 +219,9 @@ class EditorDataModel:
         self._player_team_pointer_cache: dict[int, int] = {}
         self._player_filter_items_by_key: dict[str | int, tuple[RecordListItem, ...]] = {}
         self._player_search_keys: dict[int, str] = {}
+        self._player_primary_positions: dict[int, str] = {}
         self._player_filter_index_ready = False
+        self._player_position_filter_ready = False
         self._player_free_agent_filter_ready = False
 
     def _active_config(self) -> dict[str, Any]:
@@ -395,6 +399,9 @@ class EditorDataModel:
         teams = tuple((team.display_label, int(team.index)) for team in self.loaded_items["Teams"].values())
         return (*fixed, *teams)
 
+    def player_position_filter_options(self) -> tuple[tuple[str, str], ...]:
+        return ((PLAYER_POSITION_FILTER_ALL, PLAYER_POSITION_FILTER_ALL), *((position, position) for position in PLAYER_PRIMARY_POSITIONS))
+
     def _team_player_slot_entries(self) -> list[tuple[int, FieldEntry]]:
         entries: list[tuple[int, FieldEntry]] = []
         for entry in self.grouped_fields("Teams").get("Team Players", {}).get("Team Players", ()):
@@ -454,14 +461,60 @@ class EditorDataModel:
     def _invalidate_player_filter_index(self) -> None:
         self._player_filter_items_by_key.clear()
         self._player_search_keys.clear()
+        self._player_primary_positions.clear()
         self._player_filter_index_ready = False
+        self._player_position_filter_ready = False
         self._player_free_agent_filter_ready = False
 
     def _field_invalidates_player_filter_index(self, domain: str, field: dict[str, Any]) -> bool:
         identity = _field_identity(field.get("normalized_name") or field.get("display_name"))
-        return (domain == "Players" and identity in {"CURRENTTEAM", "ISACTIVE"}) or (
+        return (domain == "Players" and identity in {"CURRENTTEAM", "ISACTIVE", "POSITION"}) or (
             domain == "Teams" and identity.startswith("PLAYER") and identity.removeprefix("PLAYER").isdigit()
         )
+
+    def _player_primary_position_values(self, players: tuple[RecordListItem, ...]) -> dict[int, str]:
+        if not players:
+            return {}
+        position_entry = self._field_by_normalized_name("Players", "POSITION")
+        if position_entry is None:
+            raise KeyError("Players position filter requires POSITION")
+        payload = self._field_version_payload(position_entry.field)
+        first_address = min(int(player.address) for player in players)
+        last_address = max(int(player.address) for player in players)
+        stride = self.domain_stride("Players")
+        position_address = _field_address(
+            self.memory,
+            first_address,
+            payload,
+            parent_payload=self._parent_payload("Players", payload),
+        )
+        position_offset = int(position_address) - first_address
+        if not 0 <= position_offset < stride:
+            raise ValueError("Players POSITION must resolve inside the player record")
+        memory = ReadOnlyMemoryBuffer.capture(
+            self.memory,
+            first_address,
+            last_address - first_address + stride,
+        )
+        return {
+            int(player.address): str(
+                _raw_to_display_value(
+                    position_entry.section,
+                    position_entry.field,
+                    payload,
+                    _read_authored_value(memory, int(player.address) + position_offset, payload),
+                )
+            )
+            for player in players
+        }
+
+    def _build_player_position_filter(self) -> None:
+        primary_positions = self._player_primary_position_values(tuple(self.loaded_items.get("Players", {}).values()))
+        primary_positions.update(
+            self._player_primary_position_values(self._player_filter_items_by_key.get(PLAYER_TEAM_FILTER_DRAFT_CLASS, ()))
+        )
+        self._player_primary_positions = primary_positions
+        self._player_position_filter_ready = True
 
     def _player_filter_source_values(
         self,
@@ -559,6 +612,8 @@ class EditorDataModel:
         }
         indexes.update({team_index: tuple(items) for team_index, items in team_buckets.items()})
         self._player_filter_items_by_key = indexes
+        self._player_primary_positions = {}
+        self._player_position_filter_ready = False
         self._player_search_keys = {
             int(item.address): item.display_label.casefold()
             for items in indexes.values()
@@ -571,20 +626,35 @@ class EditorDataModel:
         self._data_version += 1
         return self.player_list_view(PLAYER_TEAM_FILTER_ALL)
 
-    def prepare_player_list_view(self, selected_team: str | int | None, search_text: str | None = None) -> PlayerListView:
+    def prepare_player_list_view(
+        self,
+        selected_team: str | int | None,
+        search_text: str | None = None,
+        primary_position: str | None = None,
+    ) -> PlayerListView:
         selected = selected_team if isinstance(selected_team, int) else str(selected_team or PLAYER_TEAM_FILTER_ALL).strip()
         if not self._player_filter_index_ready:
             self.build_player_filter_index(include_free_agents=selected == PLAYER_TEAM_FILTER_FREE_AGENTS)
         elif selected == PLAYER_TEAM_FILTER_FREE_AGENTS and not self._player_free_agent_filter_ready:
             self._build_free_agent_filter(tuple(self.loaded_items.get("Players", {}).values()))
-        return self.player_list_view(selected, search_text)
+        if str(primary_position or "").strip() in PLAYER_PRIMARY_POSITIONS and not self._player_position_filter_ready:
+            self._build_player_position_filter()
+        return self.player_list_view(selected, search_text, primary_position)
 
-    def player_list_view(self, selected_team: str | int | None, search_text: str | None = None) -> PlayerListView:
+    def player_list_view(
+        self,
+        selected_team: str | int | None,
+        search_text: str | None = None,
+        primary_position: str | None = None,
+    ) -> PlayerListView:
         selected = selected_team if isinstance(selected_team, int) else str(selected_team or PLAYER_TEAM_FILTER_ALL).strip()
         if not self._player_filter_index_ready:
             items = tuple(self.loaded_items.get("Players", {}).values()) if selected == PLAYER_TEAM_FILTER_ALL else ()
         else:
             items = self._player_filter_items_by_key.get(selected, ())
+        position = str(primary_position or PLAYER_POSITION_FILTER_ALL).strip()
+        if position in PLAYER_PRIMARY_POSITIONS:
+            items = tuple(item for item in items if self._player_primary_positions.get(int(item.address)) == position)
         query = str(search_text or "").strip().casefold()
         if query:
             items = tuple(item for item in items if query in self._player_search_keys.get(int(item.address), item.display_label.casefold()))
@@ -593,11 +663,21 @@ class EditorDataModel:
     def _player_filter_items(self, selected_team: str | int | None) -> dict[int, RecordListItem]:
         return {int(item.index): item for item in self.player_list_view(selected_team).items}
 
-    def player_items_for_team_filter(self, selected_team: str | int | None, search_text: str | None = None) -> dict[int, RecordListItem]:
-        return {int(item.index): item for item in self.player_list_view(selected_team, search_text).items}
+    def player_items_for_team_filter(
+        self,
+        selected_team: str | int | None,
+        search_text: str | None = None,
+        primary_position: str | None = None,
+    ) -> dict[int, RecordListItem]:
+        return {int(item.index): item for item in self.player_list_view(selected_team, search_text, primary_position).items}
 
-    def player_item_labels_for_team_filter(self, selected_team: str | int | None, search_text: str | None = None) -> list[str]:
-        return [item.display_label for item in self.player_list_view(selected_team, search_text).items]
+    def player_item_labels_for_team_filter(
+        self,
+        selected_team: str | int | None,
+        search_text: str | None = None,
+        primary_position: str | None = None,
+    ) -> list[str]:
+        return [item.display_label for item in self.player_list_view(selected_team, search_text, primary_position).items]
 
     def is_player_season_id_selector_entry(self, entry: FieldEntry) -> bool:
         return _is_player_season_id_selector_entry(entry)

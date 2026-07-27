@@ -75,6 +75,7 @@ class GeneratorDisplayState:
     roster_check_source_count: int = 0
     roster_check_loaded_count: int = 0
     roster_check_missing_players: tuple[str, ...] = ()
+    roster_check_out_of_season_players: tuple[str, ...] = ()
 
 
 def empty_generator_display_state(status: str = "Load generator source data to display player options.") -> GeneratorDisplayState:
@@ -181,6 +182,7 @@ def update_generator_display_selection(
         roster_check_source_count=0 if season_changed else state.roster_check_source_count,
         roster_check_loaded_count=0 if season_changed else state.roster_check_loaded_count,
         roster_check_missing_players=() if season_changed else state.roster_check_missing_players,
+        roster_check_out_of_season_players=() if season_changed else state.roster_check_out_of_season_players,
         status=_option_status(season, league, position, source_team, players) if selection_changed else state.status,
     )
 
@@ -243,31 +245,48 @@ def check_loaded_roster_display_state(
             roster_check_source_count=0,
             roster_check_loaded_count=0,
             roster_check_missing_players=(),
+            roster_check_out_of_season_players=(),
             status="Load Players before checking the loaded roster.",
         )
     _ensure_generator_import_path()
-    from game_port import missing_generated_players_and_active_placeholder_indices
+    from game_port import (
+        active_loaded_players_not_in_generated_source,
+        missing_generated_players_and_active_placeholder_indices,
+    )
 
     if progress_callback is not None:
-        progress_callback(0, 1, f"Checking {len(source_players)} source players against the loaded roster")
+        progress_callback(0, 2, f"Checking {len(source_players)} source players against the loaded roster")
     missing_players, _target_indices, skipped_existing = missing_generated_players_and_active_placeholder_indices(
         model,
         source_players,
         placeholder_name="A Z",
     )
     if progress_callback is not None:
-        progress_callback(1, 1, f"Checked {len(source_players)} source players against the loaded roster")
+        progress_callback(1, 2, "Checking active loaded players against the selected source season")
+    out_of_season_players = active_loaded_players_not_in_generated_source(
+        model,
+        source_players,
+        placeholder_name="A Z",
+    )
+    if progress_callback is not None:
+        progress_callback(2, 2, f"Checked the loaded roster against {len(source_players)} source players")
     missing_labels = tuple(_source_roster_player_label(player) for player in missing_players)
+    out_of_season_labels = tuple(
+        f"{player_name} | roster index {player_index}"
+        for player_index, player_name in out_of_season_players
+    )
     return replace(
         selected,
         roster_check_season=selected.selected_season,
         roster_check_source_count=len(source_players),
         roster_check_loaded_count=skipped_existing,
         roster_check_missing_players=missing_labels,
+        roster_check_out_of_season_players=out_of_season_labels,
         status=(
             f"Checked loaded roster for {selected.selected_season}: "
             f"{skipped_existing}/{len(source_players)} source players loaded; "
-            f"{len(missing_labels)} not loaded."
+            f"{len(missing_labels)} source players not loaded; "
+            f"{len(out_of_season_labels)} active loaded players not in the source season."
         ),
     )
 

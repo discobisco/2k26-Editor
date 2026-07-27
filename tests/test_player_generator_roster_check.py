@@ -25,10 +25,16 @@ class RosterCheckModel:
             RecordListItem("Players", 1, 0x1000, "John Doe"),
             RecordListItem("Players", 2, 0x2000, "A Z"),
             RecordListItem("Players", 3, 0x3000, "Jane Roe"),
+            RecordListItem("Players", 4, 0x4000, "Future Star"),
         )
         self.loaded_items = {"Players": {player.index: player for player in self.players}}
-        self.active_by_index = {1: True, 2: True, 3: False}
-        self.names_by_index = {1: ("John", "Doe"), 2: ("A", "Z"), 3: ("Jane", "Roe")}
+        self.active_by_index = {1: True, 2: True, 3: False, 4: True}
+        self.names_by_index = {
+            1: ("John", "Doe"),
+            2: ("A", "Z"),
+            3: ("Jane", "Roe"),
+            4: ("Future", "Star"),
+        }
 
     def _read_player_is_active(self, item: RecordListItem) -> bool:
         return self.active_by_index[item.index]
@@ -77,7 +83,11 @@ def test_display_roster_check_reuses_missing_player_check_for_full_selected_year
         "Jane Roe | BBB | jane01",
         "Sam Foo | CCC | sam01",
     )
-    assert checked.status == "Checked loaded roster for 2026: 1/3 source players loaded; 2 not loaded."
+    assert checked.roster_check_out_of_season_players == ("Future Star | roster index 4",)
+    assert checked.status == (
+        "Checked loaded roster for 2026: 1/3 source players loaded; "
+        "2 source players not loaded; 1 active loaded players not in the source season."
+    )
 
 
 def test_display_roster_check_requires_loaded_player_records(monkeypatch) -> None:
@@ -90,6 +100,7 @@ def test_display_roster_check_requires_loaded_player_records(monkeypatch) -> Non
     assert checked.status == "Load Players before checking the loaded roster."
     assert checked.roster_check_season == ""
     assert checked.roster_check_missing_players == ()
+    assert checked.roster_check_out_of_season_players == ()
 
 
 def test_generator_output_lists_nonloaded_source_players() -> None:
@@ -97,9 +108,13 @@ def test_generator_output_lists_nonloaded_source_players() -> None:
     state = SimpleNamespace(
         **{
             **state.__dict__,
-            "status": "Checked loaded roster for 2026: 1/3 source players loaded; 2 not loaded.",
+            "status": (
+                "Checked loaded roster for 2026: 1/3 source players loaded; "
+                "2 source players not loaded; 1 active loaded players not in the source season."
+            ),
             "roster_check_season": "2026",
             "roster_check_missing_players": ("Jane Roe | BBB | jane01", "Sam Foo | CCC | sam01"),
+            "roster_check_out_of_season_players": ("Future Star | roster index 4",),
         }
     )
     app_stub = SimpleNamespace(

@@ -446,6 +446,8 @@ def _formula_has_live_input(
         return True
     if _is_approved_pre_line_value(evidence, value):
         return True
+    if _is_approved_historical_move_tendency_zero(evidence, field_key, value):
+        return True
     if _is_approved_historical_hard_foul(evidence, field_key, value):
         return True
     if _is_approved_intangibles_floor(evidence, field_key, value):
@@ -493,6 +495,33 @@ def _is_approved_pre_line_value(evidence: PlayerEvidence, value: RuleValue) -> b
     if value.source_rule.startswith("derive_tendency_") and "3point" in value.source_rule:
         return value.value == 0
     return False
+
+
+def _is_approved_historical_move_tendency_zero(
+    evidence: PlayerEvidence,
+    field_key: str,
+    value: RuleValue,
+) -> bool:
+    normalized_name = field_key.partition("/")[2]
+    formula_field = {
+        "DRIBBLECROSSOVER": "DRIVINGCROSSOVER",
+        "DRIBBLESPIN": "DRIVINGSPIN",
+    }.get(normalized_name, normalized_name)
+    first_seasons = getattr(offense, "_HISTORICAL_MOVE_TENDENCY_FIRST_SEASON_ENDING_YEAR", {})
+    first_season = first_seasons.get(formula_field) if isinstance(first_seasons, dict) else None
+    season = int(evidence.season)
+    if first_season is None or season >= int(first_season):
+        return False
+    return (
+        value.value == 0
+        and value.source_rule == f"derive_tendency_{formula_field.lower()}_historical_introduction_gate"
+        and {
+            f"season_ending_year={season}",
+            f"first_supported_season_ending_year={first_season}",
+            "historically_unavailable_move_tendency=0",
+            "post_threshold_formula_unchanged=true",
+        }.issubset(value.evidence_keys)
+    )
 
 
 def _is_approved_historical_hard_foul(

@@ -9,6 +9,7 @@ from nba2k_editor.models.data_model import (
     PLAYER_TEAM_FILTER_BASE_TEAMS,
     PLAYER_TEAM_FILTER_DRAFT_CLASS,
     PLAYER_TEAM_FILTER_FREE_AGENTS,
+    PLAYER_POSITION_FILTER_ALL,
 )
 from nba2k_editor.models.schema import FieldEntry, RecordListItem
 
@@ -22,7 +23,9 @@ class PlayerIndexModel(EditorDataModel):
         self._player_team_pointer_cache: dict[int, int] = {}
         self._player_filter_items_by_key: dict[str | int, tuple[RecordListItem, ...]] = {}
         self._player_search_keys: dict[int, str] = {}
+        self._player_primary_positions: dict[int, str] = {}
         self._player_filter_index_ready = False
+        self._player_position_filter_ready = False
         self._player_free_agent_filter_ready = False
         self.team_pointer_reads = 0
         self.active_reads = 0
@@ -40,6 +43,12 @@ class PlayerIndexModel(EditorDataModel):
             FieldEntry("Teams", "Team Players", "Team Players", 0, {"normalized_name": "PLAYER1"}),
             FieldEntry("Teams", "Team Players", "Team Players", 1, {"normalized_name": "PLAYER2"}),
         )
+        self.positions_by_address = {
+            self.players[0].address: "PG",
+            self.players[1].address: "SG",
+            self.players[2].address: "SF",
+            self.draft_player.address: "PF",
+        }
 
     def runtime_status_text(self) -> str:  # type: ignore[override]
         return "attached"
@@ -73,6 +82,9 @@ class PlayerIndexModel(EditorDataModel):
                 self._read_player_is_active(player),
             )
         return values
+
+    def _player_primary_position_values(self, players):  # type: ignore[override]
+        return {int(player.address): self.positions_by_address[int(player.address)] for player in players}
 
     def _scan_records_from_base_key(self, domain: str, base_key: str, *, limit=None):  # type: ignore[override]
         return [self.draft_player]
@@ -110,7 +122,13 @@ class PlayerLoadPerformanceTests(unittest.TestCase):
         self.assertEqual((model.players[2],), model.player_list_view(4).items)
         self.assertEqual((model.players[2],), model.player_list_view(PLAYER_TEAM_FILTER_BASE_TEAMS).items)
         self.assertEqual((model.draft_player,), model.player_list_view(PLAYER_TEAM_FILTER_DRAFT_CLASS).items)
+        self.assertEqual((model.players[0],), model.prepare_player_list_view(PLAYER_TEAM_FILTER_ALL, primary_position="PG").items)
+        self.assertEqual((model.players[2],), model.prepare_player_list_view(4, primary_position="SF").items)
+        self.assertEqual((), model.prepare_player_list_view(4, primary_position="PG").items)
+        self.assertEqual((model.draft_player,), model.prepare_player_list_view(PLAYER_TEAM_FILTER_DRAFT_CLASS, primary_position="PF").items)
+        self.assertEqual(model.players, model.player_list_view(PLAYER_TEAM_FILTER_ALL, primary_position=PLAYER_POSITION_FILTER_ALL).items)
         self.assertEqual((model.players[2],), model.player_list_view(PLAYER_TEAM_FILTER_ALL, "active team").items)
+        self.assertEqual((model.players[2],), model.player_list_view(PLAYER_TEAM_FILTER_ALL, "active", "SF").items)
         self.assertEqual((model.players[0],), model.player_list_view(PLAYER_TEAM_FILTER_ALL, "available none").items)
         self.assertEqual((model.draft_player,), model.player_list_view(PLAYER_TEAM_FILTER_DRAFT_CLASS, "draft").items)
 
@@ -158,6 +176,66 @@ class PlayerLoadPerformanceTests(unittest.TestCase):
         self.assertTrue(model._player_filter_index_ready)
         self.assertEqual((model.players[0],), rebuilt.items)
         self.assertEqual(6, model.team_pointer_reads)
+
+    def test_primary_position_bulk_read_uses_only_the_first_position_field(self) -> None:
+        class SourceMemory:
+            pointer_size = 8
+
+            def __init__(self) -> None:
+                self.base = 0x8000
+                self.data = bytearray(48)
+                self.reads: list[tuple[int, int]] = []
+                for record_offset, raw_position in ((0, 0), (16, 2), (32, 4)):
+                    self.data[record_offset + 5] = raw_position
+
+            def read_bytes(self, address: int, length: int) -> bytes:
+                self.reads.append((address, length))
+                offset = address - self.base
+                return bytes(self.data[offset : offset + length])
+
+        class PositionReadModel(EditorDataModel):
+            def __init__(self) -> None:
+                self.memory = SourceMemory()
+                self.position_entry = FieldEntry(
+                    "Players",
+                    "Vitals",
+                    "Vitals",
+                    0,
+                    {
+                        "normalized_name": "POSITION",
+                        "payload": {
+                            "address": 5,
+                            "type": "bitfield",
+                            "bit_length": 3,
+                            "bit_offset": 0,
+                            "dropdown": ["PG", "SG", "SF", "PF", "C"],
+                        },
+                    },
+                )
+
+            def _field_by_normalized_name(self, domain: str, name: str):  # type: ignore[override]
+                return self.position_entry if domain == "Players" and name == "POSITION" else None
+
+            def _field_version_payload(self, field):  # type: ignore[override]
+                return dict(field["payload"])
+
+            def domain_stride(self, domain: str) -> int:  # type: ignore[override]
+                return 16
+
+            def _parent_payload(self, domain: str, payload):  # type: ignore[override]
+                return None
+
+        model = PositionReadModel()
+        players = (
+            RecordListItem("Players", 1, 0x8000, "Point Guard"),
+            RecordListItem("Players", 2, 0x8010, "Small Forward"),
+            RecordListItem("Players", 3, 0x8020, "Center"),
+        )
+
+        positions = model._player_primary_position_values(players)
+
+        self.assertEqual({0x8000: "PG", 0x8010: "SF", 0x8020: "C"}, positions)
+        self.assertEqual([(0x8000, 48)], model.memory.reads)
 
 
 if __name__ == "__main__":

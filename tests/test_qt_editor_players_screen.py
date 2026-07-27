@@ -40,6 +40,7 @@ class PlayerScreenModel:
         }
         self.selected_items: dict[str, RecordListItem | None] = {domain: None for domain in self.loaded_items}
         self.slot_requests: list[list[RecordListItem]] = []
+        self.player_positions: dict[int, str] = {self.player.index: "PG"}
         self.editor_entry = FieldEntry("Players", "Vitals", "Identity", 1, {"normalized_name": "POSITION", "display_name": "Position"})
 
     def runtime_status_text(self) -> str:
@@ -97,17 +98,35 @@ class PlayerScreenModel:
     def player_item_labels_for_team_filter(self, _team_filter: str | None, _search_text: str | None = None) -> list[str]:
         return [item.display_label for item in self.loaded_items["Players"].values()]
 
-    def player_items_for_team_filter(self, _team_filter: str | int | None, search_text: str | None = None):
+    def player_items_for_team_filter(
+        self,
+        _team_filter: str | int | None,
+        search_text: str | None = None,
+        primary_position: str | None = None,
+    ):
+        items = self.loaded_items["Players"]
+        if primary_position in {"PG", "SG", "SF", "PF", "C"}:
+            items = {index: item for index, item in items.items() if self.player_positions.get(index) == primary_position}
         if not search_text:
-            return self.loaded_items["Players"]
+            return items
         query = search_text.lower()
-        return {index: item for index, item in self.loaded_items["Players"].items() if query in item.display_label.lower()}
+        return {index: item for index, item in items.items() if query in item.display_label.lower()}
 
-    def prepare_player_list_view(self, team_filter: str | int | None, search_text: str | None = None) -> PlayerListView:
-        return self.player_list_view(team_filter, search_text)
+    def prepare_player_list_view(
+        self,
+        team_filter: str | int | None,
+        search_text: str | None = None,
+        primary_position: str | None = None,
+    ) -> PlayerListView:
+        return self.player_list_view(team_filter, search_text, primary_position)
 
-    def player_list_view(self, team_filter: str | int | None, search_text: str | None = None) -> PlayerListView:
-        items = tuple(self.player_items_for_team_filter(team_filter, search_text).values())
+    def player_list_view(
+        self,
+        team_filter: str | int | None,
+        search_text: str | None = None,
+        primary_position: str | None = None,
+    ) -> PlayerListView:
+        items = tuple(self.player_items_for_team_filter(team_filter, search_text, primary_position).values())
         return PlayerListView(team_filter or "All Players", str(search_text or "").casefold(), items, 1)
 
     def player_roster_slot_items_for_team_items(self, teams):
@@ -286,9 +305,9 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
         worker_threads: list[int] = []
         original_player_list_view = model.player_list_view
 
-        def player_list_view(team_filter, search_text=None):
+        def player_list_view(team_filter, search_text=None, primary_position=None):
             worker_threads.append(threading.get_ident())
-            return original_player_list_view(team_filter, search_text)
+            return original_player_list_view(team_filter, search_text, primary_position)
 
         model.player_list_view = player_list_view  # type: ignore[method-assign]
         app = QtEditorApp(model)  # type: ignore[arg-type]
@@ -311,6 +330,37 @@ class QtEditorPlayersScreenTests(unittest.TestCase):
         self.assertEqual("Players: 1", app.count_labels["Players"].text())
         self.assertTrue(worker_threads)
         self.assertTrue(all(thread_id != threading.get_ident() for thread_id in worker_threads))
+
+    def test_primary_position_filter_refines_the_loaded_player_list(self) -> None:
+        model = PlayerScreenModel()
+        shooting_guard = RecordListItem("Players", 8, 0x1800, "Beta Shooting Guard")
+        model.loaded_items["Players"][shooting_guard.index] = shooting_guard
+        model.player_positions[shooting_guard.index] = "SG"
+        app = QtEditorApp(model)  # type: ignore[arg-type]
+        self.apply_loaded_players(app, model)
+
+        assert app.player_position_filter_combo is not None
+        self.assertEqual(
+            ["All Positions", "PG", "SG", "SF", "PF", "C"],
+            [app.player_position_filter_combo.itemData(index) for index in range(app.player_position_filter_combo.count())],
+        )
+        app.player_position_filter_combo.setCurrentIndex(app.player_position_filter_combo.findData("SG"))
+        deadline = time.monotonic() + 2.0
+        while app.operation_worker.is_running() and time.monotonic() < deadline:
+            time.sleep(0.01)
+            app._poll_background_operation()
+
+        record_list = app.domain_lists["Players"]
+        self.assertEqual("SG", app.state.player_position_filter)
+        self.assertEqual(
+            [shooting_guard.index],
+            [
+                int(record_list.item(row).data(Qt.ItemDataRole.UserRole))
+                for row in range(record_list.count())
+                if not record_list.item(row).isHidden()
+            ],
+        )
+        self.assertEqual("Players: 1", app.count_labels["Players"].text())
 
     def test_player_refresh_preserves_filtered_visibility_until_refreshed_filter_result_is_applied(self) -> None:
         model = PlayerScreenModel()

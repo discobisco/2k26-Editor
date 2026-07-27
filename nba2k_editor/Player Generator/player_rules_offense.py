@@ -1143,8 +1143,39 @@ def _attribute(field: str, evidence: Any, league_player_rows: Any) -> dict[str, 
 
 _DUNK_ATTEMPT_TENDENCY_FIELDS = {"DRIVINGDUNK", "STANDINGDUNK"}
 
+# Generator seasons are season-ending years. These cutoffs translate the
+# earliest defensible historical use into that representation; before the
+# cutoff the move did not exist in the modeled era, so its tendency is zero.
+_HISTORICAL_MOVE_TENDENCY_FIRST_SEASON_ENDING_YEAR: dict[str, int] = {
+    "SETUPWITHHESITATION": 1942,
+    "SETUPWITHSIZEUP": 1967,
+    "DRIVINGCROSSOVER": 1955,
+    "DRIVINGDOUBLECROSSOVER": 1990,
+    "DRIVINGSPIN": 1955,
+    "DRIVINGHALFSPIN": 1999,
+    "DRIVINGSTEPBACK": 1970,
+    "DRIVINGBEHINDTHEBACK": 1955,
+    "DRIVINGDRIBBLEHESITATION": 1942,
+    "DRIVINGINANDOUT": 1989,
+    "EUROSTEPLAYUP": 2002,
+    "HOPSTEPLAYUP": 2002,
+}
+
 
 def _tendency(field: str, evidence: Any, league_player_rows: Any) -> dict[str, Any] | None:
+    first_season = _HISTORICAL_MOVE_TENDENCY_FIRST_SEASON_ENDING_YEAR.get(field)
+    season = _season(evidence)
+    if first_season is not None and season < first_season:
+        return {
+            "value": 0,
+            "source_rule": f"derive_tendency_{field.lower()}_historical_introduction_gate",
+            "evidence_keys": (
+                f"season_ending_year={season}",
+                f"first_supported_season_ending_year={first_season}",
+                "historically_unavailable_move_tendency=0",
+                "post_threshold_formula_unchanged=true",
+            ),
+        }
     result = _derive(f"derive_tendency_{field.lower()}", field, evidence, league_player_rows, _TENDENCY_RECIPES[field], tendency=True)
     if result is None or field not in _DUNK_ATTEMPT_TENDENCY_FIELDS:
         return result

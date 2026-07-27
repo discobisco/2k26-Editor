@@ -14,6 +14,7 @@ class DomainRefreshRequest:
 class PlayerListRequest:
     filter_key: str | int
     query: str
+    primary_position: str = "All Positions"
 
 
 @dataclass(frozen=True)
