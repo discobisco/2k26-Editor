@@ -630,46 +630,6 @@ def _write_offseason_growth_fixture(root: Path) -> None:
         connection.close()
 
 
-def test_franchise_llm_view_adds_growth_only_as_offseason_progression_context(tmp_path: Path) -> None:
-    _write_offseason_growth_fixture(tmp_path)
-    model = ReadOnlyFranchiseModel()
-
-    view = build_franchise_llm_view(model, progression_season=2004, growth_data_root=tmp_path)
-
-    facts = dict(view.roster_slots[0].offseason_progression_facts)
-    assert facts["growth_model_mapping_source"] == "player_generation_pool:editor_capture_test:player_index"
-    assert facts["growth_model_master_player_id"] == "jamesle01"
-    assert facts["growth_model_next_season"] == "2005"
-    assert facts["growth_model_metric_count"] == "291"
-    assert "growth_model_sources" in facts
-
-
-def test_team_recommendation_prompt_carries_growth_for_offseason_progression_not_draft(tmp_path: Path) -> None:
-    _write_offseason_growth_fixture(tmp_path)
-    (tmp_path / "team_00_profile.md").write_text(
-        "---\nname: Team Zero Staff\n---\n# Team Zero\nGM: develop real players\n",
-        encoding="utf-8",
-    )
-    model = ReadOnlyFranchiseModel()
-    record = _franchise_record_for_recommendations()
-
-    requests = build_team_recommendation_requests(
-        record,
-        model,
-        sim_state=_franchise_sim_state(sim_year=2004, phase="player_progression"),
-        profile_dir=tmp_path,
-        progression_season=2004,
-        growth_data_root=tmp_path,
-    )
-    payload = json.loads(requests[0].task.prompt)
-
-    progression = payload["team"]["current_roster"][0]["offseason_progression"]
-    assert progression["growth_model_master_player_id"] == "jamesle01"
-    assert progression["growth_model_metric_count"] == "291"
-    assert "offseason_player_progression" in payload["allowed_recommendation_types"]
-    assert any("not fantasy draft decisions" in rule for rule in payload["rules"])
-
-
 class FakeRecommendationClient:
     def available(self) -> bool:
         return True

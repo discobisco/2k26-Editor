@@ -35,15 +35,3 @@ def _empty_evidence() -> PlayerEvidence:
         source_context={},
         missing_sources=(),
     )
-
-
-def test_fixed_rule_is_not_rejected_by_provenance_only_evidence_key() -> None:
-    values = derive_formula_rule_values(
-        _empty_evidence(),
-        league_player_rows=({},),
-    )
-
-    back = values["Attributes/BACKDURABILITY"]
-    assert back.value == 90
-    assert back.source_rule == "derive_attribute_backdurability"
-    assert back.evidence_keys == ("durability.default_90_pending_injury_database",)

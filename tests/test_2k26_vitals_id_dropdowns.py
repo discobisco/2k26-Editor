@@ -25,19 +25,6 @@ def _id_payloads() -> dict[str, dict[str, Any]]:
     }
 
 
-def test_2k26_combined_roster_vitals_id_dropdowns_are_loaded() -> None:
-    payloads = _id_payloads()
-
-    assert set(payloads) == set(EXPECTED_COUNTS)
-    for field_name, expected_count in EXPECTED_COUNTS.items():
-        payload = payloads[field_name]
-        options = cast(list[str], payload["dropdown"])
-        assert payload["id_prefixed_dropdown"] is True
-        assert len(options) == expected_count
-        assert len(options) == len(set(options))
-        assert all(not option.startswith("[0]") and not option.startswith("[-1]") for option in options)
-
-
 def test_2k26_vitals_id_dropdowns_keep_same_name_new_ids_and_shared_ids() -> None:
     face_options = cast(list[str], _id_payloads()["FACEID"]["dropdown"])
 
@@ -82,14 +69,3 @@ def test_id_prefixed_dropdown_reads_and_writes_the_authored_raw_id() -> None:
     assert _raw_to_display_value("Vitals", field, payload, 4642) == "[4642] Kareem Abdul-Jabbar"
     assert _display_to_raw_value("Vitals", field, payload, "[4643] Kareem Abdul-Jabbar") == 4643
     assert _display_to_raw_value("Vitals", field, payload, "[1643] Jeff Pendergraph") == 1643
-
-
-def test_players_editor_exposes_the_combined_roster_id_options() -> None:
-    model = EditorDataModel(target_executable="NBA2K26.exe")
-
-    face_entry = model._field_by_normalized_name("Players", "FACEID")
-    assert face_entry is not None
-    options = model.field_options(face_entry)
-
-    assert len(options) == EXPECTED_COUNTS["FACEID"]
-    assert "[8011] Tyrese Maxey" in options

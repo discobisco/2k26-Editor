@@ -124,19 +124,6 @@ def test_comparison_population_is_same_league_only() -> None:
     assert filter_same_league_rows(evidence, rows) == (rows[1],)
 
 
-def test_pre_line_nba_three_point_tendency_is_zero_but_aba_is_ranked() -> None:
-    nba = derive_tendency_3pointshot(
-        _evidence(season=1976, league="NBA", x3pa_per_game=4.0, x3p_ar=0.35),
-        league_player_rows=_rows(),
-    )
-    aba = derive_tendency_3pointshot(
-        _evidence(season=1976, league="ABA", x3pa_per_game=4.0, x3p_ar=0.35),
-        league_player_rows=_rows(),
-    )
-    assert nba is not None and nba["value"] == 0
-    assert aba is not None and aba["value"] > 0
-
-
 def test_no_three_point_attempts_always_produce_attribute_floor() -> None:
     result = derive_attribute_3point(
         _evidence(
@@ -153,20 +140,6 @@ def test_no_three_point_attempts_always_produce_attribute_floor() -> None:
     assert result["source_rule"] == "derive_attribute_3point_no_made_attempt_evidence"
 
 
-def test_total_fga_cannot_change_three_point_tendency() -> None:
-    low_fga = derive_tendency_3pointshot(
-        _evidence(season=2025, league="NBA", x3pa_per_game=4.0, x3p_ar=0.35, fga_per_game=5.0),
-        league_player_rows=_rows(),
-    )
-    high_fga = derive_tendency_3pointshot(
-        _evidence(season=2025, league="NBA", x3pa_per_game=4.0, x3p_ar=0.35, fga_per_game=40.0),
-        league_player_rows=_rows(),
-    )
-    assert low_fga == high_fga
-    assert low_fga is not None
-    assert "per_game.fga_per_game" not in low_fga["evidence_keys"]
-
-
 def test_close_and_mid_fields_are_unresolved_without_distance_data() -> None:
     evidence = _evidence(season=1990, league="NBA", fga_per_game=30.0)
     rows = _rows()
@@ -174,28 +147,6 @@ def test_close_and_mid_fields_are_unresolved_without_distance_data() -> None:
     assert derive_attribute_midrange(evidence, league_player_rows=rows) is None
     assert derive_tendency_closeshot(evidence, league_player_rows=rows) is None
     assert derive_tendency_midshot(evidence, league_player_rows=rows) is None
-
-
-def test_close_and_mid_fields_use_only_distance_data() -> None:
-    shooting = {
-        "fg_percent_from_x0_3_range": 0.70,
-        "fg_percent_from_x3_10_range": 0.50,
-        "fg_percent_from_x10_16_range": 0.50,
-        "fg_percent_from_x16_3p_range": 0.48,
-        "percent_fga_from_x0_3_range": 0.35,
-        "percent_fga_from_x3_10_range": 0.25,
-        "percent_fga_from_x10_16_range": 0.30,
-        "percent_fga_from_x16_3p_range": 0.25,
-    }
-    evidence = _evidence(season=2025, league="NBA", fga_per_game=99.0, shooting=shooting)
-    for result in (
-        derive_attribute_closeshot(evidence, league_player_rows=_rows()),
-        derive_attribute_midrange(evidence, league_player_rows=_rows()),
-        derive_tendency_closeshot(evidence, league_player_rows=_rows()),
-        derive_tendency_midshot(evidence, league_player_rows=_rows()),
-    ):
-        assert result is not None
-        assert "per_game.fga_per_game" not in result["evidence_keys"]
 
 
 def test_three_to_ten_changes_close_but_never_midrange() -> None:

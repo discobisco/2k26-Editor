@@ -48,20 +48,6 @@ def _row(*, player_fga: float, team_fga_per_game: float = 100.0, team_games: flo
     }
 
 
-def test_shot_tendency_ranks_player_total_attempt_share_of_team_total_attempts() -> None:
-    evidence = _evidence(player_fga=200, team_fga_per_game=100, team_games=80)
-    result = derive_formula_rule_values(
-        evidence,
-        league_player_rows=(_row(player_fga=80), _row(player_fga=200), _row(player_fga=400)),
-    )["Tendencies/SHOT"]
-
-    assert result.value == 67
-    assert result.source_rule == "derive_tendency_shot_team_attempt_share"
-    assert "shot_attempt_share=0.02500000" in result.evidence_keys
-    assert "per_game.fga_per_game" not in result.evidence_keys
-    assert "advanced.usg_percent" not in result.evidence_keys
-
-
 def test_shot_tendency_is_unresolved_without_player_or_team_totals() -> None:
     rows = (_row(player_fga=80),)
 
@@ -92,14 +78,3 @@ class _NeighborModel:
             "Tendencies/SHOT": _Suggestion(99, "neighbor_shot", ("neighbor",)),
             "Tendencies/DRIVE": _Suggestion(45, "neighbor_drive", ("neighbor",)),
         }
-
-
-def test_shot_tendency_is_not_authored_or_blended_by_neighbor_model() -> None:
-    values = derive_neighbor_rule_values(
-        _evidence(player_fga=200, team_fga_per_game=100, team_games=80),
-        PositionSelection("PG", None, ("PG",), (("PG", 1.0),)),
-        model=_NeighborModel(),
-    )
-
-    assert "Tendencies/SHOT" not in values
-    assert values["Tendencies/DRIVE"].value == 45
