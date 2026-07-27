@@ -40,6 +40,17 @@ class GeneratorPlayerDisplayRow:
 
 
 @dataclass(frozen=True)
+class GeneratorSourceRosterPlayer:
+    player: str
+    source_teams: tuple[str, ...]
+    player_id: str
+
+    @property
+    def identity(self) -> dict[str, str]:
+        return {"player": self.player}
+
+
+@dataclass(frozen=True)
 class GeneratorDisplayState:
     source_loaded: bool
     seasons: tuple[str, ...]
@@ -60,6 +71,10 @@ class GeneratorDisplayState:
     preview_target: str = "Players"
     proposal_cache_season: str = ""
     proposal_cache: tuple[Any, ...] = ()
+    roster_check_season: str = ""
+    roster_check_source_count: int = 0
+    roster_check_loaded_count: int = 0
+    roster_check_missing_players: tuple[str, ...] = ()
 
 
 def empty_generator_display_state(status: str = "Load generator source data to display player options.") -> GeneratorDisplayState:
@@ -162,6 +177,10 @@ def update_generator_display_selection(
         generated_proposals=() if selection_changed else state.generated_proposals,
         proposal_cache_season="" if season_changed else state.proposal_cache_season,
         proposal_cache=() if season_changed else state.proposal_cache,
+        roster_check_season="" if season_changed else state.roster_check_season,
+        roster_check_source_count=0 if season_changed else state.roster_check_source_count,
+        roster_check_loaded_count=0 if season_changed else state.roster_check_loaded_count,
+        roster_check_missing_players=() if season_changed else state.roster_check_missing_players,
         status=_option_status(season, league, position, source_team, players) if selection_changed else state.status,
     )
 
@@ -201,6 +220,54 @@ def sync_generator_pool_display_state(state: GeneratorDisplayState, *, progress_
             f"{pool_manifest.get('candidate_rows', 0)} players, "
             f"{pool_manifest.get('candidate_position_rows', 0)} position rows. "
             "Preview cleared; run Display Preview again before importing."
+        ),
+    )
+
+
+def check_loaded_roster_display_state(
+    model: Any,
+    state: GeneratorDisplayState,
+    *,
+    progress_callback: Any | None = None,
+) -> GeneratorDisplayState:
+    if not state.source_loaded:
+        return empty_generator_display_state("Load generator source data before checking the loaded roster.")
+    selected = update_generator_display_selection(state, selected_season=state.selected_season)
+    source_players = _source_roster_players_for_season(int(selected.selected_season))
+    loaded = getattr(model, "loaded_items", {})
+    loaded_players = loaded.get("Players", {}) if isinstance(loaded, dict) else {}
+    if not loaded_players:
+        return replace(
+            selected,
+            roster_check_season="",
+            roster_check_source_count=0,
+            roster_check_loaded_count=0,
+            roster_check_missing_players=(),
+            status="Load Players before checking the loaded roster.",
+        )
+    _ensure_generator_import_path()
+    from game_port import missing_generated_players_and_active_placeholder_indices
+
+    if progress_callback is not None:
+        progress_callback(0, 1, f"Checking {len(source_players)} source players against the loaded roster")
+    missing_players, _target_indices, skipped_existing = missing_generated_players_and_active_placeholder_indices(
+        model,
+        source_players,
+        placeholder_name="A Z",
+    )
+    if progress_callback is not None:
+        progress_callback(1, 1, f"Checked {len(source_players)} source players against the loaded roster")
+    missing_labels = tuple(_source_roster_player_label(player) for player in missing_players)
+    return replace(
+        selected,
+        roster_check_season=selected.selected_season,
+        roster_check_source_count=len(source_players),
+        roster_check_loaded_count=skipped_existing,
+        roster_check_missing_players=missing_labels,
+        status=(
+            f"Checked loaded roster for {selected.selected_season}: "
+            f"{skipped_existing}/{len(source_players)} source players loaded; "
+            f"{len(missing_labels)} not loaded."
         ),
     )
 
@@ -486,6 +553,40 @@ def _generated_player_label(generated: Any) -> str:
     return str(getattr(generated, "player_id", "")).strip()
 
 
+def _source_roster_players_for_season(season: int) -> tuple[GeneratorSourceRosterPlayer, ...]:
+    context = _generator_context_for_season(season)
+    grouped: dict[str, dict[str, Any]] = {}
+    for player_id, team in context.player_keys():
+        evidence = context.evidence_for(player_id=player_id, team=team)
+        source_player_id = str(evidence.player_id or player_id).strip()
+        source_team = str(evidence.team or team).strip().upper()
+        player_name = str(evidence.identity.get("player") or evidence.season_info.get("player") or source_player_id).strip()
+        identity_key = source_player_id.upper() or f"{player_name.upper()}|{source_team}"
+        source = grouped.setdefault(
+            identity_key,
+            {"player": player_name, "player_id": source_player_id, "source_teams": set()},
+        )
+        if source_team:
+            source["source_teams"].add(source_team)
+    return tuple(
+        sorted(
+            (
+                GeneratorSourceRosterPlayer(
+                    player=str(source["player"]),
+                    source_teams=tuple(sorted(source["source_teams"])),
+                    player_id=str(source["player_id"]),
+                )
+                for source in grouped.values()
+            ),
+            key=lambda player: (player.player.casefold(), player.player_id.casefold()),
+        )
+    )
+
+
+def _source_roster_player_label(player: GeneratorSourceRosterPlayer) -> str:
+    return _PLAYER_LABEL_SEPARATOR.join((player.player, "/".join(player.source_teams), player.player_id))
+
+
 def _field_column(candidate: Any) -> str:
     return " / ".join(
         str(part)
@@ -634,7 +735,9 @@ __all__ = [
     "GeneratorDisplayState",
     "GeneratorFieldDisplayRow",
     "GeneratorPlayerDisplayRow",
+    "GeneratorSourceRosterPlayer",
     "add_current_roster_to_pool_display_state",
+    "check_loaded_roster_display_state",
     "empty_generator_display_state",
     "generate_draft_class_display_state",
     "generate_generator_preview_display_state",

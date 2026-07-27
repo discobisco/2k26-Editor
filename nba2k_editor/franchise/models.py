@@ -54,6 +54,7 @@ class FantasyDraftState:
     current_pick_number: int
     team_count: int
     user_team_index: int
+    team_order: tuple[int, ...]
     started_at: str
     updated_at: str
 

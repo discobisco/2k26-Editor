@@ -3,6 +3,7 @@ from __future__ import annotations
 from bisect import bisect_left, bisect_right
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+import statistics
 from typing import Any
 
 from player_era_context import filter_same_league_rows
@@ -109,11 +110,9 @@ _SPARSE_CONTEXT_MODELS: dict[str, tuple[float, float, float, float, float]] = {
 }
 
 # The measured Pool fit for Offensive Rebound improved from MAE 5.077 to
-# 4.909 when 20% size context was included. The live formula uses a smaller,
-# smooth interaction which vanishes at performance extremes: demonstrated
-# rebounding stays the author, while frame/position can keep ordinary packages
-# coherent without downgrading an undersized elite or promoting every center.
-_FRAME_CONTEXT_WEIGHT = 0.10
+# 4.909 when 20% size context was included. The live historical formula uses a
+# smaller smooth interaction so Pool frame evidence cannot replace production.
+_FRAME_CONTEXT_WEIGHT = 0.12
 
 _POSITION_PERCENT_KEYS: tuple[tuple[str, str], ...] = (
     ("PG", "pg_percent"),
@@ -528,6 +527,24 @@ def _rebound_signal(
     *,
     side: str,
 ) -> _RankSignal | None:
+    """Use only the requested rebound-rate evidence: ORB% or DRB%."""
+    if side not in {"orb", "drb"}:
+        raise ValueError(f"unsupported rebound side: {side}")
+    return _direct_signal(
+        evidence,
+        rows,
+        source_path=f"advanced.{side}_percent",
+        row_paths=(f"advanced.{side}_percent",),
+        source_label=f"direct_{side}_percent",
+    )
+
+
+def _historical_rebound_signal(
+    evidence: PlayerEvidence,
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    side: str,
+) -> _RankSignal | None:
     if side not in {"orb", "drb"}:
         raise ValueError(f"unsupported rebound side: {side}")
 
@@ -617,6 +634,21 @@ def _rebound_signal(
             f"{unavailable}; player/team TRB share is the documented 1951-era substitute "
             "because player minutes and split rebounds are absent while both team and player totals exist"
         ),
+    )
+
+
+def _historical_sparse_rebound_context_allowed(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    required_sides: tuple[str, ...],
+) -> bool:
+    """Use the old context rule when an entire era lacks a required split rate."""
+    return any(
+        not any(
+            _row_number(row, (f"advanced.{side}_percent",)) is not None
+            for row in rows
+        )
+        for side in required_sides
     )
 
 
@@ -722,19 +754,43 @@ def _attribute_result(
         return None
     rows = _usable_rows(evidence, league_player_rows)
     signal = _rebound_signal(evidence, rows, side=side)
+    historical = False
     if signal is None:
-        field = "offensive_rebound" if side == "orb" else "defensive_rebound"
-        return _sparse_context_result(
-            evidence,
-            rows,
-            field=field,
-            curve=None,
-            source_rule=source_rule,
-            unavailable_direct_source=f"individual_{side}_split_or_rate",
-        )
+        if not _historical_sparse_rebound_context_allowed(rows, required_sides=(side,)):
+            return None
+        signal = _historical_rebound_signal(evidence, rows, side=side)
+        historical = signal is not None
+        if signal is None:
+            return _sparse_context_result(
+                evidence,
+                rows,
+                field="offensive_rebound" if side == "orb" else "defensive_rebound",
+                curve=None,
+                source_rule=source_rule,
+                unavailable_direct_source=f"individual_{side}_split_or_rate",
+            )
     performance = _midrank_percentile(signal.value, signal.population)
     if performance is None:
         return None
+
+    if not historical:
+        percentile, minutes_evidence = _minutes_context_adjustment(evidence, rows, signal, performance)
+        return {
+            "value": _rank_attribute_value(percentile),
+            "score": percentile,
+            "source_rule": source_rule,
+            "evidence_keys": (
+                "per_game.g",
+                *signal.evidence_keys,
+                *minutes_evidence,
+                f"source_mode={signal.source_label}",
+                "comparison_scope=same_season_same_league_gp_positive",
+                "rebound_contract=ORB_percent_for_offense;DRB_percent_for_defense;minutes_only_for_low_volume_shrink",
+                "position_and_MPG_are_context_for_low_volume_shrink_only",
+                "height_weight_raw_rebounds_and_total_rebound_rate_excluded=true",
+                "mapping=round(25+74*same_season_same_league_rank_score)",
+            ),
+        }
 
     evidence_keys = ["per_game.g", *signal.evidence_keys]
     percentile = performance
@@ -748,6 +804,7 @@ def _attribute_result(
         (
             f"source_mode={signal.source_label}",
             "comparison_scope=same_season_same_league_gp_positive",
+            "historical_rebound_contract=old_rate_or_team_share_chain_restored",
             "opportunity_contract=rate_or_team_share; raw_rpg_not_double_counted",
             "mapping=round(25+74*same_season_same_league_rank_score)",
             "pool_quantiles_are_distribution_evidence_not_rating_gates",
@@ -755,7 +812,6 @@ def _attribute_result(
     )
     if signal.historical_substitute:
         evidence_keys.append(f"historical_substitute={signal.historical_substitute}")
-
     return {
         "value": _rank_attribute_value(percentile),
         "score": percentile,
@@ -817,6 +873,21 @@ def _paired_ratio_signal(
 
 
 def _crash_signal(
+    evidence: PlayerEvidence,
+    rows: Sequence[Mapping[str, Any]],
+) -> _CrashSignal | None:
+    return _paired_ratio_signal(
+        evidence,
+        rows,
+        offensive_path="advanced.orb_percent",
+        defensive_path="advanced.drb_percent",
+        offensive_row_paths=("advanced.orb_percent",),
+        defensive_row_paths=("advanced.drb_percent",),
+        source_label="split_rebound_percent",
+    )
+
+
+def _historical_crash_signal(
     evidence: PlayerEvidence,
     rows: Sequence[Mapping[str, Any]],
 ) -> _CrashSignal | None:
@@ -919,26 +990,29 @@ def derive_tendency_crash(
         return None
     rows = _usable_rows(evidence, league_player_rows)
     signal = _crash_signal(evidence, rows)
+    historical = False
     if signal is None:
-        # Missing split rebounds cannot author offensive-glass direction. Resolve
-        # only through the documented conservative context substitute.
-        return _sparse_context_result(
-            evidence,
+        if not _historical_sparse_rebound_context_allowed(
             rows,
-            field="crash",
-            curve=_CRASH_CURVE,
-            source_rule="derive_tendency_crash",
-            unavailable_direct_source="individual_orb_drb_orientation_and_activity",
-        )
+            required_sides=("orb", "drb"),
+        ):
+            return None
+        signal = _historical_crash_signal(evidence, rows)
+        historical = signal is not None
+        if signal is None:
+            return _sparse_context_result(
+                evidence,
+                rows,
+                field="crash",
+                curve=_CRASH_CURVE,
+                source_rule="derive_tendency_crash",
+                unavailable_direct_source="individual_orb_drb_orientation_and_activity",
+            )
 
     orientation = _midrank_percentile(signal.orientation.value, signal.orientation.population)
     activity = _midrank_percentile(signal.activity.value, signal.activity.population)
     if orientation is None or activity is None:
         return None
-
-    # Orientation separates offensive-glass behavior from rebounding execution;
-    # activity prevents a player with one token ORB from ranking as an aggressive
-    # crasher solely because that rebound was a large share of his tiny total.
     percentile = 0.65 * orientation + 0.35 * activity
     evidence_keys = [
         "per_game.g",
@@ -946,29 +1020,54 @@ def derive_tendency_crash(
         "crash_contract=offensive_orientation_0.65+offensive_activity_0.35",
     ]
 
-    team_strategy = _team_strategy_percentile(evidence, rows)
-    if team_strategy is not None:
-        team_percentile, team_keys = team_strategy
-        percentile = _smooth_context_adjustment(percentile, team_percentile, 0.10)
-        evidence_keys.extend(team_keys)
-        evidence_keys.append("team_crash_context_adjustment=0.10")
-
-    frame = _frame_percentile(evidence, rows)
-    if frame is not None:
-        frame_percentile, frame_keys = frame
-        percentile = _smooth_context_adjustment(percentile, frame_percentile, 0.05)
-        evidence_keys.extend(frame_keys)
-        evidence_keys.append("frame_role_context_adjustment=0.05")
-
-    evidence_keys.extend(
-        (
-            f"source_mode={signal.orientation.source_label}",
-            "comparison_scope=same_season_same_league_gp_positive",
-            "opportunity_contract=split_rate_orientation; raw_rpg_not_double_counted",
-            "pool_crash_vs_orb_per36_spearman=-0.073; pool_used_for_output_scale_not_behavior_authorship",
-            "pool_quantiles_are_distribution_evidence_not_rating_gates",
+    if historical:
+        team_strategy = _team_strategy_percentile(evidence, rows)
+        if team_strategy is not None:
+            team_percentile, team_keys = team_strategy
+            percentile = _smooth_context_adjustment(percentile, team_percentile, 0.10)
+            evidence_keys.extend(team_keys)
+            evidence_keys.append("team_crash_context_adjustment=0.10")
+        frame = _frame_percentile(evidence, rows)
+        if frame is not None:
+            frame_percentile, frame_keys = frame
+            percentile = _smooth_context_adjustment(percentile, frame_percentile, 0.05)
+            evidence_keys.extend(frame_keys)
+            evidence_keys.append("frame_role_context_adjustment=0.05")
+        evidence_keys.extend(
+            (
+                f"source_mode={signal.orientation.source_label}",
+                "comparison_scope=same_season_same_league_gp_positive",
+                "historical_crash_contract=old_split_rate_chain_with_team_and_frame_context_restored",
+                "opportunity_contract=split_rate_orientation; raw_rpg_not_double_counted",
+                "pool_crash_vs_orb_per36_spearman=-0.073; pool_used_for_output_scale_not_behavior_authorship",
+                "pool_quantiles_are_distribution_evidence_not_rating_gates",
+            )
         )
-    )
+    else:
+        minutes_signal = _RankSignal(
+            value=signal.activity.value,
+            population=signal.activity.population,
+            evidence_keys=signal.activity.evidence_keys,
+            source_label="direct_orb_percent",
+        )
+        percentile, minutes_evidence = _minutes_context_adjustment(
+            evidence,
+            rows,
+            minutes_signal,
+            percentile,
+        )
+        evidence_keys.extend(
+            (
+                *minutes_evidence,
+                f"source_mode={signal.orientation.source_label}",
+                "comparison_scope=same_season_same_league_gp_positive",
+                "rebound_contract=ORB_percent_and_DRB_percent_only;minutes_only_for_low_volume_shrink",
+                "position_and_MPG_are_context_for_low_volume_shrink_only",
+                "height_weight_team_strategy_raw_rebounds_and_total_rebound_rate_excluded=true",
+                "pool_crash_vs_orb_per36_spearman=-0.073; pool_used_for_output_scale_not_behavior_authorship",
+                "pool_quantiles_are_distribution_evidence_not_rating_gates",
+            )
+        )
     return {
         "value": _curve_value(percentile, _CRASH_CURVE),
         "score": percentile,
@@ -977,8 +1076,274 @@ def derive_tendency_crash(
     }
 
 
+def _direct_putback_signal(
+    evidence: PlayerEvidence,
+    rows: Sequence[Mapping[str, Any]],
+) -> _RankSignal | None:
+    """Return demonstrated offensive-glass activity, never a TRB substitute."""
+    signal = _rebound_signal(evidence, rows, side="orb")
+    if signal is None or signal.historical_substitute is not None:
+        return None
+    return signal
+
+
+def _minutes_context_adjustment(
+    evidence: PlayerEvidence,
+    rows: Sequence[Mapping[str, Any]],
+    signal: _RankSignal,
+    performance: float,
+) -> tuple[float, tuple[str, ...]]:
+    """Shrink low-minute ORB%/DRB% outliers toward position/MPG context."""
+    side = "orb" if signal.source_label == "direct_orb_percent" else "drb" if signal.source_label == "direct_drb_percent" else ""
+    if not side:
+        return performance, ("minutes_context=not_applied;source_is_not_ORB_or_DRB_percent",)
+    games = _source_number(evidence, "per_game.g")
+    mpg = _source_number(evidence, "per_game.mp_per_game")
+    total_minutes = _source_number(evidence, "totals.mp")
+    if total_minutes is None and games is not None and mpg is not None:
+        total_minutes = games * mpg
+    positions = set(_evidence_positions(evidence))
+    if mpg is None or mpg < 0.0 or total_minutes is None or total_minutes < 0.0 or not positions:
+        return performance, ("minutes_context=not_applied;missing_minutes_or_position",)
+
+    peers: list[tuple[float, float, float]] = []
+    for row in rows:
+        if not positions.intersection(_row_positions(row)):
+            continue
+        peer_rate = _row_number(row, (f"advanced.{side}_percent",))
+        peer_games = _row_number(row, ("player_per_game.g", "per_game.g"))
+        peer_mpg = _row_number(row, ("player_per_game.mp_per_game", "per_game.mp_per_game"))
+        peer_minutes = _row_number(row, ("player_totals.mp", "totals.mp"))
+        if peer_minutes is None and peer_games is not None and peer_mpg is not None:
+            peer_minutes = peer_games * peer_mpg
+        if peer_rate is None or peer_mpg is None or peer_minutes is None or peer_minutes < 0.0:
+            continue
+        peer_percentile = _midrank_percentile(peer_rate, signal.population)
+        if peer_percentile is not None:
+            peers.append((peer_mpg, peer_minutes, peer_percentile))
+    if len(peers) < 5:
+        return performance, ("minutes_context=not_applied;fewer_than_5_position_peers",)
+
+    mean_x = sum(item[0] for item in peers) / len(peers)
+    mean_y = sum(item[2] for item in peers) / len(peers)
+    variance = sum((item[0] - mean_x) ** 2 for item in peers)
+    slope = sum((item[0] - mean_x) * (item[2] - mean_y) for item in peers) / variance if variance > 0.0 else 0.0
+    baseline = max(0.0, min(1.0, mean_y + slope * (mpg - mean_x)))
+    median_minutes = statistics.median(item[1] for item in peers)
+    if median_minutes <= 0.0:
+        return performance, ("minutes_context=not_applied;nonpositive_position_median_minutes",)
+    reliability = max(0.0, min(1.0, total_minutes / median_minutes))
+    adjusted = reliability * performance + (1.0 - reliability) * baseline
+    return adjusted, (
+        f"minutes_context=low_volume_{side.upper()}_percent_outlier_shrink",
+        f"player_mpg={mpg:.8f}",
+        f"player_total_minutes={total_minutes:.8f}",
+        f"position_peer_median_total_minutes={median_minutes:.8f}",
+        f"position_mpg_{side.upper()}_percentile_baseline={baseline:.8f}",
+        f"minutes_reliability=min(1,total_minutes/position_peer_median)={reliability:.8f}",
+        f"unshrunk_{side.upper()}_percentile={performance:.8f}",
+        f"minutes_adjusted_{side.upper()}_percentile={adjusted:.8f}",
+    )
+
+
+def _normalized_assisted_rate(value: float | None) -> float | None:
+    if value is None or value < 0.0:
+        return None
+    if value > 1.0:
+        value /= 100.0
+    return max(0.0, min(1.0, value))
+
+
+def _unassisted_two_makes_per_game(evidence: PlayerEvidence) -> float | None:
+    assisted = _normalized_assisted_rate(_source_number(evidence, "shooting.percent_assisted_x2p_fg"))
+    games = _source_number(evidence, "per_game.g")
+    if assisted is None or games is None or games <= 0.0:
+        return None
+    two_makes = _source_number(evidence, "per_game.x2p_per_game")
+    if two_makes is None:
+        total_two = _source_number(evidence, "totals.x2p")
+        if total_two is None:
+            total_fg = _source_number(evidence, "totals.fg")
+            total_three = _source_number(evidence, "totals.x3p")
+            if total_fg is not None and total_three is not None:
+                total_two = max(0.0, total_fg - total_three)
+        if total_two is not None:
+            two_makes = total_two / games
+    if two_makes is None or two_makes < 0.0:
+        return None
+    return two_makes * (1.0 - assisted)
+
+
+def _row_unassisted_two_makes_per_game(row: Mapping[str, Any]) -> float | None:
+    assisted = _normalized_assisted_rate(_row_number(row, ("player_shooting.percent_assisted_x2p_fg",)))
+    games = _row_number(row, ("player_per_game.g", "player_totals.g"))
+    if assisted is None or games is None or games <= 0.0:
+        return None
+    two_makes = _row_number(row, ("player_per_game.x2p_per_game",))
+    if two_makes is None:
+        total_two = _row_number(row, ("player_totals.x2p",))
+        if total_two is None:
+            total_fg = _row_number(row, ("player_totals.fg",))
+            total_three = _row_number(row, ("player_totals.x3p",))
+            if total_fg is not None and total_three is not None:
+                total_two = max(0.0, total_fg - total_three)
+        if total_two is not None:
+            two_makes = total_two / games
+    if two_makes is None or two_makes < 0.0:
+        return None
+    return two_makes * (1.0 - assisted)
+
+
+def _putback_score(
+    evidence: PlayerEvidence,
+    rows: Sequence[Mapping[str, Any]],
+) -> tuple[float, tuple[str, ...]] | None:
+    rebound = _direct_putback_signal(evidence, rows)
+    rim = _direct_signal(
+        evidence,
+        rows,
+        source_path="shooting.percent_fga_from_x0_3_range",
+        row_paths=("player_shooting.percent_fga_from_x0_3_range",),
+        source_label="direct_zero_to_three_attempt_share",
+    )
+    unassisted_value = _unassisted_two_makes_per_game(evidence)
+    unassisted_population = tuple(
+        value
+        for row in rows
+        if (value := _row_unassisted_two_makes_per_game(row)) is not None
+    )
+    if rebound is None or rim is None or unassisted_value is None or not unassisted_population:
+        return None
+    rebound_percentile = _midrank_percentile(rebound.value, rebound.population)
+    rim_percentile = _midrank_percentile(rim.value, rim.population)
+    unassisted_percentile = _midrank_percentile(unassisted_value, unassisted_population)
+    if rebound_percentile is None or rim_percentile is None or unassisted_percentile is None:
+        return None
+    adjusted_rebound, minutes_evidence = _minutes_context_adjustment(
+        evidence,
+        rows,
+        rebound,
+        rebound_percentile,
+    )
+    score = 0.50 * adjusted_rebound + 0.30 * rim_percentile + 0.20 * unassisted_percentile
+    return score, (
+        *rebound.evidence_keys,
+        *rim.evidence_keys,
+        "per_game.x2p_per_game|totals.x2p|totals.fg-minus-totals.x3p",
+        "shooting.percent_assisted_x2p_fg",
+        *minutes_evidence,
+        f"minutes_adjusted_ORB_percentile={adjusted_rebound:.8f}",
+        f"zero_to_three_attempt_share_percentile={rim_percentile:.8f}",
+        f"unassisted_two_makes_per_game={unassisted_value:.8f}",
+        f"unassisted_two_makes_per_game_percentile={unassisted_percentile:.8f}",
+        "putback_formula=0.50*minutes_adjusted_ORB_percentile+0.30*zero_to_three_attempt_share_percentile+0.20*unassisted_two_makes_per_game_percentile",
+        "unassisted_amount_contract=unassisted_2P_makes_per_game;public_source_has_no_unassisted_attempt_count",
+    )
+
+
+def derive_tendency_putback(
+    evidence: PlayerEvidence,
+    *,
+    league_player_rows: Iterable[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    if not _usable_games(evidence):
+        return None
+    rows = _usable_rows(evidence, league_player_rows)
+    scored = _putback_score(evidence, rows)
+    if scored is None:
+        if not _historical_sparse_rebound_context_allowed(rows, required_sides=("orb",)):
+            return None
+        return _sparse_context_result(
+            evidence,
+            rows,
+            field="putback",
+            curve=_PUTBACK_CURVE,
+            source_rule="derive_tendency_putback",
+            unavailable_direct_source=(
+                "advanced.orb_percent+shooting.percent_fga_from_x0_3_range+"
+                "shooting.percent_assisted_x2p_fg"
+            ),
+        )
+    percentile, formula_evidence = scored
+    return {
+        "value": _curve_value(percentile, _PUTBACK_CURVE),
+        "score": percentile,
+        "source_rule": "derive_tendency_putback_direct_offensive_recovery_frequency",
+        "evidence_keys": (
+            "per_game.g",
+            *formula_evidence,
+            "source_mode=ORB_percent_plus_zero_to_three_share_plus_unassisted_two_make_amount",
+            "comparison_scope=same_season_same_league_gp_positive",
+            "behavior_contract=offensive_recovery_plus_rim_location_plus_unassisted_finish_volume_authors_putback_opportunity",
+            "historical_total_rebound_substitute=forbidden",
+            "pool_calibration=field-exact Putback target distribution;765 GP-valid packages;identity=(run_id,player_index)",
+            "mapping=field_exact_pool_quantile_curve",
+        ),
+    }
+
+
+def derive_tendency_putbackdunk(
+    evidence: PlayerEvidence,
+    *,
+    league_player_rows: Iterable[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    if not _usable_games(evidence):
+        return None
+    rows = _usable_rows(evidence, league_player_rows)
+    if _putback_score(evidence, rows) is None:
+        if not _historical_sparse_rebound_context_allowed(rows, required_sides=("orb",)):
+            return None
+        return _sparse_context_result(
+            evidence,
+            rows,
+            field="putback_dunk",
+            curve=_PUTBACK_DUNK_CURVE,
+            source_rule="derive_tendency_putbackdunk",
+            unavailable_direct_source=(
+                "advanced.orb_percent+shooting.percent_fga_from_x0_3_range+"
+                "shooting.percent_assisted_x2p_fg+literal_stationary_finish_split"
+            ),
+        )
+    putback = derive_tendency_putback(
+        evidence,
+        league_player_rows=rows,  # type: ignore[arg-type] - filtered immutable mappings are valid rule rows
+    )
+    if putback is None:
+        return None
+    import player_rules_offense
+
+    standing_dunk_rule = getattr(player_rules_offense, "derive_tendency_standingdunk")
+    standing_dunk = standing_dunk_rule(evidence, league_player_rows=rows)
+    if standing_dunk is None:
+        return None
+    stationary_finish = max(0.0, min(1.0, float(standing_dunk["value"]) / 100.0))
+    putback_behavior = max(0.0, min(1.0, float(putback["score"])))
+    score = 0.60 * putback_behavior + 0.40 * stationary_finish
+    return {
+        "value": _curve_value(score, _PUTBACK_DUNK_CURVE),
+        "score": score,
+        "source_rule": "derive_tendency_putbackdunk_offensive_recovery_stationary_finish_context_substitute",
+        "evidence_keys": (
+            "per_game.g",
+            *tuple(putback["evidence_keys"]),
+            *tuple(standing_dunk["evidence_keys"]),
+            "comparison_scope=same_season_same_league_gp_positive",
+            "formula=0.60*generated_PUTBACK_behavior_score+0.40*generated_STANDINGDUNK_tendency/100",
+            "unavailable_direct_source=putback-dunk event count and literal stationary finish split",
+            "substitute_source=demonstrated offensive recovery frequency plus separately authored literal STANDINGDUNK tendency",
+            "validity=putback opportunity must be demonstrated; stationary-finish tendency affects dunk choice only and never creates a rebound",
+            "broad_or_moving_dunk_totals_excluded=true",
+            "historical_total_rebound_substitute=forbidden",
+            "pool_calibration=field-exact PutbackDunk target distribution;765 GP-valid packages;identity=(run_id,player_index)",
+            "mapping=field_exact_pool_quantile_curve",
+        ),
+    }
+
+
 __all__ = [
     "derive_attribute_defensiverebound",
     "derive_attribute_offensiverebound",
     "derive_tendency_crash",
+    "derive_tendency_putback",
+    "derive_tendency_putbackdunk",
 ]

@@ -23,6 +23,7 @@ from nba2k_editor.core.conversions import (
     height_inches_to_raw,
     is_year_offset_field,
     normalize_weight_value,
+    parse_id_prefixed_option,
     raw_height_to_inches,
     to_int,
 )
@@ -232,6 +233,16 @@ def _reverse_list_mapping(value: Any, options: object) -> int | None:
 
 
 def _mapped_display_value(payload: dict[str, Any], raw_value: Any) -> Any | None:
+    if bool(payload.get("id_prefixed_dropdown")):
+        raw_id = to_int(raw_value)
+        for option_key in ("dropdown", "values"):
+            options = payload.get(option_key)
+            if not isinstance(options, list):
+                continue
+            for option in options:
+                if parse_id_prefixed_option(option) == raw_id:
+                    return option
+        return None
     values = payload.get("values")
     mapped = _list_mapping_value(raw_value, values)
     if mapped is not None:
@@ -251,6 +262,8 @@ def _mapped_display_value(payload: dict[str, Any], raw_value: Any) -> Any | None
 
 
 def _mapped_raw_value(payload: dict[str, Any], value: Any) -> Any | None:
+    if bool(payload.get("id_prefixed_dropdown")):
+        return parse_id_prefixed_option(value)
     mapped = _reverse_list_mapping(value, payload.get("values"))
     if mapped is not None:
         return mapped

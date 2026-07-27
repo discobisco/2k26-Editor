@@ -770,6 +770,7 @@ class QtEditorApp(QMainWindow):
         layout.addLayout(selectors)
         buttons = QHBoxLayout()
         buttons.addWidget(QPushButton("Load Source", clicked=self._load_player_generator_source))
+        buttons.addWidget(QPushButton("Check Roster", clicked=self._check_player_generator_roster))
         buttons.addWidget(QPushButton("Add Current Roster to Pool SQL", clicked=self._add_current_roster_to_player_pool))
         buttons.addWidget(QPushButton("Sync Player Pool SQL", clicked=self._sync_player_generator_pool))
         buttons.addWidget(QPushButton("Display Preview", clicked=self._display_generator_preview))
@@ -1823,6 +1824,30 @@ class QtEditorApp(QMainWindow):
 
             self._start_background_operation("Display Player Generator Preview", worker, done_callback=self._sync_player_generator_status)
 
+    def _check_player_generator_roster(self) -> None:
+        display = self._generator_display_module()
+        if hasattr(display, "check_loaded_roster_display_state"):
+            if getattr(self.player_generator_state, "source_loaded", False):
+                self._refresh_player_generator_dropdowns()
+            state_snapshot = self.player_generator_state
+
+            def worker() -> str:
+                try:
+                    state = state_snapshot
+                    if not getattr(state, "source_loaded", False):
+                        state = display.load_generator_display_state()
+                    self.player_generator_state = display.check_loaded_roster_display_state(
+                        self.model,
+                        state,
+                        progress_callback=self._background_operation_progress,
+                    )
+                except Exception as exc:
+                    self.player_generator_state = display.empty_generator_display_state(f"Roster check failed: {exc}")
+                    raise
+                return str(getattr(self.player_generator_state, "status", "Roster check complete."))
+
+            self._start_background_operation("Check Player Generator Roster", worker, done_callback=self._sync_player_generator_status)
+
     def _build_generator_draft_class(self) -> None:
         display = self._generator_display_module()
         if hasattr(display, "generate_draft_class_display_state"):
@@ -2007,6 +2032,13 @@ class QtEditorApp(QMainWindow):
         if rows:
             parts.append("\nPreview:")
             parts.extend(self._generator_preview_table_lines(rows, columns))
+        roster_check_season = str(getattr(state, "roster_check_season", ""))
+        if roster_check_season:
+            missing_players = tuple(getattr(state, "roster_check_missing_players", ()))
+            parts.append(f"\nSource players not loaded for {roster_check_season} ({len(missing_players)}):")
+            parts.extend(str(player) for player in missing_players)
+            if not missing_players:
+                parts.append("None")
         return "\n".join(part for part in parts if part)
 
     def _generator_preview_table_lines(self, rows: tuple[Any, ...], columns: tuple[Any, ...]) -> list[str]:

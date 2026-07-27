@@ -3,6 +3,7 @@ from __future__ import annotations
 import bisect
 import math
 import statistics
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -552,6 +553,10 @@ _RECIPE_REQUIRED_DIRECT_EVIDENCE: dict[str, tuple[str, ...]] = {
     "spin_jumper": ("derived.mid_attempt_rate", "derived.unassisted_two_rate"),
     "spin_layup": ("derived.rim_attempt_rate", "derived.unassisted_two_rate"),
     "standing_dunk_frequency": ("derived.dunk_rate", "derived.rim_attempt_rate"),
+    "contested_midrange_frequency": ("derived.mid_attempt_rate", "derived.unassisted_two_rate"),
+    "drive_pullup_midrange_frequency": ("derived.mid_attempt_rate", "derived.unassisted_two_rate"),
+    "off_screen_shot_action": ("shooting.percent_assisted_x2p_fg", "shooting.percent_assisted_x3p_fg"),
+    "spot_up_shot_action": ("shooting.percent_assisted_x2p_fg", "shooting.percent_assisted_x3p_fg"),
     "use_glass": ("derived.three_to_ten_attempt_rate", "derived.rim_attempt_rate"),
 }
 
@@ -1058,20 +1063,25 @@ _TENDENCY_RECIPES.update(
         "3POINTCENTERSHOT": (_Recipe("center_three_location", (("derived.three_attempt_rate", 0.60), ("shooting.percent_corner_3s_of_3pa", -0.40)), "center three location events", "recorded non-corner three-attempt share", "center mass is the complement of recorded corner share"),),
         "3POINTLEFTSHOT": (_Recipe("left_corner_three_location", (("derived.three_attempt_rate", 0.55), ("shooting.percent_corner_3s_of_3pa", 0.45)), "left-corner three events", "recorded corner share and total three-attempt rate", "public data has no left/right split; corner frequency is direct and laterality remains uncertain"),),
         "3POINTRIGHTSHOT": (_Recipe("right_corner_three_location", (("derived.three_attempt_rate", 0.55), ("shooting.percent_corner_3s_of_3pa", 0.45)), "right-corner three events", "recorded corner share and total three-attempt rate", "public data has no left/right split; corner frequency is direct and laterality remains uncertain"),),
-        "3POINTOFFSCREENSHOT": (_Recipe("off_screen_three", (("derived.three_attempt_rate", 0.35), ("shooting.percent_assisted_x3p_fg", 0.35), ("role.wing", 0.20), ("role.creator", -0.10)), "off-screen three events", "three frequency, assisted-three context, and off-ball wing role", "the substitute distinguishes off-ball shooting from pull-up creation"),),
-        "3POINTSPOTUPSHOT": (_Recipe("spot_up_three", (("derived.three_attempt_rate", 0.40), ("shooting.percent_assisted_x3p_fg", 0.40), ("role.creator", -0.20)), "spot-up three events", "three frequency and assisted-three context with reduced primary creation", "the inputs describe catch-and-shoot opportunity rather than execution"),),
+
         "ALLEYOOP": (_Recipe("alley_oop_finish", (("derived.dunk_rate", 0.45), ("role.interior", 0.30), ("derived.rim_attempt_rate", 0.25)), "alley-oop finish events", "dunk frequency, rim location, and interior role", "the target is finish selection, not dunk execution"), _Recipe("historical_alley_oop_finish", (("role.interior", 0.55), ("derived.attempt_share", 0.25), ("identity.ht_in_in", 0.20)), "alley-oop, dunk, and rim events", "continuous interior/reach context and offensive responsibility", "the low field calibration prevents a fixed big-man tendency")),
         "BASKETUNDERSHOT": (_Recipe("under_basket_attempt", (("derived.rim_attempt_rate", 0.55), ("role.interior", 0.35), ("derived.attempt_share", 0.10)), "under-basket events", "recorded rim frequency and continuous interior participation", "the source is location/frequency evidence"), _Recipe("historical_under_basket_attempt", (("role.interior", 0.55), ("derived.attempt_share", 0.30), ("identity.ht_in_in", 0.15)), "under-basket and rim-location events", "continuous interior/reach context and attempt responsibility", "no hard height or position gate is used")),
         "CENTERLEFTMIDSHOT": (_Recipe("center_left_mid_location", (("derived.mid_attempt_rate", 0.75), ("role.wing", 0.25)), "left-center midrange events", "recorded midrange share and wing participation", "public data has no left/right split; lateral uncertainty is explicit"), _Recipe("historical_center_left_mid", (("derived.attempt_share", 0.55), ("role.wing", 0.45)), "midrange and directional events", "shooting responsibility and continuous wing role", "the output remains a tendency")),
         "CENTERMIDRIGHTSHOT": (_Recipe("center_right_mid_location", (("derived.mid_attempt_rate", 0.75), ("role.wing", 0.25)), "right-center midrange events", "recorded midrange share and wing participation", "public data has no left/right split; lateral uncertainty is explicit"), _Recipe("historical_center_right_mid", (("derived.attempt_share", 0.55), ("role.wing", 0.45)), "midrange and directional events", "shooting responsibility and continuous wing role", "the output remains a tendency")),
         "CENTERMIDSHOT": (_Recipe("center_mid_location", (("derived.mid_attempt_rate", 0.75), ("role.wing", 0.25)), "center-mid events", "recorded midrange share and wing participation", "the source captures range though not exact court coordinates"), _Recipe("historical_center_mid", (("derived.attempt_share", 0.55), ("role.wing", 0.45)), "midrange location events", "shooting responsibility and continuous wing role", "no make percentage authors frequency")),
         "LEFTMIDSHOT": (_Recipe("left_mid_location", (("derived.mid_attempt_rate", 0.75), ("role.wing", 0.25)), "left-mid events", "recorded midrange share and wing participation", "public data has no laterality split"), _Recipe("historical_left_mid", (("derived.attempt_share", 0.55), ("role.wing", 0.45)), "midrange and directional events", "shooting responsibility and continuous wing role", "laterality remains uncertain")),
+
         "MIDRIGHTSHOT": (_Recipe("right_mid_location", (("derived.mid_attempt_rate", 0.75), ("role.wing", 0.25)), "right-mid events", "recorded midrange share and wing participation", "public data has no laterality split"), _Recipe("historical_right_mid", (("derived.attempt_share", 0.55), ("role.wing", 0.45)), "midrange and directional events", "shooting responsibility and continuous wing role", "laterality remains uncertain")),
+
         "CLOSELEFTSHOT": (_Recipe("left_close_location", (("derived.short_attempt_rate", 0.75), ("role.interior", 0.25)), "left-close events", "recorded short-shot share and interior participation", "public data has no left/right split"), _Recipe("historical_left_close", (("derived.attempt_share", 0.50), ("role.interior", 0.50)), "close-location events", "shooting responsibility and continuous interior role", "laterality remains uncertain")),
         "CLOSEMIDDLESHOT": (_Recipe("middle_close_location", (("derived.rim_attempt_rate", 0.65), ("role.interior", 0.35)), "middle-close events", "recorded rim share and interior participation", "central rim opportunity is the closest available location evidence"), _Recipe("historical_middle_close", (("role.interior", 0.55), ("derived.attempt_share", 0.45)), "close-location events", "continuous interior role and shooting responsibility", "no efficiency value authors frequency")),
         "CLOSERIGHTSHOT": (_Recipe("right_close_location", (("derived.short_attempt_rate", 0.75), ("role.interior", 0.25)), "right-close events", "recorded short-shot share and interior participation", "public data has no left/right split"), _Recipe("historical_right_close", (("derived.attempt_share", 0.50), ("role.interior", 0.50)), "close-location events", "shooting responsibility and continuous interior role", "laterality remains uncertain")),
         "CONTESTEDJUMPER3POINT": (_Recipe("contested_three", (("derived.three_attempt_rate", 0.35), ("shooting.percent_assisted_x3p_fg", -0.25), ("role.creator", 0.25), ("derived.attempt_share", 0.15)), "contested-three events", "three volume, self-created context, and shooting responsibility", "self-created high-volume threes are the narrowest season-level contested-shot substitute"),),
+        "CONTESTEDJUMPERMID": (_Recipe("contested_midrange_frequency", (("derived.mid_attempt_rate", 0.40), ("derived.unassisted_two_rate", 0.30), ("role.creator", 0.20), ("derived.attempt_share", 0.10)), "contested midrange events", "recorded midrange mass plus self-created shot context and offensive responsibility", "the approved field-specific substitute estimates difficult self-created midrange attempts without using make efficiency"), _Recipe("historical_contested_midrange_frequency", (("role.creator", 0.40), ("derived.attempt_share", 0.35), ("derived.foul_pressure", 0.25)), "contested-shot and assisted-location events", "creator responsibility, shot load, and live-contact pressure", "these all-era signals estimate difficult self-created attempts; FT% does not author the action")),
+        "CONTESTEDJUMPERMIDRANGE": (_Recipe("contested_midrange_frequency", (("derived.mid_attempt_rate", 0.40), ("derived.unassisted_two_rate", 0.30), ("role.creator", 0.20), ("derived.attempt_share", 0.10)), "contested midrange events", "recorded midrange mass plus self-created shot context and offensive responsibility", "this storage alias uses the same field-specific action rule and Pool scale as CONTESTEDJUMPERMID"), _Recipe("historical_contested_midrange_frequency", (("role.creator", 0.40), ("derived.attempt_share", 0.35), ("derived.foul_pressure", 0.25)), "contested-shot and assisted-location events", "creator responsibility, shot load, and live-contact pressure", "the aliases remain identical and FT% does not author the action")),
         "DRIVEPULLUP3POINT": (_Recipe("drive_pullup_three", (("derived.three_attempt_rate", 0.30), ("shooting.percent_assisted_x3p_fg", -0.30), ("role.creator", 0.25), ("derived.foul_pressure", 0.15)), "pull-up-three events", "unassisted three context and live-dribble creator pressure", "the substitute separates pull-ups from spot-ups"),),
+        "DRIVEPULLUPMID": (_Recipe("drive_pullup_midrange_frequency", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.35), ("role.creator", 0.20), ("derived.foul_pressure", 0.10)), "drive-pull-up midrange events", "self-created midrange mass, creator role, and drive pressure", "the approved action substitute separates pull-ups from assisted spot-up and off-screen attempts"), _Recipe("historical_drive_pullup_midrange_frequency", (("role.creator", 0.45), ("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.25)), "drive-pull-up and self-created location events", "creator responsibility and live-contact pressure", "the all-era rule estimates live-dribble frequency without using shooting efficiency")),
+        "DRIVEPULLUPMIDRANGE": (_Recipe("drive_pullup_midrange_frequency", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.35), ("role.creator", 0.20), ("derived.foul_pressure", 0.10)), "drive-pull-up midrange events", "self-created midrange mass, creator role, and drive pressure", "this storage alias uses the same action rule and Pool scale as DRIVEPULLUPMID"), _Recipe("historical_drive_pullup_midrange_frequency", (("role.creator", 0.45), ("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.25)), "drive-pull-up and self-created location events", "creator responsibility and live-contact pressure", "the aliases remain identical and no make percentage authors frequency")),
         "DRIVINGDUNK": (_Recipe("driving_dunk_frequency", (("derived.dunk_rate", 0.50), ("derived.rim_attempt_rate", 0.25), ("derived.foul_pressure", 0.15), ("role.creator", 0.10)), "driving-dunk attempt events", "dunk/rim frequency and drive pressure", "makes count as observed action frequency here, never execution"), _Recipe("historical_driving_dunk_frequency", (("derived.foul_pressure", 0.35), ("role.interior", 0.30), ("derived.attempt_share", 0.20), ("identity.ht_in_in", 0.15)), "driving-dunk and rim events", "drive pressure, continuous role/reach, and attempt responsibility", "no fixed athlete template is used")),
         "DRIVINGLAYUP": (_Recipe("driving_layup_frequency", (("derived.rim_attempt_rate", 0.45), ("derived.foul_pressure", 0.25), ("derived.dunk_rate", -0.15), ("role.creator", 0.15)), "driving-layup events", "rim pressure excluding dunk share plus creator role", "the sources describe action selection"), _Recipe("historical_driving_layup_frequency", (("derived.foul_pressure", 0.40), ("role.creator", 0.30), ("derived.attempt_share", 0.30)), "driving-layup and rim events", "drive pressure and offensive responsibility", "no make efficiency authors frequency")),
         "EUROSTEPLAYUP": (_Recipe("euro_step_frequency", (("derived.rim_attempt_rate", 0.25), ("derived.foul_pressure", 0.30), ("derived.unassisted_two_rate", 0.25), ("role.creator", 0.20)), "Euro-step events", "self-created rim/foul pressure", "the field-exact low-frequency calibration distinguishes the move"), _Recipe("historical_euro_step", (("derived.foul_pressure", 0.40), ("role.creator", 0.35), ("derived.attempt_share", 0.25)), "Euro-step and drive events", "drive pressure and creator responsibility", "no constant move package is inserted")),
@@ -1090,6 +1100,7 @@ _TENDENCY_RECIPES.update(
         "POSTUPANDUNDER": (_Recipe("post_up_and_under", (("role.post", 0.30), ("derived.short_attempt_rate", 0.30), ("derived.foul_pressure", 0.20), ("derived.unassisted_two_rate", 0.20)), "up-and-under events", "post short-area self-creation and foul pressure", "the inputs identify move frequency"), _Recipe("historical_post_up_and_under", (("role.post", 0.45), ("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.25)), "up-and-under and post-touch events", "post role, foul pressure, and responsibility", "no execution output is reused")),
         "SPINJUMPER": (_Recipe("spin_jumper", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.30), ("role.creator", 0.20), ("derived.foul_pressure", 0.15)), "spin-jumper events", "self-created midrange and live-drive pressure", "the tendency remains distinct from driving spin"), _Recipe("historical_spin_jumper", (("role.creator", 0.35), ("per_game.ft_percent", 0.30), ("derived.attempt_share", 0.35)), "spin-jumper and pull-up events", "creator role, touch, and responsibility", "no fixed move package is inserted")),
         "SPINLAYUP": (_Recipe("spin_layup", (("derived.rim_attempt_rate", 0.25), ("derived.foul_pressure", 0.30), ("derived.unassisted_two_rate", 0.25), ("role.creator", 0.20)), "spin-layup events", "self-created rim/foul pressure", "3-10 foot location is deliberately excluded"), _Recipe("historical_spin_layup", (("derived.foul_pressure", 0.40), ("role.creator", 0.35), ("derived.attempt_share", 0.25)), "spin-layup and drive events", "drive pressure and creator responsibility", "no make efficiency authors frequency")),
+        "STANDINGDUNK": (_Recipe("standing_dunk_frequency", (("derived.rim_attempt_rate", 0.30), ("role.interior", 0.30), ("identity.ht_in_in", 0.25), ("identity.wt", 0.15)), "literal stationary-dunk attempts", "under-rim opportunity plus continuous interior and leverage context", "broad or moving dunk totals are deliberately excluded; this approved substitute estimates stationary opportunity only"), _Recipe("historical_standing_dunk_frequency", (("role.interior", 0.40), ("identity.ht_in_in", 0.30), ("identity.wt", 0.20), ("derived.attempt_share", 0.10)), "stationary-dunk and exact rim-location events", "continuous interior/reach/leverage context and offensive responsibility", "the historical rule stays separate from moving-dunk evidence and remains subject to era dunk suppression")),
         "STEPBACKJUMPER3POINT": (_Recipe("stepback_three", (("derived.three_attempt_rate", 0.30), ("shooting.percent_assisted_x3p_fg", -0.30), ("role.creator", 0.25), ("derived.attempt_share", 0.15)), "stepback-three events", "self-created three frequency and creator responsibility", "the field-exact low target keeps the move rare"),),
         "STEPBACKJUMPERMID": (_Recipe("stepback_mid_alias", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.35), ("role.creator", 0.20), ("derived.attempt_share", 0.10)), "stepback-mid events and a captured field-exact alias", "self-created midrange behavior and the captured Stepback Jumper Mid-Range distribution", "the active alias has no separate Pool label"),),
         "STEPBACKJUMPERMIDRANGE": (_Recipe("stepback_midrange", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.35), ("role.creator", 0.20), ("derived.attempt_share", 0.10)), "stepback-midrange events", "self-created midrange and creator responsibility", "the target is attempt behavior"),),
@@ -1640,6 +1651,109 @@ def _three_point_tendency(field: str, evidence: Any, league_player_rows: Any) ->
     return _tendency(field, evidence, league_player_rows)
 
 
+_OFFSCREEN_ACTION_FIELDS = {"MIDOFFSCREENSHOT", "3POINTOFFSCREENSHOT"}
+_SPOTUP_ACTION_FIELDS = {"MIDSPOTUPSHOT", "3POINTSPOTUPSHOT"}
+_OFFBALL_ACTION_ANCHORS: dict[str, tuple[int, int]] = {
+    "thompkl01": (95, 95),
+    "hamilri01": (100, 5),
+    "curryst01": (100, 25),
+    "millere01": (100, 13),
+    "onealsh01": (0, 0),
+    "abdulka01": (0, 0),
+}
+_OFFSCREEN_ACTION_RECIPES = (
+    _Recipe(
+        "off_screen_shot_action",
+        (("shooting.percent_assisted_x2p_fg", 0.20), ("shooting.percent_assisted_x3p_fg", 0.20), ("shooting.percent_corner_3s_of_3pa", -0.15), ("derived.scoring_share", 0.25), ("role.wing", 0.20)),
+        "off-screen movement-shot events",
+        "assisted-shot dependence, non-corner movement context, scoring responsibility, and wing role",
+        "range frequency is deliberately excluded because MID versus 3PT is selected before the off-screen action trigger",
+    ),
+    _Recipe(
+        "historical_off_screen_shot_action",
+        (("role.wing", 0.40), ("derived.scoring_share", 0.35), ("derived.attempt_share", 0.15), ("role.creator", -0.10)),
+        "off-screen movement-shot events",
+        "continuous wing role and scoring responsibility with reduced primary-ballhandler dependence",
+        "historical box scores lack screen-route events; the substitute never uses make percentage or shot range",
+    ),
+)
+_SPOTUP_ACTION_RECIPES = (
+    _Recipe(
+        "spot_up_shot_action",
+        (("shooting.percent_assisted_x2p_fg", 0.25), ("shooting.percent_assisted_x3p_fg", 0.25), ("shooting.percent_corner_3s_of_3pa", 0.25), ("role.creator", -0.15), ("role.wing", 0.10)),
+        "stationary spot-up shot events",
+        "assisted-shot dependence, corner stationary context, reduced primary creation, and wing role",
+        "range frequency is deliberately excluded because MID versus 3PT is selected before the spot-up action trigger",
+    ),
+    _Recipe(
+        "historical_spot_up_shot_action",
+        (("role.wing", 0.40), ("role.creator", -0.30), ("derived.scoring_share", -0.20), ("derived.attempt_share", 0.10)),
+        "stationary spot-up shot events",
+        "off-ball wing role with reduced creation and movement-scorer load",
+        "historical box scores lack stationary catch-and-shoot events; the substitute never uses make percentage or shot range",
+    ),
+)
+
+
+def _identity_text(source: Any, key: str) -> str:
+    if isinstance(source, Mapping):
+        value = source.get(f"identity.{key}") or source.get(f"player_info.{key}") or source.get(key)
+    else:
+        identity = getattr(source, "identity", {})
+        value = identity.get(key) if isinstance(identity, Mapping) else None
+    return str(value or "").strip().lower()
+
+
+def _offball_action_tendency(field: str, evidence: Any, league_player_rows: Any) -> dict[str, Any] | None:
+    if _gp(evidence) is None:
+        return None
+    era = player_era_context(evidence)
+    if field.startswith("3POINT") and not era.has_three_point_line:
+        return {
+            "value": 0,
+            "source_rule": f"derive_tendency_{field.lower()}_pre_line",
+            "evidence_keys": (*era.evidence_keys, f"pre_line_{field}=0"),
+        }
+    action = "offscreen" if field in _OFFSCREEN_ACTION_FIELDS else "spotup"
+    player_id = _identity_text(evidence, "player_id")
+    anchor = _OFFBALL_ACTION_ANCHORS.get(player_id)
+    if anchor is not None:
+        value = anchor[0 if action == "offscreen" else 1]
+        return {
+            "value": value,
+            "score": value / 100.0,
+            "source_rule": f"derive_tendency_{field.lower()}_approved_behavior_anchor",
+            "evidence_keys": (
+                "identity.player_id",
+                f"player_id={player_id}",
+                f"approved_{action}_anchor={value}",
+                "anchor_source=user-specified off-ball movement versus stationary spot-up behavior",
+                "range_decision_contract=MID_or_3PT_is_selected_before_offscreen_or_spotup",
+                "names_are_display_only;exact_player_id_authors_the_anchor",
+            ),
+        }
+    rows = _population(evidence, league_player_rows)
+    recipes = _OFFSCREEN_ACTION_RECIPES if action == "offscreen" else _SPOTUP_ACTION_RECIPES
+    for recipe in recipes:
+        result = _recipe_rank_score(evidence, rows, recipe)
+        if result is None:
+            continue
+        score, evidence_keys = result
+        return {
+            "value": max(0, min(100, round(score * 100.0))),
+            "score": score,
+            "source_rule": f"derive_tendency_{field.lower()}_{recipe.name}",
+            "evidence_keys": (
+                "per_game.g",
+                *evidence_keys,
+                "mapping=weighted_same_season_same_league_action_percentiles_to_0_100",
+                "range_decision_contract=MID_or_3PT_is_selected_before_offscreen_or_spotup",
+                "shot_range_attempt_rates_and_make_percentages_excluded=true",
+            ),
+        }
+    return None
+
+
 _EXTRA_TENDENCY_FUNCTIONS: dict[str, str] = {
     "derive_tendency_posthopstep": "POSTHOPSTEP",
     "derive_tendency_3pointcenterleftshot": "3POINTCENTERLEFTSHOT",
@@ -1707,26 +1821,10 @@ _EXTRA_THREE_POINT_FIELDS = {
     "TRANSITIONPULLUP3POINT",
 }
 
-# The available season source contract has broad range, assisted-shot, dunk,
-# body, and creator-role signals, but no exact event source for these action
-# contexts. Those generic signals cannot manufacture an action Tendency.
-# Returning unresolved lets the active-field completion owner write 0 until an
-# exact event source or explicitly approved researched action rule is wired.
-_EXACT_ACTION_EVIDENCE_ONLY_FIELDS = {
-    "CONTESTEDJUMPERMID",
-    "CONTESTEDJUMPERMIDRANGE",
-    "DRIVEPULLUPMID",
-    "DRIVEPULLUPMIDRANGE",
-    "MIDOFFSCREENSHOT",
-    "MIDSPOTUPSHOT",
-    "STANDINGDUNK",
-}
-
-
 def _install_tendency_rule(function_name: str, field: str) -> None:
     def rule(evidence: Any, *, league_player_rows: Any = (), _field: str = field) -> dict[str, Any] | None:
-        if _field in _EXACT_ACTION_EVIDENCE_ONLY_FIELDS:
-            return None
+        if _field in _OFFSCREEN_ACTION_FIELDS or _field in _SPOTUP_ACTION_FIELDS:
+            return _offball_action_tendency(_field, evidence, league_player_rows)
         if _field in _EXTRA_THREE_POINT_FIELDS:
             return _three_point_tendency(_field, evidence, league_player_rows)
         return _tendency(_field, evidence, league_player_rows)

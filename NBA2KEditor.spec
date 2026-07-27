@@ -14,6 +14,7 @@ project_root = Path(SPECPATH).resolve()
 package_root = project_root / "nba2k_editor"
 player_generator_dir = package_root / "Player Generator"
 franchise_dir = package_root / "franchise"
+franchise_team_profiles_dir = franchise_dir / "team_profiles"
 core_offsets_dir = package_root / "core" / "Offsets"
 player_data_dir = player_generator_dir / "NBA Player Data"
 player_pool_dir = player_data_dir / "player_generation_pool"
@@ -54,6 +55,7 @@ def _franchise_modules() -> list[str]:
 datas: list[tuple[str, str]] = []
 for item in (
     _existing_data(core_offsets_dir, "nba2k_editor\\core\\Offsets"),
+    _existing_data(franchise_team_profiles_dir, "nba2k_editor\\franchise\\team_profiles"),
     _existing_data(player_pool_dir, "nba2k_editor\\Player Generator\\NBA Player Data\\player_generation_pool"),
     _existing_file(player_data_dir / "NBA_DATA_Master.sqlite", "nba2k_editor\\Player Generator\\NBA Player Data"),
     _existing_file(player_data_dir / "nba.sqlite", "nba2k_editor\\Player Generator\\NBA Player Data"),

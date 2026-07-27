@@ -6,7 +6,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -55,8 +56,7 @@ from nba2k_editor.franchise.models import (
     league_mode_label,
 )
 from nba2k_editor.franchise.profile_generation import (
-    build_team_profile_generation_requests,
-    generate_team_profiles,
+    copy_missing_team_profiles,
     missing_team_profile_indexes,
     team_profiles_complete,
 )
@@ -69,7 +69,7 @@ from nba2k_editor.franchise.sim_phases import (
     phase_label,
 )
 from nba2k_editor.franchise.storage import DEFAULT_FRANCHISE_DB_PATH, FranchiseRepository, team_options_from_model
-from nba2k_editor.models.background_operations import BackgroundOperationWorker
+
 
 FRANCHISE_SCREEN_TITLE = "Franchise"
 DEFAULT_USER_TEAM_INDEX = 13
@@ -81,11 +81,9 @@ class FranchiseScreen(QWidget):
         model: Any,
         *,
         db_path: str | Path = DEFAULT_FRANCHISE_DB_PATH,
-        profile_client: Any | None = None,
     ) -> None:
         super().__init__()
         self.model = model
-        self.profile_client = profile_client
         self.repository = FranchiseRepository(db_path)
         self.team_options: tuple[FranchiseTeamOption, ...] = ()
         self.team_checkboxes: dict[int, QCheckBox] = {}
@@ -96,12 +94,6 @@ class FranchiseScreen(QWidget):
         self.fantasy_draft_checkbox: QCheckBox | None = None
         self.dashboard_text: QTextEdit | None = None
         self.profile_status_text: QTextEdit | None = None
-        self.profile_action_buttons: list[QPushButton] = []
-        self._profile_worker = BackgroundOperationWorker()
-        self._profile_generation_franchise_id = ""
-        self._profile_timer = QTimer(self)
-        self._profile_timer.setInterval(100)
-        self._profile_timer.timeout.connect(self._poll_team_profile_generation)
         self.phase_status_text: QTextEdit | None = None
         self.phase_combo: QComboBox | None = None
         self.phase_year_input: QLineEdit | None = None
@@ -117,6 +109,8 @@ class FranchiseScreen(QWidget):
         self.draft_status_text: QTextEdit | None = None
         self.draft_player_combo: QComboBox | None = None
         self.draft_action_buttons: list[QPushButton] = []
+        self.draft_order_list: QListWidget | None = None
+        self.draft_order_buttons: list[QPushButton] = []
         self.college_status_text: QTextEdit | None = None
         self.college_program_combo: QComboBox | None = None
         self.college_seed_input: QLineEdit | None = None
@@ -296,9 +290,6 @@ class FranchiseScreen(QWidget):
         )
 
     def _start_franchise(self) -> None:
-        if self._profile_generation_running():
-            QMessageBox.warning(self, "Franchise setup", "Wait for the current franchise team-profile generation to finish.")
-            return
         try:
             setup = self._current_setup()
         except ValueError as exc:
@@ -308,26 +299,30 @@ class FranchiseScreen(QWidget):
         if setup.keep_full_league_save:
             snapshot = self.model.app_dataset_snapshot() if hasattr(self.model, "app_dataset_snapshot") else {}
         teams = team_options_from_model(self.model)
-        self.repository.replace_franchise(
-            setup,
-            teams,
-            league_snapshot=snapshot,
-            target_executable=str(getattr(self.model, "target_executable", "")),
-        )
+        try:
+            record = self.repository.replace_franchise(
+                setup,
+                teams,
+                league_snapshot=snapshot,
+                target_executable=str(getattr(self.model, "target_executable", "")),
+            )
+            copy_missing_team_profiles(record)
+        except Exception as exc:
+            QMessageBox.warning(self, "Franchise setup", str(exc))
+            return
         self._load_franchise_dashboard()
-        self._run_missing_team_profile_generation()
 
     def _load_franchise_dashboard(self) -> None:
         record = self.repository.load()
         if not team_profiles_complete(record):
-            self._show_team_profile_generation_page(record)
+            self._show_team_profile_copy_page(record)
             return
         if record.setup.fantasy_draft:
             self._show_fantasy_draft_page(record)
             return
         self._show_franchise_systems_page(record)
 
-    def _show_team_profile_generation_page(self, record: FranchiseRecord) -> None:
+    def _show_team_profile_copy_page(self, record: FranchiseRecord) -> None:
         self.dashboard_text = None
         self.phase_status_text = None
         self.recommendation_text = None
@@ -338,20 +333,14 @@ class FranchiseScreen(QWidget):
         layout.addWidget(
             self._header(
                 "College Program Profiles" if college_mode else "Franchise Team Profiles",
-                (
-                    "Every active program receives persistent athletic-department, program-decision, coaching, and recruiting context before the session begins."
-                    if college_mode
-                    else "Every active team receives persistent Owner, GM, Coach, and Scout context before the franchise session begins. The user controls only the selected team's GM role."
-                ),
+                "Each active team receives a private copy of its pregenerated team profile.",
             )
         )
         controls = QHBoxLayout()
-        self.profile_action_buttons = []
-        generate_button = QPushButton("Generate Missing Profiles", clicked=self._run_missing_team_profile_generation)
+        copy_button = QPushButton("Copy Missing Profiles", clicked=self._copy_missing_team_profiles)
         new_button = QPushButton("New", clicked=self._show_new_franchise_setup)
         entry_button = QPushButton("Entry Menu", clicked=self.refresh_entry_menu)
-        self.profile_action_buttons.extend((generate_button, new_button, entry_button))
-        controls.addWidget(generate_button)
+        controls.addWidget(copy_button)
         controls.addWidget(new_button)
         controls.addWidget(entry_button)
         controls.addStretch(1)
@@ -362,9 +351,9 @@ class FranchiseScreen(QWidget):
         self.profile_status_text = status
         layout.addWidget(status, 1)
         self._replace_body(widget)
-        self._refresh_team_profile_generation_status(record)
+        self._refresh_team_profile_copy_status(record)
 
-    def _refresh_team_profile_generation_status(self, record: FranchiseRecord | None = None) -> None:
+    def _refresh_team_profile_copy_status(self, record: FranchiseRecord | None = None) -> None:
         if self.profile_status_text is None:
             return
         record = record or self.repository.load()
@@ -378,7 +367,7 @@ class FranchiseScreen(QWidget):
         ]
         missing = set(missing_team_profile_indexes(record)) if record.profile_directory else set()
         if not record.team_options:
-            lines.append("No franchise-scoped active teams are stored. Start a new franchise to generate profiles.")
+            lines.append("No franchise-scoped active teams are stored. Start a new franchise to copy profiles.")
         for team in record.team_options:
             team_index = int(team.team_index)
             gm_control = "human user" if team_index == int(record.setup.user_team_index) else "LLM"
@@ -388,91 +377,34 @@ class FranchiseScreen(QWidget):
             else:
                 role_status = f"Owner=LLM, GM={gm_control}, Coach=LLM, Scout=LLM"
             lines.append(f"[{status}] [{team_index}] {team.label}: {role_status}")
-        if self._profile_generation_running():
-            lines.extend(("", "Generating missing profiles through Hermes API Server..."))
-        elif missing:
+        if missing:
             lines.extend(("", f"Missing Profiles: {len(missing)}"))
         elif team_profiles_complete(record):
             lines.extend(("", "All required profiles are ready."))
         self.profile_status_text.setPlainText("\n".join(lines))
-        can_generate = bool(record.franchise_id and record.profile_directory and record.team_options and missing)
-        running = self._profile_generation_running()
-        if self.profile_action_buttons:
-            self.profile_action_buttons[0].setEnabled(can_generate and not running)
-            for button in self.profile_action_buttons[1:]:
-                button.setEnabled(not running)
 
-    def _run_missing_team_profile_generation(self) -> None:
-        if self._profile_generation_running():
-            QMessageBox.warning(self, "Team profile generation", "Team profiles are already being generated.")
-            return
+    def _copy_missing_team_profiles(self) -> None:
         try:
             record = self.repository.load()
             missing = missing_team_profile_indexes(record)
             if not record.franchise_id or not record.profile_directory or not record.team_options:
-                raise ValueError("This saved franchise predates franchise-scoped team profiles. Start a new franchise to generate them.")
+                raise ValueError("This saved franchise predates franchise-scoped team profiles. Start a new franchise to copy them.")
             if not missing:
                 self._load_franchise_dashboard()
                 return
-            requests = build_team_profile_generation_requests(record, self.model, team_indexes=missing)
+            copy_missing_team_profiles(record, team_indexes=missing)
         except Exception as exc:
-            QMessageBox.warning(self, "Team profile generation", str(exc))
+            QMessageBox.warning(self, "Team profile copies", str(exc))
             return
-        self._profile_generation_franchise_id = record.franchise_id
-
-        def task() -> str:
-            generated = generate_team_profiles(record, requests, client=self.profile_client)
-            return f"Generated {len(generated)} persistent team profiles."
-
-        if not self._profile_worker.start("Franchise team profiles", task):
-            QMessageBox.warning(self, "Team profile generation", "Team profiles are already being generated.")
-            return
-        self._set_profile_generation_running(True)
-        self._refresh_team_profile_generation_status(record)
-        self._profile_timer.start()
-
-    def _profile_generation_running(self) -> bool:
-        return self._profile_worker.is_running()
-
-    def _set_profile_generation_running(self, running: bool) -> None:
-        for button in self.profile_action_buttons:
-            button.setEnabled(not running)
-
-    def _poll_team_profile_generation(self) -> None:
-        handled = False
-        for kind, payload in self._profile_worker.pop_events():
-            if kind != "done":
-                continue
-            handled = True
-            _request_id, message, status, _done_callback = payload
-            launched_franchise_id = self._profile_generation_franchise_id
-            self._profile_generation_franchise_id = ""
-            try:
-                record = self.repository.load()
-            except Exception:
-                continue
-            if record.franchise_id != launched_franchise_id:
-                continue
-            if status == "failed":
-                QMessageBox.warning(self, "Team profile generation", str(message))
-                self._refresh_team_profile_generation_status(record)
-            elif status == "complete":
-                if team_profiles_complete(record):
-                    self._load_franchise_dashboard()
-                else:
-                    self._refresh_team_profile_generation_status(record)
-        if handled or not self._profile_generation_running():
-            self._profile_timer.stop()
-            self._set_profile_generation_running(False)
-            if self.profile_status_text is not None:
-                self._refresh_team_profile_generation_status()
+        self._load_franchise_dashboard()
 
     def _show_franchise_systems_page(self, record: FranchiseRecord) -> None:
         self.profile_status_text = None
-        self.profile_action_buttons = []
         self.draft_status_text = None
         self.draft_player_combo = None
         self.draft_action_buttons = []
+        self.draft_order_list = None
+        self.draft_order_buttons = []
         widget = QWidget()
         layout = QVBoxLayout(widget)
         page_title = "College Program Systems" if record.setup.league_mode == LEAGUE_MODE_COLLEGE else "Franchise Systems"
@@ -527,7 +459,6 @@ class FranchiseScreen(QWidget):
 
     def _show_fantasy_draft_page(self, record: FranchiseRecord) -> None:
         self.profile_status_text = None
-        self.profile_action_buttons = []
         self.dashboard_text = None
         self.recommendation_text = None
         self.recommendation_action_buttons = []
@@ -1185,10 +1116,32 @@ class FranchiseScreen(QWidget):
         box = QGroupBox("Fantasy Draft Room")
         box.setObjectName("FantasyDraftRoomPage")
         layout = QVBoxLayout(box)
+        order_box = QGroupBox("Round 1 Draft Order")
+        order_layout = QHBoxLayout(order_box)
+        order_list = QListWidget()
+        self.draft_order_list = order_list
+        saved_state = self.repository.load_fantasy_draft_state()
+        starting_order = saved_state.team_order if saved_state is not None else self._league_team_indexes(_record)
+        labels_by_index = {int(team.team_index): team.display_label for team in _record.team_options}
+        for team_index in starting_order:
+            order_list.addItem(labels_by_index[int(team_index)])
+            order_list.item(order_list.count() - 1).setData(Qt.ItemDataRole.UserRole, int(team_index))
+        if order_list.count():
+            order_list.setCurrentRow(0)
+        order_layout.addWidget(order_list, 1)
+        order_buttons_layout = QVBoxLayout()
+        self.draft_order_buttons = []
+        for label, direction in (("Move Up", -1), ("Move Down", 1)):
+            button = QPushButton(label, clicked=lambda _checked=False, step=direction: self._move_draft_order(step))
+            self.draft_order_buttons.append(button)
+            order_buttons_layout.addWidget(button)
+        order_buttons_layout.addStretch(1)
+        order_layout.addLayout(order_buttons_layout)
+        layout.addWidget(order_box)
         controls = QHBoxLayout()
         self.draft_action_buttons = []
         for label, callback in (
-            ("Start / Reset Draft", self._start_or_reset_fantasy_draft),
+            ("Start Draft", self._start_fantasy_draft),
             ("Refresh Draft Room", self._refresh_draft_room),
             ("Run LLM Pick", self._run_llm_draft_pick),
             ("Go Back One AI Pick", self._go_back_one_ai_draft_pick),
@@ -1214,20 +1167,46 @@ class FranchiseScreen(QWidget):
     def _league_team_indexes(self, record: FranchiseRecord) -> tuple[int, ...]:
         return league_team_indexes(record)
 
-    def _team_count(self, record: FranchiseRecord | None = None) -> int:
-        if record is None:
-            record = self.repository.load()
-        return len(self._league_team_indexes(record))
+    def _selected_fantasy_draft_order(self) -> tuple[int, ...]:
+        if self.draft_order_list is None:
+            raise ValueError("Fantasy draft order is unavailable.")
+        return tuple(
+            int(self.draft_order_list.item(row).data(Qt.ItemDataRole.UserRole))
+            for row in range(self.draft_order_list.count())
+        )
 
-    def _start_or_reset_fantasy_draft(self) -> None:
-        record = self.repository.load()
-        self.repository.start_fantasy_draft(team_count=self._team_count(record), user_team_index=record.setup.user_team_index)
+    def _move_draft_order(self, direction: int) -> None:
+        if self.draft_order_list is None or self.repository.load_fantasy_draft_state() is not None:
+            return
+        current_row = self.draft_order_list.currentRow()
+        target_row = current_row + int(direction)
+        if current_row < 0 or target_row < 0 or target_row >= self.draft_order_list.count():
+            return
+        item = self.draft_order_list.takeItem(current_row)
+        self.draft_order_list.insertItem(target_row, item)
+        self.draft_order_list.setCurrentRow(target_row)
+
+    def _start_fantasy_draft(self) -> None:
+        try:
+            if self.repository.load_fantasy_draft_state() is not None:
+                raise ValueError("The fantasy draft has already started; its draft order is locked.")
+            record = self.repository.load()
+            order = self._selected_fantasy_draft_order()
+            if set(order) != set(self._league_team_indexes(record)):
+                raise ValueError("Draft order must contain every active franchise team exactly once.")
+            self.repository.start_fantasy_draft(
+                team_order=order,
+                user_team_index=record.setup.user_team_index,
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Fantasy draft", str(exc))
+            return
         self._refresh_draft_room()
 
     def _ensure_fantasy_draft_state(self, record: FranchiseRecord) -> FantasyDraftState:
         state = self.repository.load_fantasy_draft_state()
         if state is None:
-            state = self.repository.start_fantasy_draft(team_count=self._team_count(record), user_team_index=record.setup.user_team_index)
+            raise ValueError("Set the Round 1 draft order and click Start Draft before making a pick.")
         return state
 
     def _draft_position(self, state: FantasyDraftState, record: FranchiseRecord):
@@ -1236,7 +1215,7 @@ class FranchiseScreen(QWidget):
             team_count=state.team_count,
             user_team_index=state.user_team_index,
             team_labels=team_labels_from_model(self.model, team_count=30),
-            team_order=self._league_team_indexes(record),
+            team_order=state.team_order,
         )
 
     def _draft_context(self):
@@ -1257,7 +1236,11 @@ class FranchiseScreen(QWidget):
             record = self.repository.load()
             if state is None:
                 self.draft_player_combo.clear()
-                self.draft_status_text.setPlainText("Fantasy draft has not been started. Click Start / Reset Draft.")
+                self.draft_status_text.setPlainText(
+                    "Fantasy draft has not started. Set the Round 1 draft order, then click Start Draft. "
+                    "The order locks when the draft starts; even rounds use the reverse order."
+                )
+                self._sync_fantasy_draft_controls(state_exists=False)
                 return
             position = self._draft_position(state, record)
             picks = self.repository.list_fantasy_draft_picks()
@@ -1282,6 +1265,7 @@ class FranchiseScreen(QWidget):
             f"User Team: {self._team_label(record.setup.user_team_index)}",
             f"League Teams: {', '.join(str(index) for index in self._league_team_indexes(record))}",
             f"AI League Teams: {', '.join(str(index) for index in record.setup.llm_gm_team_indexes) or 'none'}",
+            "Round 1 Draft Order: " + " -> ".join(str(index) for index in state.team_order),
             f"Pool Count: {len(pool)}",
             f"Available Count: {len(available)}",
             "",
@@ -1294,6 +1278,21 @@ class FranchiseScreen(QWidget):
             if pick.rationale:
                 lines.append(f"  Rationale: {pick.rationale}")
         self.draft_status_text.setPlainText("\n".join(lines))
+        self._sync_fantasy_draft_controls(state_exists=True)
+
+    def _sync_fantasy_draft_controls(self, *, state_exists: bool, running: bool | None = None) -> None:
+        if running is None:
+            running = self._llm_pick_running()
+        if self.draft_order_list is not None:
+            self.draft_order_list.setEnabled(not state_exists and not running)
+        for button in self.draft_order_buttons:
+            button.setEnabled(not state_exists and not running)
+        if not self.draft_action_buttons:
+            return
+        self.draft_action_buttons[0].setEnabled(not state_exists and not running)
+        self.draft_action_buttons[1].setEnabled(not running)
+        for button in self.draft_action_buttons[2:]:
+            button.setEnabled(state_exists and not running)
 
     def _selected_draft_player(self, pool, picks):
         if self.draft_player_combo is None:
@@ -1370,8 +1369,10 @@ class FranchiseScreen(QWidget):
         return self._llm_pick_thread is not None and self._llm_pick_thread.is_alive()
 
     def _set_llm_pick_running(self, running: bool) -> None:
-        for button in self.draft_action_buttons:
-            button.setEnabled(not running)
+        self._sync_fantasy_draft_controls(
+            state_exists=self.repository.load_fantasy_draft_state() is not None,
+            running=running,
+        )
 
     def _append_draft_status(self, message: str) -> None:
         if self.draft_status_text is None:

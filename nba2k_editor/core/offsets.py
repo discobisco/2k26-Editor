@@ -338,7 +338,7 @@ def get_editor_layout_for_super(super_type: str) -> dict[str, object]:
                         layout_tokens = set(_split_version_tokens(layout_version_key))
                         if not dropdown_tokens or not layout_tokens or not dropdown_tokens.intersection(layout_tokens):
                             continue
-                        for option_key in ("dropdown", "values"):
+                        for option_key in ("dropdown", "values", "id_prefixed_dropdown"):
                             if option_key in dropdown_payload:
                                 layout_payload[option_key] = dropdown_payload[option_key]
     return layout

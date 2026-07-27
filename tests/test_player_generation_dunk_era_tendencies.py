@@ -42,9 +42,32 @@ def _evidence(*, dunks: float, season: int = 2025) -> SimpleNamespace:
     )
 
 
-def test_generic_dunk_totals_do_not_author_literal_standing_dunk_tendency() -> None:
-    assert derive_tendency_standingdunk(_evidence(dunks=0.0), league_player_rows=()) is None
-    assert derive_tendency_standingdunk(_evidence(dunks=300.0), league_player_rows=()) is None
+def _standing_population() -> tuple[dict[str, object], ...]:
+    return tuple(
+        {
+            "season": 2025,
+            "player_season_info.lg": "NBA",
+            "player_season_info.pos": "C",
+            "player_info.pos": "C",
+            "player_info.ht_in_in": 77.0 + index * 0.7,
+            "player_info.wt": 205.0 + index * 5.0,
+            "player_per_game.g": 82.0,
+            "player_per_game.fga_per_game": 10.0,
+            "player_totals.g": 82.0,
+            "player_totals.fga": 820.0,
+            "player_shooting.percent_fga_from_x0_3_range": 0.20 + index * 0.05,
+        }
+        for index in range(12)
+    )
+
+
+def test_broad_dunk_totals_do_not_author_literal_standing_dunk_tendency() -> None:
+    rows = _standing_population()
+    no_dunks = derive_tendency_standingdunk(_evidence(dunks=0.0), league_player_rows=rows)
+    many_dunks = derive_tendency_standingdunk(_evidence(dunks=300.0), league_player_rows=rows)
+    assert no_dunks is not None and many_dunks is not None
+    assert no_dunks["value"] == many_dunks["value"]
+    assert "broad or moving dunk totals are deliberately excluded" in no_dunks["evidence_keys"][-1]
 
 
 def test_dunk_attempt_era_regimes_are_separate_and_never_universally_zero() -> None:

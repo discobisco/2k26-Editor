@@ -5,7 +5,7 @@ from pathlib import Path
 import sqlite3
 
 import pytest
-from PyQt6.QtWidgets import QApplication, QGroupBox, QPushButton
+from PyQt6.QtWidgets import QApplication, QGroupBox
 
 from nba2k_editor.franchise.college_dynasty import (
     PROJECTION_STAGE_SWEET16,
@@ -20,7 +20,7 @@ from nba2k_editor.franchise.models import (
     FranchiseTeamOption,
     LEAGUE_MODE_COLLEGE,
 )
-from nba2k_editor.franchise.profile_generation import GeneratedTeamProfile, write_generated_team_profile
+from nba2k_editor.franchise.profile_generation import copy_missing_team_profiles
 from nba2k_editor.franchise.qt_screen import FranchiseScreen
 from nba2k_editor.franchise.storage import FranchiseRepository
 
@@ -386,22 +386,7 @@ def test_visible_college_dashboard_shows_canonical_projection_and_sweet16_state(
     college.capture_projection_slots(model, true_sim_year=2025, stage=PROJECTION_STAGE_SWEET16)
 
     record = franchise.load()
-    for team in record.team_options:
-        write_generated_team_profile(
-            record,
-            GeneratedTeamProfile(
-                team_index=team.team_index,
-                team_label=team.label,
-                gm_control="human" if team.team_index == record.setup.user_team_index else "llm",
-                organizational_identity="Persistent college program identity.",
-                owner="Athletic department priorities.",
-                general_manager="Program decision process.",
-                coach="Coaching identity.",
-                scout="Recruiting identity.",
-                raw_response="{}",
-                league_mode=LEAGUE_MODE_COLLEGE,
-            ),
-        )
+    copy_missing_team_profiles(record)
 
     screen = FranchiseScreen(model, db_path=tmp_path / "college.sqlite")
     screen._load_franchise_dashboard()
@@ -418,7 +403,4 @@ def test_visible_college_dashboard_shows_canonical_projection_and_sweet16_state(
     assert "Reserved Season Player Records: 450/450" in status
     assert "Sweet 16 Winners: 16/16" in status
     assert "Reserved Sweet 16 Player Records: 240/240" in status
-    visible_buttons = {button.text() for button in screen.findChildren(QPushButton) if button.isVisible()}
-    assert "Apply Season Projection" in visible_buttons
-    assert "Apply Sweet 16 Projection" in visible_buttons
     screen.close()

@@ -111,6 +111,7 @@ class FranchiseRepository:
                 current_pick_number INTEGER NOT NULL,
                 team_count INTEGER NOT NULL,
                 user_team_index INTEGER NOT NULL,
+                team_order_json TEXT NOT NULL,
                 started_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -303,6 +304,32 @@ class FranchiseRepository:
             connection.execute(
                 "ALTER TABLE team_recommendations ADD COLUMN trade_with_user_team INTEGER NOT NULL DEFAULT 0"
             )
+        fantasy_draft_columns = {
+            str(row[1]) for row in connection.execute("PRAGMA table_info(fantasy_draft_state)")
+        }
+        if "team_order_json" not in fantasy_draft_columns:
+            connection.execute(
+                "ALTER TABLE fantasy_draft_state ADD COLUMN team_order_json TEXT NOT NULL DEFAULT '[]'"
+            )
+            existing_state = connection.execute(
+                "SELECT team_count FROM fantasy_draft_state WHERE id = 1"
+            ).fetchone()
+            if existing_state is not None:
+                team_count = int(existing_state[0])
+                team_order = tuple(
+                    int(row[0])
+                    for row in connection.execute(
+                        "SELECT team_index FROM franchise_teams ORDER BY team_index"
+                    )
+                )
+                if len(team_order) != team_count:
+                    raise ValueError(
+                        "existing fantasy draft team count does not match its saved franchise teams"
+                    )
+                connection.execute(
+                    "UPDATE fantasy_draft_state SET team_order_json = ? WHERE id = 1",
+                    (json.dumps(team_order),),
+                )
         college_season_columns = {
             str(row[1]) for row in connection.execute("PRAGMA table_info(college_seasons)")
         }
@@ -681,7 +708,35 @@ class FranchiseRepository:
             raise RuntimeError("user-team trade resume was not saved")
         return resumed
 
-    def start_fantasy_draft(self, *, team_count: int, user_team_index: int) -> FantasyDraftState:
+    def start_fantasy_draft(
+        self,
+        *,
+        team_order: Iterable[int],
+        user_team_index: int,
+    ) -> FantasyDraftState:
+        order = tuple(int(index) for index in team_order)
+        if not order:
+            raise ValueError("fantasy draft order must include at least one team")
+        if len(set(order)) != len(order):
+            raise ValueError("fantasy draft order cannot contain duplicate teams")
+        if int(user_team_index) not in set(order):
+            raise ValueError("fantasy draft order must include the user-controlled team")
+        if any(index < 0 or index > 29 for index in order):
+            raise ValueError("fantasy draft order contains a team index outside 0 through 29")
+        connection = self._connect()
+        try:
+            self.initialize(connection)
+            active_team_indexes = tuple(
+                int(row[0])
+                for row in connection.execute(
+                    "SELECT team_index FROM franchise_teams ORDER BY team_index"
+                )
+            )
+        finally:
+            connection.close()
+        if active_team_indexes and set(order) != set(active_team_indexes):
+            raise ValueError("fantasy draft order must contain every active franchise team exactly once")
+        team_count = len(order)
         now = _utc_now_text()
         connection = self._connect()
         try:
@@ -690,30 +745,60 @@ class FranchiseRepository:
             connection.execute("DELETE FROM fantasy_draft_state")
             connection.execute(
                 """
-                INSERT INTO fantasy_draft_state(id, current_pick_number, team_count, user_team_index, started_at, updated_at)
-                VALUES(1, 1, ?, ?, ?, ?)
+                INSERT INTO fantasy_draft_state(
+                    id, current_pick_number, team_count, user_team_index,
+                    team_order_json, started_at, updated_at
+                )
+                VALUES(1, 1, ?, ?, ?, ?, ?)
                 """,
-                (int(team_count), int(user_team_index), now, now),
+                (team_count, int(user_team_index), json.dumps(order), now, now),
             )
             connection.execute("INSERT OR REPLACE INTO franchise_meta(key, value) VALUES(?, ?)", ("updated_at", now))
             connection.commit()
         finally:
             connection.close()
-        return FantasyDraftState(1, int(team_count), int(user_team_index), now, now)
+        return FantasyDraftState(
+            current_pick_number=1,
+            team_count=team_count,
+            user_team_index=int(user_team_index),
+            team_order=order,
+            started_at=now,
+            updated_at=now,
+        )
 
     def load_fantasy_draft_state(self) -> FantasyDraftState | None:
         connection = self._connect()
         try:
             self.initialize(connection)
             row = connection.execute(
-                "SELECT current_pick_number, team_count, user_team_index, started_at, updated_at FROM fantasy_draft_state WHERE id = 1"
+                """
+                SELECT current_pick_number, team_count, user_team_index,
+                       team_order_json, started_at, updated_at
+                FROM fantasy_draft_state
+                WHERE id = 1
+                """
             ).fetchone()
             connection.commit()
         finally:
             connection.close()
         if row is None:
             return None
-        return FantasyDraftState(int(row[0]), int(row[1]), int(row[2]), str(row[3]), str(row[4]))
+        team_order_value = json.loads(str(row[3]))
+        if not isinstance(team_order_value, list):
+            raise ValueError("saved fantasy draft order is not a JSON array")
+        team_order = tuple(int(index) for index in team_order_value)
+        if len(team_order) != int(row[1]) or len(set(team_order)) != len(team_order):
+            raise ValueError("saved fantasy draft order is incomplete or contains duplicate teams")
+        if int(row[2]) not in set(team_order):
+            raise ValueError("saved fantasy draft order does not include the user-controlled team")
+        return FantasyDraftState(
+            current_pick_number=int(row[0]),
+            team_count=int(row[1]),
+            user_team_index=int(row[2]),
+            team_order=team_order,
+            started_at=str(row[4]),
+            updated_at=str(row[5]),
+        )
 
     def list_fantasy_draft_picks(self) -> tuple[FantasyDraftStoredPick, ...]:
         connection = self._connect()

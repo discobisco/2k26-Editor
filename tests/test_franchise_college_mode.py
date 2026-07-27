@@ -19,10 +19,10 @@ from nba2k_editor.franchise.models import (
     FranchiseTeamOption,
 )
 from nba2k_editor.franchise.profile_generation import (
-    GeneratedTeamProfile,
-    build_team_profile_generation_requests,
-    team_profile_is_valid,
-    write_generated_team_profile,
+    copy_missing_team_profiles,
+    pregenerated_team_profile_path,
+    team_profile_path,
+    team_profiles_complete,
 )
 from nba2k_editor.franchise.qt_screen import FranchiseScreen
 from nba2k_editor.franchise.recommendations import build_team_recommendation_requests
@@ -58,26 +58,6 @@ class CollegeModel:
         return "attached"
 
 
-class FakeCollegeProfileClient:
-    def available(self) -> bool:
-        return True
-
-    def generate(self, prompt: str, *, system_prompt: str) -> str:
-        payload = json.loads(prompt)
-        team = payload["team"]
-        return json.dumps(
-            {
-                "team_index": team["team_index"],
-                "team_label": team["team_label"],
-                "gm_control": team["gm_control"],
-                "organizational_identity": "Persistent college program identity.",
-                "owner": "Persistent athletic department priorities.",
-                "general_manager": "Persistent program decision process.",
-                "coach": "Persistent coaching staff identity.",
-                "scout": "Persistent recruiting staff identity.",
-            }
-        )
-
 
 def college_setup() -> FranchiseSetup:
     return FranchiseSetup(
@@ -98,22 +78,7 @@ def college_teams() -> tuple[FranchiseTeamOption, ...]:
 
 
 def write_ready_college_profiles(record) -> None:
-    for team in record.team_options:
-        write_generated_team_profile(
-            record,
-            GeneratedTeamProfile(
-                team_index=team.team_index,
-                team_label=team.label,
-                gm_control="human" if team.team_index == record.setup.user_team_index else "llm",
-                organizational_identity="Persistent college program identity.",
-                owner="Persistent athletic department priorities.",
-                general_manager="Persistent program decision process.",
-                coach="Persistent coaching staff identity.",
-                scout="Persistent recruiting staff identity.",
-                raw_response="{}",
-                league_mode=LEAGUE_MODE_COLLEGE,
-            ),
-        )
+    copy_missing_team_profiles(record)
 
 
 def test_college_mode_persists_and_uses_separate_phase_cycle(tmp_path: Path) -> None:
@@ -179,28 +144,15 @@ def test_saved_franchise_without_mode_key_loads_as_nba(tmp_path: Path) -> None:
     assert repository.load().setup.league_mode == LEAGUE_MODE_NBA
 
 
-def test_college_profiles_use_program_roles_and_college_prompt(tmp_path: Path) -> None:
+def test_college_mode_copies_the_pregenerated_team_profiles(tmp_path: Path) -> None:
     repository = FranchiseRepository(tmp_path / "college.sqlite")
     record = repository.replace_franchise(college_setup(), college_teams())
-    requests = build_team_profile_generation_requests(record, CollegeModel())
-    payload = json.loads(requests[0].task.prompt)
+    copied = copy_missing_team_profiles(record)
 
-    assert payload["franchise"]["league_mode"] == LEAGUE_MODE_COLLEGE
-    assert "college basketball program" in " ".join(payload["rules"])
-    assert "persistent college basketball program profile" in requests[0].task.system_prompt
-
-    client = FakeCollegeProfileClient()
-    response = client.generate(requests[0].task.prompt, system_prompt=requests[0].task.system_prompt)
-    from nba2k_editor.franchise.profile_generation import generated_team_profile_from_response
-
-    profile = generated_team_profile_from_response(requests[0], response)
-    path = write_generated_team_profile(record, profile)
-    text = path.read_text(encoding="utf-8")
-    assert "## Athletic Department (LLM-controlled)" in text
-    assert "## Program Decision-Maker (Human-controlled)" in text
-    assert "## Coaching Staff (LLM-controlled)" in text
-    assert "## Recruiting Staff (LLM-controlled)" in text
-    assert team_profile_is_valid(record, record.team_options[0]) is True
+    assert copied == (team_profile_path(record, 0), team_profile_path(record, 1))
+    assert team_profile_path(record, 0).read_bytes() == pregenerated_team_profile_path(0).read_bytes()
+    assert team_profile_path(record, 1).read_bytes() == pregenerated_team_profile_path(1).read_bytes()
+    assert team_profiles_complete(record) is True
 
 
 def test_college_recommendation_prompt_excludes_nba_action_types(tmp_path: Path) -> None:

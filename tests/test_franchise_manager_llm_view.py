@@ -35,7 +35,7 @@ from nba2k_editor.franchise.llm_tasks import FranchiseLlmTask
 from nba2k_editor.franchise.llm_view import build_franchise_llm_markdown, build_franchise_llm_view
 from nba2k_editor.franchise.prompts import build_fantasy_draft_pick_prompt
 from nba2k_editor.franchise.models import FantasyDraftStoredPick, FranchiseRecord, FranchiseSetup, FranchiseSimState, FranchiseTeamOption, TeamRecommendation
-from nba2k_editor.franchise.profile_generation import GeneratedTeamProfile, write_generated_team_profile
+from nba2k_editor.franchise.profile_generation import copy_missing_team_profiles
 from nba2k_editor.franchise.qt_screen import FranchiseScreen
 from nba2k_editor.franchise.recommendations import (
     TeamRecommendationRequest,
@@ -64,48 +64,7 @@ def flush_qt_events(app: QApplication) -> None:
 
 
 def write_ready_team_profiles(record: FranchiseRecord) -> None:
-    for team in record.team_options:
-        gm_control = "human" if team.team_index == record.setup.user_team_index else "llm"
-        write_generated_team_profile(
-            record,
-            GeneratedTeamProfile(
-                team_index=team.team_index,
-                team_label=team.label,
-                gm_control=gm_control,
-                organizational_identity="Persistent organizational identity.",
-                owner="Persistent LLM owner identity.",
-                general_manager="Persistent general manager relationship.",
-                coach="Persistent LLM coach identity.",
-                scout="Persistent LLM scout identity.",
-                raw_response="{}",
-            ),
-        )
-
-
-class FakeTeamProfileClient:
-    def available(self) -> bool:
-        return True
-
-    def generate(self, prompt: str, *, system_prompt: str = "") -> str:
-        payload = json.loads(prompt)
-        team = payload["team"]
-        gm_control = str(team["gm_control"])
-        return json.dumps(
-            {
-                "team_index": int(team["team_index"]),
-                "team_label": str(team["team_label"]),
-                "gm_control": gm_control,
-                "organizational_identity": "Persistent organizational identity.",
-                "owner": "Persistent LLM owner identity.",
-                "general_manager": (
-                    "The human user owns all GM decisions."
-                    if gm_control == "human"
-                    else "Persistent LLM general manager identity."
-                ),
-                "coach": "Persistent LLM coach identity.",
-                "scout": "Persistent LLM scout identity.",
-            }
-        )
+    copy_missing_team_profiles(record)
 
 
 @dataclass(frozen=True)
@@ -272,7 +231,7 @@ def _stored_pick(pick_number: int, *, picked_by: str, player_label: str = "Playe
 
 def test_undo_last_fantasy_draft_pick_rolls_back_latest_ai_pick(tmp_path: Path) -> None:
     repository = FranchiseRepository(tmp_path / "franchise.sqlite")
-    repository.start_fantasy_draft(team_count=3, user_team_index=0)
+    repository.start_fantasy_draft(team_order=(0, 1, 2), user_team_index=0)
     repository.record_fantasy_draft_pick(_stored_pick(1, picked_by="user", player_label="Real Player"))
     repository.record_fantasy_draft_pick(_stored_pick(2, picked_by="llm", player_label="Roster Filler"))
 
@@ -289,7 +248,7 @@ def test_undo_last_fantasy_draft_pick_rolls_back_latest_ai_pick(tmp_path: Path) 
 
 def test_undo_last_fantasy_draft_pick_does_not_remove_latest_user_pick(tmp_path: Path) -> None:
     repository = FranchiseRepository(tmp_path / "franchise.sqlite")
-    repository.start_fantasy_draft(team_count=3, user_team_index=0)
+    repository.start_fantasy_draft(team_order=(0, 1, 2), user_team_index=0)
     repository.record_fantasy_draft_pick(_stored_pick(1, picked_by="llm", player_label="AI Player"))
     repository.record_fantasy_draft_pick(_stored_pick(2, picked_by="user", player_label="User Player"))
 
@@ -331,6 +290,73 @@ def test_selected_user_and_ai_teams_are_the_only_fantasy_draft_league_teams() ->
     assert draft_turn_owner(draft_position(2, team_order=order), record) == "user"
     assert draft_turn_owner(draft_position(3, team_order=order), record) == "llm"
     assert draft_turn_owner(draft_position(1, team_order=(0,)), record) == "excluded"
+
+
+def test_custom_fantasy_draft_order_persists_and_drives_snake_order(tmp_path: Path) -> None:
+    repository = FranchiseRepository(tmp_path / "franchise.sqlite")
+    repository.replace_franchise(
+        FranchiseSetup(
+            start_year=2025,
+            keep_full_league_save=False,
+            llm_gm_team_indexes=(3, 8),
+            fantasy_draft=True,
+            user_team_index=5,
+        ),
+        (
+            FranchiseTeamOption(3, "Team Three", "[3] Team Three"),
+            FranchiseTeamOption(5, "User Team", "[5] User Team"),
+            FranchiseTeamOption(8, "Team Eight", "[8] Team Eight"),
+        ),
+    )
+
+    repository.start_fantasy_draft(team_order=(8, 5, 3), user_team_index=5)
+    state = repository.load_fantasy_draft_state()
+
+    assert state is not None
+    assert state.team_order == (8, 5, 3)
+    assert draft_position(1, team_order=state.team_order).team_index == 8
+    assert draft_position(2, team_order=state.team_order).team_index == 5
+    assert draft_position(3, team_order=state.team_order).team_index == 3
+    assert draft_position(4, team_order=state.team_order).team_index == 3
+    assert draft_position(5, team_order=state.team_order).team_index == 5
+    assert draft_position(6, team_order=state.team_order).team_index == 8
+
+
+def test_existing_fantasy_draft_state_migrates_its_exact_sorted_team_order(tmp_path: Path) -> None:
+    db_path = tmp_path / "legacy-fantasy.sqlite"
+    connection = sqlite3.connect(db_path)
+    connection.executescript(
+        """
+        CREATE TABLE franchise_teams (
+            team_index INTEGER PRIMARY KEY,
+            label TEXT NOT NULL,
+            display_label TEXT NOT NULL
+        );
+        CREATE TABLE fantasy_draft_state (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            current_pick_number INTEGER NOT NULL,
+            team_count INTEGER NOT NULL,
+            user_team_index INTEGER NOT NULL,
+            started_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        INSERT INTO franchise_teams(team_index, label, display_label)
+        VALUES(8, 'Team Eight', '[8] Team Eight'),
+              (3, 'Team Three', '[3] Team Three'),
+              (5, 'User Team', '[5] User Team');
+        INSERT INTO fantasy_draft_state(
+            id, current_pick_number, team_count, user_team_index, started_at, updated_at
+        ) VALUES(1, 4, 3, 5, 'start', 'update');
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    state = FranchiseRepository(db_path).load_fantasy_draft_state()
+
+    assert state is not None
+    assert state.current_pick_number == 4
+    assert state.team_order == (3, 5, 8)
 
 
 def test_control_room_keeps_draft_as_one_section_of_broader_framework(tmp_path: Path) -> None:
@@ -425,6 +451,30 @@ def test_fantasy_draft_franchise_shows_only_draft_page(tmp_path: Path) -> None:
     assert screen.recommendation_text is None
 
 
+def test_user_sets_and_locks_fantasy_draft_order_before_start(tmp_path: Path) -> None:
+    screen = _franchise_screen_for_mode(tmp_path, fantasy_draft=True)
+
+    assert screen.draft_order_list is not None
+    assert screen.repository.load_fantasy_draft_state() is None
+    assert screen._selected_fantasy_draft_order() == (0, 5)
+    assert screen.draft_order_list.isEnabled() is True
+    assert screen.draft_action_buttons[2].isEnabled() is False
+    screen.draft_order_list.setCurrentRow(1)
+    screen.draft_order_buttons[0].click()
+
+    assert screen._selected_fantasy_draft_order() == (5, 0)
+    screen.draft_action_buttons[0].click()
+
+    state = screen.repository.load_fantasy_draft_state()
+    assert state is not None
+    assert state.team_order == (5, 0)
+    assert screen.draft_order_list.isEnabled() is False
+    assert screen.draft_action_buttons[0].isEnabled() is False
+    assert screen.draft_status_text is not None
+    assert "On Clock: Team 5 Team 5" in screen.draft_status_text.toPlainText()
+    assert "Round 1 Draft Order: 5 -> 0" in screen.draft_status_text.toPlainText()
+
+
 def test_non_fantasy_franchise_shows_system_pages_without_draft_room(tmp_path: Path) -> None:
     screen = _franchise_screen_for_mode(tmp_path, fantasy_draft=False)
 
@@ -475,11 +525,10 @@ def test_starting_non_fantasy_replaces_setup_controls_in_visible_ui(tmp_path: Pa
         target_executable="NBA2K26.exe",
     )
 
-    repository.start_fantasy_draft(team_count=2, user_team_index=5)
+    repository.start_fantasy_draft(team_order=(0, 5), user_team_index=5)
     screen = FranchiseScreen(
         ReadOnlyFranchiseModel(),
         db_path=db_path,
-        profile_client=FakeTeamProfileClient(),
     )
     screen.show()
     screen._show_new_franchise_setup()
@@ -490,11 +539,6 @@ def test_starting_non_fantasy_replaces_setup_controls_in_visible_ui(tmp_path: Pa
             checkbox.setChecked(team_index == 0)
 
     screen._start_franchise()
-    for _ in range(100):
-        flush_qt_events(app)
-        screen._poll_team_profile_generation()
-        if screen.phase_status_text is not None:
-            break
     flush_qt_events(app)
 
     visible_titles = {group.title() for group in screen.findChildren(QGroupBox) if group.isVisible()}

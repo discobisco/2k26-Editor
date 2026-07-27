@@ -454,6 +454,8 @@ def _formula_has_live_input(
         return True
     if _is_approved_researched_defense_override(evidence, field_key, value):
         return True
+    if _is_approved_offball_action_anchor(evidence, field_key, value):
+        return True
     candidate_paths = tuple(
         dict.fromkeys(
             key
@@ -548,6 +550,37 @@ def _is_approved_researched_defense_override(
         return False
     required_provenance = set(special_rule.provenance_evidence_keys)
     return required_provenance.issubset(value.evidence_keys)
+
+
+def _is_approved_offball_action_anchor(
+    evidence: PlayerEvidence,
+    field_key: str,
+    value: RuleValue,
+) -> bool:
+    fields = {
+        "Tendencies/MIDOFFSCREENSHOT": ("offscreen", 0),
+        "Tendencies/3POINTOFFSCREENSHOT": ("offscreen", 0),
+        "Tendencies/MIDSPOTUPSHOT": ("spotup", 1),
+        "Tendencies/3POINTSPOTUPSHOT": ("spotup", 1),
+    }
+    action_spec = fields.get(field_key)
+    if action_spec is None:
+        return False
+    player_id = str(evidence.player_id or evidence.identity.get("player_id") or "").strip().lower()
+    anchors = getattr(offense, "_OFFBALL_ACTION_ANCHORS", {})
+    anchor = anchors.get(player_id) if isinstance(anchors, dict) else None
+    if not isinstance(anchor, tuple) or len(anchor) != 2:
+        return False
+    action, index = action_spec
+    expected = int(anchor[index])
+    expected_rule = f"derive_tendency_{field_key.split('/', 1)[1].lower()}_approved_behavior_anchor"
+    return (
+        value.value == expected
+        and value.source_rule == expected_rule
+        and f"player_id={player_id}" in value.evidence_keys
+        and f"approved_{action}_anchor={expected}" in value.evidence_keys
+        and "names_are_display_only;exact_player_id_authors_the_anchor" in value.evidence_keys
+    )
 
 
 def _is_approved_intangibles_floor(

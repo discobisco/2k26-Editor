@@ -1,62 +1,18 @@
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass
+import shutil
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Iterable
 
-from nba2k_editor.franchise.llm_client import LLMClient
-from nba2k_editor.franchise.llm_tasks import (
-    FranchiseLlmTask,
-    build_franchise_llm_task,
-    franchise_team_context,
-    franchise_team_profile_directory,
-    run_franchise_llm_task,
-)
-from nba2k_editor.franchise.llm_view import build_franchise_llm_view, franchise_roster_payload_for_team
-from nba2k_editor.franchise.models import LEAGUE_MODE_COLLEGE, LEAGUE_MODE_NBA, FranchiseRecord, FranchiseTeamOption
+from nba2k_editor.franchise.llm_tasks import franchise_team_profile_directory
+from nba2k_editor.franchise.models import FranchiseRecord, FranchiseTeamOption
 
 
-@dataclass(frozen=True)
-class TeamProfileGenerationRequest:
-    team_index: int
-    team_label: str
-    gm_control: str
-    task: FranchiseLlmTask
-    league_mode: str = LEAGUE_MODE_NBA
+PREGENERATED_TEAM_PROFILE_DIRECTORY = Path(__file__).resolve().parent / "team_profiles"
 
 
-@dataclass(frozen=True)
-class GeneratedTeamProfile:
-    team_index: int
-    team_label: str
-    gm_control: str
-    organizational_identity: str
-    owner: str
-    general_manager: str
-    coach: str
-    scout: str
-    raw_response: str
-    league_mode: str = LEAGUE_MODE_NBA
-
-
-def _profile_headings(league_mode: str, gm_control: str) -> tuple[str, ...]:
-    control_heading = "Human-controlled" if gm_control == "human" else "LLM-controlled"
-    if league_mode == LEAGUE_MODE_COLLEGE:
-        return (
-            "## Program Identity",
-            "## Athletic Department (LLM-controlled)",
-            f"## Program Decision-Maker ({control_heading})",
-            "## Coaching Staff (LLM-controlled)",
-            "## Recruiting Staff (LLM-controlled)",
-        )
-    return (
-        "## Organizational Identity",
-        "## Owner (LLM-controlled)",
-        f"## General Manager ({control_heading})",
-        "## Coach (LLM-controlled)",
-        "## Scout (LLM-controlled)",
-    )
+def pregenerated_team_profile_path(team_index: int) -> Path:
+    return PREGENERATED_TEAM_PROFILE_DIRECTORY / f"team_{int(team_index):02d}_profile.md"
 
 
 def team_profile_path(record: FranchiseRecord, team_index: int) -> Path:
@@ -70,23 +26,12 @@ def team_profile_is_valid(record: FranchiseRecord, team: FranchiseTeamOption) ->
         text = path.read_text(encoding="utf-8")
     except OSError:
         return False
-    gm_control = "human" if int(team.team_index) == int(record.setup.user_team_index) else "llm"
-    headings = _profile_headings(record.setup.league_mode, gm_control)
     required_markers = (
+        "type: franchise_manager_team_profile",
         f"team_index: {int(team.team_index)}",
-        f"team_label: {json.dumps(team.label)}",
-        f"gm_control: {gm_control}",
-        "status: active",
-        *headings,
+        f"# Franchise Team {int(team.team_index):02d} Profile",
     )
-    if not all(marker in text for marker in required_markers):
-        return False
-    for position, heading in enumerate(headings):
-        section_start = text.find(heading) + len(heading)
-        section_end = text.find(headings[position + 1], section_start) if position + 1 < len(headings) else len(text)
-        if not text[section_start:section_end].strip():
-            return False
-    return True
+    return all(marker in text for marker in required_markers)
 
 
 def missing_team_profile_indexes(record: FranchiseRecord) -> tuple[int, ...]:
@@ -101,265 +46,34 @@ def team_profiles_complete(record: FranchiseRecord) -> bool:
     return bool(record.franchise_id and record.profile_directory and record.team_options) and not missing_team_profile_indexes(record)
 
 
-def build_team_profile_generation_prompt(
+def copy_missing_team_profiles(
     record: FranchiseRecord,
-    *,
-    team_index: int,
-    team_label: str,
-    roster: Iterable[dict[str, object]],
-) -> str:
-    college_mode = record.setup.league_mode == LEAGUE_MODE_COLLEGE
-    gm_control = "human" if int(team_index) == int(record.setup.user_team_index) else "llm"
-    if college_mode:
-        gm_rule = (
-            "The human user is this program's decision-maker. Do not invent an autonomous replacement; describe how the athletic department, coaching staff, and recruiting staff work with the user."
-            if gm_control == "human"
-            else "Create a persistent LLM-controlled program decision-maker identity for this CPU-controlled college program."
-        )
-        role_rule = "Athletic department, coaching staff, and recruiting staff are LLM-controlled for every program."
-    else:
-        gm_rule = (
-            "The human user is this team's General Manager. Do not invent an autonomous GM persona; describe how the Owner, Coach, and Scout work with the human GM."
-            if gm_control == "human"
-            else "Create a persistent LLM-controlled General Manager identity for this CPU-controlled team."
-        )
-        role_rule = "Owner, Coach, and Scout are LLM-controlled on every team."
-    profile_schema = (
-        {
-            "team_index": int(team_index),
-            "team_label": str(team_label),
-            "gm_control": gm_control,
-            "organizational_identity": "durable college program identity and priorities",
-            "owner": "persistent athletic-department identity, goals, constraints, and oversight style",
-            "general_manager": "human working relationship when gm_control is human; otherwise persistent LLM program decision-maker identity",
-            "coach": "persistent coaching-staff identity, system, priorities, and program relationship",
-            "scout": "persistent recruiting-staff evaluation philosophy, biases, and program relationship",
-        }
-        if college_mode
-        else {
-            "team_index": int(team_index),
-            "team_label": str(team_label),
-            "gm_control": gm_control,
-            "organizational_identity": "durable team identity and priorities",
-            "owner": "persistent Owner identity, goals, constraints, and management style",
-            "general_manager": "human-GM working relationship when gm_control is human; otherwise persistent LLM GM identity and roster-building philosophy",
-            "coach": "persistent Coach identity, system, priorities, and relationship with the GM",
-            "scout": "persistent Scout identity, evaluation philosophy, biases, and relationship with the GM",
-        }
-    )
-    payload = {
-        "task": "generate_persistent_college_program_profile" if college_mode else "generate_persistent_franchise_team_profile",
-        "rules": [
-            (
-                "Create a distinct persistent staff identity for this one college basketball program."
-                if college_mode
-                else "Create a distinct persistent staff identity for this one franchise team."
-            ),
-            role_rule,
-            gm_rule,
-            "Ground basketball context in the supplied true simulation year, team label, and current roster.",
-            "Do not invent player facts, contracts, transactions, records, or staff employment facts that are not supplied.",
-            "The profile persists across phases and seasons, so write durable identities, decision styles, priorities, tensions, and working relationships rather than a one-turn recommendation.",
-            "Return only valid JSON. No markdown and no prose outside JSON.",
-            *(
-                [
-                    "This is a college basketball program. Do not invent NBA contracts, trades, free agency, or draft control.",
-                    "Use true_sim_year for era context and do not assume modern transfer, NIL, recruiting, eligibility, or postseason rules in earlier eras.",
-                ]
-                if college_mode
-                else []
-            ),
-        ],
-        "franchise": {
-            "franchise_id": record.franchise_id,
-            "league_mode": record.setup.league_mode,
-            "true_sim_year": record.setup.start_year,
-            "user_team_index": record.setup.user_team_index,
-            "fantasy_draft": record.setup.fantasy_draft,
-        },
-        "team": {
-            "team_index": int(team_index),
-            "team_label": str(team_label),
-            "gm_control": gm_control,
-            "current_roster": tuple(roster),
-        },
-        "required_json_schema": profile_schema,
-    }
-    return json.dumps(payload, indent=2, sort_keys=True)
-
-
-def build_team_profile_generation_requests(
-    record: FranchiseRecord,
-    model: object,
     *,
     team_indexes: Iterable[int] | None = None,
-) -> tuple[TeamProfileGenerationRequest, ...]:
+) -> tuple[Path, ...]:
     if not record.franchise_id or not record.profile_directory:
         raise ValueError("franchise-scoped team profile storage is not configured")
+
+    teams_by_index = {int(team.team_index): team for team in record.team_options}
     requested_indexes = (
         {int(index) for index in team_indexes}
         if team_indexes is not None
         else set(missing_team_profile_indexes(record))
     )
-    view = build_franchise_llm_view(model)
-    requests: list[TeamProfileGenerationRequest] = []
-    for team in record.team_options:
-        team_index = int(team.team_index)
-        if team_index not in requested_indexes:
-            continue
-        gm_control = "human" if team_index == int(record.setup.user_team_index) else "llm"
-        context = franchise_team_context(record, team_index, team_label=team.label)
-        prompt = build_team_profile_generation_prompt(
-            record,
-            team_index=team_index,
-            team_label=team.label,
-            roster=franchise_roster_payload_for_team(view.roster_slots, team_index),
-        )
-        requests.append(
-            TeamProfileGenerationRequest(
-                team_index=team_index,
-                team_label=team.label,
-                gm_control=gm_control,
-                task=build_franchise_llm_task(
-                    context,
-                    task_name=(
-                        "generate_persistent_college_program_profile"
-                        if record.setup.league_mode == LEAGUE_MODE_COLLEGE
-                        else "generate_persistent_franchise_team_profile"
-                    ),
-                    prompt=prompt,
-                    system_prompt=(
-                        "Return only valid JSON for the requested persistent college basketball program profile."
-                        if record.setup.league_mode == LEAGUE_MODE_COLLEGE
-                        else "Return only valid JSON for the requested persistent NBA2K franchise team profile."
-                    ),
-                ),
-                league_mode=record.setup.league_mode,
-            )
-        )
-    unknown_indexes = requested_indexes.difference(request.team_index for request in requests)
+    unknown_indexes = tuple(sorted(requested_indexes.difference(teams_by_index)))
     if unknown_indexes:
-        raise ValueError(f"profile generation requested teams outside this franchise: {tuple(sorted(unknown_indexes))}")
-    return tuple(requests)
+        raise ValueError(f"profile copies requested teams outside this franchise: {unknown_indexes}")
 
-
-def _response_object(text: str) -> dict[str, object]:
-    stripped = text.strip()
-    if stripped.startswith("```"):
-        stripped = "\n".join(line for line in stripped.splitlines() if not line.strip().startswith("```")).strip()
-    start = stripped.find("{")
-    end = stripped.rfind("}")
-    if start < 0 or end < start:
-        raise ValueError("LLM profile response did not contain a JSON object")
-    payload = json.loads(stripped[start : end + 1])
-    if not isinstance(payload, dict):
-        raise ValueError("LLM profile response JSON must be an object")
-    return payload
-
-
-def generated_team_profile_from_response(
-    request: TeamProfileGenerationRequest,
-    response: str,
-) -> GeneratedTeamProfile:
-    payload = _response_object(response)
-    required_text = (
-        "team_label",
-        "gm_control",
-        "organizational_identity",
-        "owner",
-        "general_manager",
-        "coach",
-        "scout",
-    )
-    if "team_index" not in payload:
-        raise ValueError("LLM profile response missing team_index")
-    for key in required_text:
-        if not str(payload.get(key) or "").strip():
-            raise ValueError(f"LLM profile response missing {key}")
-    if int(str(payload["team_index"])) != int(request.team_index):
-        raise ValueError("LLM profile response team_index does not match requested team")
-    if str(payload["team_label"]).strip() != request.team_label:
-        raise ValueError("LLM profile response team_label does not match requested team")
-    gm_control = str(payload["gm_control"]).strip().casefold()
-    if gm_control != request.gm_control:
-        raise ValueError("LLM profile response gm_control does not match franchise role ownership")
-    return GeneratedTeamProfile(
-        team_index=request.team_index,
-        team_label=request.team_label,
-        gm_control=gm_control,
-        organizational_identity=str(payload["organizational_identity"]).strip(),
-        owner=str(payload["owner"]).strip(),
-        general_manager=str(payload["general_manager"]).strip(),
-        coach=str(payload["coach"]).strip(),
-        scout=str(payload["scout"]).strip(),
-        raw_response=response,
-        league_mode=request.league_mode,
-    )
-
-
-def render_generated_team_profile(profile: GeneratedTeamProfile) -> str:
-    headings = _profile_headings(profile.league_mode, profile.gm_control)
-    profile_kind = "College Program Staff" if profile.league_mode == LEAGUE_MODE_COLLEGE else "Franchise Staff"
-    return "\n".join(
-        (
-            "---",
-            f"name: {json.dumps(profile.team_label + ' ' + profile_kind)}",
-            f"team_index: {profile.team_index}",
-            f"team_label: {json.dumps(profile.team_label)}",
-            f"gm_control: {profile.gm_control}",
-            "status: active",
-            "---",
-            f"# {profile.team_label} {profile_kind}",
-            "",
-            headings[0],
-            profile.organizational_identity,
-            "",
-            headings[1],
-            profile.owner,
-            "",
-            headings[2],
-            profile.general_manager,
-            "",
-            headings[3],
-            profile.coach,
-            "",
-            headings[4],
-            profile.scout,
-            "",
-        )
-    )
-
-
-def write_generated_team_profile(record: FranchiseRecord, profile: GeneratedTeamProfile) -> Path:
-    path = team_profile_path(record, profile.team_index)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = path.with_suffix(path.suffix + ".tmp")
-    temporary_path.write_text(render_generated_team_profile(profile), encoding="utf-8")
-    temporary_path.replace(path)
-    return path
-
-
-def generate_team_profiles(
-    record: FranchiseRecord,
-    requests: Iterable[TeamProfileGenerationRequest],
-    *,
-    client: Any | None = None,
-) -> tuple[GeneratedTeamProfile, ...]:
-    active_client = client or LLMClient.for_franchise_gm()
-    generated: list[GeneratedTeamProfile] = []
-    for request in requests:
-        response = run_franchise_llm_task(request.task, client=active_client)
-        profile = generated_team_profile_from_response(request, response)
-        write_generated_team_profile(record, profile)
-        generated.append(profile)
-    return tuple(generated)
-
-
-def generate_missing_team_profiles(
-    record: FranchiseRecord,
-    model: object,
-    *,
-    client: Any | None = None,
-) -> tuple[GeneratedTeamProfile, ...]:
-    requests = build_team_profile_generation_requests(record, model)
-    return generate_team_profiles(record, requests, client=client)
+    destination_directory = franchise_team_profile_directory(record)
+    destination_directory.mkdir(parents=True, exist_ok=True)
+    copied: list[Path] = []
+    for team_index in sorted(requested_indexes):
+        source = pregenerated_team_profile_path(team_index)
+        if not source.is_file():
+            raise FileNotFoundError(f"pregenerated team profile is missing: {source}")
+        destination = team_profile_path(record, team_index)
+        shutil.copy2(source, destination)
+        if destination.read_bytes() != source.read_bytes():
+            raise OSError(f"copied team profile does not match its source: {destination}")
+        copied.append(destination)
+    return tuple(copied)
