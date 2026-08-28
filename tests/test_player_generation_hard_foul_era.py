@@ -20,6 +20,7 @@ def _evidence(season: int) -> SimpleNamespace:
         source_context={},
         per_game={"g": 82.0},
         totals={"g": 82.0},
+
     )
 
 
@@ -43,13 +44,9 @@ def test_every_pre_1960_player_receives_maximum_hard_foul() -> None:
         assert "scale_meaning=maximum_2K_propensity_not_literal_event_probability" in result["evidence_keys"]
 
 
-def test_1960s_and_post_1980s_retain_player_evidence(monkeypatch) -> None:
-    monkeypatch.setattr(player_rules_defense, "_derive", lambda *args, **kwargs: _base_result(0.75))
+def test_1960s_and_post_1980s_remain_unresolved_without_hard_foul_classification() -> None:
     for season in (1960, 1969, 1990, 2025):
-        result = derive_tendency_hardfoul(_evidence(season), league_player_rows=())
-        assert result is not None
-        assert result["value"] == 42
-        assert result["source_rule"] == "derive_tendency_hardfoul"
+        assert derive_tendency_hardfoul(_evidence(season), league_player_rows=()) is None
 
 
 def test_1970s_1980s_bottom_quintile_is_the_explicit_exception(monkeypatch) -> None:

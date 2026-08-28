@@ -18,6 +18,7 @@ from nba2k_editor.franchise.control_room import (
     build_screen_context_markdown,
 )
 from nba2k_editor.franchise.draft_room import (
+    DraftPoolPlayer,
     TeamProfile,
     available_players,
     build_fantasy_draft_board,
@@ -28,13 +29,18 @@ from nba2k_editor.franchise.draft_room import (
     find_available_player,
     league_team_indexes,
     make_pick,
+    stored_pick_from_player,
 )
 from nba2k_editor.franchise.llm_client import LLMClient
-from nba2k_editor.franchise.llm_pick_runner import run_llm_fantasy_draft_pick
+from nba2k_editor.franchise.llm_pick_runner import (
+    run_llm_fantasy_draft_pick,
+    run_llm_fantasy_draft_picks_until_user,
+    validate_llm_fantasy_draft_pick_batch,
+)
 from nba2k_editor.franchise.llm_tasks import FranchiseLlmTask
 from nba2k_editor.franchise.llm_view import build_franchise_llm_markdown, build_franchise_llm_view
 from nba2k_editor.franchise.prompts import build_fantasy_draft_pick_prompt
-from nba2k_editor.franchise.models import FantasyDraftStoredPick, FranchiseRecord, FranchiseSetup, FranchiseSimState, FranchiseTeamOption, TeamRecommendation
+from nba2k_editor.franchise.models import FantasyDraftState, FantasyDraftStoredPick, FranchiseRecord, FranchiseSetup, FranchiseSimState, FranchiseTeamOption, TeamRecommendation
 from nba2k_editor.franchise.profile_generation import copy_missing_team_profiles
 from nba2k_editor.franchise.qt_screen import FranchiseScreen
 from nba2k_editor.franchise.recommendations import (
@@ -182,6 +188,21 @@ def test_fantasy_draft_pool_uses_active_player_offset_only() -> None:
     assert dict(pool[0].draft_facts)["position"] == "PG"
     assert all(player.player_label != "[8] Unused Player" for player in pool)
     assert model.write_called is False
+
+
+def test_fantasy_draft_pool_excludes_exact_a_z_placeholders() -> None:
+    model = ReadOnlyFranchiseModel()
+    placeholder = FakeItem("Players", 9, 9000, "A Z", "[9] A Z")
+    similar_name = FakeItem("Players", 10, 10000, "A Zee", "[10] A Zee")
+    model.loaded_items["Players"][placeholder.display_label] = placeholder
+    model.loaded_items["Players"][similar_name.display_label] = similar_name
+    model.player_values[9] = {"ISACTIVE": (1, "Yes")}
+    model.player_values[10] = {"ISACTIVE": (1, "Yes")}
+
+    pool = build_active_player_draft_pool(model, team_count=30)
+
+    assert [player.player_index for player in pool] == [4, 10]
+    assert all(player.player_label != "[9] A Z" for player in pool)
 
 
 def test_fantasy_draft_board_loads_on_clock_team_profile(tmp_path: Path) -> None:
@@ -451,6 +472,30 @@ def test_fantasy_draft_franchise_shows_only_draft_page(tmp_path: Path) -> None:
     assert screen.recommendation_text is None
 
 
+def test_ai_draft_batch_completion_refreshes_at_next_user_pick(tmp_path: Path) -> None:
+    screen = _franchise_screen_for_mode(tmp_path, fantasy_draft=True)
+    screen.draft_action_buttons[0].click()
+    state = screen.repository.load_fantasy_draft_state()
+    assert state is not None
+    pool = build_active_player_draft_pool(screen.model, team_count=state.team_count)
+    position = draft_position(
+        state.current_pick_number,
+        team_order=state.team_order,
+        team_labels={0: "Team Zero", 5: "User Team"},
+    )
+    result = stored_pick_from_player(pool[0], position=position, picked_by="llm")
+
+    screen._finish_llm_pick((result,))
+
+    saved_state = screen.repository.load_fantasy_draft_state()
+    assert saved_state is not None
+    assert saved_state.current_pick_number == 2
+    assert [pick.player_index for pick in screen.repository.list_fantasy_draft_picks()] == [4]
+    assert screen.draft_status_text is not None
+    assert "Turn Owner: user" in screen.draft_status_text.toPlainText()
+    assert screen.draft_action_buttons[2].text() == "Run AI Picks to User"
+
+
 def test_user_sets_and_locks_fantasy_draft_order_before_start(tmp_path: Path) -> None:
     screen = _franchise_screen_for_mode(tmp_path, fantasy_draft=True)
 
@@ -660,6 +705,24 @@ class FakeDraftPickClient:
         return '{"team_index":0,"pick_number":1,"selected_player_index":4,"selected_player_label":"[4] Player Four","rationale":"Profile wants real players only."}'
 
 
+class SequentialDraftPickClient:
+    def available(self) -> bool:
+        return True
+
+    def generate(self, prompt: str, *, system_prompt: str = "") -> str:
+        payload = json.loads(prompt)
+        player = payload["available_players"][0]
+        return json.dumps(
+            {
+                "team_index": payload["current_pick"]["team_index"],
+                "pick_number": payload["current_pick"]["pick_number"],
+                "selected_player_index": player["player_index"],
+                "selected_player_label": player["player_label"],
+                "rationale": "First available player.",
+            }
+        )
+
+
 def _recommendation_request(team_index: int = 0, prompt: str = '{"task":"franchise_team_gm_recommendation"}') -> TeamRecommendationRequest:
     profile = TeamProfile(team_index, "", False, f"Team {team_index} Staff", "")
     task = FranchiseLlmTask(
@@ -694,6 +757,72 @@ def test_fantasy_draft_pick_uses_same_team_profile_task_system(tmp_path: Path) -
     assert result.selected_player_index == 4
     assert result.selected_player_label == "[4] Player Four"
     assert result.rationale == "Profile wants real players only."
+
+
+def test_ai_draft_batch_runs_consecutive_picks_until_next_user_turn(tmp_path: Path) -> None:
+    for team_index in (1, 2):
+        (tmp_path / f"team_{team_index:02d}_profile.md").write_text(
+            f"---\nname: Team {team_index} Staff\n---\n# Team {team_index}\nOwner: draft well\nGM: choose real players\n",
+            encoding="utf-8",
+        )
+    record = FranchiseRecord(
+        setup=FranchiseSetup(
+            start_year=1946,
+            keep_full_league_save=False,
+            llm_gm_team_indexes=(1, 2),
+            fantasy_draft=True,
+            user_team_index=0,
+        ),
+        team_options=(),
+        database_path=":memory:",
+        full_league_save_count=0,
+        created_at="",
+        updated_at="",
+    )
+    state = FantasyDraftState(
+        current_pick_number=1,
+        team_count=3,
+        user_team_index=0,
+        team_order=(1, 2, 0),
+        started_at="",
+        updated_at="",
+    )
+    pool = tuple(
+        DraftPoolPlayer(f"Player {index}", index, -1, "Is Active", 0, "ISACTIVE")
+        for index in range(10, 14)
+    )
+
+    picks = run_llm_fantasy_draft_picks_until_user(
+        record=record,
+        state=state,
+        team_labels={0: "User", 1: "AI One", 2: "AI Two"},
+        available_players=pool,
+        drafted_picks=(),
+        profile_dir=tmp_path,
+        client=SequentialDraftPickClient(),
+    )
+
+    assert [(pick.pick_number, pick.team_index, pick.player_index) for pick in picks] == [
+        (1, 1, 10),
+        (2, 2, 11),
+    ]
+    validated = validate_llm_fantasy_draft_pick_batch(
+        record=record,
+        state=state,
+        team_labels={0: "User", 1: "AI One", 2: "AI Two"},
+        pool=pool,
+        drafted_picks=(),
+        generated_picks=picks,
+    )
+    repository = FranchiseRepository(tmp_path / "batch.sqlite")
+    repository.start_fantasy_draft(team_order=state.team_order, user_team_index=state.user_team_index)
+    for pick in validated:
+        repository.record_fantasy_draft_pick(pick)
+    saved_state = repository.load_fantasy_draft_state()
+    assert saved_state is not None
+    assert saved_state.current_pick_number == 3
+    assert [pick.player_index for pick in repository.list_fantasy_draft_picks()] == [10, 11]
+    assert draft_turn_owner(draft_position(3, team_order=state.team_order), record) == "user"
 
 
 def test_team_recommendation_prompt_uses_profiles_roster_and_true_year(tmp_path: Path) -> None:

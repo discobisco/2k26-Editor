@@ -70,6 +70,7 @@ class GeneratorDisplayState:
     generated_proposals: tuple[Any, ...] = ()
     preview_target: str = "Players"
     proposal_cache_season: str = ""
+    proposal_cache_league: str = ""
     proposal_cache: tuple[Any, ...] = ()
     roster_check_season: str = ""
     roster_check_source_count: int = 0
@@ -307,13 +308,15 @@ def generate_generator_preview_display_state(state: GeneratorDisplayState) -> Ge
     from player_generator import generate_player_proposals_from_index, season_context_index
 
     cache_season = str(selected.selected_season)
-    if selected.proposal_cache_season == cache_season:
+    cache_league = str(selected.selected_league)
+    if selected.proposal_cache_season == cache_season and selected.proposal_cache_league == cache_league:
         season_proposals = selected.proposal_cache
     else:
         contract = GeneratorInputContract(
             season=int(selected.selected_season),
             source_root=_SOURCE_ROOT,
             output_target=OutputTarget.PREVIEW,
+            selected_league=selected.selected_league,
         )
         season_proposals = tuple(generate_player_proposals_from_index(season_context_index(contract)).proposals)
     selected_keys = {
@@ -360,6 +363,7 @@ def generate_generator_preview_display_state(state: GeneratorDisplayState) -> Ge
         generated_proposals=proposals,
         preview_target="Players",
         proposal_cache_season=cache_season,
+        proposal_cache_league=cache_league,
         proposal_cache=season_proposals,
         status=(
             f"Displaying {len(rows)} generated players and {len(columns)} data columns for "

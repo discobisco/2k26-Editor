@@ -53,14 +53,6 @@ _ATHLETIC_MODELS: dict[str, _AthleticModel] = {
         -0.048917651,
         "pool_run3_no_stats.position_median_quadratic.speed_with_ball+pool_gp765.overall_controlled_body",
     ),
-    "strength": _AthleticModel(
-        51.714285714,
-        -0.542857143,
-        1.571428571,
-        0.120647982,
-        0.968179445,
-        "pool_run3_no_stats.position_median_quadratic.strength+pool_gp765.overall_controlled_body",
-    ),
     "vertical": _AthleticModel(
         74.600000000,
         3.050000000,
@@ -74,7 +66,6 @@ _ATHLETIC_MODELS: dict[str, _AthleticModel] = {
 
 _AGE_ADJUSTMENT: dict[str, Callable[[float], float]] = {
     "speed_with_ball": lambda age: -0.18 * max(age - 30.0, 0.0),
-    "strength": lambda age: 0.22 * (min(max(age, 22.0), 30.0) - 22.0) - 0.10 * max(age - 32.0, 0.0),
     "vertical": lambda age: 0.22 * max(25.0 - age, 0.0) - 0.45 * max(age - 28.0, 0.0),
 }
 
@@ -225,7 +216,6 @@ def _population_body_shift(
     rows: Iterable[dict[str, Any]],
     *,
     season: int,
-    league: str,
 ) -> tuple[float, float, int]:
     height_residuals: list[float] = []
     weight_residuals: list[float] = []
@@ -233,10 +223,7 @@ def _population_body_shift(
         if not isinstance(row, dict):
             continue
         row_season = _number(_row_value(row, "season_info", "player_season_info.season"))
-        row_league = str(_row_value(row, "season_info", "player_season_info.lg") or "").strip().upper()
         if row_season is not None and int(row_season) != season:
-            continue
-        if row_league and league and row_league != league:
             continue
         games = _number(_row_value(row, "per_game", "player_per_game.g"))
         if games is None or games <= 0.0:
@@ -285,6 +272,42 @@ def _inverse_min_max_rating(value: float, minimum: float, maximum: float) -> flo
     return 99.0 - 74.0 * ((bounded - minimum) / span)
 
 
+def _direct_min_max_rating(value: float, minimum: float, maximum: float) -> float | None:
+    span = maximum - minimum
+    if span <= 0.0:
+        return None
+    bounded = max(minimum, min(maximum, value))
+    return 25.0 + 74.0 * ((bounded - minimum) / span)
+
+
+def _body_compactness(height: float, weight: float) -> float | None:
+    if height <= 0.0 or weight <= 0.0:
+        return None
+    return weight / height
+
+
+def _population_body_compactness_extrema(
+    rows: Iterable[dict[str, Any]],
+) -> tuple[float, float, int] | None:
+    compactness_values: list[float] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        games = _number(_row_value(row, "per_game", "player_per_game.g"))
+        if games is None or games <= 0.0:
+            continue
+        height = _number(_row_value(row, "identity", "player_info.ht_in_in"))
+        weight = _number(_row_value(row, "identity", "player_info.wt"))
+        if height is None or weight is None:
+            continue
+        compactness = _body_compactness(height, weight)
+        if compactness is not None:
+            compactness_values.append(compactness)
+    if not compactness_values:
+        return None
+    return min(compactness_values), max(compactness_values), len(compactness_values)
+
+
 def _athletic_context(
     evidence: Any,
     league_player_rows: Iterable[dict[str, Any]],
@@ -302,7 +325,6 @@ def _athletic_context(
     height_shift, weight_shift, population_count = _population_body_shift(
         league_player_rows,
         season=season,
-        league=league,
     )
     expected_height += height_shift
     expected_weight += weight_shift
@@ -437,7 +459,42 @@ def derive_attribute_speedwithball(evidence: Any, _field_index: Any = None, leag
 
 
 def derive_attribute_strength(evidence: Any, _field_index: Any = None, league_player_rows: Iterable[dict[str, Any]] = (), _positions: Any = None) -> RuleOutput:
-    return _derive_athletic_field("strength", evidence, league_player_rows)
+    games = _games_played(evidence)
+    height = _height_inches(evidence)
+    weight = _weight_pounds(evidence)
+    extrema = _population_body_compactness_extrema(league_player_rows)
+    if games is None or games <= 0.0 or height is None or weight is None or extrema is None:
+        return None
+    compactness = _body_compactness(height, weight)
+    if compactness is None:
+        return None
+    minimum, maximum, population_count = extrema
+    rating = _direct_min_max_rating(compactness, minimum, maximum)
+    if rating is None:
+        return None
+    identity = getattr(evidence, "identity", {})
+    height_source = "identity.ht_in_in" if _dict_number(identity, "ht_in_in", "height_inches") is not None else "source_profile.height_inches"
+    weight_source = "identity.wt" if _dict_number(identity, "wt", "weight_pounds") is not None else "source_profile.weight_pounds"
+    return {
+        "value": _attribute(rating),
+        "source_rule": "derive_attribute_strength_same_season_same_league_body_compactness",
+        "evidence_keys": (
+            "per_game.g",
+            f"games_played={games:.6g}",
+            height_source,
+            f"height_inches={height:.6g}",
+            weight_source,
+            f"weight_pounds={weight:.6g}",
+            f"body_compactness_weight_per_height={compactness:.6g}",
+            f"population.same_season_same_league_gp_body_rows={population_count}",
+            f"population.min_body_compactness={minimum:.6g}",
+            f"population.max_body_compactness={maximum:.6g}",
+            "mapping=direct_min_max_of_weight_pounds_per_height_inch",
+            "rating_endpoints=minimum_body_compactness_25;maximum_body_compactness_99",
+            "population_scope=same_season_same_league_gp_positive_rows",
+            "excluded_runtime_inputs=position,age,overall,production",
+        ),
+    }
 
 
 def derive_attribute_vertical(evidence: Any, _field_index: Any = None, league_player_rows: Iterable[dict[str, Any]] = (), _positions: Any = None) -> RuleOutput:

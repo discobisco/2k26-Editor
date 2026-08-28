@@ -38,17 +38,20 @@ from nba2k_editor.franchise.draft_room import (
     build_active_player_draft_pool,
     draft_position,
     draft_turn_owner,
-    find_available_player,
     find_available_player_by_index,
     league_team_indexes,
     stored_pick_from_player,
     team_labels_from_model,
 )
-from nba2k_editor.franchise.llm_pick_runner import LlmDraftPickResult, run_llm_fantasy_draft_pick
+from nba2k_editor.franchise.llm_pick_runner import (
+    run_llm_fantasy_draft_picks_until_user,
+    validate_llm_fantasy_draft_pick_batch,
+)
 from nba2k_editor.franchise.models import (
     LEAGUE_MODE_COLLEGE,
     LEAGUE_MODE_NBA,
     FantasyDraftState,
+    FantasyDraftStoredPick,
     FranchiseRecord,
     FranchiseSetup,
     FranchiseTeamOption,
@@ -1143,7 +1146,7 @@ class FranchiseScreen(QWidget):
         for label, callback in (
             ("Start Draft", self._start_fantasy_draft),
             ("Refresh Draft Room", self._refresh_draft_room),
-            ("Run LLM Pick", self._run_llm_draft_pick),
+            ("Run AI Picks to User", self._run_llm_draft_pick),
             ("Go Back One AI Pick", self._go_back_one_ai_draft_pick),
             ("Mark Selected Pick", self._mark_selected_draft_pick),
         ):
@@ -1339,21 +1342,23 @@ class FranchiseScreen(QWidget):
             QMessageBox.warning(self, "Fantasy draft", "An LLM pick is already running.")
             return
         try:
-            record, _state, position, picks, _pool, available, owner = self._draft_context()
+            record, state, position, picks, _pool, available, owner = self._draft_context()
             if owner != "llm":
                 QMessageBox.warning(self, "Fantasy draft", "The current pick is not controlled by an AI league team.")
                 return
+            team_labels = team_labels_from_model(self.model, team_count=30)
         except Exception as exc:
             QMessageBox.warning(self, "Fantasy draft", str(exc))
             return
         self._set_llm_pick_running(True)
-        self._append_draft_status("\nLLM pick running through Hermes API Server...")
+        self._append_draft_status("\nAI picks running through Hermes API Server until the next user pick...")
 
         def worker() -> None:
             try:
-                result = run_llm_fantasy_draft_pick(
+                result = run_llm_fantasy_draft_picks_until_user(
                     record=record,
-                    position=position,
+                    state=state,
+                    team_labels=team_labels,
                     available_players=tuple(available),
                     drafted_picks=tuple(picks),
                 )
@@ -1395,27 +1400,21 @@ class FranchiseScreen(QWidget):
             self._set_llm_pick_running(False)
 
     def _finish_llm_pick(self, payload: object) -> None:
-        if not isinstance(payload, LlmDraftPickResult):
-            QMessageBox.warning(self, "Fantasy draft", "Invalid LLM pick result.")
+        if not isinstance(payload, tuple) or not payload or not all(isinstance(pick, FantasyDraftStoredPick) for pick in payload):
+            QMessageBox.warning(self, "Fantasy draft", "Invalid AI draft-pick batch.")
             return
         try:
-            _record, _state, position, picks, pool, _available, owner = self._draft_context()
-            if owner != "llm":
-                raise ValueError("The draft pick changed before the LLM result returned.")
-            player = find_available_player_by_index(pool, picks, payload.selected_player_index)
-            if player is None:
-                player = find_available_player(pool, picks, payload.selected_player_label)
-            if player is None:
-                raise ValueError("LLM selected a player that is not available")
-            self.repository.record_fantasy_draft_pick(
-                stored_pick_from_player(
-                    player,
-                    position=position,
-                    picked_by="llm",
-                    raw_llm_response=payload.response,
-                    rationale=payload.rationale,
-                )
+            record, state, _position, existing_picks, pool, _available, _owner = self._draft_context()
+            validated = validate_llm_fantasy_draft_pick_batch(
+                record=record,
+                state=state,
+                team_labels=team_labels_from_model(self.model, team_count=30),
+                pool=pool,
+                drafted_picks=existing_picks,
+                generated_picks=payload,
             )
+            for pick in validated:
+                self.repository.record_fantasy_draft_pick(pick)
         except Exception as exc:
             QMessageBox.warning(self, "Fantasy draft", str(exc))
             return

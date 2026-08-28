@@ -76,11 +76,13 @@ def generated_player(name: str, value: str):
 
 
 class PlayerGeneratorMissingImportTests(unittest.TestCase):
-    def test_matched_name_import_includes_only_season_age_from_vitals(self) -> None:
+    def test_matched_name_import_includes_age_and_positions_from_vitals(self) -> None:
         generated = SimpleNamespace(
             field_candidates=(
                 SimpleNamespace(field_key="Vitals/FIRSTNAME", section="Vitals", display_value="John"),
                 SimpleNamespace(field_key="Vitals/AGE", section="Vitals", display_value=27),
+                SimpleNamespace(field_key="Vitals/POSITION", section="Vitals", display_value="PG"),
+                SimpleNamespace(field_key="Vitals/SECONDARYPOSITION", section="Vitals", display_value="SG"),
                 SimpleNamespace(field_key="Vitals/HEIGHT", section="Vitals", display_value=78),
                 SimpleNamespace(field_key="Attributes/HANDS", section="Attributes", display_value=80),
                 SimpleNamespace(field_key="Tendencies/SHOT", section="Tendencies", display_value=75),
@@ -96,17 +98,25 @@ class PlayerGeneratorMissingImportTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            ("Vitals/AGE", "Attributes/HANDS", "Tendencies/SHOT"),
+            (
+                "Vitals/AGE",
+                "Vitals/POSITION",
+                "Vitals/SECONDARYPOSITION",
+                "Attributes/HANDS",
+                "Tendencies/SHOT",
+            ),
             tuple(row.field_key for row in rows),
         )
         self.assertEqual(27, rows[0].display_value)
 
-    def test_matched_name_import_writes_season_age_without_other_vitals(self) -> None:
+    def test_matched_name_import_writes_age_and_positions_without_other_vitals(self) -> None:
         entries = {
             "Vitals/AGE": FieldEntry("Players", "Vitals", "Identity", 0, {"normalized_name": "AGE", "display_name": "Age"}),
-            "Vitals/HEIGHT": FieldEntry("Players", "Vitals", "Body", 1, {"normalized_name": "HEIGHT", "display_name": "Height"}),
-            "Attributes/HANDS": FieldEntry("Players", "Attributes", "General", 2, {"normalized_name": "HANDS", "display_name": "Hands"}),
-            "Tendencies/SHOT": FieldEntry("Players", "Tendencies", "General", 3, {"normalized_name": "SHOT", "display_name": "Shot"}),
+            "Vitals/POSITION": FieldEntry("Players", "Vitals", "Identity", 1, {"normalized_name": "POSITION", "display_name": "Position"}),
+            "Vitals/SECONDARYPOSITION": FieldEntry("Players", "Vitals", "Identity", 2, {"normalized_name": "SECONDARYPOSITION", "display_name": "Secondary Position"}),
+            "Vitals/HEIGHT": FieldEntry("Players", "Vitals", "Body", 3, {"normalized_name": "HEIGHT", "display_name": "Height"}),
+            "Attributes/HANDS": FieldEntry("Players", "Attributes", "General", 4, {"normalized_name": "HANDS", "display_name": "Hands"}),
+            "Tendencies/SHOT": FieldEntry("Players", "Tendencies", "General", 5, {"normalized_name": "SHOT", "display_name": "Shot"}),
         }
 
         class MatchedAgeModel:
@@ -116,7 +126,14 @@ class PlayerGeneratorMissingImportTests(unittest.TestCase):
             def grouped_fields(self, domain: str):
                 assert domain == "Players"
                 return {
-                    "Vitals": {"Identity": [entries["Vitals/AGE"]], "Body": [entries["Vitals/HEIGHT"]]},
+                    "Vitals": {
+                        "Identity": [
+                            entries["Vitals/AGE"],
+                            entries["Vitals/POSITION"],
+                            entries["Vitals/SECONDARYPOSITION"],
+                        ],
+                        "Body": [entries["Vitals/HEIGHT"]],
+                    },
                     "Attributes": {"General": [entries["Attributes/HANDS"]]},
                     "Tendencies": {"General": [entries["Tendencies/SHOT"]]},
                 }
@@ -128,6 +145,8 @@ class PlayerGeneratorMissingImportTests(unittest.TestCase):
         generated = SimpleNamespace(
             field_candidates=(
                 SimpleNamespace(field_key="Vitals/AGE", section="Vitals", display_value=27),
+                SimpleNamespace(field_key="Vitals/POSITION", section="Vitals", display_value="PG"),
+                SimpleNamespace(field_key="Vitals/SECONDARYPOSITION", section="Vitals", display_value="SG"),
                 SimpleNamespace(field_key="Vitals/HEIGHT", section="Vitals", display_value=78),
                 SimpleNamespace(field_key="Attributes/HANDS", section="Attributes", display_value=80),
                 SimpleNamespace(field_key="Tendencies/SHOT", section="Tendencies", display_value=75),
@@ -146,7 +165,13 @@ class PlayerGeneratorMissingImportTests(unittest.TestCase):
 
         self.assertTrue(result.ok)
         self.assertCountEqual(
-            ((9, "Vitals/AGE", 27), (9, "Attributes/HANDS", 80), (9, "Tendencies/SHOT", 75)),
+            (
+                (9, "Vitals/AGE", 27),
+                (9, "Vitals/POSITION", "PG"),
+                (9, "Vitals/SECONDARYPOSITION", "SG"),
+                (9, "Attributes/HANDS", 80),
+                (9, "Tendencies/SHOT", 75),
+            ),
             tuple(model.writes),
         )
         self.assertNotIn((9, "Vitals/HEIGHT", 78), model.writes)

@@ -34,6 +34,8 @@ def _evidence() -> SimpleNamespace:
         advanced={
             "ts_percent": 0.58,
             "tov_percent": 12.0,
+            "ows": 4.0,
+            "dws": 2.0,
             "orb_percent": 8.0,
             "drb_percent": 20.0,
         },
@@ -47,7 +49,7 @@ def _evidence() -> SimpleNamespace:
     )
 
 
-def _row(*, position: str, height: float, weight: float, pts36: float, ts: float, tov: float, orb: float, drb: float) -> dict[str, object]:
+def _row(*, position: str, height: float, weight: float, pts36: float, ts: float, tov: float, ows: float, dws: float, orb: float, drb: float) -> dict[str, object]:
     return {
         "season": 2025,
         "player_season_info.season": 2025,
@@ -59,6 +61,8 @@ def _row(*, position: str, height: float, weight: float, pts36: float, ts: float
         "team_totals.pts": 2000.0,
         "advanced.ts_percent": ts,
         "advanced.tov_percent": tov,
+        "advanced.ows": ows,
+        "advanced.dws": dws,
         "advanced.orb_percent": orb,
         "advanced.drb_percent": drb,
         "player_info.ht_in_in": height,
@@ -68,9 +72,9 @@ def _row(*, position: str, height: float, weight: float, pts36: float, ts: float
 
 def _rows() -> tuple[dict[str, object], ...]:
     return (
-        _row(position="PG", height=72.0, weight=180.0, pts36=10.0, ts=0.50, tov=18.0, orb=2.0, drb=8.0),
-        _row(position="SF", height=78.0, weight=210.0, pts36=20.0, ts=0.58, tov=12.0, orb=8.0, drb=20.0),
-        _row(position="C", height=84.0, weight=250.0, pts36=30.0, ts=0.65, tov=8.0, orb=15.0, drb=30.0),
+        _row(position="PG", height=72.0, weight=180.0, pts36=10.0, ts=0.50, tov=18.0, ows=1.0, dws=0.5, orb=2.0, drb=8.0),
+        _row(position="SF", height=78.0, weight=210.0, pts36=20.0, ts=0.58, tov=12.0, ows=4.0, dws=2.0, orb=8.0, drb=20.0),
+        _row(position="C", height=84.0, weight=250.0, pts36=30.0, ts=0.65, tov=8.0, ows=8.0, dws=5.0, orb=15.0, drb=30.0),
     )
 
 
@@ -92,8 +96,36 @@ def test_offensive_consistency_maps_weighted_rank_score_directly_to_25_99() -> N
     assert MAPPING in result["evidence_keys"]
 
 
-def test_defense_consistency_maps_context_rank_directly_to_25_99() -> None:
+def test_defense_consistency_maps_weighted_rank_directly_to_25_99() -> None:
     result = derive_attribute_defenseconsistency(_evidence(), league_player_rows=_rows())
     assert result is not None
     assert result["value"] == round(25 + 74 * result["score"])
     assert MAPPING in result["evidence_keys"]
+
+
+def test_ows_raises_offensive_consistency_with_other_inputs_held_constant() -> None:
+    low = _evidence()
+    high = _evidence()
+    low.advanced["ows"] = 1.0
+    high.advanced["ows"] = 8.0
+
+    low_result = derive_attribute_offensiveconsistency(low, league_player_rows=_rows())
+    high_result = derive_attribute_offensiveconsistency(high, league_player_rows=_rows())
+
+    assert low_result is not None and high_result is not None
+    assert high_result["value"] > low_result["value"]
+    assert "advanced.ows" in high_result["evidence_keys"]
+
+
+def test_dws_raises_defensive_consistency_with_other_inputs_held_constant() -> None:
+    low = _evidence()
+    high = _evidence()
+    low.advanced["dws"] = 0.5
+    high.advanced["dws"] = 5.0
+
+    low_result = derive_attribute_defenseconsistency(low, league_player_rows=_rows())
+    high_result = derive_attribute_defenseconsistency(high, league_player_rows=_rows())
+
+    assert low_result is not None and high_result is not None
+    assert high_result["value"] > low_result["value"]
+    assert "advanced.dws" in high_result["evidence_keys"]

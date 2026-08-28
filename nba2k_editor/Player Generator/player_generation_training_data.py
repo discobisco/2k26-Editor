@@ -6,7 +6,9 @@ import math
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
+
+from player_generation_models import THREE_POINT_EXACT_FIELD_CONTRACTS
 
 FREE_THROW_CAPTURE_FIELD = "Offense / Free Throws"
 _SENTINEL_STAT_VALUE = 65535.0
@@ -44,6 +46,26 @@ class FreeThrowResponseData:
     excluded_zero_attempts: int
     excluded_invalid_totals: int
     excluded_invalid_rating: int
+
+
+@dataclass(frozen=True)
+class ExactFieldTrainingExample:
+    run_id: str
+    player_index: int
+    field_key: str
+    feature_values: tuple[float, ...]
+    target_value: int
+
+
+@dataclass(frozen=True)
+class ThreePointExactFieldData:
+    pool_path: Path
+    pool_fingerprint: str
+    pool_file_hashes: tuple[tuple[str, str], ...]
+    pool_files_unchanged: bool
+    examples_by_field: Mapping[str, tuple[ExactFieldTrainingExample, ...]]
+    candidate_packages: int
+    excluded_by_field: Mapping[str, int]
 
 
 def _sha256(path: Path) -> str:

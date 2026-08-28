@@ -12,7 +12,7 @@ from typing import Any, Iterable
 from nba2k_editor.core import offsets as offsets_mod
 from nba2k_editor.models.schema import FieldEntry
 from contracts import GeneratorInputContract
-from player_evidence import PlayerEvidence
+from player_evidence import PlayerEvidence, shotquality_contest_rows
 from player_generation_models import (
     FREE_THROW_FIELD_KEY,
     FreeThrowExecutionArtifact,
@@ -40,6 +40,7 @@ _PLAYER_PER_100_SHEET = "Player Per 100 Poss"
 _PLAYER_ADVANCED_SHEET = "Advanced"
 _PLAYER_SHOOTING_SHEET = "Player Shooting"
 _PLAYER_PLAY_BY_PLAY_SHEET = "Player Play by Play"
+
 _MULTI_TEAM_MARKERS = {"TOT", "2TM", "3TM", "4TM", "5TM"}
 _TEAM_STATS_PER_GAME_SHEET = "Team Stats Per Game"
 _TEAM_STATS_PER_100_SHEET = "Team Stats Per 100 Pos"
@@ -135,6 +136,7 @@ class SeasonPlayerContextIndex:
 
     season: int
     source_database_path: Path
+    selected_league: str | None
     comparison_rows: tuple[dict[str, Any], ...]
     evidence_by_key: dict[tuple[str, str], PlayerEvidence]
     field_index: dict[str, FieldEntry]
@@ -256,14 +258,7 @@ def _with_model_authored_free_throw(
     if target is None:
         fta_per_game = _float(evidence.per_game.get("fta_per_game"))
         if fta_per_game != 0.0:
-            return _with_required_free_throw_floor(
-                rule_result,
-                (
-                    "PlayerEvidence.per_game.ft_percent=null",
-                    f"PlayerEvidence.per_game.fta_per_game={fta_per_game}",
-                    "unresolved_exact_source=Attributes/FREETHROW",
-                ),
-            )
+            return rule_result
         target = 0.0
         target_evidence = (
             "PlayerEvidence.per_game.ft_percent=null",
@@ -273,14 +268,9 @@ def _with_model_authored_free_throw(
     response = artifact or load_free_throw_execution_artifact()
     solved = response.solve_rating(target)
     if not solved.resolved or solved.rating is None:
-        return _with_required_free_throw_floor(
-            rule_result,
-            target_evidence + ("unresolved_exact_source=Attributes/FREETHROW",),
-        )
-    if FREE_THROW_FIELD_KEY in rule_result.values:
-        raise RuntimeError(f"multiple authors for {FREE_THROW_FIELD_KEY}")
-    assert solved.predicted_make_probability is not None
-    assert solved.absolute_error is not None
+        return rule_result
+    if solved.predicted_make_probability is None or solved.absolute_error is None:
+        return rule_result
     values = dict(rule_result.values)
     values[FREE_THROW_FIELD_KEY] = RuleValue(
         value=solved.rating,
@@ -299,28 +289,6 @@ def _with_model_authored_free_throw(
     )
     return PlayerRuleResult(values=values)
 
-
-def _with_required_free_throw_floor(
-    rule_result: PlayerRuleResult,
-    evidence_keys: tuple[str, ...],
-) -> PlayerRuleResult:
-    if FREE_THROW_FIELD_KEY in rule_result.values:
-        return rule_result
-    values = dict(rule_result.values)
-    values[FREE_THROW_FIELD_KEY] = RuleValue(
-        value=25,
-        source_rule="required_active_field_set_value",
-        evidence_keys=evidence_keys
-        + (
-            "set_value_contract=attribute_25",
-            "blank_prevention=active_field_must_resolve",
-            "stale_game_value_allowed=false",
-        ),
-    )
-    return PlayerRuleResult(
-        values=values,
-        unresolved_fields=tuple(field for field in rule_result.unresolved_fields if field != FREE_THROW_FIELD_KEY),
-    )
 
 
 def _player_match_identity_values(evidence: PlayerEvidence, positions: Any) -> dict[str, Any]:
@@ -654,11 +622,21 @@ def season_context_index(
     validated = contract.validate()
     database_path = ensure_workbook_sqlite_database(validated.source_root)
     offset_path = Path(offsets_path).expanduser().resolve() if offsets_path is not None else _DEFAULT_OFFSETS_PLAYERS_PATH.resolve()
-    return _cached_season_context_index(str(database_path), int(validated.season), str(offset_path))
+    return _cached_season_context_index(
+        str(database_path),
+        int(validated.season),
+        str(offset_path),
+        str(validated.selected_league or ""),
+    )
 
 
 @lru_cache(maxsize=None)
-def _cached_season_context_index(database_path: str, season: int, offsets_path: str) -> SeasonPlayerContextIndex:
+def _cached_season_context_index(
+    database_path: str,
+    season: int,
+    offsets_path: str,
+    selected_league: str,
+) -> SeasonPlayerContextIndex:
     database = Path(database_path)
     field_index = _cached_authored_player_field_index(offsets_path)
     sheet_names = workbook_sqlite_sheet_names(database)
@@ -672,6 +650,7 @@ def _cached_season_context_index(database_path: str, season: int, offsets_path: 
     player_sheet_rows: dict[str, dict[tuple[str, str], dict[str, Any]]] = {sheet: {} for sheet in _PLAYER_EVIDENCE_SHEETS}
     team_sheet_rows: dict[str, dict[str, dict[str, Any]]] = {sheet: {} for sheet in _TEAM_EVIDENCE_SHEETS}
     team_rosters: dict[str, list[dict[str, Any]]] = {}
+    shotquality_by_player_id = shotquality_contest_rows(str(database), season, "NBA")
 
     for sheet in sheet_names:
         prefix = _context_prefix(sheet)
@@ -734,24 +713,63 @@ def _cached_season_context_index(database_path: str, season: int, offsets_path: 
     for (player_id, team), merged in rows_by_key.items():
         _merge_prefixed_context(merged, player_static.get(player_id, {}))
         _merge_prefixed_context(merged, _team_context_for_player(team_context, team, multi_team_shares.get(player_id)))
+        league = str(merged.get("player_season_info.lg") or merged.get("lg") or "").strip().upper()
+        shotquality_contest = shotquality_by_player_id.get(player_id, {}) if league == "NBA" else {}
+        if shotquality_contest:
+            _merge_sheet_row(
+                merged,
+                "crafted_source_shotquality",
+                shotquality_contest,
+                include_bare=False,
+            )
 
-    comparison_rows = tuple(rows_by_key[key] for key in sorted(rows_by_key))
+    normalized_league = str(selected_league or "").strip().upper()
+    selected_keys = tuple(
+        key
+        for key in sorted(rows_by_key)
+        if not normalized_league or _comparison_row_league(rows_by_key[key]) == normalized_league
+    )
+    comparison_rows = tuple(
+        rows_by_key[key]
+        for key in selected_keys
+        if _comparison_row_has_positive_games(rows_by_key[key])
+    )
     evidence_by_key = _build_evidence_index(
         season=season,
-        keys=tuple(sorted(rows_by_key)),
+        keys=selected_keys,
         identity_by_player_id=identity_by_player_id,
         player_sheet_rows=player_sheet_rows,
         team_sheet_rows=team_sheet_rows,
         team_rosters=team_rosters,
         source_context_by_key=rows_by_key,
+        shotquality_by_player_id=shotquality_by_player_id,
     )
     return SeasonPlayerContextIndex(
         season=season,
         source_database_path=database,
+        selected_league=normalized_league or None,
         comparison_rows=comparison_rows,
         evidence_by_key=evidence_by_key,
         field_index=dict(field_index),
     )
+
+
+def _comparison_row_league(row: dict[str, Any]) -> str:
+    return str(
+        row.get("player_season_info.lg")
+        or row.get("season_info.lg")
+        or row.get("lg")
+        or ""
+    ).strip().upper()
+
+
+def _comparison_row_has_positive_games(row: dict[str, Any]) -> bool:
+    games: float | None = None
+    for key in ("player_per_game.g", "per_game.g", "g"):
+        if key in row:
+            games = _float(row.get(key))
+            break
+    return games is not None and games > 0.0
 
 
 def _context_sheet_rows(database: Path, sheet: str, season: int) -> tuple[dict[str, Any], ...]:
@@ -788,6 +806,7 @@ def _build_evidence_index(
     team_sheet_rows: dict[str, dict[str, dict[str, Any]]],
     team_rosters: dict[str, list[dict[str, Any]]],
     source_context_by_key: dict[tuple[str, str], dict[str, Any]],
+    shotquality_by_player_id: dict[str, dict[str, Any]],
 ) -> dict[tuple[str, str], PlayerEvidence]:
     evidence_by_key: dict[tuple[str, str], PlayerEvidence] = {}
     for key in keys:
@@ -809,6 +828,8 @@ def _build_evidence_index(
         advanced = _optional_indexed_player_row(player_sheet_rows, _PLAYER_ADVANCED_SHEET, key, missing)
         shooting = _optional_indexed_player_row(player_sheet_rows, _PLAYER_SHOOTING_SHEET, key, missing)
         play_by_play = _optional_indexed_player_row(player_sheet_rows, _PLAYER_PLAY_BY_PLAY_SHEET, key, missing)
+        league = str(season_info.get("lg") or "").strip().upper()
+        shotquality_contest = shotquality_by_player_id.get(player_id, {}) if league == "NBA" else {}
         roster_rows = tuple(team_rosters.get(team, ()))
         if not roster_rows:
             missing.append("Team Roster")
@@ -835,6 +856,7 @@ def _build_evidence_index(
             opponent_stats_per_100=_optional_indexed_team_row(team_sheet_rows, _OPPONENT_STATS_PER_100_SHEET, team, missing, multi_team_shares=season_info.get("multi_team_stat_shares")),
             source_context=dict(source_context_by_key.get(key, {})),
             missing_sources=tuple(dict.fromkeys(missing)),
+            shotquality_contest=shotquality_contest,
         )
     return evidence_by_key
 

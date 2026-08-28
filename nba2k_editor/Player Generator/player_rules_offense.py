@@ -7,12 +7,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from player_era_context import filter_same_league_rows, player_era_context
+from player_era_context import player_era_context
 from player_rules_athleticism import derive_attribute_vertical
 
 
 _POPULATION_CACHE: dict[
-    tuple[int, int, str],
+    tuple[int, int],
     tuple[object, tuple[dict[str, Any], ...]],
 ] = {}
 _POPULATION_VALUE_CACHE: dict[
@@ -73,7 +73,6 @@ _TENDENCY_CALIBRATION: dict[str, tuple[float, float]] = {
     "SETUPWITHHESITATION": (22.0, 14.8),
     "SETUPWITHSIZEUP": (15.0, 13.3),
     "DRIVE": (48.0, 20.0),
-    "DRIVERIGHT": (45.0, 18.5),
     "DRIVINGCROSSOVER": (16.0, 21.5),
     "DRIVINGDOUBLECROSSOVER": (18.0, 23.0),
     "DRIVINGSPIN": (15.0, 17.8),
@@ -391,14 +390,13 @@ def _value(source: Any, key: str) -> float | None:
 
 def _population(evidence: Any, rows: Iterable[dict[str, Any]]) -> tuple[dict[str, Any], ...]:
     season = _season(evidence)
-    league = _league(evidence)
-    cache_key = (id(rows), season, league)
+    cache_key = (id(rows), season)
     cached = _POPULATION_CACHE.get(cache_key)
     if cached is not None and cached[0] is rows:
         return cached[1]
     population = tuple(
         row
-        for row in filter_same_league_rows(evidence, rows)
+        for row in rows
         if _gp(row) is not None and (not season or _season(row) == season)
     )
     _POPULATION_CACHE[cache_key] = (rows, population)
@@ -507,7 +505,6 @@ _RECIPE_REQUIRED_DIRECT_EVIDENCE: dict[str, tuple[str, ...]] = {
     "setup_hesitation": ("derived.unassisted_two_rate", "derived.lost_ball_per_game"),
     "setup_sizeup": ("derived.unassisted_two_rate", "derived.lost_ball_per_game"),
     "drive_frequency": ("derived.rim_attempt_rate", "derived.unassisted_two_rate"),
-    "drive_right_without_laterality": ("derived.rim_attempt_rate",),
     "driving_crossover": ("derived.unassisted_two_rate", "derived.lost_ball_per_game"),
     "driving_double_crossover": ("derived.unassisted_two_rate", "derived.lost_ball_per_game"),
     "driving_spin": ("derived.short_attempt_rate", "derived.unassisted_two_rate"),
@@ -911,8 +908,8 @@ _ATTR_RECIPES: dict[str, tuple[_Recipe, ...]] = {
         _Recipe("recorded_free_throw_pressure", (("derived.foul_pressure", 0.55), ("per_game.fta_per_game", 0.45)), "shooting-foul-drawn and and-one events", "recorded FTA/FGA pressure and FTA volume", "both are direct outcomes of forcing shooting fouls rather than shooting efficiency"),
     ),
     "OFFENSIVECONSISTENCY": (
-        _Recipe("repeatable_scoring_load", (("per_36.pts_per_36_min", 0.35), ("derived.scoring_share", 0.30), ("advanced.ts_percent", 0.20), ("advanced.tov_percent", -0.15))),
-        _Recipe("all_era_repeatable_scoring", (("per_game.pts_per_game", 0.35), ("derived.scoring_share", 0.35), ("advanced.ts_percent", 0.20), ("per_game.fg_percent", 0.10)), "game-log scoring variance and complete possession outcomes", "same-season scoring responsibility with bounded efficiency support", "load supplies most of the signal, so broad efficiency alone cannot create elite consistency"),
+        _Recipe("repeatable_scoring_load", (("advanced.ows", 0.50), ("per_36.pts_per_36_min", 0.20), ("derived.scoring_share", 0.15), ("advanced.ts_percent", 0.10), ("advanced.tov_percent", -0.05))),
+        _Recipe("all_era_repeatable_scoring", (("advanced.ows", 0.50), ("per_game.pts_per_game", 0.20), ("derived.scoring_share", 0.15), ("advanced.ts_percent", 0.10), ("per_game.fg_percent", 0.05)), "game-log scoring variance and complete possession outcomes", "same-season OWS with scoring responsibility and bounded efficiency support", "OWS is the primary season-long offensive-consistency signal; load and efficiency provide supporting context"),
     ),
     "PASSACCURACY": (
         _Recipe("tracked_pass_completion_proxy", (("derived.assist_points_per_game", 0.35), ("!derived.bad_pass_per_game", 0.35), ("derived.assist_decision_efficiency", 0.30))),
@@ -974,7 +971,6 @@ _TENDENCY_RECIPES: dict[str, tuple[_Recipe, ...]] = {
     "SETUPWITHHESITATION": (_Recipe("setup_hesitation", (("role.creator", 0.35), ("derived.unassisted_two_rate", 0.30), ("derived.lost_ball_per_game", 0.20), ("derived.foul_pressure", 0.15)), "hesitation events", "self-creation, live-dribble exposure, and drive pressure", "AST is excluded and all inputs identify on-ball setup behavior"), _Recipe("historical_setup_hesitation", (("role.creator", 0.55), ("derived.foul_pressure", 0.25), ("derived.attempt_share", 0.20)), "hesitation and self-created-shot events", "continuous creator role, drive pressure, and observed shooting responsibility", "no AST signal authors this move tendency")),
     "SETUPWITHSIZEUP": (_Recipe("setup_sizeup", (("role.creator", 0.40), ("derived.unassisted_two_rate", 0.30), ("derived.lost_ball_per_game", 0.20), ("derived.foul_pressure", 0.10)), "size-up events", "on-ball creation, self-created attempts, and live-dribble exposure", "AST is excluded; turnover exposure is behavior rather than execution"), _Recipe("historical_setup_sizeup", (("role.creator", 0.60), ("derived.foul_pressure", 0.20), ("derived.attempt_share", 0.20)), "size-up and self-created-shot events", "continuous creator role, drive pressure, and observed responsibility", "no AST signal or fixed guard template is used")),
     "DRIVE": (_Recipe("drive_frequency", (("derived.rim_attempt_rate", 0.35), ("derived.foul_pressure", 0.25), ("derived.unassisted_two_rate", 0.20), ("derived.attempt_share", 0.20)), "drive events", "rim attempts, foul pressure, self-creation, and attempt responsibility", "each input measures drive selection or opportunity, never finishing efficiency"), _Recipe("historical_drive_frequency", (("derived.foul_pressure", 0.35), ("derived.attempt_share", 0.35), ("role.creator", 0.30)), "drive, rim-location, and assisted-shot events", "foul pressure, attempt responsibility, and continuous creator role", "the all-era substitute remains frequency/behavior evidence")),
-    "DRIVERIGHT": (_Recipe("drive_right_without_laterality", (("derived.rim_attempt_rate", 0.25), ("derived.foul_pressure", 0.25), ("derived.attempt_share", 0.25), ("role.creator", 0.25)), "left/right drive direction", "overall recorded drive participation", "public season data has no handed drive split; package-calibrated drive participation is the narrowest non-identity substitute and laterality remains uncertain"), _Recipe("historical_drive_right_without_laterality", (("derived.foul_pressure", 0.35), ("derived.attempt_share", 0.35), ("role.creator", 0.30)), "drive direction and drive events", "observed drive pressure and continuous creator responsibility", "this resolves activity but cannot claim observed handedness")),
     "DRIVINGCROSSOVER": (_Recipe("driving_crossover", (("role.creator", 0.30), ("derived.unassisted_two_rate", 0.30), ("derived.lost_ball_per_game", 0.20), ("derived.foul_pressure", 0.20)), "crossover events", "self-creation, live-dribble exposure, and drive pressure", "AST is excluded and the sources describe applicable on-ball behavior"), _Recipe("historical_driving_crossover", (("role.creator", 0.55), ("derived.foul_pressure", 0.25), ("derived.attempt_share", 0.20)), "crossover and self-created-shot events", "continuous creator role, drive pressure, and offensive responsibility", "the substitute avoids AST and fixed move ratings")),
     "DRIVINGDOUBLECROSSOVER": (_Recipe("driving_double_crossover", (("role.creator", 0.35), ("derived.unassisted_two_rate", 0.30), ("derived.lost_ball_per_game", 0.20), ("derived.foul_pressure", 0.15)), "double-crossover events", "extended live-dribble creation and drive pressure", "lost-ball exposure differentiates a longer move from a basic crossover"), _Recipe("historical_driving_double_crossover", (("role.creator", 0.60), ("derived.foul_pressure", 0.20), ("derived.attempt_share", 0.20)), "double-crossover and live-dribble events", "continuous creator role, drive pressure, and observed responsibility", "AST is excluded and the lower field-exact calibration keeps this rarer move distinct")),
     "DRIVINGSPIN": (_Recipe("driving_spin", (("derived.short_attempt_rate", 0.30), ("derived.foul_pressure", 0.25), ("derived.unassisted_two_rate", 0.25), ("role.creator", 0.20)), "spin-move events", "short-area self-creation and drive pressure", "spin usage is a behavior signal"), _Recipe("historical_driving_spin", (("derived.foul_pressure", 0.35), ("derived.attempt_share", 0.30), ("role.creator", 0.20), ("role.post", 0.15)), "spin-move and location events", "drive pressure and continuous perimeter/post creation", "both perimeter and post players can spin without a hard position gate")),
@@ -1532,7 +1528,7 @@ def derive_tendency_midshot(evidence: Any, *, league_player_rows: Any = ()) -> d
         league_player_rows,
         (
             _Recipe("recorded_midrange_attempt_location", (("derived.mid_attempt_rate", 0.80), ("role.wing", 0.20))),
-            _Recipe("historical_midrange_attempt_role", (("derived.attempt_share", 0.45), ("role.wing", 0.40), ("per_game.ft_percent", 0.15)), "10-foot-to-line attempt location", "shooting responsibility, continuous perimeter/wing participation, and weak touch context", "attempt share authors frequency; touch only distinguishes plausible historical jump-shooting behavior"),
+            _Recipe("historical_midrange_attempt_role", (("derived.attempt_share", 0.45 / 0.85), ("role.wing", 0.40 / 0.85)), "10-foot-to-line attempt location", "shooting responsibility and continuous perimeter/wing participation", "attempt share and role author frequency; free-throw percentage is execution evidence and is excluded"),
         ),
         tendency=True,
     )
@@ -1570,8 +1566,10 @@ def derive_tendency_drive(evidence: Any, *, league_player_rows: Any = ()) -> dic
     return _tendency("DRIVE", evidence, league_player_rows)
 
 
-def derive_tendency_driveright(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:
-    return _tendency("DRIVERIGHT", evidence, league_player_rows)
+def derive_tendency_driveright(evidence: Any, *, league_player_rows: Any = ()) -> None:
+    """Remain unresolved until individual left/right drive evidence exists."""
+
+    return None
 
 
 def derive_tendency_drivingcrossover(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:
@@ -1620,6 +1618,12 @@ def derive_tendency_offscreendrive(evidence: Any, *, league_player_rows: Any = (
 
 def derive_tendency_spotupdrive(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:
     return _tendency("SPOTUPDRIVE", evidence, league_player_rows)
+
+
+def derive_tendency_crash(evidence: Any, *, league_player_rows: Any = ()) -> None:
+    """Remain unresolved until individual contact-fall outcome evidence exists."""
+
+    return None
 
 
 def derive_tendency_alleyoopass(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:

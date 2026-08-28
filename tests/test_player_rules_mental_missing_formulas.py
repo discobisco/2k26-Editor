@@ -145,6 +145,27 @@ def test_freelance_behavior_formulas_resolve_independently_with_provenance() -> 
     )
 
 
+def test_roll_vs_pop_uses_higher_values_for_rollers_and_lower_values_for_poppers() -> None:
+    rows = _rows()
+    roller = _evidence(quality=0.50, position="C")
+    popper = _evidence(quality=0.50, position="SF")
+
+    roller.per_game["ft_percent"] = 0.50
+    roller.advanced["f_tr"] = 0.80
+    popper.per_game["ft_percent"] = 0.92
+    popper.advanced["f_tr"] = 0.05
+
+    roll_result = derive_tendency_rollvspop(roller, league_player_rows=rows)
+    pop_result = derive_tendency_rollvspop(popper, league_player_rows=rows)
+
+    assert roll_result is not None and pop_result is not None
+    assert roll_result["value"] > 50
+    assert pop_result["value"] < 50
+    assert roll_result["value"] > pop_result["value"]
+    assert "recipe=historical_screen_roll_touch_role" in roll_result["evidence_keys"]
+    assert "scale_direction=higher_roll;lower_pop" in roll_result["evidence_keys"]
+
+
 def test_new_mental_formulas_require_games_played() -> None:
     evidence = _evidence()
     evidence.per_game["g"] = 0.0

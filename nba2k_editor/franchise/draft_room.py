@@ -72,6 +72,10 @@ def _player_is_active(value: dict[str, Any]) -> bool:
     return raw in {1, True} or display == "yes"
 
 
+def _is_a_z_placeholder(player: Any) -> bool:
+    return " ".join(str(getattr(player, "label", "")).split()).casefold() == "a z"
+
+
 _DRAFT_FACT_FIELDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("overall", ("OVERALL", "OVR", "OVERALLRATING")),
     ("potential", ("POTENTIAL",)),
@@ -112,6 +116,8 @@ def build_active_player_draft_pool(model: Any, *, team_count: int = 30) -> tuple
         raise KeyError("Players/ISACTIVE offset is not loaded")
     players: list[DraftPoolPlayer] = []
     for player in getattr(model, "loaded_items", {}).get("Players", {}).values():
+        if _is_a_z_placeholder(player):
+            continue
         player_index = int(getattr(player, "index"))
         value = model.read_entry_value(active_entry, index=player_index)
         if not _player_is_active(value):

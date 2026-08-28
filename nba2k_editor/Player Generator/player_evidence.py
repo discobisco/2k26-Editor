@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import sqlite3
+from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
 
@@ -16,6 +17,7 @@ _PLAYER_PER_100_SHEET = "Player Per 100 Poss"
 _PLAYER_ADVANCED_SHEET = "Advanced"
 _PLAYER_SHOOTING_SHEET = "Player Shooting"
 _PLAYER_PLAY_BY_PLAY_SHEET = "Player Play by Play"
+
 _TEAM_STATS_PER_GAME_SHEET = "Team Stats Per Game"
 _TEAM_STATS_PER_100_SHEET = "Team Stats Per 100 Pos"
 _TEAM_SUMMARY_SHEET = "Team Summaries"
@@ -59,6 +61,7 @@ class PlayerEvidence:
     opponent_stats_per_100: dict[str, Any]
     source_context: dict[str, Any]
     missing_sources: tuple[str, ...]
+    shotquality_contest: dict[str, Any] = field(default_factory=dict)
 
 
 def build_player_evidence(contract: GeneratorInputContract, *, player_id: str, team: str) -> PlayerEvidence:
@@ -82,6 +85,12 @@ def build_player_evidence(contract: GeneratorInputContract, *, player_id: str, t
     advanced = _optional_player_row(validated, _PLAYER_ADVANCED_SHEET, requested_player_id, requested_team, missing)
     shooting = _optional_player_row(validated, _PLAYER_SHOOTING_SHEET, requested_player_id, requested_team, missing)
     play_by_play = _optional_player_row(validated, _PLAYER_PLAY_BY_PLAY_SHEET, requested_player_id, requested_team, missing)
+    league = str(season_info.get("lg") or "").strip().upper()
+    shotquality_contest = shotquality_contest_rows(
+        str(database_path),
+        int(validated.season),
+        league,
+    ).get(requested_player_id.upper(), {})
     team_roster = _team_roster(validated, requested_team)
 
     team_stats_per_game = _optional_team_row(validated, _TEAM_STATS_PER_GAME_SHEET, requested_team, missing)
@@ -111,7 +120,77 @@ def build_player_evidence(contract: GeneratorInputContract, *, player_id: str, t
         opponent_stats_per_100=opponent_stats_per_100,
         source_context=_source_context(validated, requested_player_id, requested_team),
         missing_sources=tuple(dict.fromkeys(missing)),
+        shotquality_contest=shotquality_contest,
     )
+
+
+@lru_cache(maxsize=None)
+def shotquality_contest_rows(
+    database_path: str,
+    season: int,
+    league: str,
+) -> dict[str, dict[str, Any]]:
+    """Load exact mapped season-level dContest rows from the Data Master."""
+
+    if str(league).strip().upper() != "NBA":
+        return {}
+    uri = f"file:{database_path}?mode=ro"
+    with sqlite3.connect(uri, uri=True) as connection:
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA query_only=ON")
+        required_tables = {"crafted_source_shotquality", "crafted_player_id_map", "player_per_game"}
+        available_tables = {
+            str(row[0])
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        if not required_tables.issubset(available_tables):
+            return {}
+        source_rows = connection.execute(
+            """
+            SELECT
+                CAST(CAST(s.nba_id AS INTEGER) AS TEXT) AS nba_id,
+                CAST(s.year AS INTEGER) AS season,
+                s.team_abbreviation AS source_team_abbreviation,
+                s.dcontest,
+                m.player_id,
+                m.match_method
+            FROM crafted_source_shotquality AS s
+            JOIN crafted_player_id_map AS m
+              ON m.nba_id = CAST(CAST(s.nba_id AS INTEGER) AS TEXT)
+             AND m.status = 'mapped'
+             AND m.player_id IS NOT NULL
+            WHERE CAST(s.year AS INTEGER) = ?
+              AND s.dcontest IS NOT NULL
+              AND EXISTS (
+                  SELECT 1
+                  FROM player_per_game AS p
+                  WHERE p.season = ?
+                    AND upper(p.lg) = 'NBA'
+                    AND upper(p.player_id) = upper(m.player_id)
+                    AND p.g > 0
+              )
+            ORDER BY m.player_id, s.source_row_id
+            """,
+            (int(season), int(season)),
+        )
+
+        rows: dict[str, dict[str, Any]] = {}
+        ambiguous: set[str] = set()
+        for source_row in source_rows:
+            player_id = str(source_row["player_id"] or "").strip().upper()
+            if not player_id or player_id in ambiguous:
+                continue
+            if player_id in rows:
+                rows.pop(player_id, None)
+                ambiguous.add(player_id)
+                continue
+            row = dict(source_row)
+            row["identity_contract"] = "crafted_player_id_map.status=mapped;nba_id_only;no_name_fallback"
+            row["source_database"] = "NBA_DATA_Master.sqlite"
+            row["source_table"] = "crafted_source_shotquality"
+            row["source_grain"] = "exact_nba_id_season"
+            rows[player_id] = row
+        return rows
 
 
 def _find_player_identity(database_path: str | object, player_id: str) -> dict[str, Any]:

@@ -9,10 +9,10 @@ GENERATOR_DIR = Path(__file__).resolve().parents[1] / "nba2k_editor" / "Player G
 if str(GENERATOR_DIR) not in sys.path:
     sys.path.insert(0, str(GENERATOR_DIR))
 
+from player_rules_offense import derive_tendency_crash  # type: ignore[import-not-found]  # noqa: E402
 from player_rules_rebounding import (  # type: ignore[import-not-found]  # noqa: E402
     derive_attribute_defensiverebound,
     derive_attribute_offensiverebound,
-    derive_tendency_crash,
     derive_tendency_putback,
     derive_tendency_putbackdunk,
 )
@@ -152,16 +152,23 @@ def test_putback_formulas_require_games_played() -> None:
     assert derive_tendency_putbackdunk(evidence, league_player_rows=_rows()) is None
 
 
-def test_rebound_attributes_and_crash_use_only_orbr_drbr_plus_minutes_context() -> None:
+def test_rebound_attributes_use_only_orbr_drbr_plus_minutes_context() -> None:
     rows = _rows()
     evidence = _evidence(orb_percent=12.0, drb_percent=20.0)
     offense = derive_attribute_offensiverebound(evidence, league_player_rows=rows)
     defense = derive_attribute_defensiverebound(evidence, league_player_rows=rows)
-    crash = derive_tendency_crash(evidence, league_player_rows=rows)
-    assert offense is not None and defense is not None and crash is not None
+    assert offense is not None and defense is not None
     assert "height_weight_raw_rebounds_and_total_rebound_rate_excluded=true" in offense["evidence_keys"]
     assert "height_weight_raw_rebounds_and_total_rebound_rate_excluded=true" in defense["evidence_keys"]
-    assert "height_weight_team_strategy_raw_rebounds_and_total_rebound_rate_excluded=true" in crash["evidence_keys"]
+
+
+def test_crash_does_not_use_rebounding_body_or_role_as_contact_fall_evidence() -> None:
+    rows = _rows()
+    low_rebound_small = _evidence(orb_percent=1.0, drb_percent=2.0, height=72.0, weight=170.0)
+    high_rebound_large = _evidence(orb_percent=25.0, drb_percent=35.0, height=86.0, weight=300.0)
+
+    assert derive_tendency_crash(low_rebound_small, league_player_rows=rows) is None
+    assert derive_tendency_crash(high_rebound_large, league_player_rows=rows) is None
 
 
 def test_total_rebound_rate_or_frame_never_substitutes_for_missing_orbr_drbr() -> None:
@@ -198,11 +205,11 @@ def test_historical_sparse_version_remains_when_the_era_has_no_orbr_or_drbr() ->
     results = (
         derive_attribute_offensiverebound(evidence, league_player_rows=rows),
         derive_attribute_defensiverebound(evidence, league_player_rows=rows),
-        derive_tendency_crash(evidence, league_player_rows=rows),
         derive_tendency_putback(evidence, league_player_rows=rows),
         derive_tendency_putbackdunk(evidence, league_player_rows=rows),
     )
     assert all(result is not None for result in results)
+    assert derive_tendency_crash(evidence, league_player_rows=rows) is None
     assert all(
         result["source_rule"].endswith("_field_specific_context_substitute")
         for result in results

@@ -42,7 +42,9 @@ class GamePortResult:
 
 
 _MATCHED_NAME_IMPORT_SECTIONS: frozenset[str] = frozenset({"Attributes", "Tendencies"})
-_MATCHED_NAME_IMPORT_FIELD_KEYS: frozenset[str] = frozenset({"Vitals/AGE"})
+_MATCHED_NAME_IMPORT_FIELD_KEYS: frozenset[str] = frozenset(
+    {"Vitals/AGE", "Vitals/POSITION", "Vitals/SECONDARYPOSITION"}
+)
 
 
 @dataclass(frozen=True)

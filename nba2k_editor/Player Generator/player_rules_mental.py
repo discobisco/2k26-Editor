@@ -6,8 +6,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from player_era_context import filter_same_league_rows
-
 
 _INTANGIBLES_VORP_MAX = 12.47
 _INTANGIBLES_LINEAR_WEIGHT = 0.1318558994
@@ -302,8 +300,8 @@ _PLAY_DISCIPLINE_RECIPES = (
     _Recipe("historical_team_role_discipline", (("attempt_share", -0.45), ("assist_share", 0.30), ("role.creator", -0.25)), ("attempt_share", "assist_share"), "play-call adherence and freelance possession events", "lower self-directed shot load, team assist responsibility, and reduced primary-creator role", "the substitute describes structured team-role behavior rather than shooting execution"),
 )
 _ROLL_POP_RECIPES = (
-    _Recipe("screen_pop_spacing_preference", (("mid_attempt_rate", 0.30), ("three_attempt_rate", 0.30), ("rim_attempt_rate", -0.20), ("role.wing", 0.10), ("role.interior", -0.10)), ("mid_attempt_rate", "three_attempt_rate", "rim_attempt_rate")),
-    _Recipe("historical_screen_pop_touch_role", (("ft_percent", 0.40), ("role.wing", 0.25), ("role.interior", -0.20), ("foul_pressure", -0.15)), ("ft_percent", "role.wing", "role.interior"), "screen roll/pop event destinations and shot locations", "recorded shooting touch plus continuous spacing-versus-interior role", "higher output means pop preference; the all-era substitute separates spacing from rim pressure"),
+    _Recipe("screen_roll_rim_preference", (("mid_attempt_rate", -0.30), ("three_attempt_rate", -0.30), ("rim_attempt_rate", 0.20), ("role.wing", -0.10), ("role.interior", 0.10)), ("mid_attempt_rate", "three_attempt_rate", "rim_attempt_rate")),
+    _Recipe("historical_screen_roll_touch_role", (("ft_percent", -0.40), ("role.wing", -0.25), ("role.interior", 0.20), ("foul_pressure", 0.15)), ("ft_percent", "role.wing", "role.interior"), "screen roll/pop event destinations and shot locations", "recorded shooting touch plus continuous spacing-versus-interior role", "higher output means roll preference; the all-era substitute separates rim pressure from spacing"),
 )
 _TRANSITION_SPOTUP_RECIPES = (
     _Recipe("transition_perimeter_receiver_context", (("three_attempt_rate", 0.30), ("mid_attempt_rate", 0.25), ("assisted_two_rate", 0.25), ("role.creator", -0.20)), ("three_attempt_rate", "mid_attempt_rate", "assisted_two_rate")),
@@ -313,13 +311,11 @@ _TRANSITION_SPOTUP_RECIPES = (
 
 def _population(evidence: Any, rows: Any) -> tuple[Any, ...]:
     season = _season(evidence)
-    league = _league(evidence)
     return tuple(
         row
-        for row in filter_same_league_rows(evidence, rows)
+        for row in rows
         if _gp(row) is not None
         and (not season or not _season(row) or _season(row) == season)
-        and (not league or not _league(row) or _league(row) == league)
     )
 
 
@@ -382,6 +378,8 @@ def _derive(field: str, evidence: Any, rows: Any, recipes: tuple[_Recipe, ...], 
             f"recipe={recipe.name}",
             f"formula=center({center:.3f})+robust_weighted_z({score:.8f})*scale({scale:.3f})",
         )
+        if field == "ROLLVSPOP":
+            provenance += ("scale_direction=higher_roll;lower_pop",)
         if recipe.unavailable:
             provenance += (
                 f"unavailable_direct_source={recipe.unavailable}",

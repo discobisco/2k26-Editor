@@ -37,15 +37,16 @@ def _state(*, season: str = "2025", players: tuple[str, ...] | None = None) -> A
 
 
 def _install_fake_generator(monkeypatch):
-    calls = {"context": 0, "generate": 0}
+    calls = {"context": 0, "generate": 0, "selected_leagues": []}
 
     contracts = ModuleType("contracts")
 
     class GeneratorInputContract:
-        def __init__(self, *, season, source_root, output_target):
+        def __init__(self, *, season, source_root, output_target, selected_league=None):
             self.season = season
             self.source_root = source_root
             self.output_target = output_target
+            self.selected_league = selected_league
 
     class OutputTarget:
         PREVIEW = "preview"
@@ -57,6 +58,7 @@ def _install_fake_generator(monkeypatch):
 
     def season_context_index(contract):
         calls["context"] += 1
+        calls["selected_leagues"].append(contract.selected_league)
         return contract.season
 
     def generate_player_proposals_from_index(season_index):
@@ -82,8 +84,9 @@ def test_repeated_display_preview_reuses_full_season_proposal_cache(monkeypatch)
     first = display.generate_generator_preview_display_state(_state())
     second = display.generate_generator_preview_display_state(first)
 
-    assert calls == {"context": 1, "generate": 1}
+    assert calls == {"context": 1, "generate": 1, "selected_leagues": ["All leagues"]}
     assert first.proposal_cache_season == "2025"
+    assert first.proposal_cache_league == "All leagues"
     assert len(first.proposal_cache) == 2
     assert second.proposal_cache is first.proposal_cache
     assert tuple(proposal.player_id for proposal in second.generated_proposals) == ("p1", "p2")
@@ -102,7 +105,7 @@ def test_filter_only_display_preview_refilters_cache_without_regeneration(monkey
 
     second = display.generate_generator_preview_display_state(filtered)
 
-    assert calls == {"context": 1, "generate": 1}
+    assert calls == {"context": 1, "generate": 1, "selected_leagues": ["All leagues"]}
     assert second.proposal_cache is first.proposal_cache
     assert tuple(proposal.player_id for proposal in second.generated_proposals) == ("p2",)
 
@@ -114,5 +117,29 @@ def test_display_preview_rebuilds_cache_for_a_different_season(monkeypatch) -> N
 
     second = display.generate_generator_preview_display_state(next_season)
 
-    assert calls == {"context": 2, "generate": 2}
+    assert calls == {
+        "context": 2,
+        "generate": 2,
+        "selected_leagues": ["All leagues", "All leagues"],
+    }
     assert second.proposal_cache_season == "2026"
+
+
+def test_display_preview_rebuilds_cache_and_contract_for_a_different_league(monkeypatch) -> None:
+    calls = _install_fake_generator(monkeypatch)
+    first = display.generate_generator_preview_display_state(_state())
+    aba = replace(
+        first,
+        league_filters=("All leagues", "ABA", "NBA"),
+        selected_league="ABA",
+    )
+
+    second = display.generate_generator_preview_display_state(aba)
+
+    assert calls == {
+        "context": 2,
+        "generate": 2,
+        "selected_leagues": ["All leagues", "ABA"],
+    }
+    assert second.proposal_cache_season == "2025"
+    assert second.proposal_cache_league == "ABA"

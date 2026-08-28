@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from math import isclose, isfinite
+from math import isfinite
 from typing import Any, Callable
 
 import player_rules_athleticism as athleticism
@@ -10,9 +10,7 @@ import player_rules_defense as defense
 import player_rules_mental as mental
 import player_rules_offense as offense
 import player_rules_rebounding as rebounding
-from player_era_context import player_era_context
 from player_evidence import PlayerEvidence
-from player_special_rules import researched_defense_quality_rule_for
 from stat_neighbor_framework import PositionSelection, select_positions_from_evidence
 
 
@@ -116,7 +114,7 @@ _RULE_ROWS: tuple[tuple[str, str, str, str, str], ...] = (
 
 
 
-    ('Tendencies/CRASH', 'Tendencies', 'Layups And Dunks', 'rebounding', 'derive_tendency_crash'),
+    ('Tendencies/CRASH', 'Tendencies', 'Layups And Dunks', 'offense', 'derive_tendency_crash'),
     ('Tendencies/NOSETUPDRIBBLE', 'Tendencies', 'Drive Setup', 'offense', 'derive_tendency_setupdribble'),
     ('Tendencies/SETUPWITHHESITATION', 'Tendencies', 'Drive Setup', 'offense', 'derive_tendency_setupwithhesitation'),
     ('Tendencies/SETUPWITHSIZEUP', 'Tendencies', 'Drive Setup', 'offense', 'derive_tendency_setupwithsizeup'),
@@ -232,18 +230,8 @@ PLAYER_RULE_SCHEME: dict[str, PlayerRuleSpec] = {
     field_key: PlayerRuleSpec(field_key=field_key, section=section, group=group, module=module, function=function)
     for field_key, section, group, module, function in _RULE_ROWS
 }
-_EXTERNAL_RULE_OWNERS = {"Attributes/FREETHROW": "player_generator.model_free_throw_inverse"}
-_APPROVED_FIXED_PROVENANCE = {"durability.default_90_pending_injury_database"}
-_ELIGIBILITY_ONLY_SOURCE_PATHS = {"per_game.g", "totals.g"}
-_FORBIDDEN_PROVENANCE_FRAGMENTS = (
-    "role-band",
-    "position band",
-    "aggregate_position_mean=",
-    "ordinary_pool_distribution_q25_median_q75=",
-    "field_specific_historical_fallback",
-)
 _COMPARISON_POPULATION_CACHE: dict[
-    tuple[int, int, str],
+    tuple[int, int],
     tuple[object, tuple[dict[str, Any], ...]],
 ] = {}
 
@@ -298,10 +286,9 @@ def derive_player_rule_values(
     league_player_rows: Any = (),
     active_field_keys: set[str] | None = None,
 ) -> PlayerRuleResult:
-    required_fields = _required_rule_fields(active_field_keys)
     positions = positions or select_positions_from_evidence(evidence.play_by_play, evidence.season_info.get("pos") or evidence.identity.get("pos"))
     if not positions.primary or not _has_required_games_played(evidence):
-        return _complete_required_rule_fields({}, required_fields)
+        return PlayerRuleResult(values={})
 
     formula_values = derive_formula_rule_values(
         evidence,
@@ -310,33 +297,7 @@ def derive_player_rule_values(
     )
     if active_field_keys is not None:
         formula_values = {key: value for key, value in formula_values.items() if key in active_field_keys}
-    return _complete_required_rule_fields(formula_values, required_fields)
-
-
-def _complete_required_rule_fields(
-    values: dict[str, RuleValue],
-    required_fields: set[str],
-) -> PlayerRuleResult:
-    """Guarantee that every active Attribute/Tendency has a generated value.
-
-    Exact formulas remain authoritative. When an exact field cannot resolve,
-    use the established legal set-value contract instead of omitting the
-    candidate and exposing a blank/stale game value.
-    """
-    completed = dict(values)
-    for field_key in sorted(required_fields - set(completed)):
-        is_attribute = field_key.startswith("Attributes/")
-        completed[field_key] = RuleValue(
-            value=25 if is_attribute else 0,
-            source_rule="required_active_field_set_value",
-            evidence_keys=(
-                f"unresolved_exact_source={field_key}",
-                "set_value_contract=attribute_25" if is_attribute else "set_value_contract=tendency_0",
-                "blank_prevention=active_field_must_resolve",
-                "stale_game_value_allowed=false",
-            ),
-        )
-    return PlayerRuleResult(values=completed, unresolved_fields=())
+    return PlayerRuleResult(values=formula_values)
 
 
 def derive_formula_rule_values(
@@ -348,7 +309,7 @@ def derive_formula_rule_values(
     if not _has_required_games_played(evidence):
         return {}
     values: dict[str, RuleValue] = {}
-    rows = _same_season_same_league_rows(evidence, league_player_rows)
+    rows = _selected_comparison_rows(evidence, league_player_rows)
     for field_key, spec in PLAYER_RULE_SCHEME.items():
         rule = getattr(_RULE_MODULES[spec.module], spec.function, None)
         if rule is None:
@@ -362,8 +323,6 @@ def derive_formula_rule_values(
         )
         value = _coerce_formula_rule_value(field_key, result)
         if value is None:
-            continue
-        if not _formula_has_live_input(evidence, field_key, value, owner_module=spec.module):
             continue
         values[field_key] = value
     return values
@@ -422,268 +381,15 @@ def _coerce_formula_rule_value(field_key: str, result: Any) -> RuleValue | None:
     return RuleValue(value=stored, source_rule=source_rule, evidence_keys=evidence_keys)
 
 
-def _formula_has_live_input(
-    evidence: PlayerEvidence,
-    field_key: str,
-    value: RuleValue,
-    *,
-    owner_module: str,
-) -> bool:
-    lowered_rule = value.source_rule.lower()
-    provenance_text = "\n".join((lowered_rule, *(key.lower() for key in value.evidence_keys)))
-    if (
-        "role_fallback" in lowered_rule
-        or "random" in lowered_rule
-        or "named_player" in lowered_rule
-        or any(fragment in provenance_text for fragment in _FORBIDDEN_PROVENANCE_FRAGMENTS)
-    ):
-        return False
-    if (
-        value.source_rule.startswith("derive_attribute_")
-        and "durability" in value.source_rule
-        and any(key in _APPROVED_FIXED_PROVENANCE for key in value.evidence_keys)
-    ):
-        return True
-    if _is_approved_pre_line_value(evidence, value):
-        return True
-    if _is_approved_historical_move_tendency_zero(evidence, field_key, value):
-        return True
-    if _is_approved_historical_hard_foul(evidence, field_key, value):
-        return True
-    if _is_approved_intangibles_floor(evidence, field_key, value):
-        return True
-    if _is_approved_zero_attempt_three_point(evidence, field_key, value):
-        return True
-    if _is_approved_researched_defense_override(evidence, field_key, value):
-        return True
-    if _is_approved_offball_action_anchor(evidence, field_key, value):
-        return True
-    candidate_paths = tuple(
-        dict.fromkeys(
-            key
-            for raw_key in value.evidence_keys
-            if "=" not in (key := raw_key[1:] if raw_key.startswith("!") else raw_key)
-        )
-    )
-    live_paths = tuple(
-        key for key in candidate_paths
-        if _source_path_has_value(evidence, key)
-        or _documented_owner_feature_has_numeric_value(evidence, owner_module, key)
-    )
-    if any(
-        key not in _ELIGIBILITY_ONLY_SOURCE_PATHS
-        and (
-            _source_path_has_numeric_value(evidence, key)
-            or _documented_owner_feature_has_numeric_value(evidence, owner_module, key)
-        )
-        for key in live_paths
-    ):
-        return True
-    if _is_documented_field_fallback(value, live_paths):
-        return True
-    return False
-
-
-def _is_approved_pre_line_value(evidence: PlayerEvidence, value: RuleValue) -> bool:
-    context = player_era_context(evidence)
-    if context.has_three_point_line or "three_point_line=none" not in value.evidence_keys:
-        return False
-    if not value.source_rule.endswith("_pre_line"):
-        return False
-    if value.source_rule.startswith("derive_attribute_3point"):
-        return value.value == 25
-    if value.source_rule.startswith("derive_tendency_") and "3point" in value.source_rule:
-        return value.value == 0
-    return False
-
-
-def _is_approved_historical_move_tendency_zero(
-    evidence: PlayerEvidence,
-    field_key: str,
-    value: RuleValue,
-) -> bool:
-    normalized_name = field_key.partition("/")[2]
-    formula_field = {
-        "DRIBBLECROSSOVER": "DRIVINGCROSSOVER",
-        "DRIBBLESPIN": "DRIVINGSPIN",
-    }.get(normalized_name, normalized_name)
-    first_seasons = getattr(offense, "_HISTORICAL_MOVE_TENDENCY_FIRST_SEASON_ENDING_YEAR", {})
-    first_season = first_seasons.get(formula_field) if isinstance(first_seasons, dict) else None
-    season = int(evidence.season)
-    if first_season is None or season >= int(first_season):
-        return False
-    return (
-        value.value == 0
-        and value.source_rule == f"derive_tendency_{formula_field.lower()}_historical_introduction_gate"
-        and {
-            f"season_ending_year={season}",
-            f"first_supported_season_ending_year={first_season}",
-            "historically_unavailable_move_tendency=0",
-            "post_threshold_formula_unchanged=true",
-        }.issubset(value.evidence_keys)
-    )
-
-
-def _is_approved_historical_hard_foul(
-    evidence: PlayerEvidence,
-    field_key: str,
-    value: RuleValue,
-) -> bool:
-    if field_key != "Tendencies/HARDFOUL" or int(evidence.season) >= 1960:
-        return False
-    if value.value != 100 or value.source_rule != "derive_tendency_hardfoul_universal_pre_1960_maximum":
-        return False
-    return {
-        "season_boundary=season_ending_year<1960",
-        "HARDFOUL=100",
-        "scale_meaning=maximum_2K_propensity_not_literal_event_probability",
-    }.issubset(value.evidence_keys)
-
-
-def _is_approved_zero_attempt_three_point(
-    evidence: PlayerEvidence,
-    field_key: str,
-    value: RuleValue,
-) -> bool:
-    attempts = _float(evidence.totals.get("x3pa"))
-    if attempts is None or attempts > 0.0:
-        return False
-    if field_key == "Attributes/3POINT":
-        return value.value == 25 and value.source_rule == "derive_attribute_3point_no_made_attempt_evidence"
-    if field_key == "Tendencies/3POINTSHOT":
-        return value.value == 0 and value.source_rule == "derive_tendency_3pointshot_zero_attempts"
-    return False
-
-
-def _is_approved_researched_defense_override(
-    evidence: PlayerEvidence,
-    field_key: str,
-    value: RuleValue,
-) -> bool:
-    player_id = str(evidence.player_id or evidence.identity.get("player_id") or "").strip().upper()
-    team = str(evidence.team or evidence.season_info.get("team") or "").strip().upper()
-    league = str(evidence.season_info.get("lg") or "").strip().upper()
-    special_rule = researched_defense_quality_rule_for(
-        season=int(evidence.season),
-        league=league,
-        player_id=player_id,
-        team=team,
-    )
-    if special_rule is None:
-        return False
-    expected_value = special_rule.expected_values_by_field.get(field_key)
-    if expected_value is None or value.value != expected_value:
-        return False
-    expected_rule = f"derive_attribute_{field_key.split('/', 1)[1].lower()}_researched_exact_player_override"
-    if value.source_rule != expected_rule:
-        return False
-    required_provenance = set(special_rule.provenance_evidence_keys)
-    return required_provenance.issubset(value.evidence_keys)
-
-
-def _is_approved_offball_action_anchor(
-    evidence: PlayerEvidence,
-    field_key: str,
-    value: RuleValue,
-) -> bool:
-    fields = {
-        "Tendencies/MIDOFFSCREENSHOT": ("offscreen", 0),
-        "Tendencies/3POINTOFFSCREENSHOT": ("offscreen", 0),
-        "Tendencies/MIDSPOTUPSHOT": ("spotup", 1),
-        "Tendencies/3POINTSPOTUPSHOT": ("spotup", 1),
-    }
-    action_spec = fields.get(field_key)
-    if action_spec is None:
-        return False
-    player_id = str(evidence.player_id or evidence.identity.get("player_id") or "").strip().lower()
-    anchors = getattr(offense, "_OFFBALL_ACTION_ANCHORS", {})
-    anchor = anchors.get(player_id) if isinstance(anchors, dict) else None
-    if not isinstance(anchor, tuple) or len(anchor) != 2:
-        return False
-    action, index = action_spec
-    expected = int(anchor[index])
-    expected_rule = f"derive_tendency_{field_key.split('/', 1)[1].lower()}_approved_behavior_anchor"
-    return (
-        value.value == expected
-        and value.source_rule == expected_rule
-        and f"player_id={player_id}" in value.evidence_keys
-        and f"approved_{action}_anchor={expected}" in value.evidence_keys
-        and "names_are_display_only;exact_player_id_authors_the_anchor" in value.evidence_keys
-    )
-
-
-def _is_approved_intangibles_floor(
-    evidence: PlayerEvidence,
-    field_key: str,
-    value: RuleValue,
-) -> bool:
-    if field_key != "Attributes/INTANGIBLES" or value.value != 25:
-        return False
-    if value.source_rule != "derive_attribute_intangibles":
-        return False
-    raw_vorp = _float(evidence.advanced.get("vorp"))
-    return raw_vorp is None or raw_vorp <= 0.0
-
-
-def _is_documented_field_fallback(value: RuleValue, live_paths: tuple[str, ...]) -> bool:
-    if not live_paths or not value.source_rule.endswith("_field_specific_context_substitute"):
-        return False
-    required_prefix_groups = (
-        ("unavailable_direct_source=",),
-        ("substitute_source=", "substitute_evidence="),
-        ("validity=", "field_validity="),
-    )
-    return all(
-        any(key.startswith(prefix) for key in value.evidence_keys for prefix in prefixes)
-        for prefixes in required_prefix_groups
-    )
-
-
-def _source_path_has_numeric_value(evidence: PlayerEvidence, path: str) -> bool:
-    namespace, sep, key = path.partition(".")
-    if not sep:
-        return False
-    source = getattr(evidence, namespace, None)
-    if not isinstance(source, dict) or key not in source:
-        return False
-    return _float(source.get(key)) is not None
-
-
-def _documented_owner_feature_has_numeric_value(
-    evidence: PlayerEvidence,
-    owner_module: str,
-    path: str,
-) -> bool:
-    if owner_module == "offense":
-        if path.startswith("derived."):
-            helper = getattr(offense, "_derived_value", None)
-            return callable(helper) and _float(helper(evidence, path.split(".", 1)[1])) is not None
-        if path.startswith("role."):
-            helper = getattr(offense, "_role_value", None)
-            return callable(helper) and _float(helper(evidence, path.split(".", 1)[1])) is not None
-    if owner_module == "defense" and path.startswith(("crafted.", "derived.")):
-        helper = getattr(defense, "_feature_value", None)
-        return callable(helper) and _float(helper(evidence, path)) is not None
-    return False
-
-
-def _required_rule_fields(active_field_keys: set[str] | None) -> set[str]:
-    requested = set(PLAYER_RULE_SCHEME) if active_field_keys is None else {
-        key for key in active_field_keys if key.startswith(("Attributes/", "Tendencies/"))
-    }
-    return requested - set(_EXTERNAL_RULE_OWNERS)
-
-
 def _has_required_games_played(evidence: PlayerEvidence) -> bool:
     games = _float(evidence.per_game.get("g"))
     return games is not None and games > 0.0
 
 
-def _same_season_same_league_rows(evidence: PlayerEvidence, rows: Any) -> tuple[dict[str, Any], ...]:
-    context = player_era_context(evidence)
-    if not context.league or int(evidence.season) <= 0:
+def _selected_comparison_rows(evidence: PlayerEvidence, rows: Any) -> tuple[dict[str, Any], ...]:
+    if int(evidence.season) <= 0:
         return ()
-    cache_key = (id(rows), int(evidence.season), context.league)
+    cache_key = (id(rows), int(evidence.season))
     cached = _COMPARISON_POPULATION_CACHE.get(cache_key)
     if cached is not None and cached[0] is rows:
         return cached[1]
@@ -692,10 +398,7 @@ def _same_season_same_league_rows(evidence: PlayerEvidence, rows: Any) -> tuple[
         if not isinstance(row, dict):
             continue
         row_season = _row_context_value(row, "season", "player_season_info.season", "season_info.season")
-        row_league = _row_context_value(row, "player_season_info.lg", "season_info.lg", "lg")
         if _int_round(row_season) != int(evidence.season):
-            continue
-        if str(row_league or "").strip().upper() != context.league:
             continue
         row_games = _row_context_value(row, "player_per_game.g", "per_game.g", "g")
         if (games := _float(row_games)) is None or games <= 0.0:
@@ -711,17 +414,6 @@ def _row_context_value(row: dict[str, Any], *keys: str) -> Any:
         if key in row:
             return row.get(key)
     return None
-
-
-def _source_path_has_value(evidence: PlayerEvidence, path: str) -> bool:
-    namespace, sep, key = path.partition(".")
-    if not sep:
-        return False
-    source = getattr(evidence, namespace, None)
-    if not isinstance(source, dict) or key not in source:
-        return False
-    value = source.get(key)
-    return value is not None and value != ""
 
 
 def _add_profile(values: dict[str, ProfileValue], key: str, value: object, source_rule: str, *evidence_keys: str) -> None:

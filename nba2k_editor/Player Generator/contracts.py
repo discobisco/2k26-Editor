@@ -26,6 +26,7 @@ class GeneratorInputContract:
     source_root: Path
     output_target: OutputTarget | str
     roster_label: str | None = None
+    selected_league: str | None = None
 
     def validate(self) -> "GeneratorInputContract":
         season = self._validate_season(self.season)
@@ -42,7 +43,18 @@ class GeneratorInputContract:
         if output_target is OutputTarget.OVERWRITE_CURRENT_ROSTER and roster_label is None:
             raise ValueError("roster_label is required for overwrite_current_roster output")
 
-        return replace(self, season=season, source_root=source_root, output_target=output_target, roster_label=roster_label)
+        selected_league = str(self.selected_league or "").strip().upper() or None
+        if selected_league == "ALL LEAGUES":
+            selected_league = None
+
+        return replace(
+            self,
+            season=season,
+            source_root=source_root,
+            output_target=output_target,
+            roster_label=roster_label,
+            selected_league=selected_league,
+        )
 
     @staticmethod
     def _validate_season(value: object) -> int:

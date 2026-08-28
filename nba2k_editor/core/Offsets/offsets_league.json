@@ -124,11 +124,11 @@
       },
       "base_pointers": {
         "Player": {
-          "address": 132254824,
+          "address": 132279288,
           "chain": []
         },
         "PlayerSeasonStats": {
-          "address": 132251632,
+          "address": 132276528,
           "chain": [
             {
               "offset": 472,
@@ -137,38 +137,38 @@
           ]
         },
         "DraftClass": {
-          "address": 111383040,
+          "address": 111407616,
           "chain": [],
           "finalOffset": 8,
           "schema_alias": "Players",
           "record_count": 150,
           "signature": "draft_NBA_150",
-          "signature_offset": 111383016,
+          "signature_offset": 111407592,
           "pointer_offset": 24
         },
         "Team": {
-          "address": 132254856,
+          "address": 132279320,
           "chain": []
         },
         "TeamStatsEdit": {
-          "address": 132254856,
+          "address": 132279320,
           "chain": [],
           "finalOffset": 4638676
         },
         "Staff": {
-          "address": 132254920,
+          "address": 132279384,
           "chain": []
         },
         "Stadium": {
-          "address": 132254848,
+          "address": 132279312,
           "chain": []
         },
         "Jersey": {
-          "address": 132254952,
+          "address": 132279416,
           "chain": []
         },
         "Shoes": {
-          "address": 132255288,
+          "address": 132279752,
           "chain": []
         },
         "TeamHistory": {
@@ -176,12 +176,12 @@
           "chain": []
         },
         "NBAHistory": {
-          "address": 132255048,
+          "address": 132279512,
           "chain": [],
           "finalOffset": 8
         },
         "Record": {
-          "address": 132255024,
+          "address": 132279488,
           "chain": []
         },
         "HallOfFame": {

@@ -5,8 +5,6 @@ import sqlite3
 import sys
 from pathlib import Path
 
-import pytest
-
 GENERATOR_DIR = Path(__file__).resolve().parents[1] / "nba2k_editor" / "Player Generator"
 if str(GENERATOR_DIR) not in sys.path:
     sys.path.insert(0, str(GENERATOR_DIR))
@@ -167,11 +165,10 @@ def test_free_throw_artifact_loads_without_pool_and_predicts_only_the_attribute_
         "PlayerEvidence.per_game.fta_per_game",
     ]
     assert loaded.to_dict()["runtime_inverse_author"] is True
-    with pytest.raises(ValueError, match="25 through 99"):
-        loaded.predict_make_probability(100)
+    assert loaded.predict_make_probability(100) is None
 
 
-def test_free_throw_artifact_rejects_malformed_curve_members() -> None:
+def test_free_throw_artifact_ignores_malformed_curve_members() -> None:
     curve = tuple((rating, rating / 100.0) for rating in range(25, 100))
     artifact = FreeThrowExecutionArtifact(
         schema_version=1,
@@ -185,8 +182,8 @@ def test_free_throw_artifact_rejects_malformed_curve_members() -> None:
     payload = artifact.to_dict()
     payload["curve"].append("not a curve point")
 
-    with pytest.raises(ValueError, match="curve point 75 must be an object"):
-        FreeThrowExecutionArtifact.from_dict(payload)
+    loaded = FreeThrowExecutionArtifact.from_dict(payload)
+    assert loaded.curve == curve
 
 
 def _player_evidence_with_ft_percent(
@@ -293,7 +290,7 @@ def test_player_proposal_authors_free_throw_only_through_the_new_model_path() ->
     assert "PlayerEvidence.per_game.ft_percent" in candidate.evidence_keys
 
 
-def test_player_proposal_uses_legal_floor_without_master_target_instead_of_blank() -> None:
+def test_player_proposal_omits_free_throw_without_master_target() -> None:
     artifact = FreeThrowExecutionArtifact(
         schema_version=1,
         field_key=FREE_THROW_FIELD_KEY,
@@ -310,11 +307,7 @@ def test_player_proposal_uses_legal_floor_without_master_target_instead_of_blank
         free_throw_artifact=artifact,
     )
 
-    candidate = proposal.by_field_key()[FREE_THROW_FIELD_KEY]
-    assert candidate.display_value == 25
-    assert candidate.source_rule == "required_active_field_set_value"
-    assert "blank_prevention=active_field_must_resolve" in candidate.evidence_keys
-    assert "stale_game_value_allowed=false" in candidate.evidence_keys
+    assert FREE_THROW_FIELD_KEY not in proposal.by_field_key()
 
 
 def test_zero_free_throw_attempts_mean_zero_target_not_missing_target() -> None:
@@ -352,5 +345,4 @@ def test_free_throw_artifact_does_not_interpolate_an_unresolved_exact_rating() -
         evaluation_summary={},
     )
 
-    with pytest.raises(ValueError, match="unresolved for exact rating 31"):
-        artifact.predict_make_probability(31)
+    assert artifact.predict_make_probability(31) is None

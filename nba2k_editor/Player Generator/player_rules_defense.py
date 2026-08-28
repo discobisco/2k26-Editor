@@ -41,12 +41,8 @@ _CALIBRATION: dict[str, tuple[float, float, float, float, float]] = {
     "lateral_quickness": (31.89939328, 45.33874148, 3.25832799, 0.07509925, 12.12455866),
     "pick_and_roll_iq": (43.46149719, 19.84886967, 2.93547020, 0.09069753, 11.50524791),
     "contest_shot_attribute": (50.44894563, 3.52469525, 2.45040692, 0.09768933, 7.98725768),
-    "t_block_shot": (31.59699097, -13.82156877, 1.59049373, 0.11198057, 11.23224295),
-    "t_contest_shot": (44.45438924, -9.54215171, 0.43142702, 0.21647086, 13.86984645),
     "t_foul": (68.09121203, -16.64156651, -0.33218055, -0.01287985, 14.08472996),
     "t_hard_foul": (62.64078510, -22.26446853, -2.67721871, -0.04814260, 15.95836388),
-    "t_on_ball_steal": (33.11475980, 30.08682424, 1.15130687, 0.20093118, 13.56027791),
-    "t_pass_interception": (36.73500915, 27.85207615, 1.55150943, 0.14145887, 11.44525718),
     "t_take_charge": (24.50019729, 7.88667278, 1.48002538, 0.05358680, 13.78303321),
 }
 
@@ -56,7 +52,7 @@ _ROW_POPULATION_CACHE: dict[
     tuple[tuple[dict[str, Any], ...], tuple[float, ...]],
 ] = {}
 _ELIGIBLE_ROWS_CACHE: dict[
-    tuple[int, int, str],
+    tuple[int, int],
     tuple[tuple[dict[str, Any], ...], tuple[dict[str, Any], ...]],
 ] = {}
 _DEFENSE_QUALITY_WEIGHTS = {
@@ -72,7 +68,7 @@ _DIRECT_SOURCES: dict[str, tuple[tuple[str, float], ...]] = {
         ("advanced.blk_percent", 0.35),
         ("per_game.blk_per_game", 0.20),
     ),
-    "defense_consistency": (),
+    "defense_consistency": (("advanced.dws", 1.0),),
     "help_defense": (
         ("advanced.dbpm", 0.47),
         ("advanced.dws", 0.45),
@@ -98,16 +94,6 @@ _DIRECT_SOURCES: dict[str, tuple[tuple[str, float], ...]] = {
         ("advanced.dws", 0.45),
         ("advanced.blk_percent", 0.10),
     ),
-    "t_block_shot": (
-        ("advanced.blk_percent", 0.50),
-        ("per_100.blk_per_100_poss", 0.35),
-        ("per_game.blk_per_game", 0.15),
-    ),
-    "t_contest_shot": (
-        ("advanced.dbpm", 0.45),
-        ("advanced.dws", 0.45),
-        ("advanced.blk_percent", 0.10),
-    ),
     "t_foul": (
         ("per_36.pf_per_36_min", 0.55),
         ("per_game.pf_per_game", 0.25),
@@ -117,17 +103,6 @@ _DIRECT_SOURCES: dict[str, tuple[tuple[str, float], ...]] = {
         ("derived.shooting_foul_committed_per_game", 0.55),
         ("per_36.pf_per_36_min", 0.30),
         ("per_game.pf_per_game", 0.15),
-    ),
-    "t_on_ball_steal": (
-        ("advanced.stl_percent", 0.45),
-        ("per_100.stl_per_100_poss", 0.35),
-        ("per_game.stl_per_game", 0.20),
-    ),
-    "t_pass_interception": (
-        ("crafted.disruption_per_100", 0.40),
-        ("advanced.stl_percent", 0.30),
-        ("per_100.stl_per_100_poss", 0.20),
-        ("crafted.stock_percent", 0.10),
     ),
     "t_take_charge": (("derived.offensive_foul_drawn_per_game", 1.0),),
 }
@@ -139,9 +114,9 @@ _SUBSTITUTES: dict[str, tuple[str, str, str]] = {
         "historical centers protected the basket; this is a field-specific role prior, not a fabricated block count",
     ),
     "defense_consistency": (
-        "game-level defensive consistency measurement; DWS and DBPM are aggregate outcomes, not consistency",
-        "continuous role/size context calibrated only to the captured Defensive Consistency field",
-        "the substitute does not relabel STL, BLK, team rating, or pace as game-to-game consistency",
+        "game-level defensive consistency measurement",
+        "season-long DWS plus continuous role/size context calibrated to the captured Defensive Consistency field",
+        "DWS is the primary sustained defensive-value signal while role and size retain field-specific context",
     ),
     "help_defense": (
         "DWS, DBPM, and BLK%",
@@ -183,16 +158,6 @@ _SUBSTITUTES: dict[str, tuple[str, str, str]] = {
         "continuous matchup/basket-protection role and size",
         "contest execution remains distinct from contest frequency and raw block production",
     ),
-    "t_block_shot": (
-        "BLK, BLK%, and BLK per 100",
-        "continuous basket-protection opportunity from role and size",
-        "the exact Block Shot tendency prior does not fabricate historical block events",
-    ),
-    "t_contest_shot": (
-        "DWS, DBPM, and at most ten-percent BLK evidence",
-        "continuous matchup contest opportunity from role and size",
-        "contest frequency is separately calibrated from contest execution and block behavior",
-    ),
     "t_foul": (
         "PF rate and shooting fouls committed",
         "continuous contact-role context calibrated to the exact Foul tendency",
@@ -202,16 +167,6 @@ _SUBSTITUTES: dict[str, tuple[str, str, str]] = {
         "shooting-foul and PF frequency; hard-foul classification is unavailable",
         "continuous contact-role and size context calibrated to the exact Hard Foul tendency",
         "contact opportunity is not asserted to be observed hard-foul severity",
-    ),
-    "t_on_ball_steal": (
-        "STL, STL%, and STL per 100; on-ball attempt events are unavailable",
-        "continuous on-ball pressure role calibrated to the exact On Ball Steal tendency",
-        "STL supplies disruption frequency while the field calibration keeps this distinct from interception",
-    ),
-    "t_pass_interception": (
-        "STL plus crafted disruption/stock evidence; interception attempts are unavailable",
-        "continuous passing-lane role calibrated to the exact Pass Interception tendency",
-        "the exact-field calibration prevents copying the Steal attribute unchanged",
     ),
     "t_take_charge": (
         "offensive fouls drawn",
@@ -309,9 +264,8 @@ def _row_league(row: dict[str, Any]) -> str:
 
 def _eligible_rows(evidence: Any, rows: Any) -> tuple[dict[str, Any], ...]:
     season = _season(evidence)
-    league = _league(evidence)
     row_tuple = tuple(rows or ())
-    cache_key = (id(row_tuple), season, league)
+    cache_key = (id(row_tuple), season)
     cached = _ELIGIBLE_ROWS_CACHE.get(cache_key)
     if cached is not None and cached[0] is row_tuple:
         return cached[1]
@@ -320,10 +274,7 @@ def _eligible_rows(evidence: Any, rows: Any) -> tuple[dict[str, Any], ...]:
         if not isinstance(row, dict):
             continue
         row_season = _row_season(row)
-        row_league = _row_league(row)
         if season and row_season != season:
-            continue
-        if league and row_league != league:
             continue
         games = _row_games(row)
         if games is None or games <= 0.0:
@@ -496,7 +447,8 @@ def _row_feature(row: dict[str, Any], feature: str) -> float | None:
 def _feature_population(evidence: Any, rows: tuple[dict[str, Any], ...], feature: str) -> tuple[float, ...]:
     if feature.startswith("crafted."):
         metric = feature.split(".", 1)[1]
-        return _crafted_population(_season(evidence), _league(evidence), metric)
+        leagues = tuple(sorted({_row_league(row) for row in rows if _row_league(row)}))
+        return _crafted_population(_season(evidence), leagues, metric)
     cache_key = (id(rows), feature)
     cached = _ROW_POPULATION_CACHE.get(cache_key)
     if cached is not None and cached[0] is rows:
@@ -507,8 +459,12 @@ def _feature_population(evidence: Any, rows: tuple[dict[str, Any], ...], feature
 
 
 @lru_cache(maxsize=None)
-def _crafted_population(season: int, league: str, metric: str) -> tuple[float, ...]:
-    values = (_optional_number(row.get(metric)) for row in _crafted_rows(season, league).values())
+def _crafted_population(season: int, leagues: tuple[str, ...], metric: str) -> tuple[float, ...]:
+    values = (
+        _optional_number(row.get(metric))
+        for league in leagues
+        for row in _crafted_rows(season, league).values()
+    )
     return tuple(sorted(value for value in values if value is not None))
 
 
@@ -662,14 +618,40 @@ def _derive(rule_name: str, field: str, evidence: Any, league_player_rows: Any) 
         )
         if not population:
             return None
-        score = bisect.bisect_right(population, context_value) / len(population)
+        context_score = bisect.bisect_right(population, context_value) / len(population)
+        dws = _read(evidence, "advanced.dws")
+        dws_population = tuple(
+            sorted(
+                value
+                for row in rows
+                if (value := _row_value(row, "advanced.dws")) is not None
+            )
+        )
+        if dws is not None and dws_population:
+            dws_score = bisect.bisect_right(dws_population, dws) / len(dws_population)
+            score = 0.50 * dws_score + 0.50 * context_score
+            rank_source = "dws_plus_field_specific_defense_consistency_context_prediction"
+            consistency_keys = (
+                "advanced.dws",
+                f"dws={dws:.8f}",
+                f"dws_same_season_same_league_rank={dws_score:.8f}",
+                f"context_same_season_same_league_rank={context_score:.8f}",
+                "defense_consistency_weights=dws:0.50,field_specific_context:0.50",
+            )
+        else:
+            score = context_score
+            rank_source = "field_specific_defense_consistency_context_prediction"
+            consistency_keys = (
+                f"context_same_season_same_league_rank={context_score:.8f}",
+                "missing_dws_policy=field_specific_context_only",
+            )
         return {
             "value": max(25, min(99, round(25.0 + 74.0 * score))),
             "score": score,
             "source_rule": rule_name,
-            "evidence_keys": (games[1],) + context_keys + (
-                f"same_season_same_league_context_rank={score:.8f}",
-                "rank_source=field_specific_defense_consistency_context_prediction",
+            "evidence_keys": (games[1],) + context_keys + consistency_keys + (
+                f"same_season_same_league_rank_score={score:.8f}",
+                f"rank_source={rank_source}",
                 "mapping=round(25+74*same_season_same_league_rank_score)",
                 "population=exact_same_season_same_league_gp_positive_unflattened_rows",
             ),
@@ -903,11 +885,47 @@ def derive_attribute_contestshot(evidence: Any, *, league_player_rows: Any = ())
 
 
 def derive_tendency_blockshot(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:
-    return _derive("derive_tendency_blockshot", "t_block_shot", evidence, league_player_rows)
+    """Remain unresolved without Data Master block-attempt appetite evidence."""
+
+    return None
 
 
 def derive_tendency_contestshot(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:
-    return _derive("derive_tendency_contestshot", "t_contest_shot", evidence, league_player_rows)
+    games = _games_played(evidence)
+    dcontest = _read(evidence, "shotquality_contest.dcontest")
+    if games is None or dcontest is None:
+        return None
+    population = tuple(
+        sorted(
+            value
+            for row in _eligible_rows(evidence, league_player_rows)
+            if (value := _row_value(row, "crafted_source_shotquality.dcontest")) is not None
+        )
+    )
+    score = _population_rank(dcontest, population)
+    if score is None:
+        return None
+    return {
+        "value": max(0, min(100, round(100.0 * score))),
+        "score": score,
+        "source_rule": "derive_tendency_contestshot_data_master_dcontest_rank",
+        "evidence_keys": (
+            games[1],
+            "shotquality_contest.dcontest",
+            f"dcontest={dcontest:.8f}",
+            f"same_season_same_league_dcontest_rank={score:.8f}",
+            "source_database=NBA_DATA_Master.sqlite",
+            "source_table=crafted_source_shotquality",
+            "source_column=dcontest",
+            "identity=crafted_player_id_map.status=mapped;nba_id_only;no_name_fallback",
+            "source_grain=exact_nba_id_season",
+            "source_team_abbreviation=provenance_only_not_identity",
+            "metric_semantics=ShotQuality_defensive_contest_component_not_raw_attempt_count",
+            "mapping=round(100*same_season_same_league_dcontest_rank)",
+            "population=exact_same_season_same_league_gp_positive_mapped_Data_Master_rows",
+            "independent_tendency=no_cross_field_normalization",
+        ),
+    }
 
 
 def derive_tendency_foul(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:
@@ -935,9 +953,12 @@ def derive_tendency_hardfoul(evidence: Any, *, league_player_rows: Any = ()) -> 
             ),
         }
 
+    if not 1970 <= era.season < 1990:
+        return None
+
     result = _derive("derive_tendency_hardfoul", "t_hard_foul", evidence, league_player_rows)
-    if result is None or not 1970 <= era.season < 1990:
-        return result
+    if result is None:
+        return None
 
     score = result.get("score")
     if score is not None and float(score) <= _HARD_FOUL_LOW_CONTACT_EXCEPTION_MAX_SCORE:
@@ -968,11 +989,15 @@ def derive_tendency_hardfoul(evidence: Any, *, league_player_rows: Any = ()) -> 
 
 
 def derive_tendency_onballsteal(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:
-    return _derive("derive_tendency_onballsteal", "t_on_ball_steal", evidence, league_player_rows)
+    """Remain unresolved without Data Master on-ball steal-attempt evidence."""
+
+    return None
 
 
 def derive_tendency_passinterception(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:
-    return _derive("derive_tendency_passinterception", "t_pass_interception", evidence, league_player_rows)
+    """Remain unresolved without Data Master interception-attempt evidence."""
+
+    return None
 
 
 def derive_tendency_takecharge(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:

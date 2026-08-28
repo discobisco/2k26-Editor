@@ -18,9 +18,10 @@ from player_rules_offense import (  # type: ignore[import-not-found]  # noqa: E4
     derive_tendency_drivepullupmid,
     derive_tendency_drivepullupmidrange,
     derive_tendency_midoffscreenshot,
+    derive_tendency_midshot,
     derive_tendency_midspotupshot,
 )
-from player_rules import _coerce_formula_rule_value, _formula_has_live_input  # type: ignore[import-not-found]  # noqa: E402
+
 
 
 def _generic_midrange_evidence(*, index: int = 7) -> SimpleNamespace:
@@ -116,6 +117,24 @@ def test_midrange_action_tendencies_do_not_use_free_throw_percentage_as_action_a
     ]
 
 
+def test_historical_midshot_tendency_does_not_use_free_throw_percentage() -> None:
+    rows = _population_rows()
+    low_ft = _generic_midrange_evidence()
+    high_ft = copy.deepcopy(low_ft)
+    low_ft.shooting = {}
+    high_ft.shooting = {}
+    low_ft.per_game["ft_percent"] = 0.30
+    high_ft.per_game["ft_percent"] = 0.99
+
+    low = derive_tendency_midshot(low_ft, league_player_rows=rows)
+    high = derive_tendency_midshot(high_ft, league_player_rows=rows)
+
+    assert low is not None and high is not None
+    assert low["value"] == high["value"]
+    assert "recipe=historical_midrange_attempt_role" in low["evidence_keys"]
+    assert "per_game.ft_percent" not in low["evidence_keys"]
+
+
 def test_user_approved_offball_action_anchors_apply_to_mid_and_three_after_range_selection() -> None:
     expected = {
         "thompkl01": (95, 95),
@@ -139,12 +158,3 @@ def test_user_approved_offball_action_anchors_apply_to_mid_and_three_after_range
         assert mid_spotup is not None and three_spotup is not None
         assert mid_offscreen["value"] == three_offscreen["value"] == offscreen_value
         assert mid_spotup["value"] == three_spotup["value"] == spotup_value
-        for field_key, raw in (
-            ("Tendencies/MIDOFFSCREENSHOT", mid_offscreen),
-            ("Tendencies/3POINTOFFSCREENSHOT", three_offscreen),
-            ("Tendencies/MIDSPOTUPSHOT", mid_spotup),
-            ("Tendencies/3POINTSPOTUPSHOT", three_spotup),
-        ):
-            value = _coerce_formula_rule_value(field_key, raw)
-            assert value is not None
-            assert _formula_has_live_input(evidence, field_key, value, owner_module="offense")

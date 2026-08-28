@@ -12,7 +12,6 @@ if str(GENERATOR_DIR) not in sys.path:
     sys.path.insert(0, str(GENERATOR_DIR))
 
 import player_rules_offense  # type: ignore[import-not-found]  # noqa: E402
-from player_rules import RuleValue, _formula_has_live_input  # type: ignore[import-not-found]  # noqa: E402
 from player_rules_offense import (  # type: ignore[import-not-found]  # noqa: E402
     derive_tendency_drivingbehindtheback,
     derive_tendency_drivingcrossover,
@@ -71,44 +70,6 @@ def test_dribble_move_tendency_is_literal_zero_before_first_supported_season(
     }
     assert calls == []
 
-
-DRIBBLE_MOVE_FIELD_KEYS = {
-    "SETUPWITHHESITATION": "Tendencies/SETUPWITHHESITATION",
-    "SETUPWITHSIZEUP": "Tendencies/SETUPWITHSIZEUP",
-    "DRIVINGCROSSOVER": "Tendencies/DRIBBLECROSSOVER",
-    "DRIVINGDOUBLECROSSOVER": "Tendencies/DRIVINGDOUBLECROSSOVER",
-    "DRIVINGSPIN": "Tendencies/DRIBBLESPIN",
-    "DRIVINGHALFSPIN": "Tendencies/DRIVINGHALFSPIN",
-    "DRIVINGSTEPBACK": "Tendencies/DRIVINGSTEPBACK",
-    "DRIVINGBEHINDTHEBACK": "Tendencies/DRIVINGBEHINDTHEBACK",
-    "DRIVINGDRIBBLEHESITATION": "Tendencies/DRIVINGDRIBBLEHESITATION",
-    "DRIVINGINANDOUT": "Tendencies/DRIVINGINANDOUT",
-    "EUROSTEPLAYUP": "Tendencies/EUROSTEPLAYUP",
-    "HOPSTEPLAYUP": "Tendencies/HOPSTEPLAYUP",
-}
-
-
-@pytest.mark.parametrize(("field", "derive", "first_season"), DRIBBLE_MOVE_CASES)
-def test_dribble_move_historical_zero_is_retained_by_rule_assembly(
-    field: str,
-    derive,
-    first_season: int,
-) -> None:
-    evidence = SimpleNamespace(season=first_season - 1)
-    result = derive(evidence)
-    assert result is not None
-    value = RuleValue(
-        value=result["value"],
-        source_rule=result["source_rule"],
-        evidence_keys=result["evidence_keys"],
-    )
-
-    assert _formula_has_live_input(
-        evidence,
-        DRIBBLE_MOVE_FIELD_KEYS[field],
-        value,
-        owner_module="offense",
-    )
 
 
 @pytest.mark.parametrize(("field", "derive", "first_season"), DRIBBLE_MOVE_CASES)
