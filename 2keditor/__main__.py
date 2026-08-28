@@ -8,7 +8,7 @@ from . import __version__
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m nba2k_editor")
+    parser = argparse.ArgumentParser(prog="python -m 2keditor")
     parser.add_argument("--version", action="version", version=f"nba2k_editor {__version__}")
     subparsers = parser.add_subparsers(dest="command")
     subparsers.add_parser("gui", add_help=False, help="open the PyQt6 editor")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import os
 import subprocess
 import sys
@@ -8,6 +9,12 @@ from pathlib import Path
 from typing import Sequence
 
 _RELAUNCH_ENV = "NBA2K_EDITOR_WINDOWS_RELAUNCHED"
+
+# The editor package lives in ``2keditor/`` to match the shared remote. That name
+# starts with a digit, so it cannot be written in an ``import`` statement; load
+# it by string first. Importing it runs ``2keditor/__init__.py``, which
+# registers the package under ``nba2k_editor`` for its internal absolute imports.
+_PACKAGE_DIR = "2keditor"
 
 
 def _project_root() -> Path:
@@ -79,6 +86,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _relaunch_in_windows_python(project_root, args_list)
 
     sys.path.insert(0, str(project_root))
+    importlib.import_module(_PACKAGE_DIR)
     from nba2k_editor.entrypoints.gui import main as gui_main
 
     gui_args = [
