@@ -13,7 +13,6 @@ from typing import Any, Iterable
 from nba2k_editor.core import offsets as offsets_mod
 from nba2k_editor.models.schema import FieldEntry
 from player_evidence import PlayerEvidence, shotquality_contest_rows
-from source_data import GeneratorSourceInventory
 from player_generation_models import (
     FREE_THROW_FIELD_KEY,
     FreeThrowExecutionArtifact,
@@ -571,10 +570,10 @@ def season_context_index(
 ) -> SeasonPlayerContextIndex:
     resolved_season = validated_season(season)
     root = Path(source_root) if source_root is not None else _GENERATOR_DIR / "NBA Player Data"
-    root = root.expanduser().resolve()
-    # Fail here rather than part-way through a several-hundred-player run.
-    GeneratorSourceInventory.from_root(root)
-    database_path = ensure_workbook_sqlite_database(root)
+    # ensure_workbook_sqlite_database runs GeneratorSourceInventory.from_root itself and
+    # then checks the database opens and carries workbook metadata, so a missing or
+    # unusable source fails here rather than part-way through a whole-season run.
+    database_path = ensure_workbook_sqlite_database(root.expanduser().resolve())
     offset_path = Path(offsets_path).expanduser().resolve() if offsets_path is not None else _DEFAULT_OFFSETS_PLAYERS_PATH.resolve()
     return _cached_season_context_index(
         str(database_path),
