@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from nba2k_editor.franchise.draft_room import build_fantasy_draft_markdown
+from nba2k_editor.franchise.draft_room import PREGENERATED_TEAM_PROFILE_DIRECTORY, build_fantasy_draft_markdown
 from nba2k_editor.franchise.llm_view import build_franchise_llm_markdown
 
 
@@ -51,7 +51,7 @@ def build_franchise_control_room_markdown(
     user_team_index: int = 0,
     team_count: int = 30,
     current_pick_number: int = 1,
-    profile_dir: str | Path = Path("nba2k_editor") / "franchise" / "team_profiles",
+    profile_dir: str | Path = PREGENERATED_TEAM_PROFILE_DIRECTORY,
 ) -> str:
     return "\n\n".join(
         (

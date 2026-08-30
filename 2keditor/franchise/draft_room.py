@@ -7,6 +7,9 @@ from typing import Any, Iterable
 from nba2k_editor.franchise.models import FantasyDraftStoredPick, FranchiseRecord
 
 
+PREGENERATED_TEAM_PROFILE_DIRECTORY = Path(__file__).resolve().parent / "team_profiles"
+
+
 @dataclass(frozen=True)
 class DraftPoolPlayer:
     player_label: str
@@ -255,7 +258,7 @@ def build_fantasy_draft_board(
     team_count: int = 30,
     current_pick_number: int = 1,
     drafted_picks: Iterable[DraftPick | FantasyDraftStoredPick] = (),
-    profile_dir: str | Path = Path("nba2k_editor") / "franchise" / "team_profiles",
+    profile_dir: str | Path = PREGENERATED_TEAM_PROFILE_DIRECTORY,
 ) -> FantasyDraftBoard:
     labels = team_labels_from_model(model, team_count=team_count)
     position = draft_position(current_pick_number, team_count=team_count, user_team_index=user_team_index, team_labels=labels)
@@ -280,7 +283,7 @@ def build_fantasy_draft_markdown(
     team_count: int = 30,
     current_pick_number: int = 1,
     drafted_picks: Iterable[DraftPick | FantasyDraftStoredPick] = (),
-    profile_dir: str | Path = Path("nba2k_editor") / "franchise" / "team_profiles",
+    profile_dir: str | Path = PREGENERATED_TEAM_PROFILE_DIRECTORY,
 ) -> str:
     picks = tuple(drafted_picks)
     board = build_fantasy_draft_board(

@@ -4,11 +4,9 @@ import shutil
 from pathlib import Path
 from typing import Iterable
 
+from nba2k_editor.franchise.draft_room import PREGENERATED_TEAM_PROFILE_DIRECTORY
 from nba2k_editor.franchise.llm_tasks import franchise_team_profile_directory
 from nba2k_editor.franchise.models import FranchiseRecord, FranchiseTeamOption
-
-
-PREGENERATED_TEAM_PROFILE_DIRECTORY = Path(__file__).resolve().parent / "team_profiles"
 
 
 def pregenerated_team_profile_path(team_index: int) -> Path:
