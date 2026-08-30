@@ -283,6 +283,7 @@ def apply_generated_players_to_game(
 
 def _generated_player_name_matches(model: Any, generated_players: Iterable[Any]) -> tuple[tuple[Any, int], ...]:
     players_by_name = _loaded_players_by_name_key(model)
+    active_by_index: dict[int, bool] = {}
     used_indices: set[int] = set()
     matches: list[tuple[Any, int]] = []
     for generated in generated_players:
@@ -290,21 +291,45 @@ def _generated_player_name_matches(model: Any, generated_players: Iterable[Any])
             keys = _generated_player_name_keys(generated)
         except Exception:
             continue
-        for key in keys:
-            for player in players_by_name.get(key, ()):
-                try:
-                    player_index = int(getattr(player, "index"))
-                except Exception:
-                    continue
-                if player_index in used_indices:
-                    continue
-                matches.append((generated, player_index))
-                used_indices.add(player_index)
-                break
-            else:
-                continue
-            break
+        player_index = _matched_name_player_index(model, players_by_name, keys, used_indices, active_by_index)
+        if player_index is None:
+            continue
+        matches.append((generated, player_index))
+        used_indices.add(player_index)
     return tuple(matches)
+
+
+def _matched_name_player_index(
+    model: Any,
+    players_by_name: dict[str, tuple[Any, ...]],
+    keys: Iterable[str],
+    used_indices: set[int],
+    active_by_index: dict[int, bool],
+) -> int | None:
+    # A roster can carry two records for one person: the one on a team and an
+    # inactive leftover duplicate. Name keys match both, and taking whichever the
+    # scan reached first writes the generated ratings onto the duplicate, so the
+    # player in the game never changes. Read ISACTIVE and take the first active
+    # record across every name key, falling back to the first record found when
+    # the roster has no active one to write to.
+    fallback: int | None = None
+    seen: set[int] = set()
+    for key in keys:
+        for player in players_by_name.get(key, ()):
+            try:
+                player_index = int(getattr(player, "index"))
+            except Exception:
+                continue
+            if player_index in used_indices or player_index in seen:
+                continue
+            seen.add(player_index)
+            if fallback is None:
+                fallback = player_index
+            if player_index not in active_by_index:
+                active_by_index[player_index] = _player_is_active(model, player)
+            if active_by_index[player_index]:
+                return player_index
+    return fallback
 
 
 _FIRST_NAME_ALIASES: dict[str, tuple[str, ...]] = {

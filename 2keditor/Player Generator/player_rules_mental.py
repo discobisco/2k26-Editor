@@ -462,6 +462,16 @@ def derive_attribute_hands(evidence: Any, *, league_player_rows: Any = ()) -> di
 
 
 def derive_attribute_hustle(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:
+    if _league(evidence) == "NBL":
+        return {
+            "value": 80,
+            "source_rule": "derive_attribute_hustle_nbl_fixed",
+            "evidence_keys": (
+                "season_info.lg",
+                "league_rule=NBL",
+                "mapping=fixed_80",
+            ),
+        }
     return _derive("HUSTLE", evidence, league_player_rows, _HUSTLE_RECIPES, tendency=False)
 
 
@@ -470,6 +480,16 @@ def derive_attribute_intangibles(
     *,
     league_player_rows: Any = (),
 ) -> dict[str, Any] | None:
+    if _league(evidence) == "NBL":
+        return {
+            "value": 60,
+            "source_rule": "derive_attribute_intangibles_nbl_fixed",
+            "evidence_keys": (
+                "season_info.lg",
+                "league_rule=NBL",
+                "mapping=fixed_60",
+            ),
+        }
     if _gp(evidence) is None:
         return None
     raw_vorp = _source_value(evidence, "advanced", "vorp")

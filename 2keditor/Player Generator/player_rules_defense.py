@@ -61,9 +61,9 @@ _ELIGIBLE_ROWS_CACHE: dict[
     tuple[tuple[dict[str, Any], ...], tuple[dict[str, Any], ...]],
 ] = {}
 _DEFENSE_QUALITY_WEIGHTS = {
-    "dws": 0.50,
-    "team_win_pct": 0.25,
-    "team_point_diff": 0.25,
+    "dws": 0.80,
+    "team_win_pct": 0.10,
+    "team_opp_ppg": 0.10,
 }
 # Direct-source weights are field-specific.  Blocks never supply more than ten
 # percent of a broad-defense score, and steals do not author broad defense.
@@ -690,19 +690,18 @@ def _team_win_pct(source: Any) -> float | None:
     return wins / (wins + losses)
 
 
-def _team_point_diff(source: Any) -> float | None:
-    points = _row_value(source, "team_stats_per_game.pts_per_game") if isinstance(source, dict) else _read(source, "team_stats_per_game.pts_per_game")
+def _team_opponent_points_per_game(source: Any) -> float | None:
     opponent_points = _row_value(source, "opponent_stats_per_game.opp_pts_per_game") if isinstance(source, dict) else _read(source, "opponent_stats_per_game.opp_pts_per_game")
-    if points is None or opponent_points is None:
+    if opponent_points is None or opponent_points < 0.0:
         return None
-    return points - opponent_points
+    return opponent_points
 
 
 def _defense_quality_component_values(evidence: Any) -> dict[str, float | None]:
     return {
         "dws": _read(evidence, "advanced.dws"),
         "team_win_pct": _team_win_pct(evidence),
-        "team_point_diff": _team_point_diff(evidence),
+        "team_opp_ppg": _team_opponent_points_per_game(evidence),
     }
 
 
@@ -722,20 +721,20 @@ def _defense_quality_component_populations(rows: tuple[dict[str, Any], ...]) -> 
     )
     team_values: dict[str, dict[str, float]] = {
         "team_win_pct": {},
-        "team_point_diff": {},
+        "team_opp_ppg": {},
     }
     for ordinal, row in enumerate(rows):
         team_key = _row_team_key(row, ordinal)
         win_pct = _team_win_pct(row)
-        point_diff = _team_point_diff(row)
+        opponent_points = _team_opponent_points_per_game(row)
         if win_pct is not None:
             team_values["team_win_pct"].setdefault(team_key, win_pct)
-        if point_diff is not None:
-            team_values["team_point_diff"].setdefault(team_key, point_diff)
+        if opponent_points is not None:
+            team_values["team_opp_ppg"].setdefault(team_key, opponent_points)
     return {
         "dws": tuple(dws),
         "team_win_pct": tuple(sorted(team_values["team_win_pct"].values())),
-        "team_point_diff": tuple(sorted(team_values["team_point_diff"].values())),
+        "team_opp_ppg": tuple(sorted(team_values["team_opp_ppg"].values())),
     }
 
 
@@ -745,7 +744,7 @@ def _defense_quality_component_provenance(name: str, value: float, score: float)
     elif name == "team_win_pct":
         paths = ("team_summary.w", "team_summary.l")
     else:
-        paths = ("team_stats_per_game.pts_per_game", "opponent_stats_per_game.opp_pts_per_game")
+        paths = ("opponent_stats_per_game.opp_pts_per_game",)
     return (*paths, f"{name}={value:.8f}", f"{name}_same_league_percentile={score:.8f}")
 
 
@@ -753,7 +752,7 @@ def _derive_dws_defense(rule_name: str, field: str, evidence: Any, rows: Any) ->
     """Author defensive quality, then route it by listed position.
 
     Player DWS remains the primary component. Exact-team win percentage and
-    point differential supply team context and become the complete quality
+    lower-is-better opponent points per game supply team context and become the complete quality
     signal when player DWS is unavailable. Missing components are omitted and
     the authored weights are renormalized; missing values are never zero-filled.
     """
@@ -784,7 +783,10 @@ def _derive_dws_defense(rule_name: str, field: str, evidence: Any, rows: Any) ->
             population = component_populations.get(name, ())
             if value is None or not population:
                 continue
-            component_score = bisect.bisect_right(population, value) / len(population)
+            if name == "team_opp_ppg":
+                component_score = (len(population) - bisect.bisect_left(population, value)) / len(population)
+            else:
+                component_score = bisect.bisect_right(population, value) / len(population)
             components.append((name, weight, component_score))
             quality_keys_list.extend(_defense_quality_component_provenance(name, value, component_score))
         total_weight = sum(weight for _name, weight, _component_score in components)
@@ -794,7 +796,8 @@ def _derive_dws_defense(rule_name: str, field: str, evidence: Any, rows: Any) ->
         quality_rule = rule_name
         quality_keys = (
             *quality_keys_list,
-            "defense_quality_weights=dws:0.50,team_win_pct:0.25,team_point_diff:0.25",
+            "defense_quality_weights=dws:0.80,team_win_pct:0.10,team_opp_ppg:0.10",
+            "team_opp_ppg_direction=lower_is_better",
             f"available_weight={total_weight:.8f}",
             "missing_components=omitted_and_available_weights_renormalized",
             "team_population=unique_exact_team_within_same_season_same_league",
