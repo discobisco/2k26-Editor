@@ -6,7 +6,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from source_data import GeneratorSourceInventory
+
+# The generator's only data source. source_data.py used to hold this name and a pair
+# of existence checks, but one of those checks duplicated _require_database below, so
+# the filename now sits next to the only code that opens the database.
+_DATABASE_NAME = "NBA_DATA_Master.sqlite"
+_DEFAULT_SOURCE_ROOT = Path(__file__).resolve().parent / "NBA Player Data"
 
 @dataclass(frozen=True)
 class WorkbookSqliteTable:
@@ -24,8 +29,10 @@ def ensure_workbook_sqlite_database(source_root: str | Path | None = None) -> Pa
     checked-in SQLite artifact can be restored/rebuilt out-of-band.
     """
 
-    inventory = GeneratorSourceInventory.from_root(source_root) if source_root is not None else GeneratorSourceInventory.from_default()
-    database_path = _require_database(inventory.database_path)
+    root = Path(source_root).expanduser().resolve() if source_root is not None else _DEFAULT_SOURCE_ROOT
+    if not root.is_dir():
+        raise FileNotFoundError(f"generator source root does not exist: {root}")
+    database_path = _require_database(root / _DATABASE_NAME)
     if not workbook_sqlite_tables(database_path):
         raise ValueError(f"generator SQLite database has no workbook table metadata: {database_path}")
     return database_path

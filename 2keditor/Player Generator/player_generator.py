@@ -570,9 +570,9 @@ def season_context_index(
 ) -> SeasonPlayerContextIndex:
     resolved_season = validated_season(season)
     root = Path(source_root) if source_root is not None else _GENERATOR_DIR / "NBA Player Data"
-    # ensure_workbook_sqlite_database runs GeneratorSourceInventory.from_root itself and
-    # then checks the database opens and carries workbook metadata, so a missing or
-    # unusable source fails here rather than part-way through a whole-season run.
+    # ensure_workbook_sqlite_database checks the root, the database file and its
+    # workbook metadata, so a missing or unusable source fails here rather than
+    # part-way through a whole-season run.
     database_path = ensure_workbook_sqlite_database(root.expanduser().resolve())
     offset_path = Path(offsets_path).expanduser().resolve() if offsets_path is not None else _DEFAULT_OFFSETS_PLAYERS_PATH.resolve()
     return _cached_season_context_index(
