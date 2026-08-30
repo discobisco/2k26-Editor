@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 from player_era_context import player_era_context
+from player_era_role import era_role_playstyle_enabled as _era_role_playstyle_on
 from player_rules_athleticism import derive_attribute_vertical
 
 
@@ -60,41 +61,47 @@ _ATTRIBUTE_CALIBRATION: dict[str, tuple[float, float]] = {
     "STANDINGDUNK": (37.0, 19.3),
 }
 
+# Centers and scales come from Docs/ATD Committee Official Master Tendency (1).xlsx:
+# each field's center is the middle of the sheet's baseline range and its scale that
+# range's width. They replaced values frozen from a captured 2K roster, which the
+# sheet explicitly rules out as a realism target ("Default 2K values are engine
+# evidence only... they are not the ATD realism scale"). The five directional
+# three-point zone slices are not named on the sheet and keep their old centers.
 _TENDENCY_CALIBRATION: dict[str, tuple[float, float]] = {
-    "SHOT": (46.0, 17.8),
-    "3POINTSHOT": (45.0, 22.0),
-    "CLOSESHOT": (37.0, 20.0),
-    "MIDRANGESHOT": (37.0, 19.3),
-    "TRIPLETHREATIDLE": (30.0, 14.1),
-    "TRIPLETHREATJAB": (23.0, 19.3),
-    "TRIPLETHREATPUMPFake": (27.0, 15.6),
-    "TRIPLETHREATSHOT": (24.0, 17.0),
-    "SETUPDRIBBLE": (43.0, 21.5),
-    "SETUPWITHHESITATION": (22.0, 14.8),
-    "SETUPWITHSIZEUP": (15.0, 13.3),
-    "DRIVE": (48.0, 20.0),
-    "DRIVINGCROSSOVER": (16.0, 21.5),
-    "DRIVINGDOUBLECROSSOVER": (18.0, 23.0),
-    "DRIVINGSPIN": (15.0, 17.8),
-    "DRIVINGHALFSPIN": (18.0, 23.0),
-    "DRIVINGSTEPBACK": (20.0, 24.5),
-    "DRIVINGBEHINDTHEBACK": (18.0, 22.2),
-    "DRIVINGDRIBBLEHESITATION": (25.0, 20.0),
-    "DRIVINGINANDOUT": (22.0, 23.7),
-    "NODRIVINGDRIBBLEMOVE": (70.0, 18.5),
-    "ATTACKSTRONGONDRIVE": (46.0, 20.0),
-    "OFFSCREENDRIVE": (40.0, 21.5),
-    "SPOTUPDRIVE": (42.0, 18.5),
-    "ALLEYOOOPASS": (20.0, 17.8),
-    "DISHTOOPENMAN": (37.0, 14.1),
-    "FLASHYPASS": (20.0, 17.0),
-    "POSTUP": (29.0, 23.7),
-    "POSTBACKDOWN": (16.0, 14.1),
-    "POSTAGGRESSIVEBACKDOWN": (13.0, 11.9),
-    "POSTFACEUP": (9.0, 7.4),
-    "POSTSPIN": (3.0, 3.7),
-    "POSTDRIVE": (11.0, 8.2),
-    "POSTHOPSHOT": (1.0, 4.4),
+    "SHOT": (37.5, 11.12),  # ATD Shot 30-45, cap 75
+    "3POINTSHOT": (35.0, 14.83),  # ATD Shot Three 25-45, cap 75
+    "CLOSESHOT": (27.5, 11.12),  # ATD Shot Close 20-35, cap 60
+    "MIDRANGESHOT": (10.0, 7.41),  # ATD Shot Mid 5-15, cap 45
+    "TRIPLETHREATIDLE": (22.5, 18.53),  # ATD Triple Threat Idle 10-35, cap 65
+    "TRIPLETHREATJAB": (20.0, 14.83),  # ATD Triple Threat Jab Step 10-30, cap 55
+    "TRIPLETHREATPUMPFake": (17.5, 11.12),  # ATD Triple Threat Pump Fake 10-25, cap 55
+    "TRIPLETHREATSHOT": (27.5, 11.12),  # ATD Triple Threat Shoot 20-35, cap 55
+    "SETUPDRIBBLE": (37.5, 11.12),  # ATD No Setup Dribble 30-45, cap 85
+    "SETUPWITHHESITATION": (15.0, 14.83),  # ATD Setup with Hesitation 5-25, cap 55
+    "SETUPWITHSIZEUP": (15.0, 14.83),  # ATD Setup with Size-Up 5-25, cap 55
+    "DRIVE": (35.0, 14.83),  # ATD Drive 25-45, cap 75
+    "DRIVINGCROSSOVER": (20.0, 14.83),  # ATD Driving Crossover 10-30, cap 60
+    "DRIVINGDOUBLECROSSOVER": (5.0, 7.41),  # ATD Driving Double Crossover 0-10, cap 40
+    "DRIVINGSPIN": (12.5, 11.12),  # ATD Driving Spin 5-20, cap 50
+    "DRIVINGHALFSPIN": (7.5, 11.12),  # ATD Driving Half Spin 0-15, cap 45
+    "DRIVINGSTEPBACK": (12.5, 11.12),  # ATD Driving Step Back 5-20, cap 55
+    "DRIVINGBEHINDTHEBACK": (10.0, 7.41),  # ATD Driving Behind The Back 5-15, cap 50
+    "DRIVINGDRIBBLEHESITATION": (20.0, 14.83),  # ATD Driving Dribble Hesitation 10-30, cap 65
+    "DRIVINGINANDOUT": (15.0, 14.83),  # ATD Drive In & Out 5-25, cap 65
+    "NODRIVINGDRIBBLEMOVE": (37.5, 11.12),  # ATD No Drive Dribble Move 30-45, cap 90
+    "ATTACKSTRONGONDRIVE": (62.5, 18.53),  # ATD Attack Strong on Drive 50-75, cap 90
+    "OFFSCREENDRIVE": (12.5, 11.12),  # ATD Off-Screen Drive 5-20, cap 60
+    "SPOTUPDRIVE": (30.0, 14.83),  # ATD Spot-Up Drive 20-40, cap 70
+    "ALLEYOOOPASS": (15.0, 14.83),  # ATD Alley-Oop Pass 5-25, cap 65
+    "DISHTOOPENMAN": (35.0, 14.83),  # ATD Dish to Open Man 25-45, cap 65
+    "FLASHYPASS": (15.0, 14.83),  # ATD Flashy Pass 5-25, cap 60
+    "POSTUP": (27.5, 25.95),  # ATD Post Up 10-45, cap 85
+    "POSTBACKDOWN": (27.5, 25.95),  # ATD Post Back Down 10-45, cap 80
+    "POSTAGGRESSIVEBACKDOWN": (20.0, 14.83),  # ATD Post Aggressive Back Down 10-30, cap 70
+    "POSTFACEUP": (22.5, 18.53),  # ATD Post Face Up 10-35, cap 60
+    "POSTSPIN": (20.0, 14.83),  # ATD Post Spin 10-30, cap 55
+    "POSTDRIVE": (20.0, 14.83),  # ATD Post Drive 10-30, cap 55
+    "POSTHOPSHOT": (10.0, 14.83),  # ATD Post Hop Shot 0-20, cap 45
 }
 
 # User-observed NBA 2K mid-range response anchors. Each context is the expected
@@ -108,26 +115,6 @@ _MIDRANGE_RESPONSE_ANCHORS: dict[str, tuple[tuple[int, float], ...]] = {
     "contested": ((25, 0.0015), (80, 0.35), (99, 0.45)),
 }
 
-def _piecewise_linear_response(
-    x: float,
-    anchors: tuple[tuple[int, float], ...],
-) -> float:
-    for anchor_x, anchor_y in anchors:
-        if x == anchor_x:
-            return anchor_y
-    if x <= anchors[0][0]:
-        return anchors[0][1]
-    for (x0, y0), (x1, y1) in zip(anchors, anchors[1:]):
-        if x < x1:
-            return y0 + (x - x0) * (y1 - y0) / (x1 - x0)
-    return anchors[-1][1]
-
-
-def midrange_make_probability_for_rating(rating: int, *, context: str) -> float:
-    anchors = _MIDRANGE_RESPONSE_ANCHORS[context]
-    return _piecewise_linear_response(float(max(25, min(99, rating))), anchors)
-
-
 def midrange_rating_for_make_probability(make_probability: float, *, context: str) -> int:
     target = max(0.0, min(1.0, float(make_probability)))
     anchors = _MIDRANGE_RESPONSE_ANCHORS[context]
@@ -138,6 +125,35 @@ def midrange_rating_for_make_probability(make_probability: float, *, context: st
             rating = rating0 + (target - probability0) * (rating1 - rating0) / (probability1 - probability0)
             return max(25, min(99, int(round(rating))))
     return anchors[-1][0]
+
+
+# User-observed NBA 2K close-range response: a close-shot Attribute of 99 finishes
+# roughly 55%, 25 finishes roughly 1%, near-linear in between.
+_CLOSE_RANGE_RESPONSE_ANCHORS: tuple[tuple[int, float], ...] = ((25, 0.01), (99, 0.55))
+
+# User-observed NBA 2K standing-dunk response, given a competent playmaker feeding the
+# roll: a modern big finishing anywhere from ~55% to ~70% at the rim reads as a 99
+# STANDINGDUNK; it falls off below that.
+_RIM_FINISH_RESPONSE_ANCHORS: tuple[tuple[int, float], ...] = ((25, 0.05), (65, 0.32), (99, 0.55))
+
+
+def _rating_from_anchors(anchors: tuple[tuple[int, float], ...], make_probability: float) -> int:
+    target = max(0.0, min(1.0, float(make_probability)))
+    if target <= anchors[0][1]:
+        return anchors[0][0]
+    for (rating0, probability0), (rating1, probability1) in zip(anchors, anchors[1:]):
+        if target <= probability1:
+            rating = rating0 + (target - probability0) * (rating1 - rating0) / (probability1 - probability0)
+            return max(25, min(99, int(round(rating))))
+    return anchors[-1][0]
+
+
+def close_range_rating_for_make_probability(make_probability: float) -> int:
+    return _rating_from_anchors(_CLOSE_RANGE_RESPONSE_ANCHORS, make_probability)
+
+
+def rim_finish_rating_for_make_probability(make_probability: float) -> int:
+    return _rating_from_anchors(_RIM_FINISH_RESPONSE_ANCHORS, make_probability)
 
 _ROW_PREFIX = {
     "per_game": "player_per_game",
@@ -482,7 +498,7 @@ _RECIPE_REQUIRED_DIRECT_EVIDENCE: dict[str, tuple[str, ...]] = {
     # modern recipe by themselves.
     "tracked_handle_security": ("derived.lost_ball_per_game", "advanced.tov_percent", "derived.unassisted_two_rate"),
     "tracked_foul_creation": ("derived.shooting_foul_drawn_per_game", "derived.and1_per_game"),
-    "repeatable_scoring_load": ("per_36.pts_per_36_min",),
+    "ows_only": ("advanced.ows",),
     "tracked_pass_completion_proxy": ("derived.assist_points_per_game", "derived.bad_pass_per_game", "derived.assist_decision_efficiency"),
     "tracked_pass_decisions": ("advanced.ast_percent", "derived.assist_decision_efficiency", "derived.bad_pass_per_game"),
     "tracked_creation_vision": ("derived.assist_points_per_game", "advanced.ast_percent", "derived.bad_pass_per_game"),
@@ -804,7 +820,16 @@ def _derive(
         score, evidence_keys = scored
         center, scale = calibration
         value = center + score * scale
-        value, absolute_evidence = _absolute_attribute_adjustment(field, evidence, value)
+        # Attributes only. These anchors convert execution (FG%, FT%, AST/G) into a
+        # rating, and CLOSESHOT / DRIVINGDUNK / DRIVINGLAYUP / STANDINGDUNK name both
+        # an attribute and a tendency. Applying an execution anchor to a tendency
+        # asks how *well* a player finishes in order to decide how *often* he tries,
+        # which the ATD sheet separates: attributes determine effectiveness,
+        # tendencies create attempts. It also pushed those tendencies past their ATD
+        # caps regardless of the calibration band.
+        absolute_evidence: tuple[str, ...] = ()
+        if not tendency:
+            value, absolute_evidence = _absolute_attribute_adjustment(field, evidence, value)
         resolved_source_rule = (
             f"{source_rule}_field_specific_context_substitute"
             if recipe.unavailable
@@ -908,8 +933,7 @@ _ATTR_RECIPES: dict[str, tuple[_Recipe, ...]] = {
         _Recipe("recorded_free_throw_pressure", (("derived.foul_pressure", 0.55), ("per_game.fta_per_game", 0.45)), "shooting-foul-drawn and and-one events", "recorded FTA/FGA pressure and FTA volume", "both are direct outcomes of forcing shooting fouls rather than shooting efficiency"),
     ),
     "OFFENSIVECONSISTENCY": (
-        _Recipe("repeatable_scoring_load", (("advanced.ows", 0.50), ("per_36.pts_per_36_min", 0.20), ("derived.scoring_share", 0.15), ("advanced.ts_percent", 0.10), ("advanced.tov_percent", -0.05))),
-        _Recipe("all_era_repeatable_scoring", (("advanced.ows", 0.50), ("per_game.pts_per_game", 0.20), ("derived.scoring_share", 0.15), ("advanced.ts_percent", 0.10), ("per_game.fg_percent", 0.05)), "game-log scoring variance and complete possession outcomes", "same-season OWS with scoring responsibility and bounded efficiency support", "OWS is the primary season-long offensive-consistency signal; load and efficiency provide supporting context"),
+        _Recipe("ows_only", (("advanced.ows", 1.0),)),
     ),
     "PASSACCURACY": (
         _Recipe("tracked_pass_completion_proxy", (("derived.assist_points_per_game", 0.35), ("!derived.bad_pass_per_game", 0.35), ("derived.assist_decision_efficiency", 0.30))),
@@ -997,57 +1021,57 @@ _TENDENCY_RECIPES: dict[str, tuple[_Recipe, ...]] = {
 
 _TENDENCY_CALIBRATION.update(
     {
-        "POSTHOPSTEP": (9.0, 11.9),
+        "POSTHOPSTEP": (10.0, 14.83),  # ATD Post Hop Shot 0-20, cap 45
         "3POINTCENTERLEFTSHOT": (0.0, 11.6),
         "3POINTCENTERRIGHTSHOT": (0.0, 15.6),
         "3POINTCENTERSHOT": (0.0, 18.5),
         "3POINTLEFTSHOT": (0.0, 8.9),
-        "3POINTOFFSCREENSHOT": (0.0, 15.0),
+        "3POINTOFFSCREENSHOT": (12.5, 11.12),  # ATD Off-Screen Three 5-20, cap 65
         "3POINTRIGHTSHOT": (0.0, 14.8),
-        "3POINTSPOTUPSHOT": (0.0, 23.0),
-        "ALLEYOOP": (14.0, 17.0),
-        "BASKETUNDERSHOT": (89.0, 35.6),
+        "3POINTSPOTUPSHOT": (40.0, 14.83),  # ATD Spot-Up Three 30-50, cap 75
+        "ALLEYOOP": (25.0, 14.83),  # ATD Alley-Oop Finish 15-35, cap 85
+        "BASKETUNDERSHOT": (32.5, 18.53),  # ATD Shot Under 20-45, cap 85
         "CENTERLEFTMIDSHOT": (17.0, 7.4),
         "CENTERMIDRIGHTSHOT": (18.0, 6.7),
         "CENTERMIDSHOT": (18.0, 8.2),
         "CLOSELEFTSHOT": (23.0, 14.1),
         "CLOSEMIDDLESHOT": (28.0, 17.8),
         "CLOSERIGHTSHOT": (24.0, 14.1),
-        "CONTESTEDJUMPER3POINT": (0.0, 8.0),
-        "CONTESTEDJUMPERMID": (15.0, 12.6),
-        "CONTESTEDJUMPERMIDRANGE": (15.0, 12.6),
-        "DRIVEPULLUP3POINT": (0.0, 7.0),
-        "DRIVEPULLUPMID": (11.0, 7.4),
-        "DRIVEPULLUPMIDRANGE": (11.0, 7.4),
-        "DRIVINGDUNK": (20.0, 22.2),
-        "DRIVINGLAYUP": (49.0, 20.0),
-        "EUROSTEPLAYUP": (19.0, 11.9),
-        "FLASHYDUNK": (8.0, 17.0),
-        "FLOATER": (35.0, 17.8),
-        "FROMPOSTSHOT": (32.0, 18.5),
-        "HOPPOSTSHOT": (1.0, 4.4),
-        "HOPSTEPLAYUP": (25.0, 16.3),
+        "CONTESTEDJUMPER3POINT": (12.5, 11.12),  # ATD Contested Jumper Three 5-20, cap 55
+        "CONTESTEDJUMPERMID": (17.5, 11.12),  # ATD Contested Jumper Mid-Range 10-25, cap 55
+        "CONTESTEDJUMPERMIDRANGE": (17.5, 11.12),  # ATD Contested Jumper Mid-Range 10-25, cap 55
+        "DRIVEPULLUP3POINT": (12.5, 11.12),  # ATD Dribble Pull-Up Three 5-20, cap 50
+        "DRIVEPULLUPMID": (20.0, 14.83),  # ATD Dribble Pull-Up Mid-Range 10-30, cap 70
+        "DRIVEPULLUPMIDRANGE": (20.0, 14.83),  # ATD Dribble Pull-Up Mid-Range 10-30, cap 70
+        "DRIVINGDUNK": (27.5, 18.53),  # ATD Driving Dunk 15-40, cap 80
+        "DRIVINGLAYUP": (35.0, 22.24),  # ATD Driving Layup 20-50, cap 80
+        "EUROSTEPLAYUP": (20.0, 14.83),  # ATD Eurostep Layup 10-30, cap 75
+        "FLASHYDUNK": (10.0, 14.83),  # ATD Flashy Dunk 0-20, cap 70
+        "FLOATER": (20.0, 14.83),  # ATD Floater 10-30, cap 75
+        "FROMPOSTSHOT": (22.5, 18.53),  # ATD Shoot From Post 10-35, cap 75
+        "HOPPOSTSHOT": (10.0, 14.83),  # ATD Post Hop Shot 0-20, cap 45
+        "HOPSTEPLAYUP": (15.0, 14.83),  # ATD Hop Step Layup 5-25, cap 65
         "LEFTMIDSHOT": (19.0, 6.7),
-        "MIDOFFSCREENSHOT": (32.0, 17.8),
+        "MIDOFFSCREENSHOT": (5.0, 7.41),  # ATD Off-Screen Mid 0-10, cap 50
         "MIDRIGHTSHOT": (18.0, 6.7),
-        "MIDSPOTUPSHOT": (45.0, 16.3),
-        "POSTDROPSTEP": (9.0, 11.9),
-        "POSTFADELEFT": (12.0, 11.9),
-        "POSTFADERIGHT": (11.0, 11.9),
-        "POSTHOOKLEFT": (9.0, 12.6),
-        "POSTHOOKRIGHT": (14.0, 13.3),
-        "POSTSHIMMYSHOT": (9.0, 8.2),
-        "POSTSTEPBACKSHOT": (1.0, 6.7),
-        "POSTUPANDUNDER": (20.0, 12.6),
-        "SPINJUMPER": (16.0, 10.4),
-        "SPINLAYUP": (30.0, 17.8),
-        "STANDINGDUNK": (22.0, 21.5),
-        "STEPBACKJUMPER3POINT": (0.0, 6.0),
-        "STEPBACKJUMPERMID": (13.0, 8.2),
-        "STEPBACKJUMPERMIDRANGE": (13.0, 8.2),
-        "STEPTHROUGH": (15.0, 12.6),
-        "TRANSITIONPULLUP3POINT": (0.0, 5.0),
-        "USEGLASS": (14.0, 14.8),
+        "MIDSPOTUPSHOT": (10.0, 7.41),  # ATD Spot-Up Mid 5-15, cap 55
+        "POSTDROPSTEP": (20.0, 14.83),  # ATD Post Drop Step 10-30, cap 60
+        "POSTFADELEFT": (10.0, 14.83),  # ATD Post Fade Left 0-20, cap 50
+        "POSTFADERIGHT": (10.0, 14.83),  # ATD Post Fade Right 0-20, cap 50
+        "POSTHOOKLEFT": (7.5, 11.12),  # ATD Post Hook Left 0-15, cap 50
+        "POSTHOOKRIGHT": (7.5, 11.12),  # ATD Post Hook Right 0-15, cap 50
+        "POSTSHIMMYSHOT": (10.0, 14.83),  # ATD Post Shimmy 0-20, cap 45
+        "POSTSTEPBACKSHOT": (10.0, 14.83),  # ATD Post Step Back 0-20, cap 50
+        "POSTUPANDUNDER": (10.0, 14.83),  # ATD Post Up & Under 0-20, cap 45
+        "SPINJUMPER": (10.0, 7.41),  # ATD Spin Jumper 5-15, cap 45
+        "SPINLAYUP": (15.0, 14.83),  # ATD Spin Layup 5-25, cap 70
+        "STANDINGDUNK": (12.5, 18.53),  # ATD Standing Dunk 0-25, cap 85
+        "STEPBACKJUMPER3POINT": (12.5, 11.12),  # ATD Stepback Jumper Three 5-20, cap 60
+        "STEPBACKJUMPERMID": (12.5, 11.12),  # ATD Stepback Jumper Mid-Range 5-20, cap 55
+        "STEPBACKJUMPERMIDRANGE": (12.5, 11.12),  # ATD Stepback Jumper Mid-Range 5-20, cap 55
+        "STEPTHROUGH": (17.5, 11.12),  # ATD Step Through Shot 10-25, cap 50
+        "TRANSITIONPULLUP3POINT": (10.0, 7.41),  # ATD Transition Pull-Up Three 5-15, cap 45
+        "USEGLASS": (10.0, 7.41),  # ATD Use Glass 5-15, cap 45
     }
 )
 
@@ -1298,15 +1322,48 @@ def derive_attribute_midrange(evidence: Any, *, league_player_rows: Any = ()) ->
 
     ft_percent = _basic_value(evidence, "per_game.ft_percent")
     if ft_percent is not None:
-        target = max(0.0, min(1.0, ft_percent)) * 0.5
-        rating = midrange_rating_for_make_probability(target, context="spot_up")
+        base_target = max(0.0, min(1.0, ft_percent)) * 0.5
+        era = player_era_context(evidence)
+        if era.era_key == "pre_shot_clock" and _era_role_playstyle_on():
+            # Free-throw touch alone rates a pure pivot's face-up jumper the same
+            # as a set-shot guard's. Pre-clock, the pivot barely faced up while
+            # the perimeter set shot *was* the jumper -- and the team's primary
+            # scorer took (and made) more of them. Modulate the FT%-touch target
+            # by role and scoring load before the response-map inversion.
+            post = _role_value(evidence, "post") or 0.0
+            interior = _role_value(evidence, "interior") or 0.0
+            pivot = max(0.0, min(1.0, 0.5 * post + 0.5 * interior))
+            attempt_share = _derived_value(evidence, "attempt_share")
+            load = max(0.0, min(1.0, (attempt_share or 0.0) / 0.22))
+            factor = max(0.45, min(1.15, 1.0 - 0.42 * pivot + 0.18 * load - 0.10))
+            target = max(0.0, min(1.0, base_target * factor))
+            rating = midrange_rating_for_make_probability(target, context="spot_up")
+            return {
+                "value": rating,
+                "source_rule": "derive_attribute_midrange_pre_shot_clock_role_touch_spot_up_response_map",
+                "evidence_keys": (
+                    "per_game.ft_percent",
+                    "season_info.pos",
+                    "derived.attempt_share",
+                    *era.evidence_keys,
+                    f"historical_ft_percent={ft_percent:.8f}",
+                    f"base_open_spot_up_make_probability=0.5*FT%={base_target:.8f}",
+                    f"pivot_role_weight={pivot:.6f}",
+                    f"scoring_load_weight={load:.6f}",
+                    f"role_touch_factor=1-0.42*pivot+0.18*load-0.10={factor:.6f}",
+                    f"target_open_spot_up_make_probability={target:.8f}",
+                    "mapping=inverse_piecewise_linear_open_spot_up_response",
+                    "ft_percent_does_not_author_action_tendencies=true",
+                ),
+            }
+        rating = midrange_rating_for_make_probability(base_target, context="spot_up")
         return {
             "value": rating,
             "source_rule": "derive_attribute_midrange_historical_ft_half_open_spot_up_response_map",
             "evidence_keys": (
                 "per_game.ft_percent",
                 f"historical_ft_percent={ft_percent:.8f}",
-                f"target_open_spot_up_make_probability=0.5*FT%={target:.8f}",
+                f"target_open_spot_up_make_probability=0.5*FT%={base_target:.8f}",
                 "response_anchor_25=spot_up_0.0015",
                 "response_anchor_80=spot_up_0.45",
                 "response_anchor_99=spot_up_0.55",
@@ -1331,14 +1388,6 @@ def derive_attribute_posthook(evidence: Any, *, league_player_rows: Any = ()) ->
     return _attribute("POSTHOOK", evidence, league_player_rows)
 
 
-def _standing_dunk_frame_score(source: Any) -> float | None:
-    height_in = _basic_value(source, "identity.ht_in_in")
-    weight_lb = _basic_value(source, "identity.wt")
-    if height_in is None or weight_lb is None:
-        return None
-    return 5.0 * (height_in - 76.0) + 0.12 * (weight_lb - 180.0)
-
-
 def derive_attribute_standingdunk(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:
     if _gp(evidence) is None:
         return None
@@ -1346,63 +1395,60 @@ def derive_attribute_standingdunk(evidence: Any, *, league_player_rows: Any = ()
     weight_lb = _basic_value(evidence, "identity.wt")
     if height_in is None or weight_lb is None:
         return None
-    if height_in < 76.0:
-        return {
-            "value": 25,
-            "source_rule": "derive_attribute_standingdunk_under_6_4_height_gate",
-            "evidence_keys": (
-                "identity.ht_in_in",
-                f"height_in={height_in:.6f}",
-                "standing_dunk_height_threshold_in=76",
-                "standing_dunk_height_gate=height_below_6_4_resolves_to_25",
-            ),
-        }
 
     vertical_result = derive_attribute_vertical(evidence, league_player_rows=league_player_rows)
     if vertical_result is None:
         return None
     vertical = int(vertical_result["value"])
-    if height_in <= 79.0 and vertical <= 40:
-        return {
-            "value": 25,
-            "source_rule": "derive_attribute_standingdunk_lower_height_vertical_gate",
-            "evidence_keys": (
-                "identity.ht_in_in",
-                "identity.wt",
-                *tuple(vertical_result["evidence_keys"]),
-                f"height_in={height_in:.6f}",
-                f"generated_VERTICAL={vertical}",
-                "lower_height_boundary=through_6_7",
-                "generated_VERTICAL<=40_resolves_to_25",
-            ),
-        }
 
-    population = _population(evidence, league_player_rows)
-    population_scores = sorted(
-        score
-        for row in population
-        if (score := _standing_dunk_frame_score(row)) is not None
-    )
-    frame_score = _standing_dunk_frame_score(evidence)
-    if frame_score is None or not population_scores:
-        return None
-    left = bisect.bisect_left(population_scores, frame_score)
-    right = bisect.bisect_right(population_scores, frame_score)
-    frame_percentile = (left + right) / (2.0 * len(population_scores))
-    value = 25.0 + 74.0 * frame_percentile**0.55 + 0.25 * (vertical - 65.0)
+    # Standing-dunk *ability* is a clearance problem: can this player, from a standstill,
+    # get the ball far enough over a 10-foot rim to throw it down reliably in a game.
+    # Standing reach (~1.33x height) plus the standing portion of the vertical, minus
+    # the rim plus control margin. The response is an S-curve, not a line: below true
+    # size you basically can't (25-30s for a 6-3 guard), above it real bigs sit high
+    # (mid-80s for a legit 6-10 center), with a steep transition through 6-6 to 6-8.
+    standing_reach_in = 1.33 * height_in
+    standing_vert_in = 15.0 + 0.20 * vertical
+    clearance_in = standing_reach_in + standing_vert_in - 126.0  # 120" rim + 6" ball control
+    hops_potential = 25.0 + 62.0 / (1.0 + math.exp(-0.50 * (clearance_in - 7.0)))
 
-    lower_height_cap: float | None = None
-    if height_in <= 77.0:
-        lower_height_cap = 40.0 + 0.80 * max(0.0, vertical - 40.0)
-    elif height_in <= 79.0:
-        lower_height_cap = 25.0 + 1.20 * max(0.0, vertical - 40.0)
-    if lower_height_cap is not None:
-        value = min(value, lower_height_cap)
+    # Rim finishing is a one-way, big-men-only ceiling: a modern big who converts
+    # 55-70% at the rim (with a competent playmaker feeding the roll) reads as a 99
+    # STANDINGDUNK regardless of a merely-average vertical. It never subtracts -- a low
+    # or jump-shot-heavy percentage says nothing about whether the player *can* stand
+    # and dunk (Jim Pollard shot corner jumpers and dunked from the foul line). Needs
+    # the recorded rim split, so it is a modern signal; pre-tracking bigs ride the
+    # physical clearance number, and their star exceptions live in player_star_profiles.
+    rim_fg = _basic_value(evidence, "shooting.fg_percent_from_x0_3_range")
+    value = hops_potential
+    is_frontcourt = height_in >= 80.0  # 6'8"+
+    if rim_fg is not None and is_frontcourt:
+        attempts = _estimated_total(evidence, "fga")
+        reliability = attempts / (attempts + 60.0) if attempts is not None and attempts > 0.0 else 0.0
+        finish_rating = rim_finish_rating_for_make_probability(rim_fg)
+        # a full-season rotation big's rim sample stands on its own; a thin sample gets
+        # shrunk back toward the physical number
+        finish_signal = finish_rating if reliability >= 0.60 else (
+            finish_rating * reliability + hops_potential * (1.0 - reliability)
+        )
+        value = max(hops_potential, finish_signal)
+        finish_evidence = (
+            f"shooting.fg_percent_from_x0_3_range={rim_fg:.6f}",
+            "rim_finish_response_anchor=(25,0.05)->(65,0.32)->(99,0.55)_plateau",
+            f"rim_finish_rating={finish_rating}",
+            f"attempt_reliability=fga/(fga+60)={reliability:.6f}",
+            f"finish_signal={finish_signal:.4f}",
+        )
+    else:
+        finish_evidence = (
+            "standing_dunk_rim_finish_signal=not_applied "
+            + ("(no_recorded_rim_split)" if rim_fg is None else "(below_6-8_frontcourt_gate)"),
+        )
 
     stored = max(25, min(99, round(value)))
     return {
         "value": stored,
-        "source_rule": "derive_attribute_standingdunk_frame_vertical_field_specific_context_substitute",
+        "source_rule": "derive_attribute_standingdunk_reach_clearance_with_rim_finish_ceiling",
         "evidence_keys": (
             "identity.ht_in_in",
             "identity.wt",
@@ -1410,14 +1456,14 @@ def derive_attribute_standingdunk(evidence: Any, *, league_player_rows: Any = ()
             f"height_in={height_in:.6f}",
             f"weight_lb={weight_lb:.6f}",
             f"generated_VERTICAL={vertical}",
-            f"frame_score={frame_score:.8f}",
-            f"same_season_same_league_frame_percentile={frame_percentile:.8f}",
-            "frame_score=5*(height_in-76)+0.12*(weight_lb-180)",
-            "mapping=25+74*frame_percentile^0.55+0.25*(generated_VERTICAL-65)",
-            "lower_height_vertical_cap=active" if lower_height_cap is not None else "lower_height_vertical_cap=not_applicable",
+            f"standing_reach_in=1.33*height_in={standing_reach_in:.4f}",
+            f"standing_vert_in=15+0.20*VERTICAL={standing_vert_in:.4f}",
+            f"clearance_in=standing_reach+standing_vert-126={clearance_in:.4f}",
+            f"hops_potential=25+62/(1+exp(-0.50*(clearance_in-7.0)))={hops_potential:.4f}",
+            *finish_evidence,
+            "value=max(hops_potential, blend(finish_potential,hops by frontcourt_factor)) (rim finish is a one-way ceiling)",
             "unavailable_direct_source=literal_stationary_dunk_execution_measurement",
-            "substitute_source=height_weight_leverage_plus_generated_VERTICAL_and_same_season_same_league_frame_rank",
-            "validity=standing_dunk_physical_execution_potential_only; no FG%, foul pressure, broad dunk total, or moving action evidence",
+            "validity=standing_dunk_execution_potential_only; no foul pressure, broad dunk total, or moving action evidence",
             "DRIVINGDUNK_attribute_unchanged=true",
         ),
     }
@@ -1662,10 +1708,6 @@ def derive_tendency_postdrive(evidence: Any, *, league_player_rows: Any = ()) ->
     return _tendency("POSTDRIVE", evidence, league_player_rows)
 
 
-def derive_tendency_posthopshot(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:
-    return _tendency("POSTHOPSHOT", evidence, league_player_rows)
-
-
 def _three_point_tendency(field: str, evidence: Any, league_player_rows: Any) -> dict[str, Any] | None:
     if _gp(evidence) is None:
         return None
@@ -1739,6 +1781,24 @@ def _identity_text(source: Any, key: str) -> str:
     return str(value or "").strip().lower()
 
 
+_NORMAL_DISTRIBUTION = statistics.NormalDist()
+# Keeps the probit finite when a rank lands on exactly 0.0 or 1.0.
+_RANK_PROBIT_LIMIT = 0.9995
+
+
+def _value_from_rank(field: str, rank: float) -> int:
+    """Score a 0-1 population rank through the same center/scale every rule uses.
+
+    A rank is not a rating. Multiplying it by 100 put the median player at 50
+    whatever the tendency was, which is how Spot-Up Mid ended up around four times
+    its calibrated center and every big's spot-up jumper beat the post-up branch.
+    Converting the rank to a z-score first keeps it on the field's own scale.
+    """
+    center, scale = _TENDENCY_CALIBRATION[field]
+    bounded = min(max(float(rank), 1.0 - _RANK_PROBIT_LIMIT), _RANK_PROBIT_LIMIT)
+    return max(0, min(100, int(round(center + _NORMAL_DISTRIBUTION.inv_cdf(bounded) * scale))))
+
+
 def _offball_action_tendency(field: str, evidence: Any, league_player_rows: Any) -> dict[str, Any] | None:
     if _gp(evidence) is None:
         return None
@@ -1775,13 +1835,13 @@ def _offball_action_tendency(field: str, evidence: Any, league_player_rows: Any)
             continue
         score, evidence_keys = result
         return {
-            "value": max(0, min(100, round(score * 100.0))),
+            "value": _value_from_rank(field, score),
             "score": score,
             "source_rule": f"derive_tendency_{field.lower()}_{recipe.name}",
             "evidence_keys": (
                 "per_game.g",
                 *evidence_keys,
-                "mapping=weighted_same_season_same_league_action_percentiles_to_0_100",
+                "mapping=weighted_same_season_same_league_action_percentiles_through_field_center_scale",
                 "range_decision_contract=MID_or_3PT_is_selected_before_offscreen_or_spotup",
                 "shot_range_attempt_rates_and_make_percentages_excluded=true",
             ),

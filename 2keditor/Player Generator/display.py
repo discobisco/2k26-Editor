@@ -14,21 +14,7 @@ _SOURCE_TEAM_ALL = "All source teams"
 _LEAGUE_ALL = "All leagues"
 _POSITION_ALL = "All positions"
 _PLAYER_LABEL_SEPARATOR = " | "
-_MATCH_DISPLAY_COLUMNS: tuple[tuple[str, str], ...] = (
-    ("Player Match", "player_match"),
-    ("Offensive Player Match", "offensive_player_match"),
-    ("Defensive Player Match", "defensive_player_match"),
-)
 _MULTI_TEAM_MARKERS = {"TOT", "2TM", "3TM", "4TM", "5TM"}
-
-
-@dataclass(frozen=True)
-class GeneratorFieldDisplayRow:
-    section: str
-    group: str
-    field: str
-    value: str
-    source: str
 
 
 @dataclass(frozen=True)
@@ -64,7 +50,6 @@ class GeneratorDisplayState:
     players: tuple[str, ...]
     selected_player: str
     status: str
-    rows: tuple[GeneratorFieldDisplayRow, ...] = ()
     field_columns: tuple[str, ...] = ()
     player_rows: tuple[GeneratorPlayerDisplayRow, ...] = ()
     generated_proposals: tuple[Any, ...] = ()
@@ -173,7 +158,6 @@ def update_generator_display_selection(
         selected_source_team=source_team,
         players=players,
         selected_player=player,
-        rows=() if selection_changed else state.rows,
         field_columns=() if selection_changed else state.field_columns,
         player_rows=() if selection_changed else state.player_rows,
         generated_proposals=() if selection_changed else state.generated_proposals,
@@ -196,11 +180,14 @@ def add_current_roster_to_pool_display_state(model: Any, state: GeneratorDisplay
     return replace(
         state,
         status=(
-            f"Added current roster to player pool SQL as {pool_manifest.get('added_snapshot_id')}: "
-            f"{pool_manifest.get('added_stats_rows', 0)} stats rows, "
+            f"Added run {pool_manifest.get('added_snapshot_id')} to player pool SQL: "
+            f"{pool_manifest.get('added_stats_rows', 0)} players, "
             f"{pool_manifest.get('added_attribute_rows', 0)} attribute rows, "
-            f"{pool_manifest.get('added_tendency_rows', 0)} tendency rows. "
-            "Use Sync Player Pool SQL to rebuild offset-backed Pool columns."
+            f"{pool_manifest.get('added_tendency_rows', 0)} tendency rows, "
+            f"{pool_manifest.get('added_play_type_rows', 0)} play-type rows. "
+            f"Pool now holds {pool_manifest.get('candidate_position_rows', 0)} position rows across "
+            f"{pool_manifest.get('candidate_rows', 0)} players"
+            + (" (all runs rebuilt for new schema)." if pool_manifest.get("rebuilt_all_runs") else ".")
         ),
     )
 
@@ -212,16 +199,16 @@ def sync_generator_pool_display_state(state: GeneratorDisplayState, *, progress_
     pool_manifest = ensure_player_generation_pool_current(progress_callback=progress_callback)
     return replace(
         state,
-        rows=(),
         field_columns=(),
         player_rows=(),
         generated_proposals=(),
         proposal_cache_season="",
         proposal_cache=(),
         status=(
-            f"Player pool SQL current: "
+            f"{pool_manifest.get('status', 'Player pool SQL current.')} "
             f"{pool_manifest.get('candidate_rows', 0)} players, "
-            f"{pool_manifest.get('candidate_position_rows', 0)} position rows. "
+            f"{pool_manifest.get('candidate_position_rows', 0)} position rows, "
+            f"{pool_manifest.get('play_type_rows', 0)} play-type rows. "
             "Preview cleared; run Display Preview again before importing."
         ),
     )
@@ -329,13 +316,10 @@ def generate_generator_preview_display_state(state: GeneratorDisplayState) -> Ge
         for proposal in season_proposals
         if (str(proposal.player_id).strip(), str(proposal.team).strip().upper()) in selected_keys
     )
-    columns: list[str] = [label for label, _key in _MATCH_DISPLAY_COLUMNS]
+    columns: list[str] = []
     proposal_values: dict[tuple[str, str], dict[str, str]] = {}
     for proposal in proposals:
-        values: dict[str, str] = {
-            label: str(getattr(proposal, "identity", {}).get(key) or "")
-            for label, key in _MATCH_DISPLAY_COLUMNS
-        }
+        values: dict[str, str] = {}
         for candidate in proposal.field_candidates:
             column = _field_column(candidate)
             if column not in columns:
@@ -357,7 +341,6 @@ def generate_generator_preview_display_state(state: GeneratorDisplayState) -> Ge
     ]
     return replace(
         selected,
-        rows=(),
         field_columns=tuple(columns),
         player_rows=tuple(rows),
         generated_proposals=proposals,
@@ -392,13 +375,10 @@ def generate_draft_class_display_state(state: GeneratorDisplayState) -> Generato
         source_root=_SOURCE_ROOT,
     )
     proposals = draft_class.proposals
-    columns: list[str] = [label for label, _key in _MATCH_DISPLAY_COLUMNS]
+    columns: list[str] = []
     rows: list[GeneratorPlayerDisplayRow] = []
     for proposal in proposals:
-        values: dict[str, str] = {
-            label: str(getattr(proposal, "identity", {}).get(key) or "")
-            for label, key in _MATCH_DISPLAY_COLUMNS
-        }
+        values: dict[str, str] = {}
         for candidate in proposal.field_candidates:
             column = _field_column(candidate)
             if column not in columns:
@@ -415,7 +395,6 @@ def generate_draft_class_display_state(state: GeneratorDisplayState) -> Generato
         )
     return replace(
         selected,
-        rows=(),
         field_columns=tuple(columns),
         player_rows=tuple(rows),
         generated_proposals=proposals,
@@ -698,7 +677,7 @@ def _evidence_league(evidence: Any) -> str:
 
 def _evidence_positions(evidence: Any) -> tuple[str, ...]:
     _ensure_generator_import_path()
-    from stat_neighbor_framework import select_positions_from_evidence
+    from player_rules import select_positions_from_evidence
 
     selected = select_positions_from_evidence(evidence.play_by_play, evidence.season_info.get("pos") or evidence.identity.get("pos"))
     return tuple(position for position in selected.all_positions if position)
@@ -756,7 +735,6 @@ def _ensure_generator_import_path() -> None:
 
 __all__ = [
     "GeneratorDisplayState",
-    "GeneratorFieldDisplayRow",
     "GeneratorPlayerDisplayRow",
     "GeneratorSourceRosterPlayer",
     "add_current_roster_to_pool_display_state",

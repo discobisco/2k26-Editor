@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sqlite3
 from dataclasses import dataclass, replace
@@ -25,8 +26,8 @@ from player_rules import (
     RuleValue,
     derive_player_profile_values,
     derive_player_rule_values,
+    select_positions_from_evidence,
 )
-from stat_neighbor_framework import select_positions_from_evidence
 from workbook_sqlite import ensure_workbook_sqlite_database, iter_workbook_sqlite_sheet_rows, query_rows_for_season, workbook_sqlite_sheet_names
 
 _GENERATOR_DIR = Path(__file__).resolve().parent
@@ -224,7 +225,6 @@ def generate_player_proposal(
         active_field_keys=active_field_keys,
         artifact=free_throw_artifact,
     )
-    player_match_identity = _player_match_identity_values(evidence, positions)
     candidates = player_field_candidates_from_results(profile_result, rule_result, offsets_path=offsets_path, field_index=field_index)
     return GeneratedPlayerProposal(
         player_id=evidence.player_id,
@@ -238,7 +238,6 @@ def generate_player_proposal(
             "team_name": _team_display_name(evidence),
             "multi_team_stat_shares": evidence.source_context.get("multi_team_stat_shares"),
             "source": evidence.source_context.get("source"),
-            **player_match_identity,
         },
         field_candidates=candidates,
     )
@@ -290,58 +289,6 @@ def _with_model_authored_free_throw(
     return PlayerRuleResult(values=values)
 
 
-
-def _player_match_identity_values(evidence: PlayerEvidence, positions: Any) -> dict[str, Any]:
-    try:
-        from stat_neighbor_framework import load_latest_stat_neighbor_model
-
-        groups = load_latest_stat_neighbor_model().player_matches_for_evidence(evidence=evidence, positions=positions)
-    except FileNotFoundError:
-        return {}
-    return {
-        "player_match": _format_player_matches(groups.get("player", ())),
-        "offensive_player_match": _format_player_matches(groups.get("offensive", ())),
-        "defensive_player_match": _format_player_matches(groups.get("defensive", ())),
-        "player_match_details": tuple(_player_match_detail(match) for match in groups.get("player", ())),
-        "offensive_player_match_details": tuple(_player_match_detail(match) for match in groups.get("offensive", ())),
-        "defensive_player_match_details": tuple(_player_match_detail(match) for match in groups.get("defensive", ())),
-    }
-
-
-def _format_player_matches(matches: Iterable[Any]) -> str:
-    parts: list[str] = []
-    for match in matches:
-        label = str(getattr(match, "player_label", "") or "").strip()
-        if not label:
-            continue
-        position = str(getattr(match, "position", "") or "").strip().upper()
-        distance = getattr(match, "distance", None)
-        suffix = f"{position}, {float(distance):.6f}" if position and distance is not None else f"{float(distance):.6f}" if distance is not None else position
-        parts.append(f"{label} ({suffix})" if suffix else label)
-    return "; ".join(parts)
-
-
-def _player_match_detail(match: Any) -> dict[str, Any]:
-    return {
-        "player": str(getattr(match, "player_label", "") or ""),
-        "player_id": str(getattr(match, "master_player_id", "") or ""),
-        "position": str(getattr(match, "position", "") or ""),
-        "distance": float(getattr(match, "distance", 0.0)),
-        "common_features": int(getattr(match, "common_features", 0)),
-    }
-
-
-def generate_player_proposal_from_contract(
-    contract: GeneratorInputContract,
-    *,
-    player_id: str,
-    team: str,
-    offsets_path: str | Path | None = None,
-) -> GeneratedPlayerProposal:
-    context = season_context_index(contract, offsets_path=offsets_path)
-    return generate_player_proposal_from_index(context, player_id=player_id, team=team)
-
-
 def generate_player_proposal_from_index(
     context: SeasonPlayerContextIndex,
     *,
@@ -354,16 +301,6 @@ def generate_player_proposal_from_index(
         field_index=context.field_index,
         league_player_rows=context.comparison_rows,
     )
-
-
-def generate_player_proposals_for_contract(
-    contract: GeneratorInputContract,
-    *,
-    team_filter: str | None = None,
-    offsets_path: str | Path | None = None,
-) -> GeneratedPlayerBatch:
-    context = season_context_index(contract, offsets_path=offsets_path)
-    return generate_player_proposals_from_index(context, team_filter=team_filter)
 
 
 def generate_player_proposals_from_index(
@@ -610,10 +547,6 @@ def _int_value(value: Any) -> int | None:
         return None
 
 
-def selected_year_player_comparison_rows(contract: GeneratorInputContract) -> tuple[dict[str, Any], ...]:
-    return season_context_index(contract).comparison_rows
-
-
 def season_context_index(
     contract: GeneratorInputContract,
     *,
@@ -734,6 +667,8 @@ def _cached_season_context_index(
         for key in selected_keys
         if _comparison_row_has_positive_games(rows_by_key[key])
     )
+    _impute_sparse_fg_percent(database, season, player_sheet_rows[_PLAYER_PER_GAME_SHEET])
+
     evidence_by_key = _build_evidence_index(
         season=season,
         keys=selected_keys,
@@ -990,6 +925,112 @@ def _canonicalized_player_row(row: dict[str, Any], canonical_team: str, stat_sha
     return copied
 
 
+def _impute_sparse_fg_enabled() -> bool:
+    """Test hook toggle. Set PLAYERGEN_IMPUTE_SPARSE_FG=0 to disable."""
+    return os.environ.get("PLAYERGEN_IMPUTE_SPARSE_FG", "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
+@lru_cache(maxsize=None)
+def _sparse_fg_percent_baseline(database_path: str, season: int) -> tuple[tuple[str, float], ...]:
+    """League-season field-goal percentage by position family (G / F / C), attempt-weighted,
+    plus an ``_ALL`` overall entry.
+
+    Sourced from ``generated_pseudo_per_1947_1951`` because that is the only table carrying
+    both attempts and a position for the 1947-1949 seasons where one league (the NBL) recorded
+    makes but never attempts. Returns an empty tuple whenever the table (and therefore the
+    early-era context) is absent, which makes the imputation below a no-op for every modern
+    season.
+    """
+
+    try:
+        uri = f"file:{database_path}?mode=ro"
+        with sqlite3.connect(uri, uri=True) as connection:
+            connection.row_factory = sqlite3.Row
+            has_table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='generated_pseudo_per_1947_1951'"
+            ).fetchone()
+            if not has_table:
+                return ()
+            rows = connection.execute(
+                """
+                SELECT pos_family AS family, SUM(fg) AS fg, SUM(fga) AS fga
+                FROM generated_pseudo_per_1947_1951
+                WHERE season = ? AND fga IS NOT NULL AND fga > 0
+                GROUP BY pos_family
+                """,
+                (int(season),),
+            ).fetchall()
+    except sqlite3.Error:
+        return ()
+
+    baseline: dict[str, float] = {}
+    total_fg = 0.0
+    total_fga = 0.0
+    for row in rows:
+        family = str(row["family"] or "").strip().upper()[:1]
+        made = _float(row["fg"])
+        attempted = _float(row["fga"])
+        if family not in {"G", "F", "C"} or not attempted:
+            continue
+        baseline[family] = made / attempted
+        total_fg += made
+        total_fga += attempted
+    if total_fga > 0.0:
+        baseline["_ALL"] = total_fg / total_fga
+    return tuple(sorted(baseline.items()))
+
+
+def _position_family(row: dict[str, Any]) -> str:
+    pos = str(row.get("pos") or row.get("player_per_game.pos") or "").strip().upper()
+    return pos[:1] if pos[:1] in {"G", "F", "C"} else ""
+
+
+def _impute_sparse_fg_percent(
+    database: Path,
+    season: int,
+    per_game_rows: dict[tuple[str, str], dict[str, Any]],
+) -> int:
+    """TEST HOOK — substitute the league-season position FG% average for players whose
+    season recorded field-goal makes but not attempts (1947-1949 NBL).
+
+    Without this, every such player reaches the shooting rules with ``per_game.fg_percent``
+    (and every derived shot-quality signal) missing, so those rules collapse to role/size
+    defaults and roughly 40% of the 1947 pool ends up with near-identical shooting cards.
+    Here we fill ``fg_percent`` / ``e_fg_percent`` from the league-season average for the
+    player's position, and back out an implied ``fga_per_game`` from recorded makes so the
+    exposure-reliability weighting engages at a sensible confidence. The substitution is
+    marked on the row (``fg_percent_source``) and only touches the subject's own evidence —
+    the league comparison population is left untouched. Disable with PLAYERGEN_IMPUTE_SPARSE_FG=0.
+    """
+
+    if not _impute_sparse_fg_enabled():
+        return 0
+    baseline = dict(_sparse_fg_percent_baseline(str(database), season))
+    if not baseline:
+        return 0
+    overall = baseline.get("_ALL")
+    imputed = 0
+    for row in per_game_rows.values():
+        if row.get("fg_percent") is not None:
+            continue
+        percent = baseline.get(_position_family(row), overall)
+        if percent is None or percent <= 0.0:
+            continue
+        row["fg_percent"] = round(percent, 4)
+        row["e_fg_percent"] = round(percent, 4)  # no 3-point attempts in this era
+        made_per_game = _float(row.get("fg_per_game"))
+        if made_per_game is not None and made_per_game >= 0.0:
+            row["fga_per_game"] = round(made_per_game / percent, 2)
+        row["fg_percent_source"] = "imputed_league_season_position_mean"
+        imputed += 1
+    return imputed
+
+
 def _multi_team_primary_teams(database: Path, season: int) -> dict[str, str]:
     saw_multi: set[str] = set()
     primary: dict[str, str] = {}
@@ -1149,12 +1190,9 @@ __all__ = [
     "SeasonPlayerContextIndex",
     "authored_player_field_index",
     "generate_player_proposal",
-    "generate_player_proposal_from_contract",
     "generate_player_proposal_from_index",
-    "generate_player_proposals_for_contract",
     "generate_player_proposals_from_index",
     "generate_draft_class_proposals",
     "player_field_candidates_from_results",
     "season_context_index",
-    "selected_year_player_comparison_rows",
 ]

@@ -9,7 +9,6 @@ from typing import Any, Callable, Iterable
 from nba2k_editor.models.schema import FieldEntry
 from contracts import GeneratorInputContract, OutputTarget
 from player_generator import (
-    GeneratedPlayerProposal,
     authored_player_field_index,
     generate_player_proposals_from_index,
     season_context_index,
@@ -223,25 +222,6 @@ def active_loaded_players_not_in_generated_source(
     return tuple(not_in_source)
 
 
-def apply_generated_player_proposal_to_game(
-    model: Any,
-    proposal: GeneratedPlayerProposal,
-    *,
-    player_index: int,
-    field_index: dict[str, FieldEntry] | None = None,
-    offsets_path: str | Path | None = None,
-    stop_on_error: bool = False,
-) -> GamePortResult:
-    return apply_generated_rows_to_game(
-        model,
-        proposal.field_candidates,
-        player_index=player_index,
-        field_index=field_index,
-        offsets_path=offsets_path,
-        stop_on_error=stop_on_error,
-    )
-
-
 def apply_generated_players_to_game(
     model: Any,
     generated_players: Iterable[Any],
@@ -286,15 +266,6 @@ def apply_generated_players_to_game(
         generated_count=len(generated_tuple),
         target_count=target_count,
     )
-
-
-def player_team_slot_indices_for_generated(model: Any, generated_players: Iterable[Any]) -> tuple[int, ...]:
-    indices, _target_count = _player_team_slot_indices_for_generated(model, tuple(generated_players))
-    return indices
-
-
-def _player_indices_by_generated_names(model: Any, generated_players: Iterable[Any]) -> tuple[int, ...]:
-    return tuple(index for _generated, index in _generated_player_name_matches(model, generated_players))
 
 
 def _generated_player_name_matches(model: Any, generated_players: Iterable[Any]) -> tuple[tuple[Any, int], ...]:
@@ -833,22 +804,6 @@ def _generated_matches_live_name(generated: _GeneratedTeamMatchProfile, live: _T
     return any(full_key.endswith(live.name_key) or full_key in live.full_keys for full_key in generated.full_keys)
 
 
-def _live_team_keys(model: Any, team: Any) -> set[str]:
-    values: set[str] = set()
-    for value in (getattr(team, "label", ""), getattr(team, "display_label", "")):
-        _add_team_key(values, value)
-    for field_names in (
-        ("CITYABBREV", "CITY ABBREV", "ABBREVIATION"),
-        ("TEAMNAME", "TEAM NAME"),
-        ("CITYNAME", "CITY NAME"),
-    ):
-        _add_team_key(values, _read_team_value(model, team, field_names))
-    city = _read_team_value(model, team, ("CITYNAME", "CITY NAME"))
-    name = _read_team_value(model, team, ("TEAMNAME", "TEAM NAME"))
-    _add_team_key(values, f"{city} {name}")
-    return values
-
-
 def _read_team_value(model: Any, team: Any, field_names: tuple[str, ...]) -> str:
     reader = getattr(model, "_read_named_value", None)
     if callable(reader):
@@ -1093,12 +1048,10 @@ __all__ = [
     "GamePortResult",
     "GeneratedPlayerGameImportResult",
     "active_loaded_players_not_in_generated_source",
-    "apply_generated_player_proposal_to_game",
     "apply_generated_players_to_game",
     "apply_generated_rows_to_game",
     "import_generated_players_to_game",
     "missing_generated_players_and_active_placeholder_indices",
-    "player_team_slot_indices_for_generated",
     "validate_generated_player_names_match_offsets",
 ]
 

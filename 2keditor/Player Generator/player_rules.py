@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from math import isfinite
 from typing import Any, Callable
@@ -10,8 +11,71 @@ import player_rules_defense as defense
 import player_rules_mental as mental
 import player_rules_offense as offense
 import player_rules_rebounding as rebounding
+from player_era_role import adjust_values as _apply_era_role_playstyle
 from player_evidence import PlayerEvidence
-from stat_neighbor_framework import PositionSelection, select_positions_from_evidence
+
+
+POSITIONS: tuple[str, ...] = ("PG", "SG", "SF", "PF", "C")
+
+
+@dataclass(frozen=True)
+class PositionSelection:
+    primary: str
+    secondary: str | None
+    all_positions: tuple[str, ...]
+    position_weights: tuple[tuple[str, float], ...] = ()
+
+
+def _parse_listed_positions(value: object) -> tuple[str, ...]:
+    text = str(value or "").upper()
+    compact = re.sub(r"[^A-Z]+", "", text)
+    position_map = {
+        "G": ("PG", "SG"),
+        "GF": ("SG", "SF"),
+        "FG": ("SF", "SG"),
+        "F": ("SF", "PF"),
+        "FC": ("PF", "C"),
+        "CF": ("C", "PF"),
+    }
+    mapped = position_map.get(compact)
+    if mapped:
+        return mapped
+    found = re.findall(r"\b(?:PG|SG|SF|PF|C)\b", text)
+    if found:
+        return tuple(dict.fromkeys(found))
+    return ()
+
+
+def select_positions_from_evidence(play_by_play: dict[str, Any], fallback_pos: object = None) -> PositionSelection:
+    percent_rows: list[tuple[str, float]] = []
+    for pos, col in (
+        ("PG", "pg_percent"),
+        ("SG", "sg_percent"),
+        ("SF", "sf_percent"),
+        ("PF", "pf_percent"),
+        ("C", "c_percent"),
+    ):
+        value = _float(play_by_play.get(col))
+        if value is not None and value > 0:
+            percent_rows.append((pos, value))
+    if percent_rows:
+        ordered_rows = tuple(sorted(percent_rows, key=lambda item: (-item[1], POSITIONS.index(item[0]))))
+        total = sum(value for _pos, value in ordered_rows)
+        weights = tuple((pos, value / total) for pos, value in ordered_rows) if total > 0.0 else ()
+        ordered = tuple(pos for pos, _ in ordered_rows)
+        return PositionSelection(
+            primary=ordered[0],
+            secondary=ordered[1] if len(ordered) > 1 else None,
+            all_positions=ordered,
+            position_weights=weights,
+        )
+
+    parsed = _parse_listed_positions(fallback_pos)
+    return PositionSelection(
+        primary=parsed[0] if parsed else "",
+        secondary=parsed[1] if len(parsed) > 1 else None,
+        all_positions=parsed,
+    )
 
 
 @dataclass(frozen=True)
@@ -42,71 +106,73 @@ class PlayerRuleResult:
 @dataclass(frozen=True)
 class PlayerRuleSpec:
     field_key: str
-    section: str
-    group: str
     module: str
     function: str
 
 
-_RULE_ROWS: tuple[tuple[str, str, str, str, str], ...] = (
+# field_key -> (rule module, derivation function). This is the only thing the
+# generator declares about attributes/tendencies: which function computes which
+# field. Section, group, ordinal, and *which fields exist* all come from the
+# editor's offset layout at generation time -- see derive_formula_rule_values.
+_RULE_BINDINGS: dict[str, tuple[str, str]] = {
 
-    ('Attributes/BALLCONTROL', 'Attributes', 'Offense', 'offense', 'derive_attribute_ballcontrol'),
-    ('Attributes/DRAWFOUL', 'Attributes', 'Offense', 'offense', 'derive_attribute_drawfoul'),
-    ('Attributes/OFFENSIVECONSISTENCY', 'Attributes', 'Offense', 'offense', 'derive_attribute_offensiveconsistency'),
-    ('Attributes/PASSACCURACY', 'Attributes', 'Offense', 'offense', 'derive_attribute_passaccuracy'),
-    ('Attributes/PASSIQ', 'Attributes', 'Offense', 'offense', 'derive_attribute_passiq'),
-    ('Attributes/PASSVISION', 'Attributes', 'Offense', 'offense', 'derive_attribute_passvision'),
-    ('Attributes/IQSHOT', 'Attributes', 'Offense', 'offense', 'derive_attribute_iqshot'),
-    ('Attributes/3POINT', 'Attributes', 'Offense', 'offense', 'derive_attribute_3point'),
-    ('Attributes/CLOSESHOT', 'Attributes', 'Offense', 'offense', 'derive_attribute_closeshot'),
-    ('Attributes/DRIVINGDUNK', 'Attributes', 'Offense', 'offense', 'derive_attribute_drivingdunk'),
-    ('Attributes/DRIVINGLAYUP', 'Attributes', 'Offense', 'offense', 'derive_attribute_drivinglayup'),
-    ('Attributes/MIDRANGE', 'Attributes', 'Offense', 'offense', 'derive_attribute_midrange'),
-    ('Attributes/POSTCONTROL', 'Attributes', 'Offense', 'offense', 'derive_attribute_postcontrol'),
-    ('Attributes/POSTFADE', 'Attributes', 'Offense', 'offense', 'derive_attribute_postfade'),
-    ('Attributes/POSTHOOK', 'Attributes', 'Offense', 'offense', 'derive_attribute_posthook'),
-    ('Attributes/STANDINGDUNK', 'Attributes', 'Offense', 'offense', 'derive_attribute_standingdunk'),
-    ('Attributes/BLOCK', 'Attributes', 'Defense', 'defense', 'derive_attribute_block'),
-    ('Attributes/DEFENSECONSISTENCY', 'Attributes', 'Defense', 'defense', 'derive_attribute_defenseconsistency'),
-    ('Attributes/HELPDEFENSE', 'Attributes', 'Defense', 'defense', 'derive_attribute_helpdefense'),
-    ('Attributes/INTERIORDEFENSE', 'Attributes', 'Defense', 'defense', 'derive_attribute_interiordefense'),
-    ('Attributes/PASSPERCEPTION', 'Attributes', 'Defense', 'defense', 'derive_attribute_passperception'),
-    ('Attributes/PERIMETERDEFENSE', 'Attributes', 'Defense', 'defense', 'derive_attribute_perimeterdefense'),
-    ('Attributes/STEAL', 'Attributes', 'Defense', 'defense', 'derive_attribute_steal'),
-    ('Attributes/ACCELERATION', 'Attributes', 'Athleticism', 'athleticism', 'derive_attribute_acceleration'),
-    ('Attributes/AGILITY', 'Attributes', 'Athleticism', 'athleticism', 'derive_attribute_agility'),
-    ('Attributes/SPEED', 'Attributes', 'Athleticism', 'athleticism', 'derive_attribute_speed'),
-    ('Attributes/SPEEDWITHBALL', 'Attributes', 'Athleticism', 'athleticism', 'derive_attribute_speedwithball'),
-    ('Attributes/STAMINA', 'Attributes', 'Athleticism', 'athleticism', 'derive_attribute_stamina'),
-    ('Attributes/STRENGTH', 'Attributes', 'Athleticism', 'athleticism', 'derive_attribute_strength'),
-    ('Attributes/VERTICAL', 'Attributes', 'Athleticism', 'athleticism', 'derive_attribute_vertical'),
-    ('Attributes/BACKDURABILITY', 'Attributes', 'Durability', 'athleticism', 'derive_attribute_backdurability'),
-    ('Attributes/HEADDURABILITY', 'Attributes', 'Durability', 'athleticism', 'derive_attribute_headdurability'),
-    ('Attributes/LEFTANKLEDURABILITY', 'Attributes', 'Durability', 'athleticism', 'derive_attribute_leftankledurability'),
-    ('Attributes/LEFTELBOWDURABILITY', 'Attributes', 'Durability', 'athleticism', 'derive_attribute_leftelbowdurability'),
-    ('Attributes/LEFTFOOTDURABILITY', 'Attributes', 'Durability', 'athleticism', 'derive_attribute_leftfootdurability'),
-    ('Attributes/LEFTHANDDURABILITY', 'Attributes', 'Durability', 'athleticism', 'derive_attribute_lefthanddurability'),
-    ('Attributes/LEFTHIPDURABILITY', 'Attributes', 'Durability', 'athleticism', 'derive_attribute_lefthipdurability'),
-    ('Attributes/LEFTKNEEDURABILITY', 'Attributes', 'Durability', 'athleticism', 'derive_attribute_leftkneedurability'),
-    ('Attributes/LEFTSHOULDERDURABILITY', 'Attributes', 'Durability', 'athleticism', 'derive_attribute_leftshoulderdurability'),
-    ('Attributes/MISCDURABILITY', 'Attributes', 'Durability', 'athleticism', 'derive_attribute_miscdurability'),
-    ('Attributes/NECKDURABILITY', 'Attributes', 'Durability', 'athleticism', 'derive_attribute_neckdurability'),
-    ('Attributes/RIGHTANKLEDURABILITY', 'Attributes', 'Durability', 'athleticism', 'derive_attribute_rightankledurability'),
-    ('Attributes/RIGHTELBOWDURABILITY', 'Attributes', 'Durability', 'athleticism', 'derive_attribute_rightelbowdurability'),
-    ('Attributes/RIGHTFOOTDURABILITY', 'Attributes', 'Durability', 'athleticism', 'derive_attribute_rightfootdurability'),
-    ('Attributes/RIGHTHANDDURABILITY', 'Attributes', 'Durability', 'athleticism', 'derive_attribute_righthanddurability'),
-    ('Attributes/RIGHTHIPDURABILITY', 'Attributes', 'Durability', 'athleticism', 'derive_attribute_righthipdurability'),
-    ('Attributes/RIGHTKNEEDURABILITY', 'Attributes', 'Durability', 'athleticism', 'derive_attribute_rightkneedurability'),
-    ('Attributes/RIGHTSHOULDERDURABILITY', 'Attributes', 'Durability', 'athleticism', 'derive_attribute_rightshoulderdurability'),
-    ('Attributes/HANDS', 'Attributes', 'Mental', 'mental', 'derive_attribute_hands'),
-    ('Attributes/HUSTLE', 'Attributes', 'Mental', 'mental', 'derive_attribute_hustle'),
-    ('Attributes/INTANGIBLES', 'Attributes', 'Mental', 'mental', 'derive_attribute_intangibles'),
-    ('Attributes/LATERALQUICKNESS', 'Attributes', 'Misc', 'defense', 'derive_attribute_lateralquickness'),
-    ('Attributes/PICKANDROLLDEFENSEIQ', 'Attributes', 'Misc', 'defense', 'derive_attribute_pickandrolldefenseiq'),
-    ('Attributes/POTENTIAL', 'Attributes', 'Misc', 'mental', 'derive_attribute_potential'),
-    ('Attributes/CONTESTSHOT', 'Attributes', 'Misc', 'defense', 'derive_attribute_contestshot'),
-    ('Attributes/DEFENSEREBOUND', 'Attributes', 'Rebounding', 'rebounding', 'derive_attribute_defensiverebound'),
-    ('Attributes/OFFENSIVEREBOUND', 'Attributes', 'Rebounding', 'rebounding', 'derive_attribute_offensiverebound'),
+    'Attributes/BALLCONTROL': ('offense', 'derive_attribute_ballcontrol'),
+    'Attributes/DRAWFOUL': ('offense', 'derive_attribute_drawfoul'),
+    'Attributes/OFFENSIVECONSISTENCY': ('offense', 'derive_attribute_offensiveconsistency'),
+    'Attributes/PASSACCURACY': ('offense', 'derive_attribute_passaccuracy'),
+    'Attributes/PASSIQ': ('offense', 'derive_attribute_passiq'),
+    'Attributes/PASSVISION': ('offense', 'derive_attribute_passvision'),
+    'Attributes/IQSHOT': ('offense', 'derive_attribute_iqshot'),
+    'Attributes/3POINT': ('offense', 'derive_attribute_3point'),
+    'Attributes/CLOSESHOT': ('offense', 'derive_attribute_closeshot'),
+    'Attributes/DRIVINGDUNK': ('offense', 'derive_attribute_drivingdunk'),
+    'Attributes/DRIVINGLAYUP': ('offense', 'derive_attribute_drivinglayup'),
+    'Attributes/MIDRANGE': ('offense', 'derive_attribute_midrange'),
+    'Attributes/POSTCONTROL': ('offense', 'derive_attribute_postcontrol'),
+    'Attributes/POSTFADE': ('offense', 'derive_attribute_postfade'),
+    'Attributes/POSTHOOK': ('offense', 'derive_attribute_posthook'),
+    'Attributes/STANDINGDUNK': ('offense', 'derive_attribute_standingdunk'),
+    'Attributes/BLOCK': ('defense', 'derive_attribute_block'),
+    'Attributes/DEFENSECONSISTENCY': ('defense', 'derive_attribute_defenseconsistency'),
+    'Attributes/HELPDEFENSE': ('defense', 'derive_attribute_helpdefense'),
+    'Attributes/INTERIORDEFENSE': ('defense', 'derive_attribute_interiordefense'),
+    'Attributes/PASSPERCEPTION': ('defense', 'derive_attribute_passperception'),
+    'Attributes/PERIMETERDEFENSE': ('defense', 'derive_attribute_perimeterdefense'),
+    'Attributes/STEAL': ('defense', 'derive_attribute_steal'),
+    'Attributes/ACCELERATION': ('athleticism', 'derive_attribute_acceleration'),
+    'Attributes/AGILITY': ('athleticism', 'derive_attribute_agility'),
+    'Attributes/SPEED': ('athleticism', 'derive_attribute_speed'),
+    'Attributes/SPEEDWITHBALL': ('athleticism', 'derive_attribute_speedwithball'),
+    'Attributes/STAMINA': ('athleticism', 'derive_attribute_stamina'),
+    'Attributes/STRENGTH': ('athleticism', 'derive_attribute_strength'),
+    'Attributes/VERTICAL': ('athleticism', 'derive_attribute_vertical'),
+    'Attributes/BACKDURABILITY': ('athleticism', 'derive_attribute_backdurability'),
+    'Attributes/HEADDURABILITY': ('athleticism', 'derive_attribute_headdurability'),
+    'Attributes/LEFTANKLEDURABILITY': ('athleticism', 'derive_attribute_leftankledurability'),
+    'Attributes/LEFTELBOWDURABILITY': ('athleticism', 'derive_attribute_leftelbowdurability'),
+    'Attributes/LEFTFOOTDURABILITY': ('athleticism', 'derive_attribute_leftfootdurability'),
+    'Attributes/LEFTHANDDURABILITY': ('athleticism', 'derive_attribute_lefthanddurability'),
+    'Attributes/LEFTHIPDURABILITY': ('athleticism', 'derive_attribute_lefthipdurability'),
+    'Attributes/LEFTKNEEDURABILITY': ('athleticism', 'derive_attribute_leftkneedurability'),
+    'Attributes/LEFTSHOULDERDURABILITY': ('athleticism', 'derive_attribute_leftshoulderdurability'),
+    'Attributes/MISCDURABILITY': ('athleticism', 'derive_attribute_miscdurability'),
+    'Attributes/NECKDURABILITY': ('athleticism', 'derive_attribute_neckdurability'),
+    'Attributes/RIGHTANKLEDURABILITY': ('athleticism', 'derive_attribute_rightankledurability'),
+    'Attributes/RIGHTELBOWDURABILITY': ('athleticism', 'derive_attribute_rightelbowdurability'),
+    'Attributes/RIGHTFOOTDURABILITY': ('athleticism', 'derive_attribute_rightfootdurability'),
+    'Attributes/RIGHTHANDDURABILITY': ('athleticism', 'derive_attribute_righthanddurability'),
+    'Attributes/RIGHTHIPDURABILITY': ('athleticism', 'derive_attribute_righthipdurability'),
+    'Attributes/RIGHTKNEEDURABILITY': ('athleticism', 'derive_attribute_rightkneedurability'),
+    'Attributes/RIGHTSHOULDERDURABILITY': ('athleticism', 'derive_attribute_rightshoulderdurability'),
+    'Attributes/HANDS': ('mental', 'derive_attribute_hands'),
+    'Attributes/HUSTLE': ('mental', 'derive_attribute_hustle'),
+    'Attributes/INTANGIBLES': ('mental', 'derive_attribute_intangibles'),
+    'Attributes/LATERALQUICKNESS': ('defense', 'derive_attribute_lateralquickness'),
+    'Attributes/PICKANDROLLDEFENSEIQ': ('defense', 'derive_attribute_pickandrolldefenseiq'),
+    'Attributes/POTENTIAL': ('mental', 'derive_attribute_potential'),
+    'Attributes/CONTESTSHOT': ('defense', 'derive_attribute_contestshot'),
+    'Attributes/DEFENSEREBOUND': ('rebounding', 'derive_attribute_defensiverebound'),
+    'Attributes/OFFENSIVEREBOUND': ('rebounding', 'derive_attribute_offensiverebound'),
 
 
 
@@ -114,111 +180,111 @@ _RULE_ROWS: tuple[tuple[str, str, str, str, str], ...] = (
 
 
 
-    ('Tendencies/CRASH', 'Tendencies', 'Layups And Dunks', 'offense', 'derive_tendency_crash'),
-    ('Tendencies/NOSETUPDRIBBLE', 'Tendencies', 'Drive Setup', 'offense', 'derive_tendency_setupdribble'),
-    ('Tendencies/SETUPWITHHESITATION', 'Tendencies', 'Drive Setup', 'offense', 'derive_tendency_setupwithhesitation'),
-    ('Tendencies/SETUPWITHSIZEUP', 'Tendencies', 'Drive Setup', 'offense', 'derive_tendency_setupwithsizeup'),
-    ('Tendencies/TRIPLETHREATIDLE', 'Tendencies', 'Drive Setup', 'offense', 'derive_tendency_triplethreatidle'),
-    ('Tendencies/TRIPLETHREATJABSTEP', 'Tendencies', 'Drive Setup', 'offense', 'derive_tendency_triplethreatjab'),
-    ('Tendencies/TRIPLETHREATPUMPFAKE', 'Tendencies', 'Drive Setup', 'offense', 'derive_tendency_triplethreatpumpfake'),
-    ('Tendencies/THREATTRIPLESHOT', 'Tendencies', 'Drive Setup', 'offense', 'derive_tendency_triplethreatshot'),
-    ('Tendencies/ATTACKSTRONGONDRIVE', 'Tendencies', 'Driving', 'offense', 'derive_tendency_attackstrongondrive'),
-    ('Tendencies/DRIVE', 'Tendencies', 'Driving', 'offense', 'derive_tendency_drive'),
-    ('Tendencies/DRIVERIGHT', 'Tendencies', 'Driving', 'offense', 'derive_tendency_driveright'),
-    ('Tendencies/DRIVINGBEHINDTHEBACK', 'Tendencies', 'Driving', 'offense', 'derive_tendency_drivingbehindtheback'),
-    ('Tendencies/DRIBBLECROSSOVER', 'Tendencies', 'Driving', 'offense', 'derive_tendency_drivingcrossover'),
-    ('Tendencies/DRIVINGDOUBLECROSSOVER', 'Tendencies', 'Driving', 'offense', 'derive_tendency_drivingdoublecrossover'),
-    ('Tendencies/DRIVINGDRIBBLEHESITATION', 'Tendencies', 'Driving', 'offense', 'derive_tendency_drivingdribblehesitation'),
-    ('Tendencies/DRIVINGHALFSPIN', 'Tendencies', 'Driving', 'offense', 'derive_tendency_drivinghalfspin'),
-    ('Tendencies/DRIVINGINANDOUT', 'Tendencies', 'Driving', 'offense', 'derive_tendency_drivinginandout'),
-    ('Tendencies/DRIBBLESPIN', 'Tendencies', 'Driving', 'offense', 'derive_tendency_drivingspin'),
-    ('Tendencies/DRIVINGSTEPBACK', 'Tendencies', 'Driving', 'offense', 'derive_tendency_drivingstepback'),
-    ('Tendencies/NODRIVINGDRIBBLEMOVE', 'Tendencies', 'Driving', 'offense', 'derive_tendency_nodrivingdribblemove'),
-    ('Tendencies/OFFSCREENDRIVE', 'Tendencies', 'Driving', 'offense', 'derive_tendency_offscreendrive'),
-    ('Tendencies/SPOTUPDRIVE', 'Tendencies', 'Driving', 'offense', 'derive_tendency_spotupdrive'),
-    ('Tendencies/ALLEYOOPPASS', 'Tendencies', 'Passing', 'offense', 'derive_tendency_alleyoopass'),
-    ('Tendencies/DISHTOOPENMAN', 'Tendencies', 'Passing', 'offense', 'derive_tendency_dishtoopenman'),
-    ('Tendencies/FLASHYPASS', 'Tendencies', 'Passing', 'offense', 'derive_tendency_flashypass'),
-    ('Tendencies/POSTAGGRESSIVEBACKDOWN', 'Tendencies', 'Post Game', 'offense', 'derive_tendency_postaggressivebackdown'),
-    ('Tendencies/POSTBACKDOWN', 'Tendencies', 'Post Game', 'offense', 'derive_tendency_postbackdown'),
-    ('Tendencies/POSTDRIVE', 'Tendencies', 'Post Game', 'offense', 'derive_tendency_postdrive'),
-    ('Tendencies/POSTFACEUP', 'Tendencies', 'Post Game', 'offense', 'derive_tendency_postfaceup'),
-    ('Tendencies/POSTHOPSTEP', 'Tendencies', 'Post Game', 'offense', 'derive_tendency_posthopstep'),
-    ('Tendencies/POSTSPIN', 'Tendencies', 'Post Game', 'offense', 'derive_tendency_postspin'),
-    ('Tendencies/POSTUP', 'Tendencies', 'Post Game', 'offense', 'derive_tendency_postup'),
-    ('Tendencies/ISOVSAVERAGEDEFENDER', 'Tendencies', 'Freelance', 'mental', 'derive_tendency_isovsaveragedefender'),
-    ('Tendencies/ISOVSELITEDEFENDER', 'Tendencies', 'Freelance', 'mental', 'derive_tendency_isovselitedefender'),
-    ('Tendencies/ISOVSGOODDEFENDER', 'Tendencies', 'Freelance', 'mental', 'derive_tendency_isovsgooddefender'),
-    ('Tendencies/ISOVSPOORDEFENDER', 'Tendencies', 'Freelance', 'mental', 'derive_tendency_isovspoordefender'),
-    ('Tendencies/PLAYDISCIPLINE', 'Tendencies', 'Freelance', 'mental', 'derive_tendency_playdiscipline'),
-    ('Tendencies/ROLLVSPOP', 'Tendencies', 'Freelance', 'mental', 'derive_tendency_rollvspop'),
-    ('Tendencies/TOUCHES', 'Tendencies', 'Freelance', 'mental', 'derive_tendency_touches'),
-    ('Tendencies/TRANSITIONSPOTUP', 'Tendencies', 'Freelance', 'mental', 'derive_tendency_transitionspotup'),
-    ('Tendencies/BLOCKSHOT', 'Tendencies', 'Defense', 'defense', 'derive_tendency_blockshot'),
-    ('Tendencies/CONTESTSHOT', 'Tendencies', 'Defense', 'defense', 'derive_tendency_contestshot'),
-    ('Tendencies/FOUL', 'Tendencies', 'Defense', 'defense', 'derive_tendency_foul'),
-    ('Tendencies/HARDFOUL', 'Tendencies', 'Defense', 'defense', 'derive_tendency_hardfoul'),
-    ('Tendencies/ONBALLSTEAL', 'Tendencies', 'Defense', 'defense', 'derive_tendency_onballsteal'),
-    ('Tendencies/PASSINTERCEPTION', 'Tendencies', 'Defense', 'defense', 'derive_tendency_passinterception'),
-    ('Tendencies/TAKECHARGE', 'Tendencies', 'Defense', 'defense', 'derive_tendency_takecharge'),
+    'Tendencies/CRASH': ('offense', 'derive_tendency_crash'),
+    'Tendencies/NOSETUPDRIBBLE': ('offense', 'derive_tendency_setupdribble'),
+    'Tendencies/SETUPWITHHESITATION': ('offense', 'derive_tendency_setupwithhesitation'),
+    'Tendencies/SETUPWITHSIZEUP': ('offense', 'derive_tendency_setupwithsizeup'),
+    'Tendencies/TRIPLETHREATIDLE': ('offense', 'derive_tendency_triplethreatidle'),
+    'Tendencies/TRIPLETHREATJABSTEP': ('offense', 'derive_tendency_triplethreatjab'),
+    'Tendencies/TRIPLETHREATPUMPFAKE': ('offense', 'derive_tendency_triplethreatpumpfake'),
+    'Tendencies/THREATTRIPLESHOT': ('offense', 'derive_tendency_triplethreatshot'),
+    'Tendencies/ATTACKSTRONGONDRIVE': ('offense', 'derive_tendency_attackstrongondrive'),
+    'Tendencies/DRIVE': ('offense', 'derive_tendency_drive'),
+    'Tendencies/DRIVERIGHT': ('offense', 'derive_tendency_driveright'),
+    'Tendencies/DRIVINGBEHINDTHEBACK': ('offense', 'derive_tendency_drivingbehindtheback'),
+    'Tendencies/DRIBBLECROSSOVER': ('offense', 'derive_tendency_drivingcrossover'),
+    'Tendencies/DRIVINGDOUBLECROSSOVER': ('offense', 'derive_tendency_drivingdoublecrossover'),
+    'Tendencies/DRIVINGDRIBBLEHESITATION': ('offense', 'derive_tendency_drivingdribblehesitation'),
+    'Tendencies/DRIVINGHALFSPIN': ('offense', 'derive_tendency_drivinghalfspin'),
+    'Tendencies/DRIVINGINANDOUT': ('offense', 'derive_tendency_drivinginandout'),
+    'Tendencies/DRIBBLESPIN': ('offense', 'derive_tendency_drivingspin'),
+    'Tendencies/DRIVINGSTEPBACK': ('offense', 'derive_tendency_drivingstepback'),
+    'Tendencies/NODRIVINGDRIBBLEMOVE': ('offense', 'derive_tendency_nodrivingdribblemove'),
+    'Tendencies/OFFSCREENDRIVE': ('offense', 'derive_tendency_offscreendrive'),
+    'Tendencies/SPOTUPDRIVE': ('offense', 'derive_tendency_spotupdrive'),
+    'Tendencies/ALLEYOOPPASS': ('offense', 'derive_tendency_alleyoopass'),
+    'Tendencies/DISHTOOPENMAN': ('offense', 'derive_tendency_dishtoopenman'),
+    'Tendencies/FLASHYPASS': ('offense', 'derive_tendency_flashypass'),
+    'Tendencies/POSTAGGRESSIVEBACKDOWN': ('offense', 'derive_tendency_postaggressivebackdown'),
+    'Tendencies/POSTBACKDOWN': ('offense', 'derive_tendency_postbackdown'),
+    'Tendencies/POSTDRIVE': ('offense', 'derive_tendency_postdrive'),
+    'Tendencies/POSTFACEUP': ('offense', 'derive_tendency_postfaceup'),
+    'Tendencies/POSTHOPSTEP': ('offense', 'derive_tendency_posthopstep'),
+    'Tendencies/POSTSPIN': ('offense', 'derive_tendency_postspin'),
+    'Tendencies/POSTUP': ('offense', 'derive_tendency_postup'),
+    'Tendencies/ISOVSAVERAGEDEFENDER': ('mental', 'derive_tendency_isovsaveragedefender'),
+    'Tendencies/ISOVSELITEDEFENDER': ('mental', 'derive_tendency_isovselitedefender'),
+    'Tendencies/ISOVSGOODDEFENDER': ('mental', 'derive_tendency_isovsgooddefender'),
+    'Tendencies/ISOVSPOORDEFENDER': ('mental', 'derive_tendency_isovspoordefender'),
+    'Tendencies/PLAYDISCIPLINE': ('mental', 'derive_tendency_playdiscipline'),
+    'Tendencies/ROLLVSPOP': ('mental', 'derive_tendency_rollvspop'),
+    'Tendencies/TOUCHES': ('mental', 'derive_tendency_touches'),
+    'Tendencies/TRANSITIONSPOTUP': ('mental', 'derive_tendency_transitionspotup'),
+    'Tendencies/BLOCKSHOT': ('defense', 'derive_tendency_blockshot'),
+    'Tendencies/CONTESTSHOT': ('defense', 'derive_tendency_contestshot'),
+    'Tendencies/FOUL': ('defense', 'derive_tendency_foul'),
+    'Tendencies/HARDFOUL': ('defense', 'derive_tendency_hardfoul'),
+    'Tendencies/ONBALLSTEAL': ('defense', 'derive_tendency_onballsteal'),
+    'Tendencies/PASSINTERCEPTION': ('defense', 'derive_tendency_passinterception'),
+    'Tendencies/TAKECHARGE': ('defense', 'derive_tendency_takecharge'),
 
-    ('Tendencies/3POINTSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_3pointshot'),
-    ('Tendencies/3POINTCENTERLEFTSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_3pointcenterleftshot'),
-    ('Tendencies/3POINTCENTERRIGHTSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_3pointcenterrightshot'),
-    ('Tendencies/3POINTCENTERSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_3pointcentershot'),
-    ('Tendencies/3POINTLEFTSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_3pointleftshot'),
-    ('Tendencies/3POINTOFFSCREENSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_3pointoffscreenshot'),
-    ('Tendencies/3POINTRIGHTSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_3pointrightshot'),
-    ('Tendencies/3POINTSPOTUPSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_3pointspotupshot'),
-    ('Tendencies/ALLEYOOP', 'Tendencies', 'Layups And Dunks', 'offense', 'derive_tendency_alleyoop'),
-    ('Tendencies/BASKETUNDERSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_basketundershot'),
-    ('Tendencies/CENTERLEFTMIDSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_centerleftmidshot'),
-    ('Tendencies/CENTERMIDRIGHTSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_centermidrightshot'),
-    ('Tendencies/CENTERMIDSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_centermidshot'),
-    ('Tendencies/CLOSESHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_closeshot'),
-    ('Tendencies/CLOSELEFTSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_closeleftshot'),
-    ('Tendencies/CLOSEMIDDLESHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_closemiddleshot'),
-    ('Tendencies/CLOSERIGHTSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_closerightshot'),
-    ('Tendencies/CONTESTEDJUMPER3POINT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_contestedjumper3point'),
-    ('Tendencies/CONTESTEDJUMPERMID', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_contestedjumpermid'),
-    ('Tendencies/CONTESTEDJUMPERMIDRANGE', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_contestedjumpermidrange'),
-    ('Tendencies/DRIVEPULLUP3POINT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_drivepullup3point'),
-    ('Tendencies/DRIVEPULLUPMID', 'Tendencies', 'Driving', 'offense', 'derive_tendency_drivepullupmid'),
-    ('Tendencies/DRIVEPULLUPMIDRANGE', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_drivepullupmidrange'),
-    ('Tendencies/DRIVINGDUNK', 'Tendencies', 'Layups And Dunks', 'offense', 'derive_tendency_drivingdunk'),
-    ('Tendencies/DRIVINGLAYUP', 'Tendencies', 'Layups And Dunks', 'offense', 'derive_tendency_drivinglayup'),
-    ('Tendencies/EUROSTEPLAYUP', 'Tendencies', 'Layups And Dunks', 'offense', 'derive_tendency_eurosteplayup'),
-    ('Tendencies/FLASHYDUNK', 'Tendencies', 'Layups And Dunks', 'offense', 'derive_tendency_flashydunk'),
-    ('Tendencies/FLOATER', 'Tendencies', 'Layups And Dunks', 'offense', 'derive_tendency_floater'),
-    ('Tendencies/FROMPOSTSHOT', 'Tendencies', 'Post Game', 'offense', 'derive_tendency_frompostshot'),
-    ('Tendencies/HOPPOSTSHOT', 'Tendencies', 'Post Game', 'offense', 'derive_tendency_hoppostshot'),
-    ('Tendencies/HOPSTEPLAYUP', 'Tendencies', 'Layups And Dunks', 'offense', 'derive_tendency_hopsteplayup'),
-    ('Tendencies/LEFTMIDSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_leftmidshot'),
-    ('Tendencies/MIDOFFSCREENSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_midoffscreenshot'),
-    ('Tendencies/MIDRIGHTSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_midrightshot'),
-    ('Tendencies/MIDSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_midshot'),
-    ('Tendencies/MIDSPOTUPSHOT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_midspotupshot'),
-    ('Tendencies/POSTDROPSTEP', 'Tendencies', 'Post Game', 'offense', 'derive_tendency_postdropstep'),
-    ('Tendencies/POSTFADELEFT', 'Tendencies', 'Post Game', 'offense', 'derive_tendency_postfadeleft'),
-    ('Tendencies/POSTFADERIGHT', 'Tendencies', 'Post Game', 'offense', 'derive_tendency_postfaderight'),
-    ('Tendencies/POSTHOOKLEFT', 'Tendencies', 'Post Game', 'offense', 'derive_tendency_posthookleft'),
-    ('Tendencies/POSTHOOKRIGHT', 'Tendencies', 'Post Game', 'offense', 'derive_tendency_posthookright'),
-    ('Tendencies/POSTSHIMMYSHOT', 'Tendencies', 'Post Game', 'offense', 'derive_tendency_postshimmyshot'),
-    ('Tendencies/POSTSTEPBACKSHOT', 'Tendencies', 'Post Game', 'offense', 'derive_tendency_poststepbackshot'),
-    ('Tendencies/POSTUPANDUNDER', 'Tendencies', 'Post Game', 'offense', 'derive_tendency_postupandunder'),
-    ('Tendencies/PUTBACK', 'Tendencies', 'Layups And Dunks', 'rebounding', 'derive_tendency_putback'),
-    ('Tendencies/PUTBACKDUNK', 'Tendencies', 'Layups And Dunks', 'rebounding', 'derive_tendency_putbackdunk'),
-    ('Tendencies/SPINJUMPER', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_spinjumper'),
-    ('Tendencies/SPINLAYUP', 'Tendencies', 'Layups And Dunks', 'offense', 'derive_tendency_spinlayup'),
-    ('Tendencies/STANDINGDUNK', 'Tendencies', 'Layups And Dunks', 'offense', 'derive_tendency_standingdunk'),
-    ('Tendencies/STEPBACKJUMPER3POINT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_stepbackjumper3point'),
-    ('Tendencies/STEPBACKJUMPERMID', 'Tendencies', 'Drive Setup', 'offense', 'derive_tendency_stepbackjumpermid'),
-    ('Tendencies/STEPBACKJUMPERMIDRANGE', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_stepbackjumpermidrange'),
-    ('Tendencies/STEPTHROUGH', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_stepthrough'),
-    ('Tendencies/TRANSITIONPULLUP3POINT', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_transitionpullup3point'),
-    ('Tendencies/USEGLASS', 'Tendencies', 'Jump Shooting', 'offense', 'derive_tendency_useglass'),
-    ('Tendencies/SHOT', 'Tendencies', 'Tendencies', 'offense', 'derive_tendency_shot'),
-)
+    'Tendencies/3POINTSHOT': ('offense', 'derive_tendency_3pointshot'),
+    'Tendencies/3POINTCENTERLEFTSHOT': ('offense', 'derive_tendency_3pointcenterleftshot'),
+    'Tendencies/3POINTCENTERRIGHTSHOT': ('offense', 'derive_tendency_3pointcenterrightshot'),
+    'Tendencies/3POINTCENTERSHOT': ('offense', 'derive_tendency_3pointcentershot'),
+    'Tendencies/3POINTLEFTSHOT': ('offense', 'derive_tendency_3pointleftshot'),
+    'Tendencies/3POINTOFFSCREENSHOT': ('offense', 'derive_tendency_3pointoffscreenshot'),
+    'Tendencies/3POINTRIGHTSHOT': ('offense', 'derive_tendency_3pointrightshot'),
+    'Tendencies/3POINTSPOTUPSHOT': ('offense', 'derive_tendency_3pointspotupshot'),
+    'Tendencies/ALLEYOOP': ('offense', 'derive_tendency_alleyoop'),
+    'Tendencies/BASKETUNDERSHOT': ('offense', 'derive_tendency_basketundershot'),
+    'Tendencies/CENTERLEFTMIDSHOT': ('offense', 'derive_tendency_centerleftmidshot'),
+    'Tendencies/CENTERMIDRIGHTSHOT': ('offense', 'derive_tendency_centermidrightshot'),
+    'Tendencies/CENTERMIDSHOT': ('offense', 'derive_tendency_centermidshot'),
+    'Tendencies/CLOSESHOT': ('offense', 'derive_tendency_closeshot'),
+    'Tendencies/CLOSELEFTSHOT': ('offense', 'derive_tendency_closeleftshot'),
+    'Tendencies/CLOSEMIDDLESHOT': ('offense', 'derive_tendency_closemiddleshot'),
+    'Tendencies/CLOSERIGHTSHOT': ('offense', 'derive_tendency_closerightshot'),
+    'Tendencies/CONTESTEDJUMPER3POINT': ('offense', 'derive_tendency_contestedjumper3point'),
+    'Tendencies/CONTESTEDJUMPERMID': ('offense', 'derive_tendency_contestedjumpermid'),
+    'Tendencies/CONTESTEDJUMPERMIDRANGE': ('offense', 'derive_tendency_contestedjumpermidrange'),
+    'Tendencies/DRIVEPULLUP3POINT': ('offense', 'derive_tendency_drivepullup3point'),
+    'Tendencies/DRIVEPULLUPMID': ('offense', 'derive_tendency_drivepullupmid'),
+    'Tendencies/DRIVEPULLUPMIDRANGE': ('offense', 'derive_tendency_drivepullupmidrange'),
+    'Tendencies/DRIVINGDUNK': ('offense', 'derive_tendency_drivingdunk'),
+    'Tendencies/DRIVINGLAYUP': ('offense', 'derive_tendency_drivinglayup'),
+    'Tendencies/EUROSTEPLAYUP': ('offense', 'derive_tendency_eurosteplayup'),
+    'Tendencies/FLASHYDUNK': ('offense', 'derive_tendency_flashydunk'),
+    'Tendencies/FLOATER': ('offense', 'derive_tendency_floater'),
+    'Tendencies/FROMPOSTSHOT': ('offense', 'derive_tendency_frompostshot'),
+    'Tendencies/HOPPOSTSHOT': ('offense', 'derive_tendency_hoppostshot'),
+    'Tendencies/HOPSTEPLAYUP': ('offense', 'derive_tendency_hopsteplayup'),
+    'Tendencies/LEFTMIDSHOT': ('offense', 'derive_tendency_leftmidshot'),
+    'Tendencies/MIDOFFSCREENSHOT': ('offense', 'derive_tendency_midoffscreenshot'),
+    'Tendencies/MIDRIGHTSHOT': ('offense', 'derive_tendency_midrightshot'),
+    'Tendencies/MIDSHOT': ('offense', 'derive_tendency_midshot'),
+    'Tendencies/MIDSPOTUPSHOT': ('offense', 'derive_tendency_midspotupshot'),
+    'Tendencies/POSTDROPSTEP': ('offense', 'derive_tendency_postdropstep'),
+    'Tendencies/POSTFADELEFT': ('offense', 'derive_tendency_postfadeleft'),
+    'Tendencies/POSTFADERIGHT': ('offense', 'derive_tendency_postfaderight'),
+    'Tendencies/POSTHOOKLEFT': ('offense', 'derive_tendency_posthookleft'),
+    'Tendencies/POSTHOOKRIGHT': ('offense', 'derive_tendency_posthookright'),
+    'Tendencies/POSTSHIMMYSHOT': ('offense', 'derive_tendency_postshimmyshot'),
+    'Tendencies/POSTSTEPBACKSHOT': ('offense', 'derive_tendency_poststepbackshot'),
+    'Tendencies/POSTUPANDUNDER': ('offense', 'derive_tendency_postupandunder'),
+    'Tendencies/PUTBACK': ('rebounding', 'derive_tendency_putback'),
+    'Tendencies/PUTBACKDUNK': ('rebounding', 'derive_tendency_putbackdunk'),
+    'Tendencies/SPINJUMPER': ('offense', 'derive_tendency_spinjumper'),
+    'Tendencies/SPINLAYUP': ('offense', 'derive_tendency_spinlayup'),
+    'Tendencies/STANDINGDUNK': ('offense', 'derive_tendency_standingdunk'),
+    'Tendencies/STEPBACKJUMPER3POINT': ('offense', 'derive_tendency_stepbackjumper3point'),
+    'Tendencies/STEPBACKJUMPERMID': ('offense', 'derive_tendency_stepbackjumpermid'),
+    'Tendencies/STEPBACKJUMPERMIDRANGE': ('offense', 'derive_tendency_stepbackjumpermidrange'),
+    'Tendencies/STEPTHROUGH': ('offense', 'derive_tendency_stepthrough'),
+    'Tendencies/TRANSITIONPULLUP3POINT': ('offense', 'derive_tendency_transitionpullup3point'),
+    'Tendencies/USEGLASS': ('offense', 'derive_tendency_useglass'),
+    'Tendencies/SHOT': ('offense', 'derive_tendency_shot'),
+}
 _RULE_MODULES: dict[str, Any] = {
     "offense": offense,
     "defense": defense,
@@ -227,8 +293,8 @@ _RULE_MODULES: dict[str, Any] = {
     "mental": mental,
 }
 PLAYER_RULE_SCHEME: dict[str, PlayerRuleSpec] = {
-    field_key: PlayerRuleSpec(field_key=field_key, section=section, group=group, module=module, function=function)
-    for field_key, section, group, module, function in _RULE_ROWS
+    field_key: PlayerRuleSpec(field_key=field_key, module=module, function=function)
+    for field_key, (module, function) in _RULE_BINDINGS.items()
 }
 _COMPARISON_POPULATION_CACHE: dict[
     tuple[int, int],
@@ -294,9 +360,8 @@ def derive_player_rule_values(
         evidence,
         positions=positions,
         league_player_rows=league_player_rows,
+        active_field_keys=active_field_keys,
     )
-    if active_field_keys is not None:
-        formula_values = {key: value for key, value in formula_values.items() if key in active_field_keys}
     return PlayerRuleResult(values=formula_values)
 
 
@@ -305,12 +370,20 @@ def derive_formula_rule_values(
     *,
     positions: PositionSelection | None = None,
     league_player_rows: Any = (),
+    active_field_keys: set[str] | None = None,
 ) -> dict[str, RuleValue]:
     if not _has_required_games_played(evidence):
         return {}
+    # Drive from the editor's field list when it is supplied: a field is
+    # generated only if the loaded game exposes it AND a rule is bound to it.
+    # Otherwise (standalone/tests) fall back to every bound field.
+    field_keys = tuple(sorted(active_field_keys)) if active_field_keys is not None else tuple(PLAYER_RULE_SCHEME)
     values: dict[str, RuleValue] = {}
     rows = _selected_comparison_rows(evidence, league_player_rows)
-    for field_key, spec in PLAYER_RULE_SCHEME.items():
+    for field_key in field_keys:
+        spec = PLAYER_RULE_SCHEME.get(field_key)
+        if spec is None:
+            continue
         rule = getattr(_RULE_MODULES[spec.module], spec.function, None)
         if rule is None:
             continue
@@ -325,13 +398,81 @@ def derive_formula_rule_values(
         if value is None:
             continue
         values[field_key] = value
-    return values
+    # Pre-shot-clock (<=1954) playstyle post-pass: push each archetype toward how
+    # it was actually played in its era. No-op for every later season and when
+    # PLAYERGEN_ERA_ROLE_PLAYSTYLE is disabled.
+    values = _apply_era_role_playstyle(evidence, positions, values)
+    return _apply_shot_family_gate(values)
 
 
-def derive_neighbor_rule_values(evidence: PlayerEvidence, positions: PositionSelection, *, model: Any = None) -> dict[str, RuleValue]:
-    # The current neighbor suggestion contract omits source package run_id/player_index,
-    # GP, season, and league. Those values cannot be admitted as generation evidence.
-    return {}
+# ATD "Shot family vs subtypes": Shot Mid and Shot Three carry the total share for
+# their range, and the spot-up / off-screen / pull-up / stepback / contested /
+# directional values only choose the *route* once a shot of that range is taken. A
+# route cannot be taken more often than the range it belongs to exists, so a family
+# total of zero has to zero its whole family -- otherwise a player who took no
+# mid-range shots all season still carries a contested-mid or pull-up-mid branch and
+# the engine can select it.
+#
+# Deliberately not listed: SPINJUMPER and THREATTRIPLESHOT. Neither is named for a
+# range on the committee sheet (the game fields are "Spin Jumper Tendency" and
+# "Triple Threat Shoot"), and the sheet's triple-threat notes treat Shoot as its own
+# conditional stationary-catch branch rather than a member of a range family.
+_SHOT_FAMILY_GATES: dict[str, tuple[str, ...]] = {
+    "Tendencies/MIDSHOT": (
+        "Tendencies/MIDSPOTUPSHOT",
+        "Tendencies/MIDOFFSCREENSHOT",
+        "Tendencies/CONTESTEDJUMPERMID",
+        "Tendencies/CONTESTEDJUMPERMIDRANGE",
+        "Tendencies/STEPBACKJUMPERMID",
+        "Tendencies/STEPBACKJUMPERMIDRANGE",
+        "Tendencies/DRIVEPULLUPMID",
+        "Tendencies/DRIVEPULLUPMIDRANGE",
+        "Tendencies/LEFTMIDSHOT",
+        "Tendencies/MIDRIGHTSHOT",
+        "Tendencies/CENTERMIDSHOT",
+        "Tendencies/CENTERLEFTMIDSHOT",
+        "Tendencies/CENTERMIDRIGHTSHOT",
+    ),
+    "Tendencies/3POINTSHOT": (
+        "Tendencies/3POINTSPOTUPSHOT",
+        "Tendencies/3POINTOFFSCREENSHOT",
+        "Tendencies/CONTESTEDJUMPER3POINT",
+        "Tendencies/STEPBACKJUMPER3POINT",
+        "Tendencies/DRIVEPULLUP3POINT",
+        "Tendencies/TRANSITIONPULLUP3POINT",
+        "Tendencies/3POINTLEFTSHOT",
+        "Tendencies/3POINTRIGHTSHOT",
+        "Tendencies/3POINTCENTERSHOT",
+        "Tendencies/3POINTCENTERLEFTSHOT",
+        "Tendencies/3POINTCENTERRIGHTSHOT",
+    ),
+}
+
+
+def _apply_shot_family_gate(values: dict[str, RuleValue]) -> dict[str, RuleValue]:
+    gated = dict(values)
+    for parent_key, child_keys in _SHOT_FAMILY_GATES.items():
+        parent = gated.get(parent_key)
+        # An absent parent is unresolved evidence, not a zero: only an explicit 0
+        # closes the family.
+        if parent is None or parent.value != 0:
+            continue
+        for child_key in child_keys:
+            child = gated.get(child_key)
+            if child is None or child.value == 0:
+                continue
+            gated[child_key] = replace(
+                child,
+                value=0,
+                source_rule=f"{child.source_rule}_shot_family_gate",
+                evidence_keys=child.evidence_keys
+                + (
+                    f"{parent_key}=0",
+                    "atd_rule=shot_family_total_gates_its_route_subtypes",
+                    f"ungated_{child_key.split('/')[-1].lower()}={child.value}",
+                ),
+            )
+    return gated
 
 
 def _clamp_rule_value(field_key: str, value: int) -> int:
@@ -351,7 +492,7 @@ def _call_formula_rule(
     league_player_rows: Any,
 ) -> Any:
     if owner_module == "athleticism":
-        return rule(evidence, PLAYER_RULE_SCHEME, league_player_rows, positions)
+        return rule(evidence, None, league_player_rows, positions)
     return rule(evidence, league_player_rows=league_player_rows)
 
 
@@ -474,10 +615,11 @@ __all__ = [
     "PlayerProfileResult",
     "PlayerRuleResult",
     "PlayerRuleSpec",
+    "PositionSelection",
     "ProfileValue",
     "RuleValue",
     "derive_formula_rule_values",
-    "derive_neighbor_rule_values",
     "derive_player_profile_values",
     "derive_player_rule_values",
+    "select_positions_from_evidence",
 ]

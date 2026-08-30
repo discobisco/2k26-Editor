@@ -8,21 +8,12 @@ from typing import Any
 
 from source_data import GeneratorSourceInventory
 
-_DEFAULT_DATABASE_NAME = "NBA_DATA_Master.sqlite"
-_IDENTIFIER_RE = re.compile(r"[^0-9A-Za-z_]+")
-
-
 @dataclass(frozen=True)
 class WorkbookSqliteTable:
     sheet_name: str
     table_name: str
     row_count: int
     column_count: int
-
-
-def default_workbook_database_path(source_root: str | Path | None = None) -> Path:
-    root = Path(source_root).expanduser().resolve() if source_root is not None else GeneratorSourceInventory.from_default().root
-    return root / _DEFAULT_DATABASE_NAME
 
 
 def ensure_workbook_sqlite_database(source_root: str | Path | None = None) -> Path:
@@ -74,18 +65,6 @@ def iter_workbook_sqlite_sheet_rows(database_path: str | Path, sheet_name: str) 
     return tuple(dict(row) for row in rows)
 
 
-def read_sqlite_sheet_rows_for_season(
-    source_root: str | Path,
-    sheet_name: str,
-    season: int,
-    *,
-    limit: int | None = None,
-) -> tuple[dict[str, Any], ...]:
-    database_path = ensure_workbook_sqlite_database(source_root)
-    table_name = _table_name_for_sheet(database_path, sheet_name)
-    return query_rows_for_season(database_path, table_name, season, limit=limit)
-
-
 def query_rows_for_season(
     database_path: str | Path,
     table_name: str,
@@ -131,11 +110,9 @@ def _validate_identifier(identifier: str) -> None:
 
 __all__ = [
     "WorkbookSqliteTable",
-    "default_workbook_database_path",
     "ensure_workbook_sqlite_database",
     "iter_workbook_sqlite_sheet_rows",
     "query_rows_for_season",
-    "read_sqlite_sheet_rows_for_season",
     "workbook_sqlite_sheet_names",
     "workbook_sqlite_tables",
 ]

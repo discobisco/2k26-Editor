@@ -6,13 +6,14 @@ only be calculated from values captured through current game offsets.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence
 
 POSITIONS = ("PG", "SG", "SF", "PF", "C")
 SEASON_GAMES = 82.0
@@ -77,7 +78,52 @@ FEATURES = (
     "team_tov_percent",
     "team_opp_e_fg_percent",
 )
-VITAL_COLUMNS = ("height_inches", "height_cm", "weight_pounds", "weight_kg")
+VITAL_COLUMNS = (
+    "height_inches",
+    "height_cm",
+    "weight_pounds",
+    "weight_kg",
+    "wingspan_inches",
+    "wingspan_cm",
+    "age",
+    "years_pro",
+)
+
+# Bumped whenever the derived candidate_* schema changes (feature/vital columns,
+# play-type table). A stored pool whose fingerprint no longer matches is rebuilt
+# from the immutable raw snapshots instead of being extended in place.
+POOL_SCHEMA_VERSION = 3
+
+PLAY_TYPE_SLOTS = (1, 2, 3, 4)
+_ABSENT_PLAY_TYPE = {"", "NONE", "N/A", "NA", "--"}
+
+# Player Vitals offsets captured verbatim for every package. Version-specific
+# names are all listed; grouped_fields only yields the ones the loaded game
+# exposes, so unused aliases are harmless.
+_CAPTURED_VITAL_ENTRY_NAMES = {
+    "HEIGHT",
+    "WEIGHT",
+    "WEIGHTKG",
+    "WINGSPAN",
+    "WINGSPANCM",
+    "STANDINGREACH",
+    "AGE",
+    "YEARSPRO",
+    "BIRTHDAY",
+    "BIRTHMONTH",
+    "PLAYTYPE1",
+    "PLAYTYPE2",
+    "PLAYTYPE3",
+    "PLAYTYPE4",
+}
+
+
+class PoolCaptureError(RuntimeError):
+    """Raised when a roster capture is incomplete.
+
+    The run is rejected as a whole; nothing is written to the pool. The message
+    lists every missing field so a partial capture can never become a package.
+    """
 
 
 def pool_database_path() -> Path:
@@ -136,49 +182,81 @@ def _next_snapshot_id(connection: sqlite3.Connection) -> str:
     return f"editor_capture_{max(numbers, default=0) + 1:03d}"
 
 
-def pool_source_ids() -> tuple[str, ...]:
-    return stored_pool_snapshot_ids()
+def _schema_fingerprint() -> str:
+    """Identity of the derived candidate_* schema.
+
+    A stored pool whose fingerprint differs (new feature/vital column, play-type
+    table, schema-version bump) is rebuilt from the immutable raw snapshots
+    rather than extended in place.
+    """
+
+    return json.dumps(
+        {"version": POOL_SCHEMA_VERSION, "vitals": list(VITAL_COLUMNS), "features": list(FEATURES)},
+        sort_keys=True,
+    )
 
 
-def source_signature(snapshot_ids: Sequence[str]) -> dict[str, Any]:
-    signature: dict[str, Any] = {}
-    if snapshot_ids and POOL_SQLITE.is_file():
-        with sqlite3.connect(POOL_SQLITE) as connection:
-            _ensure_pool_export_tables(connection)
-            for snapshot_id in snapshot_ids:
-                row = connection.execute(
-                    "SELECT created_at, stats_rows, attribute_rows, tendency_rows, team_stat_rows FROM pool_export_snapshots WHERE snapshot_id = ?",
-                    (snapshot_id,),
-                ).fetchone()
-                if row is not None:
-                    signature[f"snapshot/{snapshot_id}"] = {
-                        "created_at": str(row[0]),
-                        "stats_rows": int(row[1]),
-                        "attribute_rows": int(row[2]),
-                        "tendency_rows": int(row[3]),
-                        "team_stat_rows": int(row[4]),
-                    }
-    return signature
+_SNAPSHOT_ROW_TYPES = ("stats", "attributes", "tendencies", "team_stats")
 
 
-def _pool_manifest_values(path: Path) -> dict[str, str]:
-    if not path.is_file():
-        return {}
-    with sqlite3.connect(path) as connection:
-        try:
-            rows = connection.execute("SELECT key, value FROM pool_manifest").fetchall()
-        except sqlite3.Error:
-            return {}
-    return {str(key): str(value) for key, value in rows}
+def _content_hash_from_row_json(rows_by_type: dict[str, Sequence[str]]) -> str:
+    """Order-independent hash of a run's raw captured rows.
+
+    Identifies a byte-identical recapture of the same roster. Excludes the
+    snapshot timestamp and any derived data — only the captured field values.
+    """
+
+    digest = hashlib.sha256()
+    for row_type in _SNAPSHOT_ROW_TYPES:
+        digest.update(row_type.encode("utf-8"))
+        for row_json in sorted(rows_by_type.get(row_type, ())):
+            digest.update(b"\x1f")
+            digest.update(str(row_json).encode("utf-8"))
+        digest.update(b"\x1e")
+    return digest.hexdigest()
 
 
-def _pool_is_current(snapshot_ids: Sequence[str]) -> bool:
-    manifest = _pool_manifest_values(pool_database_path())
-    if not manifest:
-        return False
-    if json.loads(manifest.get("source_snapshots", "[]")) != list(snapshot_ids):
-        return False
-    return json.loads(manifest.get("snapshot_signature", "{}")) == source_signature(snapshot_ids)
+def _capture_content_hash(
+    stats_rows: Sequence[dict[str, Any]],
+    attribute_rows: Sequence[dict[str, Any]],
+    tendency_rows: Sequence[dict[str, Any]],
+    team_stat_rows: Sequence[dict[str, Any]],
+) -> str:
+    return _content_hash_from_row_json(
+        {
+            "stats": [json.dumps(row, ensure_ascii=False, sort_keys=True) for row in stats_rows],
+            "attributes": [json.dumps(row, ensure_ascii=False, sort_keys=True) for row in attribute_rows],
+            "tendencies": [json.dumps(row, ensure_ascii=False, sort_keys=True) for row in tendency_rows],
+            "team_stats": [json.dumps(row, ensure_ascii=False, sort_keys=True) for row in team_stat_rows],
+        }
+    )
+
+
+def _snapshot_content_hash(connection: sqlite3.Connection, snapshot_id: str) -> str:
+    by_type: dict[str, list[str]] = {}
+    for row_type, row_json in connection.execute(
+        "SELECT row_type, row_json FROM pool_export_rows WHERE snapshot_id = ?",
+        (snapshot_id,),
+    ):
+        by_type.setdefault(str(row_type), []).append(str(row_json))
+    return _content_hash_from_row_json(by_type)
+
+
+def _snapshot_counts(connection: sqlite3.Connection, snapshot_id: str) -> dict[str, Any]:
+    row = connection.execute(
+        "SELECT created_at, stats_rows, attribute_rows, tendency_rows, team_stat_rows "
+        "FROM pool_export_snapshots WHERE snapshot_id = ?",
+        (snapshot_id,),
+    ).fetchone()
+    if row is None:
+        return {"created_at": "", "stats_rows": 0, "attribute_rows": 0, "tendency_rows": 0, "team_stat_rows": 0}
+    return {
+        "created_at": str(row[0]),
+        "stats_rows": int(row[1]),
+        "attribute_rows": int(row[2]),
+        "tendency_rows": int(row[3]),
+        "team_stat_rows": int(row[4]),
+    }
 
 
 def as_float(v: Any) -> Optional[float]:
@@ -359,11 +437,22 @@ def live_vitals(stats: Dict[str, str]) -> Dict[str, Optional[float]]:
     if weight_kg is None and weight_pounds is not None:
         weight_kg = weight_pounds * 0.45359237
 
+    wingspan_inches = as_float(stats.get("wingspan_inches"))
+    wingspan_cm = as_float(stats.get("wingspan_cm"))
+    if wingspan_inches is None and wingspan_cm is not None:
+        wingspan_inches = wingspan_cm / 2.54
+    if wingspan_cm is None and wingspan_inches is not None:
+        wingspan_cm = wingspan_inches * 2.54
+
     return {
         "height_inches": None if height_inches is None else round(float(height_inches), 4),
         "height_cm": None if height_cm is None else round(float(height_cm), 4),
         "weight_pounds": None if weight_pounds is None else round(float(weight_pounds), 4),
         "weight_kg": None if weight_kg is None else round(float(weight_kg), 4),
+        "wingspan_inches": None if wingspan_inches is None else round(float(wingspan_inches), 4),
+        "wingspan_cm": None if wingspan_cm is None else round(float(wingspan_cm), 4),
+        "age": as_float(stats.get("age")),
+        "years_pro": as_float(stats.get("years_pro")),
     }
 
 
@@ -419,116 +508,221 @@ def _stored_snapshot_rows(snapshot_id: str) -> tuple[dict[int, dict[str, str]], 
     return by_type["stats"], by_type["attributes"], by_type["tendencies"], by_type["team_stats"]
 
 
-def load_candidates(snapshot_ids: Sequence[str] | None = None) -> Tuple[List[Dict[str, Any]], List[str]]:
+def _rows_by_index(rows: Sequence[Dict[str, Any]], key: str) -> dict[int, Dict[str, Any]]:
+    out: dict[int, Dict[str, Any]] = {}
+    for row in rows:
+        try:
+            out[int(row[key])] = dict(row)
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
+def _snapshot_play_types(stats: Dict[str, Any]) -> tuple[tuple[int, str], ...]:
+    out: list[tuple[int, str]] = []
+    for slot in PLAY_TYPE_SLOTS:
+        label = str(stats.get(f"play_type_{slot}") or "").strip()
+        if not label or label.upper() in _ABSENT_PLAY_TYPE:
+            continue
+        out.append((slot, label))
+    return tuple(out)
+
+
+def _candidates_from_rows(
+    run_id: str,
+    stats_by_index: dict[int, Dict[str, Any]],
+    attrs_by_index: dict[int, Dict[str, Any]],
+    tends_by_index: dict[int, Dict[str, Any]],
+    team_by_index: dict[int, Dict[str, Any]],
+) -> List[Dict[str, Any]]:
     candidates: List[Dict[str, Any]] = []
-    fieldnames: list[str] = []
-    for run_id in tuple(snapshot_ids or pool_source_ids()):
-        stats_rows, attrs_rows, tends_rows, team_rows = _stored_snapshot_rows(run_id)
-        if not fieldnames and attrs_rows and tends_rows:
-            attr_fields = [c for c in next(iter(attrs_rows.values())).keys() if c not in BASE_COLS]
-            tend_fields = [c for c in next(iter(tends_rows.values())).keys() if c not in BASE_COLS]
-            fieldnames = [f"Attribute::{c}" for c in attr_fields] + [f"Tendency::{c}" for c in tend_fields]
-        for idx, stats in stats_rows.items():
-            positions = parse_positions(stats.get("primary_position"))
-            if not positions:
+    for idx, stats in stats_by_index.items():
+        positions = parse_positions(stats.get("primary_position"))
+        if not positions:
+            continue
+        fields: Dict[str, float] = {}
+        for col, val in attrs_by_index.get(idx, {}).items():
+            if col in BASE_COLS:
                 continue
-            fields: Dict[str, float] = {}
-            for col, val in attrs_rows.get(idx, {}).items():
-                if col in BASE_COLS:
-                    continue
-                v = as_float(val)
-                if v is not None:
-                    fields[f"Attribute::{col}"] = v
-            for col, val in tends_rows.get(idx, {}).items():
-                if col in BASE_COLS:
-                    continue
-                v = as_float(val)
-                if v is not None:
-                    fields[f"Tendency::{col}"] = v
-            team_index = int(stats.get("team_index") or -1)
-            live = live_features(stats)
-            team_all_features = live_team_features(team_rows.get(team_index, {}))
-            team_features = {key: value for key, value in team_all_features.items() if value is not None}
-            player_team_features = {key: value for key, value in live_player_team_features(stats, team_all_features).items() if value is not None}
-            features = {**live, **team_features, **player_team_features}
-            vitals = live_vitals(stats)
-            for pos in positions:
-                candidates.append({
+            v = as_float(val)
+            if v is not None:
+                fields[f"Attribute::{col}"] = v
+        for col, val in tends_by_index.get(idx, {}).items():
+            if col in BASE_COLS:
+                continue
+            v = as_float(val)
+            if v is not None:
+                fields[f"Tendency::{col}"] = v
+        team_index = int(as_float(stats.get("team_index")) or -1)
+        live = live_features(stats)
+        team_all_features = live_team_features(team_by_index.get(team_index, {}))
+        team_features = {key: value for key, value in team_all_features.items() if value is not None}
+        player_team_features = {
+            key: value for key, value in live_player_team_features(stats, team_all_features).items() if value is not None
+        }
+        features = {**live, **team_features, **player_team_features}
+        vitals = live_vitals(stats)
+        play_types = _snapshot_play_types(stats)
+        for pos in positions:
+            candidates.append(
+                {
                     "run_id": run_id,
                     "player_index": idx,
                     "position": pos,
                     "features": features,
                     "vitals": vitals,
                     "fields": fields,
-                })
-    return candidates, fieldnames
+                    "play_types": play_types,
+                }
+            )
+    return candidates
 
 
-def write_pool_database(
-    *,
-    snapshot_ids: Sequence[str],
+def _snapshot_candidates(run_id: str) -> List[Dict[str, Any]]:
+    stats_rows, attrs_rows, tends_rows, team_rows = _stored_snapshot_rows(run_id)
+    return _candidates_from_rows(run_id, stats_rows, attrs_rows, tends_rows, team_rows)
+
+
+_CANDIDATE_TABLE_SQL = (
+    "DROP TABLE IF EXISTS pool_runs",
+    "DROP TABLE IF EXISTS candidate_pool",
+    "DROP TABLE IF EXISTS candidate_fields",
+    "DROP TABLE IF EXISTS candidate_play_types",
+)
+
+
+def _ensure_pool_tables(connection: sqlite3.Connection) -> None:
+    _ensure_pool_export_tables(connection)
+    connection.executescript(
+        f"""
+        CREATE TABLE IF NOT EXISTS pool_runs (
+            run_id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL DEFAULT '',
+            stats_rows INTEGER NOT NULL DEFAULT 0,
+            attribute_rows INTEGER NOT NULL DEFAULT 0,
+            tendency_rows INTEGER NOT NULL DEFAULT 0,
+            team_stat_rows INTEGER NOT NULL DEFAULT 0,
+            candidate_position_rows INTEGER NOT NULL DEFAULT 0,
+            play_type_rows INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS candidate_pool (
+            run_id TEXT NOT NULL,
+            player_index INTEGER NOT NULL,
+            position TEXT NOT NULL,
+            {_feature_columns_sql()}
+        );
+        CREATE TABLE IF NOT EXISTS candidate_fields (
+            run_id TEXT NOT NULL,
+            player_index INTEGER NOT NULL,
+            position TEXT NOT NULL,
+            field_type TEXT NOT NULL,
+            input_field TEXT NOT NULL,
+            value REAL NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS candidate_play_types (
+            run_id TEXT NOT NULL,
+            player_index INTEGER NOT NULL,
+            position TEXT NOT NULL,
+            slot INTEGER NOT NULL,
+            play_type TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS pool_manifest (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS idx_candidate_pool_run ON candidate_pool(run_id);
+        CREATE INDEX IF NOT EXISTS idx_candidate_fields_run ON candidate_fields(run_id);
+        CREATE INDEX IF NOT EXISTS idx_candidate_play_types_run ON candidate_play_types(run_id);
+        """
+    )
+
+
+def _pool_schema_matches(connection: sqlite3.Connection) -> bool:
+    try:
+        row = connection.execute("SELECT value FROM pool_manifest WHERE key = 'schema_fingerprint'").fetchone()
+    except sqlite3.Error:
+        return False
+    return row is not None and str(row[0]) == _schema_fingerprint()
+
+
+def _reset_candidate_tables(connection: sqlite3.Connection) -> None:
+    for statement in _CANDIDATE_TABLE_SQL:
+        connection.execute(statement)
+    _ensure_pool_tables(connection)
+
+
+def _write_run_candidates(
+    connection: sqlite3.Connection,
+    run_id: str,
     candidates: Sequence[Dict[str, Any]],
-    fieldnames: Sequence[str],
-) -> dict[str, Any]:
-    db_path = pool_database_path()
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    signature = source_signature(snapshot_ids)
-    feature_columns_sql = _feature_columns_sql()
+    counts: dict[str, Any],
+) -> int:
+    connection.execute("DELETE FROM candidate_pool WHERE run_id = ?", (run_id,))
+    connection.execute("DELETE FROM candidate_fields WHERE run_id = ?", (run_id,))
+    connection.execute("DELETE FROM candidate_play_types WHERE run_id = ?", (run_id,))
     insert_sql = _candidate_pool_insert_sql()
-    with sqlite3.connect(db_path) as connection:
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.executescript(
-            f"""
-            DROP TABLE IF EXISTS pool_runs;
-            DROP TABLE IF EXISTS candidate_pool;
-            DROP TABLE IF EXISTS candidate_fields;
-            DROP TABLE IF EXISTS pool_manifest;
-            CREATE TABLE pool_runs (
-                run_id TEXT PRIMARY KEY
-            );
-            CREATE TABLE candidate_pool (
-                run_id TEXT NOT NULL,
-                player_index INTEGER NOT NULL,
-                position TEXT NOT NULL,
-                {feature_columns_sql}
-            );
-            CREATE TABLE candidate_fields (
-                run_id TEXT NOT NULL,
-                player_index INTEGER NOT NULL,
-                position TEXT NOT NULL,
-                field_type TEXT NOT NULL,
-                input_field TEXT NOT NULL,
-                value REAL NOT NULL
-            );
-            CREATE TABLE pool_manifest (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-            """
-        )
-        connection.executemany("INSERT INTO pool_runs VALUES (?)", ((snapshot_id,) for snapshot_id in snapshot_ids))
-        for candidate in candidates:
-            connection.execute(insert_sql, _candidate_pool_values(candidate))
-            for field_key, value in candidate["fields"].items():
-                field_type, input_field = field_key.split("::", 1)
-                connection.execute(
-                    "INSERT INTO candidate_fields VALUES (?, ?, ?, ?, ?, ?)",
-                    (candidate["run_id"], int(candidate["player_index"]), candidate["position"], field_type, input_field, float(value)),
-                )
-        manifest = {
-            "source_snapshots": json.dumps(list(snapshot_ids)),
-            "snapshot_signature": json.dumps(signature, sort_keys=True),
-            "data_contract": "game-offset-derived inputs to exact captured fields",
-            "features": json.dumps(list(FEATURES)),
-            "vital_columns": json.dumps(list(VITAL_COLUMNS)),
-            "candidate_rows": str(len({(c["run_id"], c["player_index"]) for c in candidates})),
-            "candidate_position_rows": str(len(candidates)),
-            "fieldnames": json.dumps(list(fieldnames)),
-        }
-        connection.executemany("INSERT INTO pool_manifest VALUES (?, ?)", manifest.items())
-        connection.commit()
+    play_type_rows = 0
+    for candidate in candidates:
+        connection.execute(insert_sql, _candidate_pool_values(candidate))
+        player_index = int(candidate["player_index"])
+        for field_key, value in candidate["fields"].items():
+            field_type, input_field = field_key.split("::", 1)
+            connection.execute(
+                "INSERT INTO candidate_fields VALUES (?, ?, ?, ?, ?, ?)",
+                (run_id, player_index, candidate["position"], field_type, input_field, float(value)),
+            )
+        for slot, label in candidate.get("play_types", ()):
+            connection.execute(
+                "INSERT INTO candidate_play_types VALUES (?, ?, ?, ?, ?)",
+                (run_id, player_index, candidate["position"], int(slot), str(label)),
+            )
+            play_type_rows += 1
+    connection.execute(
+        "INSERT OR REPLACE INTO pool_runs "
+        "(run_id, created_at, stats_rows, attribute_rows, tendency_rows, team_stat_rows, candidate_position_rows, play_type_rows) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            run_id,
+            str(counts.get("created_at", "")),
+            int(counts.get("stats_rows", 0)),
+            int(counts.get("attribute_rows", 0)),
+            int(counts.get("tendency_rows", 0)),
+            int(counts.get("team_stat_rows", 0)),
+            len(candidates),
+            play_type_rows,
+        ),
+    )
+    return play_type_rows
+
+
+def _refresh_pool_manifest(connection: sqlite3.Connection) -> dict[str, int | list[str]]:
+    runs = [str(row[0]) for row in connection.execute("SELECT run_id FROM pool_runs ORDER BY created_at, run_id")]
+    position_rows = int(connection.execute("SELECT COUNT(*) FROM candidate_pool").fetchone()[0])
+    player_rows = int(
+        connection.execute("SELECT COUNT(*) FROM (SELECT DISTINCT run_id, player_index FROM candidate_pool)").fetchone()[0]
+    )
+    play_type_rows = int(connection.execute("SELECT COUNT(*) FROM candidate_play_types").fetchone()[0])
+    by_position = {
+        pos: int(connection.execute("SELECT COUNT(*) FROM candidate_pool WHERE position = ?", (pos,)).fetchone()[0])
+        for pos in POSITIONS
+    }
+    manifest = {
+        "schema_fingerprint": _schema_fingerprint(),
+        "schema_version": str(POOL_SCHEMA_VERSION),
+        "data_contract": "game-offset-derived inputs to exact captured fields",
+        "features": json.dumps(list(FEATURES)),
+        "vital_columns": json.dumps(list(VITAL_COLUMNS)),
+        "source_snapshots": json.dumps(runs),
+        "candidate_rows": str(player_rows),
+        "candidate_position_rows": str(position_rows),
+        "candidate_rows_by_position": json.dumps(by_position),
+        "play_type_rows": str(play_type_rows),
+    }
+    connection.execute("DELETE FROM pool_manifest")
+    connection.executemany("INSERT INTO pool_manifest VALUES (?, ?)", manifest.items())
     return {
-        "pool_db": str(db_path),
-        "source_snapshots": list(snapshot_ids),
-        "candidate_rows": int(manifest["candidate_rows"]),
-        "candidate_position_rows": int(manifest["candidate_position_rows"]),
+        "source_snapshots": runs,
+        "candidate_rows": player_rows,
+        "candidate_position_rows": position_rows,
+        "play_type_rows": play_type_rows,
+        "candidate_rows_by_position": by_position,
     }
 
 
@@ -593,11 +787,24 @@ def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None
     vital_entries = {
         str(entry.normalized_name).upper(): entry
         for entry in player_entries
-        if str(entry.normalized_name).upper()
-        in {"HEIGHT", "WEIGHT", "WEIGHTKG", "PLAYTYPE1", "PLAYTYPE2", "PLAYTYPE3", "PLAYTYPE4"}
+        if str(entry.normalized_name).upper() in _CAPTURED_VITAL_ENTRY_NAMES
     }
     attribute_entries = [entry for group_entries in grouped.get("Attributes", {}).values() for entry in group_entries]
     tendency_entries = [entry for group_entries in grouped.get("Tendencies", {}).values() for entry in group_entries]
+    attribute_field_names = tuple(f"{entry.group} / {entry.display_name}" for entry in attribute_entries)
+    tendency_field_names = tuple(f"{entry.group} / {entry.display_name}" for entry in tendency_entries)
+    team_stat_field_names = tuple(str(entry.normalized_name) for entry in team_stat_entries)
+    stat_detail_field_names = tuple(entry.display_name for entry in stat_detail_entries)
+    if not attribute_entries or not tendency_entries:
+        raise PoolCaptureError(
+            "player layout exposes no "
+            + ("Attributes" if not attribute_entries else "Tendencies")
+            + " for the loaded game version; load Players before capturing"
+        )
+    if not team_stat_entries:
+        raise PoolCaptureError("team layout exposes no Team Stats Edit fields; load Teams before capturing")
+    if current_stat_selector is None:
+        raise PoolCaptureError("player layout exposes no CURRENTYEARSTATID selector; cannot resolve season stats")
     stats_rows: list[dict[str, Any]] = []
     attribute_rows: list[dict[str, Any]] = []
     tendency_rows: list[dict[str, Any]] = []
@@ -648,30 +855,32 @@ def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None
             stat_row[current_stat_selector.display_name] = _display(current_stat_value)
             stat_id = _raw_int(current_stat_value)
             current_stat_selector_name = current_stat_selector.display_name
-        height_entry = vital_entries.get("HEIGHT")
-        weight_entry = vital_entries.get("WEIGHT")
-        weight_kg_entry = vital_entries.get("WEIGHTKG")
-        stat_row["height_inches"] = "" if height_entry is None else _display(model.read_entry_value_for_item(height_entry, player))
-        stat_row["weight_pounds"] = "" if weight_entry is None else _display(model.read_entry_value_for_item(weight_entry, player))
-        stat_row["weight_kg"] = "" if weight_kg_entry is None else _display(model.read_entry_value_for_item(weight_kg_entry, player))
-        for play_type_number in range(1, 5):
-            entry = vital_entries.get(f"PLAYTYPE{play_type_number}")
-            stat_row[f"play_type_{play_type_number}"] = (
-                "" if entry is None else _display(model.read_entry_value_for_item(entry, player))
-            )
+        def _vital(name: str, _player: Any = player) -> str:
+            entry = vital_entries.get(name)
+            return "" if entry is None else _display(model.read_entry_value_for_item(entry, _player))
+
+        stat_row["height_inches"] = _vital("HEIGHT")
+        stat_row["weight_pounds"] = _vital("WEIGHT")
+        stat_row["weight_kg"] = _vital("WEIGHTKG")
+        stat_row["wingspan_inches"] = _vital("WINGSPAN")
+        stat_row["wingspan_cm"] = _vital("WINGSPANCM")
+        stat_row["standing_reach"] = _vital("STANDINGREACH")
+        stat_row["age"] = _vital("AGE")
+        stat_row["years_pro"] = _vital("YEARSPRO")
+        stat_row["birth_day"] = _vital("BIRTHDAY")
+        stat_row["birth_month"] = _vital("BIRTHMONTH")
+        for play_type_number in PLAY_TYPE_SLOTS:
+            stat_row[f"play_type_{play_type_number}"] = _vital(f"PLAYTYPE{play_type_number}")
         valid_current_stat_slot = isinstance(current_stat_selector_name, str) and isinstance(stat_id, int) and 0 < stat_id < 0xFFFF
-        if valid_current_stat_slot:
-            for entry in stat_detail_entries:
-                stat_row[entry.display_name] = _display(
-                    model.read_entry_value_for_item(
-                        entry,
-                        player,
-                        stat_selector=current_stat_selector_name,
-                    )
+        stat_row["stat_slot_valid"] = "1" if valid_current_stat_slot else "0"
+        for entry in stat_detail_entries:
+            stat_row[entry.display_name] = (
+                _display(
+                    model.read_entry_value_for_item(entry, player, stat_selector=current_stat_selector_name)
                 )
-        else:
-            for entry in stat_detail_entries:
-                stat_row[entry.display_name] = ""
+                if valid_current_stat_slot
+                else ""
+            )
         stats_rows.append(stat_row)
         completed_units += 1
         emit_progress(f"Captured stats for {progress_slot}/{len(players)} loaded team-slot players...")
@@ -689,32 +898,164 @@ def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None
         tendency_rows.append(tendency_row)
         completed_units += 1
         emit_progress(f"Captured tendencies for {progress_slot}/{len(players)} loaded team-slot players...")
+
+    _validate_capture(
+        stats_rows=stats_rows,
+        attribute_rows=attribute_rows,
+        tendency_rows=tendency_rows,
+        team_stat_rows=team_stat_rows,
+        team_indices={int(team.index) for team in active_teams},
+        attribute_field_names=attribute_field_names,
+        tendency_field_names=tendency_field_names,
+        team_stat_field_names=team_stat_field_names,
+        stat_detail_field_names=stat_detail_field_names,
+    )
     return stats_rows, attribute_rows, tendency_rows, team_stat_rows
 
 
+_REQUIRED_STAT_DETAIL_FIELDS = (
+    "Games Played",
+    "Minutes",
+    "Points",
+    "Field Goals Attempted",
+    "Field Goals Made",
+    "Free Throws Attempted",
+    "Free Throws Made",
+    "Assists",
+    "Offensive Rebounds",
+    "Defensive Rebounds",
+    "Steals",
+    "Blocks",
+    "Turnovers",
+    "Fouls",
+)
+
+
+def _validate_capture(
+    *,
+    stats_rows: list[dict[str, Any]],
+    attribute_rows: list[dict[str, Any]],
+    tendency_rows: list[dict[str, Any]],
+    team_stat_rows: list[dict[str, Any]],
+    team_indices: set[int],
+    attribute_field_names: tuple[str, ...],
+    tendency_field_names: tuple[str, ...],
+    team_stat_field_names: tuple[str, ...],
+    stat_detail_field_names: tuple[str, ...],
+) -> None:
+    problems: list[str] = []
+    if not stats_rows:
+        raise PoolCaptureError("no roster-slot players were captured; load Players and Teams before capturing")
+    if not team_stat_rows:
+        problems.append("no team stat rows captured")
+
+    for team_row in team_stat_rows:
+        label = str(team_row.get("team_label") or team_row.get("team_index"))
+        missing = [name for name in team_stat_field_names if not str(team_row.get(name, "")).strip()]
+        if missing:
+            problems.append(f"team {label}: empty team stats {missing}")
+
+    missing_detail = [name for name in _REQUIRED_STAT_DETAIL_FIELDS if name not in stat_detail_field_names]
+    if missing_detail:
+        problems.append(f"stat-detail layout is missing required fields {missing_detail}")
+
+    attr_by_index = {int(row.get("player_index")): row for row in attribute_rows}
+    tend_by_index = {int(row.get("player_index")): row for row in tendency_rows}
+    for stat_row in stats_rows:
+        index = int(stat_row.get("player_index"))
+        label = str(stat_row.get("player_label") or index)
+        if not parse_positions(stat_row.get("primary_position")):
+            problems.append(f"{label}: primary position {stat_row.get('primary_position')!r} does not resolve to PG/SG/SF/PF/C")
+        team_index = _int_or_none(stat_row.get("team_index"))
+        if team_index is None or team_index not in team_indices:
+            problems.append(f"{label}: team_index {stat_row.get('team_index')!r} has no captured team stat row")
+        attr_row = attr_by_index.get(index)
+        if attr_row is None:
+            problems.append(f"{label}: no attribute row captured")
+        else:
+            empty = [name for name in attribute_field_names if not str(attr_row.get(name, "")).strip()]
+            if empty:
+                problems.append(f"{label}: {len(empty)} empty attributes ({empty[:5]}{'...' if len(empty) > 5 else ''})")
+        tend_row = tend_by_index.get(index)
+        if tend_row is None:
+            problems.append(f"{label}: no tendency row captured")
+        else:
+            empty = [name for name in tendency_field_names if not str(tend_row.get(name, "")).strip()]
+            if empty:
+                problems.append(f"{label}: {len(empty)} empty tendencies ({empty[:5]}{'...' if len(empty) > 5 else ''})")
+        if str(stat_row.get("stat_slot_valid")) == "1":
+            empty_stats = [name for name in _REQUIRED_STAT_DETAIL_FIELDS if not str(stat_row.get(name, "")).strip()]
+            if empty_stats:
+                problems.append(f"{label}: stat slot marked valid but season stats empty {empty_stats}")
+
+    if problems:
+        raise PoolCaptureError(
+            f"roster capture incomplete ({len(problems)} problem(s)); run rejected:\n  - "
+            + "\n  - ".join(problems[:60])
+            + ("" if len(problems) <= 60 else f"\n  ... and {len(problems) - 60} more")
+        )
+
+
+def _int_or_none(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def add_current_roster_to_player_generation_pool(model: Any, *, season: int = 2026, progress_callback: Any | None = None) -> dict[str, Any]:
+    """Capture the loaded roster and append its derived rows as one run.
+
+    The capture is validated as a whole (``PoolCaptureError`` on any gap) before
+    anything is written. The new run's ``candidate_*`` rows are built and inserted
+    in the same call: there is no separate rebuild step, and existing runs are
+    left untouched unless the derived schema changed.
+    """
+
     stats_rows, attribute_rows, tendency_rows, team_stat_rows = capture_active_roster_pool_rows(
         model,
         progress_callback=progress_callback,
     )
-    if not stats_rows:
-        return {
-            "status": "No loaded roster rows were captured. Load Players and Teams before adding the current roster.",
-            "pool_db": str(pool_database_path()),
-            "candidate_rows": 0,
-            "candidate_position_rows": 0,
-            "added_snapshot_id": "",
-            "added_stats_rows": 0,
-            "added_attribute_rows": 0,
-            "added_tendency_rows": 0,
-            "added_team_stat_rows": 0,
-            "sync_required": False,
-        }
-    total_units = max(1, len(stats_rows) * 3 + len(team_stat_rows) + 1)
+    total_units = max(1, len(stats_rows) * 3 + len(team_stat_rows) + 2)
     if progress_callback is not None:
-        progress_callback(max(0, total_units - 1), total_units, "Writing current roster snapshot to Pool SQL...")
+        progress_callback(max(0, total_units - 2), total_units, "Writing current roster run to Pool SQL...")
+
+    stats_by_index = _rows_by_index(stats_rows, "player_index")
+    attrs_by_index = _rows_by_index(attribute_rows, "player_index")
+    tends_by_index = _rows_by_index(tendency_rows, "player_index")
+    team_by_index = _rows_by_index(team_stat_rows, "team_index")
+    content_hash = _capture_content_hash(stats_rows, attribute_rows, tendency_rows, team_stat_rows)
+
     with _connect_pool() as connection:
-        _ensure_pool_export_tables(connection)
+        connection.execute("PRAGMA journal_mode=WAL")
+        _ensure_pool_tables(connection)
+
+        for existing_id in [str(row[0]) for row in connection.execute("SELECT snapshot_id FROM pool_export_snapshots")]:
+            if _snapshot_content_hash(connection, existing_id) == content_hash:
+                summary = _refresh_pool_manifest(connection)
+                connection.commit()
+                if progress_callback is not None:
+                    progress_callback(total_units, total_units, f"Capture identical to run {existing_id}; not added.")
+                return {
+                    "status": f"Capture is identical to existing run {existing_id}; nothing added.",
+                    "pool_db": str(pool_database_path()),
+                    "candidate_rows": int(summary["candidate_rows"]),
+                    "candidate_position_rows": int(summary["candidate_position_rows"]),
+                    "added_snapshot_id": "",
+                    "duplicate_of": existing_id,
+                    "added_stats_rows": 0,
+                    "added_attribute_rows": 0,
+                    "added_tendency_rows": 0,
+                    "added_team_stat_rows": 0,
+                    "added_play_type_rows": 0,
+                    "rebuilt_all_runs": False,
+                    "sync_required": False,
+                }
+
+        rebuilt_all = not _pool_schema_matches(connection)
+        if rebuilt_all:
+            _reset_candidate_tables(connection)
+
         snapshot_id = _next_snapshot_id(connection)
         created_at = datetime.now(timezone.utc).isoformat()
         connection.execute(
@@ -726,26 +1067,61 @@ def add_current_roster_to_player_generation_pool(model: Any, *, season: int = 20
                 "INSERT INTO pool_export_rows VALUES (?, ?, ?)",
                 ((snapshot_id, row_type, json.dumps(row, ensure_ascii=False, sort_keys=True)) for row in rows),
             )
+
+        run_counts = {
+            "created_at": created_at,
+            "stats_rows": len(stats_rows),
+            "attribute_rows": len(attribute_rows),
+            "tendency_rows": len(tendency_rows),
+            "team_stat_rows": len(team_stat_rows),
+        }
+        candidates = _candidates_from_rows(snapshot_id, stats_by_index, attrs_by_index, tends_by_index, team_by_index)
+        if not candidates:
+            raise PoolCaptureError("capture produced no position candidates; run rejected")
+        added_play_type_rows = _write_run_candidates(connection, snapshot_id, candidates, run_counts)
+
+        if rebuilt_all:
+            existing = [
+                str(row[0])
+                for row in connection.execute("SELECT snapshot_id FROM pool_export_snapshots WHERE snapshot_id <> ?", (snapshot_id,))
+            ]
+            for other in existing:
+                other_candidates = _snapshot_candidates(other)
+                if other_candidates:
+                    _write_run_candidates(connection, other, other_candidates, _snapshot_counts(connection, other))
+
+        summary = _refresh_pool_manifest(connection)
         connection.commit()
+
     if progress_callback is not None:
-        progress_callback(total_units, total_units, "Added current roster snapshot to Pool SQL.")
-    manifest = _pool_manifest_values(pool_database_path())
+        progress_callback(total_units, total_units, "Added current roster run to Pool SQL.")
     return {
-        "status": "Current roster snapshot added. Run Sync Player Pool SQL to rebuild offset-backed Pool columns.",
+        "status": (
+            f"Added run {snapshot_id}: {len(stats_rows)} players, {added_play_type_rows} play-type rows. "
+            + ("Derived schema changed — all runs rebuilt." if rebuilt_all else "Existing runs unchanged.")
+        ),
         "pool_db": str(pool_database_path()),
-        "candidate_rows": int(manifest.get("candidate_rows", "0")),
-        "candidate_position_rows": int(manifest.get("candidate_position_rows", "0")),
+        "candidate_rows": int(summary["candidate_rows"]),
+        "candidate_position_rows": int(summary["candidate_position_rows"]),
         "added_snapshot_id": snapshot_id,
         "added_stats_rows": len(stats_rows),
         "added_attribute_rows": len(attribute_rows),
         "added_tendency_rows": len(tendency_rows),
         "added_team_stat_rows": len(team_stat_rows),
-        "sync_required": True,
+        "added_play_type_rows": added_play_type_rows,
+        "rebuilt_all_runs": rebuilt_all,
+        "sync_required": False,
     }
 
 
 def sync_player_generation_pool(*, force: bool = False, progress_callback: Any | None = None) -> dict[str, Any]:
-    """Rebuild derived Pool tables exclusively from game-offset-backed captures."""
+    """Bring the derived ``candidate_*`` tables level with the stored raw runs.
+
+    Normal path: add any snapshot whose ``run_id`` is not present yet. ``force``
+    (or a changed derived schema) drops and rebuilds every run's derived rows
+    from the immutable raw snapshots. Raw ``pool_export_*`` data is never touched.
+    """
+
     total_steps = 3
 
     def emit_progress(step: int, message: str) -> None:
@@ -753,43 +1129,65 @@ def sync_player_generation_pool(*, force: bool = False, progress_callback: Any |
             progress_callback(max(0, min(total_steps, step)), total_steps, message)
 
     emit_progress(0, "Checking player pool sources...")
-    snapshot_ids = pool_source_ids()
+    snapshot_ids = stored_pool_snapshot_ids()
     if not snapshot_ids:
         raise FileNotFoundError("no player pool snapshots found; use Add Current Roster to Pool SQL from the editor")
-    if not force and _pool_is_current(snapshot_ids):
-        manifest = _pool_manifest_values(pool_database_path())
-        emit_progress(total_steps, "Player generation pool already current.")
-        return {
-            "status": "Player generation pool already current.",
-            "pool_db": str(pool_database_path()),
-            "source_snapshots": json.loads(manifest.get("source_snapshots", "[]")),
-            "candidate_rows": int(manifest.get("candidate_rows", "0")),
-            "candidate_position_rows": int(manifest.get("candidate_position_rows", "0")),
-        }
 
-    emit_progress(1, f"Loading {len(snapshot_ids)} player pool snapshot(s)...")
-    candidates, fieldnames = load_candidates(snapshot_ids)
+    with _connect_pool() as connection:
+        connection.execute("PRAGMA journal_mode=WAL")
+        _ensure_pool_tables(connection)
+        full_rebuild = force or not _pool_schema_matches(connection)
+        if full_rebuild:
+            _reset_candidate_tables(connection)
+            pending = list(snapshot_ids)
+        else:
+            present = {str(row[0]) for row in connection.execute("SELECT run_id FROM pool_runs")}
+            pending = [snapshot_id for snapshot_id in snapshot_ids if snapshot_id not in present]
 
-    manifest = {
-        "pool_sqlite": str(pool_database_path()),
-        "source_snapshots": list(snapshot_ids),
-        "rule": "game-offset-derived inputs to exact captured field outputs",
-        "features": list(FEATURES),
-        "vital_columns": list(VITAL_COLUMNS),
-        "candidate_rows": len({(c["run_id"], c["player_index"]) for c in candidates}),
-        "candidate_position_rows": len(candidates),
-        "candidate_rows_by_position": {pos: sum(1 for c in candidates if c["position"] == pos) for pos in POSITIONS},
-        "status": f"Rebuilt player generation pool from {len(snapshot_ids)} snapshots.",
-    }
-    emit_progress(2, "Writing offset-backed player pool SQLite...")
-    pool_manifest = write_pool_database(
-        snapshot_ids=snapshot_ids,
-        candidates=candidates,
-        fieldnames=fieldnames,
-    )
-    manifest["pool_summary"] = pool_manifest
+        if not pending:
+            summary = _refresh_pool_manifest(connection)
+            connection.commit()
+            emit_progress(total_steps, "Player generation pool already current.")
+            return {
+                "status": "Player generation pool already current.",
+                "pool_db": str(pool_database_path()),
+                "source_snapshots": summary["source_snapshots"],
+                "candidate_rows": int(summary["candidate_rows"]),
+                "candidate_position_rows": int(summary["candidate_position_rows"]),
+                "play_type_rows": int(summary["play_type_rows"]),
+            }
+
+        empty_runs: list[str] = []
+        for index, run_id in enumerate(pending, start=1):
+            emit_progress(1, f"Adding run {index}/{len(pending)} ({run_id})...")
+            candidates = _snapshot_candidates(run_id)
+            if not candidates:
+                empty_runs.append(run_id)
+                continue
+            _write_run_candidates(connection, run_id, candidates, _snapshot_counts(connection, run_id))
+
+        emit_progress(2, "Refreshing pool manifest...")
+        summary = _refresh_pool_manifest(connection)
+        connection.commit()
+
     emit_progress(total_steps, "Player pool SQL sync complete.")
-    return manifest
+    status = (
+        f"{'Rebuilt' if full_rebuild else 'Added'} {len(pending) - len(empty_runs)} run(s); "
+        f"{summary['candidate_position_rows']} position rows, {summary['play_type_rows']} play-type rows."
+    )
+    if empty_runs:
+        status += f" WARNING: {len(empty_runs)} run(s) produced no candidates: {empty_runs}"
+    return {
+        "status": status,
+        "pool_db": str(pool_database_path()),
+        "source_snapshots": summary["source_snapshots"],
+        "candidate_rows": int(summary["candidate_rows"]),
+        "candidate_position_rows": int(summary["candidate_position_rows"]),
+        "candidate_rows_by_position": summary["candidate_rows_by_position"],
+        "play_type_rows": int(summary["play_type_rows"]),
+        "empty_runs": empty_runs,
+        "full_rebuild": full_rebuild,
+    }
 
 
 def ensure_player_generation_pool_current(*, force: bool = False, progress_callback: Any | None = None) -> dict[str, Any]:

@@ -9,40 +9,45 @@ from typing import Any
 from player_evidence import PlayerEvidence
 
 
+# Percentile -> value ladders taken from the ATD committee sheet's Putback scale:
+# NBA Norm 10-35, Interior Finisher 35-55, Specialist 60-65, Absolute Cap 70. The
+# rank quartiles are laid on the norm band (p25 -> 10, p50 -> 22, p75 -> 35) and the
+# upper tail walks the sheet's named tiers to the cap, so the curve reproduces the
+# committee scale instead of the captured-roster distribution it used to carry.
 _PUTBACK_CURVE: tuple[tuple[float, float], ...] = (
     (0.000, 0.00),
     (0.010, 0.00),
-    (0.050, 8.00),
-    (0.100, 19.00),
-    (0.250, 30.00),
-    (0.500, 38.00),
-    (0.750, 42.00),
-    (0.900, 58.00),
-    (0.950, 70.00),
-    (0.975, 75.00),
-    (0.990, 95.00),
-    (0.995, 99.00),
-    (1.000, 100.00),
+    (0.050, 3.00),
+    (0.100, 5.00),
+    (0.250, 10.00),
+    (0.500, 22.00),
+    (0.750, 35.00),
+    (0.900, 45.00),
+    (0.950, 55.00),
+    (0.975, 60.00),
+    (0.990, 65.00),
+    (0.995, 68.00),
+    (1.000, 70.00),
 )
 
-# PUTBACKDUNK is a separate live 2K26 field, but the captures expose Putback
-# rather than a second field with that label. Its scale is therefore calibrated
-# offline from the same-package 60% Putback + 40% Standing Dunk Tendency
-# distribution (1,261 packages), not copied from the Putback curve.
+# PUTBACKDUNK is a separate live 2K26 field that the committee sheet does not name;
+# it is a slice of Putback and inherits its cap. The captures put it at roughly 85%
+# of Putback at the median (32.2 vs 38.0 on the old pool ladder), so the ATD Putback
+# ladder is carried over at that ratio and clipped to the same cap.
 _PUTBACK_DUNK_CURVE: tuple[tuple[float, float], ...] = (
     (0.000, 0.00),
     (0.010, 0.00),
-    (0.050, 10.60),
-    (0.100, 15.00),
-    (0.250, 18.00),
-    (0.500, 32.20),
-    (0.750, 41.00),
-    (0.900, 56.00),
-    (0.950, 69.00),
-    (0.975, 77.70),
-    (0.990, 86.40),
-    (0.995, 93.96),
-    (1.000, 99.00),
+    (0.050, 2.50),
+    (0.100, 4.25),
+    (0.250, 8.50),
+    (0.500, 18.70),
+    (0.750, 29.75),
+    (0.900, 38.25),
+    (0.950, 46.75),
+    (0.975, 51.00),
+    (0.990, 55.25),
+    (0.995, 57.80),
+    (1.000, 59.50),
 )
 
 # Empirical body quantiles from the same 1,261 captured packages. These are
@@ -90,11 +95,6 @@ _SPARSE_CONTEXT_MODELS: dict[str, tuple[float, float, float, float, float]] = {
     "putback": (0.25, 0.30, 0.16, 0.11, 0.18),
     "putback_dunk": (0.06, 0.28, 0.16, 0.06, 0.44),
 }
-
-# The measured Pool fit for Offensive Rebound improved from MAE 5.077 to
-# 4.909 when 20% size context was included. The live historical formula uses a
-# smaller smooth interaction so Pool frame evidence cannot replace production.
-_FRAME_CONTEXT_WEIGHT = 0.12
 
 _POSITION_PERCENT_KEYS: tuple[tuple[str, str], ...] = (
     ("PG", "pg_percent"),
@@ -201,12 +201,6 @@ def _rank_attribute_value(percentile: float) -> int:
     return int(round(25.0 + 74.0 * bounded))
 
 
-def _smooth_context_adjustment(performance: float, context: float, weight: float) -> float:
-    interaction = 4.0 * performance * (1.0 - performance)
-    adjusted = performance + weight * (context - 0.5) * interaction
-    return max(0.0, min(1.0, adjusted))
-
-
 def _percentile_from_calibration(
     value: float,
     calibration: Sequence[tuple[float, float]],
@@ -266,6 +260,13 @@ def _sparse_position_context(evidence: PlayerEvidence) -> tuple[float, tuple[str
         keys.append("identity.pos")
     keys.append("position_context=exact_primary_secondary_continuous_blend_0.72_0.28")
     return position, tuple(keys)
+
+
+def _primary_position_is_guard(evidence: PlayerEvidence) -> bool:
+    season_tokens = _raw_position_tokens(_source(evidence, "season_info").get("pos"))
+    identity_tokens = _raw_position_tokens(_source(evidence, "identity").get("pos"))
+    tokens = season_tokens or identity_tokens
+    return bool(tokens and _position_family(tokens[0]) == "G")
 
 
 def _sparse_body_context(evidence: PlayerEvidence) -> tuple[float, tuple[str, ...]] | None:
@@ -612,6 +613,124 @@ def _historical_rebound_signal(
     )
 
 
+def _historical_win_share_rank(
+    evidence: PlayerEvidence,
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    side: str,
+) -> tuple[float, tuple[str, ...]] | None:
+    if side not in {"orb", "drb"}:
+        raise ValueError(f"unsupported rebound side: {side}")
+    field = "ows" if side == "orb" else "dws"
+    source_path = f"advanced.{field}"
+    value = _source_number(evidence, source_path)
+    if value is None:
+        return None
+    population = sorted(
+        candidate
+        for row in rows
+        if (candidate := _row_number(row, (source_path,))) is not None
+    )
+    if not population:
+        return None
+    left = bisect_left(population, value)
+    right = bisect_right(population, value)
+    rank = (left + right) / (2.0 * len(population))
+    return rank, (source_path, f"{field}_same_season_same_league_rank={rank:.8f}")
+
+
+def _pretracking_attribute_result(
+    evidence: PlayerEvidence,
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    side: str,
+    source_rule: str,
+    rebound_signal: _RankSignal | None,
+) -> dict[str, Any] | None:
+    position = _sparse_position_context(evidence)
+    if position is None:
+        return None
+    position_score, position_keys = position
+
+    components: list[tuple[float, float, str]] = [(position_score, 0.50, "position")]
+    evidence_keys: list[str] = ["per_game.g", *position_keys]
+    if rebound_signal is not None:
+        rebound_score = _midrank_percentile(rebound_signal.value, rebound_signal.population)
+        if rebound_score is None:
+            return None
+        components.append((rebound_score, 0.35, "demonstrated_total_rebound"))
+        evidence_keys.extend(
+            (
+                *rebound_signal.evidence_keys,
+                f"demonstrated_total_rebound_rank={rebound_score:.8f}",
+                f"source_mode={rebound_signal.source_label}",
+            )
+        )
+        if rebound_signal.historical_substitute:
+            evidence_keys.append(f"historical_substitute={rebound_signal.historical_substitute}")
+    else:
+        body = _sparse_body_context(evidence)
+        if body is None:
+            return None
+        body_score, body_keys = body
+        components.append((body_score, 0.35, "body"))
+        evidence_keys.extend((*body_keys, f"body_rank={body_score:.8f}"))
+
+    win_shares = _historical_win_share_rank(evidence, rows, side=side)
+    if win_shares is not None:
+        win_share_score, win_share_keys = win_shares
+        components.append((win_share_score, 0.15, "ows" if side == "orb" else "dws"))
+        evidence_keys.extend(win_share_keys)
+    else:
+        evidence_keys.append(
+            f"missing_{'ows' if side == 'orb' else 'dws'}_policy=omit_and_renormalize_available_authored_weights"
+        )
+
+    available_weight = sum(weight for _score, weight, _label in components)
+    if available_weight <= 0.0:
+        return None
+    score = sum(component_score * weight for component_score, weight, _label in components) / available_weight
+    if rebound_signal is None and _primary_position_is_guard(evidence):
+        raw_inferred_value = _rank_attribute_value(score)
+        score *= 1.10
+        scaled_uncapped_value = _rank_attribute_value(score)
+        guard_ceiling_score = (55.0 - 25.0) / 74.0
+        score = min(score, guard_ceiling_score)
+        normalized_guard_score = score / guard_ceiling_score
+        if normalized_guard_score < 0.90:
+            normalized_guard_score = 0.90 * ((normalized_guard_score / 0.90) ** 4)
+            score = guard_ceiling_score * normalized_guard_score
+        curved_value = _rank_attribute_value(score)
+        evidence_keys.extend(
+            (
+                "no_total_rebound_primary_guard_distribution_scale=1.10",
+                "no_total_rebound_primary_guard_ceiling=55",
+                "no_total_rebound_primary_guard_drop_curve=preserve_top_10_percent_of_25_to_55_span;below_90_percent_use_fourth_power",
+                f"no_total_rebound_primary_guard_raw_value={raw_inferred_value}",
+                f"no_total_rebound_primary_guard_scaled_uncapped_value={scaled_uncapped_value}",
+                f"no_total_rebound_primary_guard_curved_value={curved_value}",
+                "first_tracked_anchor=1951_NBA_TRB;1947_BAA_guard_overlap=7;max_TRB_per_game=5.0",
+            )
+        )
+    component_weights = ",".join(f"{label}:{weight:.2f}" for _score, weight, label in components)
+    evidence_keys.extend(
+        (
+            f"pre_tracking_rebound_weights={component_weights}",
+            f"available_weight={available_weight:.2f}",
+            "pre_tracking_guard_control=absolute_primary_secondary_position_weight_0.50;no_TRB_primary_guard_ceiling_55",
+            "pre_tracking_role_and_scoring_share_excluded=true",
+            "comparison_scope=same_season_same_league_gp_positive",
+            "mapping=round(25+74*same_season_same_league_rank_score)",
+        )
+    )
+    return {
+        "value": _rank_attribute_value(score),
+        "score": score,
+        "source_rule": f"{source_rule}_pre_tracking_position_win_shares",
+        "evidence_keys": tuple(dict.fromkeys(evidence_keys)),
+    }
+
+
 def _historical_sparse_rebound_context_allowed(
     rows: Sequence[Mapping[str, Any]],
     *,
@@ -681,43 +800,6 @@ def _row_positions(row: Mapping[str, Any]) -> tuple[str, ...]:
     return ()
 
 
-def _frame_percentile(
-    evidence: PlayerEvidence,
-    rows: Sequence[Mapping[str, Any]],
-) -> tuple[float, tuple[str, ...]] | None:
-    positions = set(_evidence_positions(evidence))
-    if not positions:
-        return None
-    cohort = [row for row in rows if positions.intersection(_row_positions(row))]
-    if not cohort:
-        return None
-
-    percentiles: list[float] = []
-    evidence_keys: list[str] = []
-    frame_specs = (
-        ("identity.ht_in_in", ("player_info.ht_in_in",)),
-        ("identity.wt", ("player_info.wt",)),
-    )
-    for source_path, row_paths in frame_specs:
-        target = _source_number(evidence, source_path)
-        if target is None or target <= 0.0:
-            continue
-        population = tuple(
-            value
-            for row in cohort
-            if (value := _row_number(row, row_paths)) is not None and value > 0.0
-        )
-        percentile = _midrank_percentile(target, population)
-        if percentile is None:
-            continue
-        percentiles.append(percentile)
-        evidence_keys.append(source_path)
-    if not percentiles:
-        return None
-    evidence_keys.append("position_context=primary_secondary_intersection")
-    return sum(percentiles) / len(percentiles), tuple(evidence_keys)
-
-
 def _attribute_result(
     evidence: PlayerEvidence,
     league_player_rows: Iterable[dict[str, Any]] | None,
@@ -729,69 +811,35 @@ def _attribute_result(
         return None
     rows = _usable_rows(evidence, league_player_rows)
     signal = _rebound_signal(evidence, rows, side=side)
-    historical = False
     if signal is None:
         if not _historical_sparse_rebound_context_allowed(rows, required_sides=(side,)):
             return None
-        signal = _historical_rebound_signal(evidence, rows, side=side)
-        historical = signal is not None
-        if signal is None:
-            return _sparse_context_result(
-                evidence,
-                rows,
-                field="offensive_rebound" if side == "orb" else "defensive_rebound",
-                curve=None,
-                source_rule=source_rule,
-                unavailable_direct_source=f"individual_{side}_split_or_rate",
-            )
+        return _pretracking_attribute_result(
+            evidence,
+            rows,
+            side=side,
+            source_rule=source_rule,
+            rebound_signal=_historical_rebound_signal(evidence, rows, side=side),
+        )
     performance = _midrank_percentile(signal.value, signal.population)
     if performance is None:
         return None
-
-    if not historical:
-        percentile, minutes_evidence = _minutes_context_adjustment(evidence, rows, signal, performance)
-        return {
-            "value": _rank_attribute_value(percentile),
-            "score": percentile,
-            "source_rule": source_rule,
-            "evidence_keys": (
-                "per_game.g",
-                *signal.evidence_keys,
-                *minutes_evidence,
-                f"source_mode={signal.source_label}",
-                "comparison_scope=same_season_same_league_gp_positive",
-                "rebound_contract=ORB_percent_for_offense;DRB_percent_for_defense;minutes_only_for_low_volume_shrink",
-                "position_and_MPG_are_context_for_low_volume_shrink_only",
-                "height_weight_raw_rebounds_and_total_rebound_rate_excluded=true",
-                "mapping=round(25+74*same_season_same_league_rank_score)",
-            ),
-        }
-
-    evidence_keys = ["per_game.g", *signal.evidence_keys]
-    percentile = performance
-    frame = _frame_percentile(evidence, rows)
-    if frame is not None:
-        frame_percentile, frame_keys = frame
-        percentile = _smooth_context_adjustment(performance, frame_percentile, _FRAME_CONTEXT_WEIGHT)
-        evidence_keys.extend(frame_keys)
-        evidence_keys.append(f"frame_context_weight={_FRAME_CONTEXT_WEIGHT:.2f}")
-    evidence_keys.extend(
-        (
-            f"source_mode={signal.source_label}",
-            "comparison_scope=same_season_same_league_gp_positive",
-            "historical_rebound_contract=old_rate_or_team_share_chain_restored",
-            "opportunity_contract=rate_or_team_share; raw_rpg_not_double_counted",
-            "mapping=round(25+74*same_season_same_league_rank_score)",
-            "pool_quantiles_are_distribution_evidence_not_rating_gates",
-        )
-    )
-    if signal.historical_substitute:
-        evidence_keys.append(f"historical_substitute={signal.historical_substitute}")
+    percentile, minutes_evidence = _minutes_context_adjustment(evidence, rows, signal, performance)
     return {
         "value": _rank_attribute_value(percentile),
         "score": percentile,
         "source_rule": source_rule,
-        "evidence_keys": tuple(evidence_keys),
+        "evidence_keys": (
+            "per_game.g",
+            *signal.evidence_keys,
+            *minutes_evidence,
+            f"source_mode={signal.source_label}",
+            "comparison_scope=same_season_same_league_gp_positive",
+            "rebound_contract=ORB_percent_for_offense;DRB_percent_for_defense;minutes_only_for_low_volume_shrink",
+            "position_and_MPG_are_context_for_low_volume_shrink_only",
+            "height_weight_raw_rebounds_and_total_rebound_rate_excluded=true",
+            "mapping=round(25+74*same_season_same_league_rank_score)",
+        ),
     }
 
 

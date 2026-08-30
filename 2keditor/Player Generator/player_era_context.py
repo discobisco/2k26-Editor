@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -90,21 +90,6 @@ def _hard_foul_regime(season: int) -> str:
     return "use_player_evidence"
 
 
-def filter_same_league_rows(evidence: Any, rows: Iterable[dict[str, Any]]) -> tuple[dict[str, Any], ...]:
-    row_tuple = tuple(rows or ())
-    league = player_era_context(evidence).league
-    if not league:
-        return row_tuple
-    return tuple(row for row in row_tuple if _row_league(row) == league)
-
-
-def _row_league(row: dict[str, Any]) -> str:
-    for key in ("player_season_info.lg", "season_info.lg", "lg"):
-        if key in row:
-            return _normalized_league(row.get(key))
-    return ""
-
-
 def _dict_value(source: Any, key: str) -> Any:
     return source.get(key) if isinstance(source, dict) else None
 
@@ -143,4 +128,4 @@ def _era_key(season: int, league: str) -> str:
     return "high_volume_three_position_flexible"
 
 
-__all__ = ["PlayerEraContext", "filter_same_league_rows", "player_era_context"]
+__all__ = ["PlayerEraContext", "player_era_context"]

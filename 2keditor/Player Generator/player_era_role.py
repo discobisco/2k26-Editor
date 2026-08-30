@@ -1,0 +1,303 @@
+"""Pre-shot-clock (1947-1954) playstyle model.
+
+The evidence-driven rules produce a rating/tendency card that is *individually*
+plausible but stylistically modern: a 1947 pivot ends up with a face-up jumper and
+step-back post moves, a 1947 guard ends up with crossovers and pull-ups, everyone
+gets isolation and transition-pull-up tendencies. None of that existed before the
+24-second clock.
+
+This module applies one researched post-pass over the finished field values,
+gated strictly to ``player_era_context`` era key ``pre_shot_clock`` (season <= 1954).
+It reshapes the *role-driven* behaviour — which is the lever that actually matters,
+because the raw ``role.*`` signals are z-scored within era and so era-uniform
+changes to them wash out — by pushing each archetype toward how it was actually
+played:
+
+* pivots / interior bigs -> post-up, hook, backdown, put-back, bank shot up;
+  face-up jumper, hop / spin / step-back post footwork, drives down.
+* guards / perimeter -> two-hand set shot (spot-up mid), give-and-go passing,
+  no-dribble catch-and-go up; on-ball creation, pull-ups, iso, alley-oop passing
+  down. Elite handle ratings capped.
+* everyone -> dunking, isolation, floaters, contested/off-screen jumpers,
+  transition pull-ups down.
+
+Controlled by env ``PLAYERGEN_ERA_ROLE_PLAYSTYLE`` (default on; ``0`` / ``false`` /
+``off`` disables). Every touched field records ``era_role_playstyle=...`` in its
+evidence keys and a ``_pre_shot_clock_role_playstyle`` suffix on its source rule.
+
+The mid-range attribute is handled separately, inside
+``player_rules_offense.derive_attribute_midrange``, because it needs the
+free-throw-touch math rather than a flat multiplier.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from typing import Any
+
+from player_era_context import player_era_context
+from player_star_profiles import star_profile_for
+
+_PRE_SHOT_CLOCK_ERA_KEY = "pre_shot_clock"
+
+# kind:
+#   "scale"    -> value *= amount
+#   "cap"      -> value = min(value, amount)
+#   "raise_to" -> value = max(value, amount)   (only when the gate is engaged)
+# gate: None applies to everyone; otherwise the adjustment strength scales with the
+# named archetype weight (0..1) so a hybrid forward gets a partial dose.
+_GATES = ("guard", "wing", "frontcourt", "pivot", "perimeter")
+
+
+@dataclass(frozen=True)
+class _Adj:
+    field: str
+    kind: str
+    amount: float
+    gate: str | None
+    why: str
+    tag: str = ""  # a documented-calling-card exemption (player_star_profiles) suppresses this adjustment
+
+
+_MODEL: tuple[_Adj, ...] = (
+    # -- on-ball creation & handle: did not exist -------------------------------
+    _Adj("Tendencies/SETUPWITHHESITATION", "cap", 8, None, "no live-dribble setup game pre-clock", "handle"),
+    _Adj("Tendencies/SETUPWITHSIZEUP", "cap", 4, None, "size-up dribble is a modern move", "handle"),
+    _Adj("Tendencies/TRIPLETHREATJABSTEP", "cap", 10, None, "triple-threat footwork is modern", "handle"),
+    _Adj("Tendencies/THREATTRIPLESHOT", "cap", 12, None, "triple-threat shot decision is modern", "handle"),
+    _Adj("Tendencies/TRIPLETHREATPUMPFAKE", "scale", 0.7, None, "less shot-fake gamesmanship", "handle"),
+    _Adj("Tendencies/DRIVINGDRIBBLEHESITATION", "cap", 10, None, "hesitation dribble is modern", "handle"),
+    _Adj("Tendencies/DRIVINGBEHINDTHEBACK", "cap", 6, None, "combo dribble moves are modern", "handle"),
+    _Adj("Tendencies/DRIBBLECROSSOVER", "cap", 6, None, "combo dribble moves are modern", "handle"),
+    _Adj("Tendencies/DRIBBLESPIN", "cap", 6, None, "combo dribble moves are modern", "handle"),
+    _Adj("Tendencies/NOSETUPDRIBBLE", "scale", 1.3, "perimeter", "catch and go, no extended setup", ""),
+    _Adj("Tendencies/NODRIVINGDRIBBLEMOVE", "scale", 1.35, None, "straight-line drives, no combo moves", ""),
+    _Adj("Attributes/BALLCONTROL", "cap", 70, "guard", "no crossover-era handle ratings", "handle"),
+    _Adj("Attributes/SPEEDWITHBALL", "cap", 80, "guard", "ball advancement, not dribble penetration", "handle"),
+    # -- isolation basketball: did not exist ----------------------------------
+    _Adj("Tendencies/ISOVSAVERAGEDEFENDER", "cap", 12, None, "ball-movement offense, no iso", "iso"),
+    _Adj("Tendencies/ISOVSGOODDEFENDER", "cap", 9, None, "ball-movement offense, no iso", "iso"),
+    _Adj("Tendencies/ISOVSELITEDEFENDER", "cap", 6, None, "ball-movement offense, no iso", "iso"),
+    _Adj("Tendencies/ISOVSPOORDEFENDER", "cap", 16, None, "ball-movement offense, no iso", "iso"),
+    _Adj("Tendencies/PLAYDISCIPLINE", "scale", 1.15, None, "set-play weave/give-and-go offense", "ball_dominant"),
+    # -- driving: slower, more deliberate, no rim-attack athletes ------------
+    _Adj("Tendencies/DRIVE", "scale", 0.72, None, "deliberate half-court sets", "drive"),
+    _Adj("Tendencies/ATTACKSTRONGONDRIVE", "scale", 0.7, None, "few power finishers at the rim", "drive"),
+    _Adj("Tendencies/DRIVEPULLUPMID", "cap", 8, None, "off-dribble pull-up is modern", "off_dribble_jumper"),
+    _Adj("Tendencies/DRIVEPULLUPMIDRANGE", "cap", 8, None, "off-dribble pull-up is modern", "off_dribble_jumper"),
+    _Adj("Tendencies/OFFSCREENDRIVE", "scale", 0.7, None, "limited off-ball screen actions", "drive"),
+    # -- shot selection: the two-hand set shot & the shot near the rim -------
+    _Adj("Tendencies/MIDSPOTUPSHOT", "scale", 1.25, "perimeter", "two-hand set shot from the perimeter", "set_shot"),
+    _Adj("Tendencies/MIDSHOT", "scale", 1.15, "perimeter", "set shot is the perimeter jumper", "set_shot"),
+    _Adj("Tendencies/MIDOFFSCREENSHOT", "scale", 0.6, None, "little off-ball movement shooting", "off_screen"),
+    _Adj("Tendencies/CONTESTEDJUMPERMID", "scale", 0.5, None, "you did not force contested jumpers", "volume_jumper"),
+    _Adj("Tendencies/CONTESTEDJUMPERMIDRANGE", "scale", 0.5, None, "you did not force contested jumpers", "volume_jumper"),
+    _Adj("Tendencies/SPINJUMPER", "cap", 6, None, "spin jumper is modern", "off_dribble_jumper"),
+    _Adj("Tendencies/STEPBACKJUMPERMID", "cap", 5, None, "step-back jumper is modern", "off_dribble_jumper"),
+    _Adj("Tendencies/STEPBACKJUMPERMIDRANGE", "cap", 5, None, "step-back jumper is modern", "off_dribble_jumper"),
+    _Adj("Tendencies/STEPTHROUGH", "cap", 18, None, "aggressive step-through is modern footwork", "post_footwork"),
+    _Adj("Tendencies/BASKETUNDERSHOT", "scale", 1.2, None, "most offense finished at the rim", "rim_finish"),
+    _Adj("Tendencies/CLOSESHOT", "scale", 1.2, None, "most offense finished at the rim", "rim_finish"),
+    _Adj("Tendencies/CLOSEMIDDLESHOT", "scale", 1.15, None, "most offense finished at the rim", "rim_finish"),
+    _Adj("Tendencies/USEGLASS", "scale", 1.4, None, "the bank shot was standard", ""),
+    _Adj("Tendencies/FLOATER", "cap", 8, None, "the floater is a modern shot", "off_dribble_jumper"),
+    # -- post game: the pivot was the hub; footwork was the hook ------------
+    _Adj("Tendencies/POSTUP", "scale", 1.35, "frontcourt", "the pivot ran the offense", "post_hub"),
+    _Adj("Tendencies/POSTUPANDUNDER", "scale", 1.2, "frontcourt", "up-and-under off the pivot", "post_hub"),
+    _Adj("Tendencies/FROMPOSTSHOT", "scale", 1.3, "frontcourt", "scoring came from the post", "post_hub"),
+    _Adj("Tendencies/POSTBACKDOWN", "scale", 1.25, "frontcourt", "backing down from the pivot", "post_hub"),
+    _Adj("Tendencies/POSTAGGRESSIVEBACKDOWN", "scale", 1.15, "pivot", "power pivots backed men down", "post_hub"),
+    _Adj("Tendencies/POSTHOOKLEFT", "scale", 1.35, "pivot", "the hook was the money post shot", "post_hub"),
+    _Adj("Tendencies/POSTHOOKRIGHT", "scale", 1.35, "pivot", "the hook was the money post shot", "post_hub"),
+    _Adj("Tendencies/POSTFACEUP", "cap", 12, None, "the pivot did not face up", "post_footwork"),
+    _Adj("Tendencies/POSTDRIVE", "cap", 10, None, "the pivot did not drive from the post", "post_footwork"),
+    _Adj("Tendencies/POSTSPIN", "cap", 8, None, "spin move is modern post footwork", "post_footwork"),
+    _Adj("Tendencies/POSTHOPSTEP", "cap", 8, None, "hop step is modern post footwork", "post_footwork"),
+    _Adj("Tendencies/POSTSHIMMYSHOT", "cap", 8, None, "shimmy is modern post footwork", "post_footwork"),
+    _Adj("Tendencies/POSTSTEPBACKSHOT", "cap", 5, None, "post step-back is modern", "post_footwork"),
+    _Adj("Tendencies/POSTDROPSTEP", "scale", 0.7, None, "drop step existed but was less emphasised", "post_footwork"),
+    _Adj("Tendencies/HOPPOSTSHOT", "cap", 6, None, "hop shot is modern post footwork", "post_footwork"),
+    _Adj("Attributes/POSTHOOK", "raise_to", 60, "pivot", "hook was the core pivot skill", ""),
+    _Adj("Attributes/POSTCONTROL", "raise_to", 55, "pivot", "footwork and balance in the pivot", ""),
+    # -- passing: give-and-go, not flair ----------------------------------
+    _Adj("Tendencies/DISHTOOPENMAN", "scale", 1.15, None, "give-and-go, hit the cutter", "ball_dominant"),
+    _Adj("Tendencies/FLASHYPASS", "cap", 6, None, "fundamental passing, no flair", "flair_pass"),
+    _Adj("Tendencies/ALLEYOOPPASS", "cap", 3, None, "the alley-oop as a play did not exist", "alley_oop"),
+    # -- finishing above the rim: ability is fine, the *choice* to do it in a game is not -
+    _Adj("Tendencies/ALLEYOOP", "cap", 2, None, "the alley-oop as a play did not exist", "alley_oop"),
+    _Adj("Tendencies/FLASHYDUNK", "cap", 2, None, "a dunk was never a show move in a game", "showtime_finish"),
+    _Adj("Tendencies/SPINLAYUP", "cap", 6, None, "spin layup is modern", "showtime_finish"),
+    # NOTE: the dunk *attributes* (DRIVINGDUNK / STANDINGDUNK) are deliberately left alone.
+    # Pre-shot-clock players dunked in warmups routinely -- the ability was there; they just
+    # did not do it in games because of injury risk and convention. That is a *tendency*
+    # suppression, already handled by player_era_context.dunk_attempt_multiplier, not an
+    # ability ceiling.
+    # -- transition ------------------------------------------------------
+    _Adj("Tendencies/TRANSITIONSPOTUP", "scale", 0.6, None, "limited transition spacing", "fast_break"),
+    # -- rebounding / hustle -------------------------------------------
+    _Adj("Tendencies/PUTBACK", "scale", 1.2, "frontcourt", "everyone crashed the glass", ""),
+    _Adj("Tendencies/CRASH", "scale", 1.15, None, "everyone crashed the glass", ""),
+)
+
+
+def era_role_playstyle_enabled() -> bool:
+    return os.environ.get("PLAYERGEN_ERA_ROLE_PLAYSTYLE", "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
+def _position_vector(positions: Any, season_info_pos: Any) -> dict[str, float]:
+    tokens: tuple[str, ...] = ()
+    if positions is not None:
+        tokens = tuple(getattr(positions, "all_positions", ()) or ())
+        if not tokens and getattr(positions, "primary", ""):
+            tokens = (positions.primary,)
+    if not tokens:
+        text = str(season_info_pos or "").upper()
+        compact = "".join(ch for ch in text if ch.isalpha())
+        two = {"G": ("PG", "SG"), "GF": ("SG", "SF"), "FG": ("SF", "SG"),
+               "F": ("SF", "PF"), "FC": ("PF", "C"), "CF": ("C", "PF")}
+        tokens = two.get(compact, ())
+        if not tokens and compact in {"PG", "SG", "SF", "PF", "C"}:
+            tokens = (compact,)
+    vector = {p: 0.0 for p in ("PG", "SG", "SF", "PF", "C")}
+    if not tokens:
+        return vector
+    weights = (0.65, 0.35) if len(tokens) > 1 else (1.0,)
+    for token, weight in zip(tokens, weights):
+        if token in vector:
+            vector[token] += weight
+    total = sum(vector.values())
+    return {p: v / total for p, v in vector.items()} if total > 0.0 else vector
+
+
+def role_mix(positions: Any, season_info_pos: Any = None) -> dict[str, float]:
+    """Continuous archetype weights (~0..1) for the pre-shot-clock gates."""
+
+    v = _position_vector(positions, season_info_pos)
+    guard = v["PG"] + 0.7 * v["SG"] + 0.2 * v["SF"]
+    wing = 0.3 * v["SG"] + v["SF"] + 0.45 * v["PF"]
+    big = 0.55 * v["PF"] + v["C"]
+    return {
+        "guard": _clamp01(guard),
+        "wing": _clamp01(wing),
+        "frontcourt": _clamp01(big + 0.4 * wing),
+        "pivot": _clamp01(big),
+        "perimeter": _clamp01(guard + 0.45 * wing),
+        # continuous inputs the mid-range rewrite also uses
+        "post_raw": big + 0.25 * wing,
+        "interior_raw": big + 0.2 * wing,
+    }
+
+
+def _clamp01(value: float) -> float:
+    return 0.0 if value < 0.0 else 1.0 if value > 1.0 else value
+
+
+def adjust_values(evidence: Any, positions: Any, values: dict[str, Any]) -> dict[str, Any]:
+    """Return a new field->RuleValue map with the pre-shot-clock playstyle applied.
+
+    ``values`` maps field key -> object with ``.value`` (int), ``.source_rule`` (str)
+    and ``.evidence_keys`` (tuple). The concrete class is rebuilt via ``type(rv)``.
+    """
+
+    if not era_role_playstyle_enabled():
+        return values
+    era = player_era_context(evidence)
+    if era.era_key != _PRE_SHOT_CLOCK_ERA_KEY:
+        return values
+
+    season_info = getattr(evidence, "season_info", {}) or {}
+    mix = role_mix(positions, season_info.get("pos"))
+    star = star_profile_for(getattr(evidence, "player_id", ""), era.season)
+    exempt = star.exempt if star else frozenset()
+
+    out = dict(values)
+
+    def _write(field_key: str, new_value: float, current: Any, provenance: tuple[str, ...]) -> None:
+        stored = _clamp_field(field_key, new_value)
+        if stored == int(current.value):
+            return
+        out[field_key] = type(current)(
+            value=stored,
+            source_rule=f"{current.source_rule}_pre_shot_clock_role_playstyle",
+            evidence_keys=tuple(current.evidence_keys) + (f"pre_playstyle_value={int(current.value)}",) + provenance,
+        )
+
+    # 1) blanket era playstyle, skipping any adjustment a star is documented to be exempt from
+    for adj in _MODEL:
+        if adj.tag and adj.tag in exempt:
+            continue
+        current = out.get(adj.field)
+        if current is None or not isinstance(getattr(current, "value", None), (int, float)):
+            continue
+        gate = 1.0 if adj.gate is None else mix.get(adj.gate, 0.0)
+        if gate <= 0.0:
+            continue
+        original = float(current.value)
+        if adj.kind == "scale":
+            new_value = original * (1.0 + (adj.amount - 1.0) * gate)
+        elif adj.kind == "cap":
+            new_value = min(original, adj.amount + (original - adj.amount) * (1.0 - gate))
+        elif adj.kind == "raise_to":
+            new_value = original + (adj.amount - original) * gate if original < adj.amount else original
+        else:
+            continue
+        _write(
+            adj.field,
+            new_value,
+            current,
+            (
+                f"era_role_playstyle={era.era_key}",
+                f"era_role_gate={adj.gate or 'all'}:{gate:.2f}",
+                f"era_role_op={adj.kind}:{adj.amount:g}",
+                f"era_role_reason={adj.why}",
+            ),
+        )
+
+    # 2) named-player calling cards and documented limitations (mappings/STAR_PLAYERS.md)
+    if star is not None:
+        for field_key, op, amount in (*star.boost, *star.limit):
+            current = out.get(field_key)
+            if current is None or not isinstance(getattr(current, "value", None), (int, float)):
+                continue
+            original = float(current.value)
+            if op == "raise_to":
+                new_value = max(original, amount)
+            elif op == "cap":
+                new_value = min(original, amount)
+            elif op == "scale":
+                new_value = original * amount
+            else:
+                continue
+            _write(
+                field_key,
+                new_value,
+                current,
+                (
+                    f"star_profile={star.player_id}:{star.name}",
+                    f"star_op={op}:{amount:g}",
+                    f"star_source={star.evidence[0] if star.evidence else 'STAR_PLAYERS.md'}",
+                    f"star_calling_card_exemptions={','.join(sorted(star.exempt)) or 'none'}",
+                ),
+            )
+
+    return out
+
+
+def _clamp_field(field_key: str, value: float) -> int:
+    rounded = int(round(value))
+    if field_key.startswith("Attributes/"):
+        return max(25, min(99, rounded))
+    if field_key.startswith("Tendencies/"):
+        # Deliberately the raw range: player_rules re-applies the ATD Absolute Cap
+        # after this post-pass runs, so the cap has exactly one owner.
+        return max(0, min(100, rounded))
+    return rounded
+
+
+__all__ = ["adjust_values", "role_mix", "era_role_playstyle_enabled"]

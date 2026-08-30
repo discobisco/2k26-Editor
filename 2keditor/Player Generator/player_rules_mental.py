@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import bisect
+import math
 import statistics
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -213,6 +214,8 @@ def _signal(source: Any, name: str) -> float | None:
         return _rate(source, "pf")
     if name == "trb_rate":
         return _rate(source, "trb")
+    if name == "dws":
+        return _source_value(source, "advanced", "dws")
     if name == "games_share":
         return _ratio(_gp(source), _source_value(source, "team_stats_per_game", "g"))
     if name == "ft_percent":
@@ -246,8 +249,9 @@ _SIGNAL_PROVENANCE: dict[str, tuple[str, ...]] = {
     "stl_rate": ("per_36.stl_per_36_min",),
     "blk_rate": ("per_36.blk_per_36_min",),
     "charge_rate": ("play_by_play.offensive_foul_drawn", "per_game.g"),
-    "foul_rate": ("per_36.pf_per_36_min",),
+    "foul_rate": ("per_36.pf_per_36_min", "per_game.pf_per_game", "per_game.mp_per_game"),
     "trb_rate": ("per_36.trb_per_36_min",),
+    "dws": ("advanced.dws",),
     "games_share": ("per_game.g", "team_stats_per_game.g"),
     "ft_percent": ("per_game.ft_percent",),
     "mid_attempt_rate": ("shooting.percent_fga_from_x10_16_range", "shooting.percent_fga_from_x16_3p_range"),
@@ -273,31 +277,35 @@ class _Recipe:
 _CALIBRATION: dict[str, tuple[float, float]] = {
     "HANDS": (68.0, 23.722),
     "HUSTLE": (65.0, 20.756),
-    "ISOVSPOOR": (30.0, 17.791),
-    "ISOVSAVERAGE": (25.0, 14.826),
-    "ISOVSGOOD": (18.0, 11.861),
-    "ISOVSELITE": (14.0, 13.343),
-    "PLAYDISCIPLINE": (74.0, 14.826),
-    "ROLLVSPOP": (46.0, 17.791),
-    "TRANSITIONSPOTUP": (8.0, 11.861),
+    "ISOVSPOOR": (15.0, 14.83),  # ATD ISO vs Poor 5-25, cap 75
+    "ISOVSAVERAGE": (10.0, 14.83),  # ATD ISO vs Average 0-20, cap 70
+    "ISOVSGOOD": (7.5, 11.12),  # ATD ISO vs Good 0-15, cap 60
+    "ISOVSELITE": (5.0, 7.41),  # ATD ISO vs Elite 0-10, cap 50
+    "PLAYDISCIPLINE": (55.0, 22.24),  # ATD Play Discipline 40-70, cap 90
+    "ROLLVSPOP": (50.0, 14.83),  # ATD Roll vs Pop 40-60, cap 85
+    "TOUCHES": (40.0, 7.41),  # ATD Touch 35-45, cap 75
+    "TRANSITIONSPOTUP": (50.0, 14.83),  # ATD Spot vs Cut 40-60, cap 85
 }
-
 
 _HANDS_RECIPES = (
     _Recipe("tracked_catch_and_ball_security", (("lost_ball_security", 0.55), ("turnover_rate", -0.30), ("secure_possession_rate", 0.15)), ("lost_ball_security", "turnover_rate")),
     _Recipe("historical_hand_eye_and_secure_possession", (("ft_percent", 0.40), ("assist_share", 0.35), ("secure_possession_rate", 0.25)), ("ft_percent", "assist_share", "secure_possession_rate"), "tracked lost-ball and catch outcomes", "recorded FT touch, team assist responsibility, and secured-possession activity", "the substitute estimates hand-eye control and possession security without using height or names"),
 )
 _HUSTLE_RECIPES = (
-    _Recipe("recorded_effort_event_activity", (("orb_rate", 0.35), ("stl_rate", 0.25), ("blk_rate", 0.15), ("charge_rate", 0.15), ("foul_rate", 0.10)), ("orb_rate", "stl_rate", "blk_rate", "charge_rate")),
-    _Recipe("historical_rebound_foul_availability_activity", (("trb_rate", 0.65), ("foul_rate", 0.25), ("games_share", 0.10)), ("trb_rate", "foul_rate"), "offensive boards, steals, blocks, charges, and loose-ball recoveries", "recorded total-rebound activity, foul activity, and schedule availability", "these all-era events measure repeated pursuit and physical activity; no body or name template authors HUSTLE"),
+    _Recipe("recorded_effort_event_activity", (("orb_rate", 0.28), ("stl_rate", 0.20), ("blk_rate", 0.12), ("charge_rate", 0.12), ("foul_rate", 0.08), ("dws", 0.20)), ("orb_rate", "stl_rate", "blk_rate", "charge_rate")),
+    _Recipe("historical_rebound_foul_availability_activity", (("trb_rate", 0.52), ("foul_rate", 0.20), ("games_share", 0.08), ("dws", 0.20)), ("trb_rate", "foul_rate", "dws"), "offensive boards, steals, blocks, charges, and loose-ball recoveries", "recorded total-rebound activity, foul activity, schedule availability, and DWS", "these all-era events plus sustained defensive value measure repeated pursuit and physical activity; no body or name template authors HUSTLE"),
 )
 _ISO_RECIPES = (
     _Recipe("self_created_isolation_load", (("assisted_two_rate", -0.35), ("attempt_share", 0.25), ("foul_pressure", 0.25), ("role.creator", 0.15)), ("assisted_two_rate",)),
     _Recipe("historical_creator_isolation_load", (("attempt_share", 0.40), ("foul_pressure", 0.30), ("role.creator", 0.30)), ("attempt_share", "scoring_share"), "isolation play-type and unassisted-shot event counts", "offensive responsibility, live-contact pressure, and continuous creator role", "the substitute estimates self-created possession load and the four defender classes share one base score"),
 )
+# Foul rate is a negative discipline signal in both recipes: a player who repeatedly
+# fouls is the player who leaves his assignment, gambles, and plays outside the call.
+# It is the one discipline signal every era records, so it also carries the historical
+# recipe when team totals are thin.
 _PLAY_DISCIPLINE_RECIPES = (
-    _Recipe("assisted_structure_and_decision_security", (("assisted_two_rate", 0.35), ("turnover_rate", -0.25), ("attempt_share", -0.20), ("role.creator", -0.20)), ("assisted_two_rate", "turnover_rate")),
-    _Recipe("historical_team_role_discipline", (("attempt_share", -0.45), ("assist_share", 0.30), ("role.creator", -0.25)), ("attempt_share", "assist_share"), "play-call adherence and freelance possession events", "lower self-directed shot load, team assist responsibility, and reduced primary-creator role", "the substitute describes structured team-role behavior rather than shooting execution"),
+    _Recipe("assisted_structure_and_decision_security", (("assisted_two_rate", 0.30), ("turnover_rate", -0.22), ("foul_rate", -0.18), ("attempt_share", -0.15), ("role.creator", -0.15)), ("assisted_two_rate", "turnover_rate")),
+    _Recipe("historical_team_role_discipline", (("attempt_share", -0.38), ("assist_share", 0.25), ("foul_rate", -0.22), ("role.creator", -0.15)), ("attempt_share", "assist_share", "foul_rate"), "play-call adherence and freelance possession events", "lower self-directed shot load, team assist responsibility, recorded foul activity, and reduced primary-creator role", "the substitute describes structured team-role behavior rather than shooting execution; fouling is the all-era record of playing outside the call"),
 )
 _ROLL_POP_RECIPES = (
     _Recipe("screen_roll_rim_preference", (("mid_attempt_rate", -0.30), ("three_attempt_rate", -0.30), ("rim_attempt_rate", 0.20), ("role.wing", -0.10), ("role.interior", 0.10)), ("mid_attempt_rate", "three_attempt_rate", "rim_attempt_rate")),
@@ -332,6 +340,44 @@ def _robust_summary(values: list[float]) -> tuple[float, float] | None:
     return (median, scale) if scale > 1e-12 else None
 
 
+# Every signal in these recipes is a rate over the same denominator -- the playing
+# time the player actually got -- so they are all noise together at low exposure.
+# One game of four minutes yields 18 PF/36 and a 0.0 turnover rate, and shrinking
+# only one of them just hands authorship to the other. Shrink the finished score
+# instead, so a player with no meaningful sample lands on the calibration center
+# rather than on whichever signal has the smallest denominator. Same
+# exposure/(exposure+prior) form used in player_rules_offense; minutes are the real
+# denominator and are used when the era recorded them, games otherwise.
+_MINUTES_EXPOSURE_PRIOR = 300.0
+_GAMES_EXPOSURE_PRIOR = 20.0
+
+
+def _exposure_total_minutes(source: Any) -> float | None:
+    total = _source_value(source, "totals", "mp")
+    if total is not None:
+        return total
+    per_game = _source_value(source, "per_game", "mp_per_game")
+    games = _gp(source)
+    return per_game * games if per_game is not None and games is not None else None
+
+
+def _exposure_reliability(evidence: Any) -> tuple[float, str] | None:
+    minutes = _exposure_total_minutes(evidence)
+    if minutes is not None and minutes >= 0.0:
+        exposure, prior, basis = minutes, _MINUTES_EXPOSURE_PRIOR, "total_minutes_rate_exposure"
+    else:
+        games = _gp(evidence)
+        if games is None or games < 0.0:
+            return None
+        exposure, prior, basis = games, _GAMES_EXPOSURE_PRIOR, "games_played_rate_exposure"
+    reliability = exposure / (exposure + prior)
+    return reliability, (
+        f"exposure_reliability[recipe_score]={reliability:.8f};"
+        f"basis={basis};exposure={exposure:.6f};prior={prior:.6f};"
+        "shrinks_toward=calibration_center"
+    )
+
+
 def _recipe_score(evidence: Any, population: tuple[Any, ...], recipe: _Recipe) -> tuple[float, tuple[str, ...]] | None:
     if recipe.required and not any(_signal(evidence, name) is not None for name in recipe.required):
         return None
@@ -353,6 +399,11 @@ def _recipe_score(evidence: Any, population: tuple[Any, ...], recipe: _Recipe) -
     if total_weight <= 0.0:
         return None
     score = sum(z_value * weight for z_value, weight, _name in components) / total_weight
+    reliability = _exposure_reliability(evidence)
+    if reliability is not None:
+        factor, reliability_key = reliability
+        score *= factor
+        provenance.append(reliability_key)
     return score, tuple(dict.fromkeys(provenance))
 
 
@@ -380,6 +431,8 @@ def _derive(field: str, evidence: Any, rows: Any, recipes: tuple[_Recipe, ...], 
         )
         if field == "ROLLVSPOP":
             provenance += ("scale_direction=higher_roll;lower_pop",)
+        if field == "TRANSITIONSPOTUP":
+            provenance += ("scale_direction=higher_spot_up;lower_cut",)
         if recipe.unavailable:
             provenance += (
                 f"unavailable_direct_source={recipe.unavailable}",
@@ -420,31 +473,57 @@ def derive_attribute_intangibles(
     if _gp(evidence) is None:
         return None
     raw_vorp = _source_value(evidence, "advanced", "vorp")
-    rating = _intangibles_rating_from_vorp(raw_vorp)
-    state = "missing" if raw_vorp is None else "nonpositive" if raw_vorp <= 0.0 else "observed"
+    if raw_vorp is not None:
+        rating = _intangibles_rating_from_vorp(raw_vorp)
+        state = "nonpositive" if raw_vorp <= 0.0 else "observed"
+        return {
+            "value": rating,
+            "source_rule": "derive_attribute_intangibles",
+            "evidence_keys": (
+                "per_game.g",
+                "advanced.vorp",
+                f"raw_vorp_state={state}",
+                f"raw_vorp={raw_vorp}",
+                "mapping=integer_inverse_of_approved_0_12.47_vorp_curve",
+            ),
+        }
+
+    # VORP is not computed before 1974, so every pre-1974 player used to land on the
+    # curve's floor of 25 and the field carried no information for those eras. Win
+    # shares are recorded all the way back to 1947, so rank them in the same season
+    # and league instead. WS is a counting stat, which is why this is a rank rather
+    # than a second absolute curve: a season's total is not comparable across eras
+    # with different schedule lengths, but a player's standing within his own league
+    # is. Missing WS stays unresolved rather than becoming a floor.
+    win_shares = _source_value(evidence, "advanced", "ws")
+    if win_shares is None:
+        return None
+    population = sorted(
+        value
+        for row in _population(evidence, league_player_rows)
+        if (value := _source_value(row, "advanced", "ws")) is not None
+    )
+    if not population:
+        return None
+    percentile = bisect.bisect_right(population, win_shares) / len(population)
     return {
-        "value": rating,
-        "source_rule": "derive_attribute_intangibles",
+        "value": max(25, min(99, int(round(25.0 + 74.0 * percentile)))),
+        "score": percentile,
+        "source_rule": "derive_attribute_intangibles_historical_win_share_rank",
         "evidence_keys": (
             "per_game.g",
-            "advanced.vorp",
-            f"raw_vorp_state={state}",
-            f"raw_vorp={raw_vorp if raw_vorp is not None else 'missing'}",
-            "mapping=integer_inverse_of_approved_0_12.47_vorp_curve",
+            "advanced.ws",
+            "unavailable_direct_source=advanced.vorp (first computed for season 1974)",
+            "substitute_evidence=same-season same-league win share rank",
+            "validity=WS is recorded from 1947 and measures contributed wins; ranking it "
+            "keeps the field ordered within an era instead of flooring every player at 25",
+            f"raw_win_shares={win_shares}",
+            f"win_share_rank_score={percentile:.8f}",
+            "population=same-season,GP>0,win-share-recorded"
+            ";league-filtered when the generator contract selects one",
+            "mapping=round(25+74*win_share_rank_score)",
         ),
     }
-
-
-def derive_attribute_cachcedovr(evidence: Any, *, league_player_rows: Any = ()) -> None:
-    return None
-
-
-def derive_attribute_maxovr(evidence: Any, *, league_player_rows: Any = ()) -> None:
-    return None
-
-
-def derive_attribute_minovr(evidence: Any, *, league_player_rows: Any = ()) -> None:
-    return None
 
 
 def derive_attribute_potential(evidence: Any, *, league_player_rows: Any = ()) -> None:
@@ -552,6 +631,23 @@ def _touch_component_provenance(name: str, value: float, percentile: float) -> t
     return (*paths, f"{name}={value:.8f}", f"{name}_same_league_percentile={percentile:.8f}")
 
 
+_NORMAL_DISTRIBUTION = statistics.NormalDist()
+# Keeps the probit finite when a rank lands on exactly 0.0 or 1.0.
+_RANK_PROBIT_LIMIT = 0.9995
+
+
+def _value_from_rank(field: str, rank: float) -> int:
+    """Score a 0-1 population rank through the same center/scale every rule uses.
+
+    A rank is not a rating: multiplying it by 100 put the median player at 50
+    whatever the tendency was. TOUCHES is centered at 40, so the rank has to become
+    a z-score and go through the field's own scale.
+    """
+    center, scale = _CALIBRATION[field]
+    bounded = min(max(float(rank), 1.0 - _RANK_PROBIT_LIMIT), _RANK_PROBIT_LIMIT)
+    return max(0, min(100, int(round(center + _NORMAL_DISTRIBUTION.inv_cdf(bounded) * scale))))
+
+
 def derive_tendency_touches(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:
     """Rank the player's share of team offensive involvement.
 
@@ -605,7 +701,7 @@ def derive_tendency_touches(evidence: Any, *, league_player_rows: Any = ()) -> d
         return None
     score = sum(weight * percentile for _name, weight, percentile in available) / available_weight
     return {
-        "value": round(score * 100),
+        "value": _value_from_rank("TOUCHES", score),
         "source_rule": source_rule,
         "evidence_keys": (
             *provenance,
@@ -622,9 +718,6 @@ __all__ = [
     "derive_attribute_hands",
     "derive_attribute_hustle",
     "derive_attribute_intangibles",
-    "derive_attribute_cachcedovr",
-    "derive_attribute_maxovr",
-    "derive_attribute_minovr",
     "derive_attribute_potential",
     "derive_tendency_isovsaveragedefender",
     "derive_tendency_isovselitedefender",

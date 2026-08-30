@@ -41,9 +41,14 @@ _CALIBRATION: dict[str, tuple[float, float, float, float, float]] = {
     "lateral_quickness": (31.89939328, 45.33874148, 3.25832799, 0.07509925, 12.12455866),
     "pick_and_roll_iq": (43.46149719, 19.84886967, 2.93547020, 0.09069753, 11.50524791),
     "contest_shot_attribute": (50.44894563, 3.52469525, 2.45040692, 0.09768933, 7.98725768),
-    "t_foul": (68.09121203, -16.64156651, -0.33218055, -0.01287985, 14.08472996),
+    "t_foul": (63.32078326, -16.64156651, -0.33218055, -0.01287985, 14.83),  # ATD Foul 45-65, cap 95
+    # Deliberately NOT on ATD numbers. derive_tendency_hardfoul pins this field to
+    # 100 pre-1960 and for all but the bottom-quintile contact score in 1970-1989,
+    # because 2K does not otherwise represent the physicality of those eras. The ATD
+    # band (5-20, cap 45) describes a literal hard-contact rate; this field is used
+    # as an engine propensity. Only the 1970s/80s low-contact exception reads it.
     "t_hard_foul": (62.64078510, -22.26446853, -2.67721871, -0.04814260, 15.95836388),
-    "t_take_charge": (24.50019729, 7.88667278, 1.48002538, 0.05358680, 13.78303321),
+    "t_take_charge": (6.05666361, 7.88667278, 1.48002538, 0.05358680, 7.41),  # ATD Take Charge 5-15, cap 35
 }
 
 _POSITION_ROLE = {"PG": 1.0, "SG": 0.8, "SF": 0.5, "PF": 0.2, "C": 0.0}
@@ -64,9 +69,10 @@ _DEFENSE_QUALITY_WEIGHTS = {
 # percent of a broad-defense score, and steals do not author broad defense.
 _DIRECT_SOURCES: dict[str, tuple[tuple[str, float], ...]] = {
     "block": (
-        ("per_100.blk_per_100_poss", 0.45),
-        ("advanced.blk_percent", 0.35),
-        ("per_game.blk_per_game", 0.20),
+        ("per_100.blk_per_100_poss", 0.36),
+        ("advanced.blk_percent", 0.28),
+        ("per_game.blk_per_game", 0.16),
+        ("advanced.dws", 0.20),
     ),
     "defense_consistency": (("advanced.dws", 1.0),),
     "help_defense": (
@@ -83,9 +89,10 @@ _DIRECT_SOURCES: dict[str, tuple[tuple[str, float], ...]] = {
     ),
     "perimeter_defense": (("advanced.dws", 1.0),),
     "steal": (
-        ("advanced.stl_percent", 0.45),
-        ("per_100.stl_per_100_poss", 0.35),
-        ("per_game.stl_per_game", 0.20),
+        ("advanced.stl_percent", 0.36),
+        ("per_100.stl_per_100_poss", 0.28),
+        ("per_game.stl_per_game", 0.16),
+        ("advanced.dws", 0.20),
     ),
     "lateral_quickness": (),
     "pick_and_roll_iq": (),
@@ -110,8 +117,8 @@ _DIRECT_SOURCES: dict[str, tuple[tuple[str, float], ...]] = {
 _SUBSTITUTES: dict[str, tuple[str, str, str]] = {
     "block": (
         "BLK, BLK%, and BLK per 100",
-        "continuous listed defensive role plus exact height and weight",
-        "historical centers protected the basket; this is a field-specific role prior, not a fabricated block count",
+        "DWS plus continuous listed defensive role, exact height, and weight",
+        "DWS supplies sustained defensive value while the field-specific context remains a role prior, not a fabricated block count",
     ),
     "defense_consistency": (
         "game-level defensive consistency measurement",
@@ -140,8 +147,8 @@ _SUBSTITUTES: dict[str, tuple[str, str, str]] = {
     ),
     "steal": (
         "STL, STL%, and STL per 100",
-        "continuous ball-pressure role and size",
-        "the substitute calibrates the exact Steal field without inventing an unavailable historical steal total",
+        "DWS plus continuous ball-pressure role and size",
+        "DWS supplies sustained defensive value while the substitute calibrates Steal without inventing an unavailable historical steal total",
     ),
     "lateral_quickness": (
         "defensive lateral-movement tracking; DWS and DBPM do not measure movement",
@@ -602,23 +609,10 @@ def _legal_value(field: str, value: float) -> int:
 
 def _derive(rule_name: str, field: str, evidence: Any, league_player_rows: Any) -> dict[str, Any] | None:
     games = _games_played(evidence)
-    context = _context_value(field, evidence)
-    if games is None or context is None:
+    if games is None:
         return None
-    context_value, context_keys = context
-    era = player_era_context(evidence)
     rows = _eligible_rows(evidence, league_player_rows)
     if field == "defense_consistency":
-        population = tuple(
-            sorted(
-                value
-                for row in rows
-                if (value := _row_context_value(field, row)) is not None
-            )
-        )
-        if not population:
-            return None
-        context_score = bisect.bisect_right(population, context_value) / len(population)
         dws = _read(evidence, "advanced.dws")
         dws_population = tuple(
             sorted(
@@ -627,35 +621,25 @@ def _derive(rule_name: str, field: str, evidence: Any, league_player_rows: Any) 
                 if (value := _row_value(row, "advanced.dws")) is not None
             )
         )
-        if dws is not None and dws_population:
-            dws_score = bisect.bisect_right(dws_population, dws) / len(dws_population)
-            score = 0.50 * dws_score + 0.50 * context_score
-            rank_source = "dws_plus_field_specific_defense_consistency_context_prediction"
-            consistency_keys = (
-                "advanced.dws",
-                f"dws={dws:.8f}",
-                f"dws_same_season_same_league_rank={dws_score:.8f}",
-                f"context_same_season_same_league_rank={context_score:.8f}",
-                "defense_consistency_weights=dws:0.50,field_specific_context:0.50",
-            )
-        else:
-            score = context_score
-            rank_source = "field_specific_defense_consistency_context_prediction"
-            consistency_keys = (
-                f"context_same_season_same_league_rank={context_score:.8f}",
-                "missing_dws_policy=field_specific_context_only",
-            )
+        if dws is None or not dws_population:
+            return None
+        score = bisect.bisect_right(dws_population, dws) / len(dws_population)
         return {
             "value": max(25, min(99, round(25.0 + 74.0 * score))),
             "score": score,
             "source_rule": rule_name,
-            "evidence_keys": (games[1],) + context_keys + consistency_keys + (
+            "evidence_keys": (games[1], "advanced.dws", f"dws={dws:.8f}") + (
                 f"same_season_same_league_rank_score={score:.8f}",
-                f"rank_source={rank_source}",
+                "rank_source=dws_only",
                 "mapping=round(25+74*same_season_same_league_rank_score)",
                 "population=exact_same_season_same_league_gp_positive_unflattened_rows",
             ),
         }
+    context = _context_value(field, evidence)
+    if context is None:
+        return None
+    context_value, context_keys = context
+    era = player_era_context(evidence)
     scored = _direct_score(evidence, rows, field)
     unavailable, substitute, validity = _SUBSTITUTES[field]
     common_keys = (games[1],) + context_keys + (
