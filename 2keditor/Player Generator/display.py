@@ -291,7 +291,6 @@ def generate_generator_preview_display_state(state: GeneratorDisplayState) -> Ge
     )
 
     _ensure_generator_import_path()
-    from contracts import GeneratorInputContract, OutputTarget
     from player_generator import generate_player_proposals_from_index, season_context_index
 
     cache_season = str(selected.selected_season)
@@ -299,13 +298,12 @@ def generate_generator_preview_display_state(state: GeneratorDisplayState) -> Ge
     if selected.proposal_cache_season == cache_season and selected.proposal_cache_league == cache_league:
         season_proposals = selected.proposal_cache
     else:
-        contract = GeneratorInputContract(
-            season=int(selected.selected_season),
-            source_root=_SOURCE_ROOT,
-            output_target=OutputTarget.PREVIEW,
+        context = season_context_index(
+            int(selected.selected_season),
+            _SOURCE_ROOT,
             selected_league=selected.selected_league,
         )
-        season_proposals = tuple(generate_player_proposals_from_index(season_context_index(contract)).proposals)
+        season_proposals = tuple(generate_player_proposals_from_index(context).proposals)
     selected_keys = {
         (player_id, source_team)
         for label in selected.players
@@ -458,7 +456,6 @@ def import_generator_to_game_display_state(model: Any, state: GeneratorDisplaySt
     if not state.source_loaded:
         return empty_generator_display_state("Load generator source data before importing generated players.")
     _ensure_generator_import_path()
-    from contracts import GeneratorInputContract, OutputTarget
     from game_port import import_generated_players_to_game
 
     import_state = state
@@ -475,7 +472,9 @@ def import_generator_to_game_display_state(model: Any, state: GeneratorDisplaySt
         import_kwargs["progress_callback"] = progress_callback
     result = import_generated_players_to_game(
         model,
-        GeneratorInputContract(int(import_state.selected_season), _SOURCE_ROOT, OutputTarget.OVERWRITE_CURRENT_ROSTER, f"Player Generator {import_state.selected_season}"),
+        int(import_state.selected_season),
+        _SOURCE_ROOT,
+        roster_label=f"Player Generator {import_state.selected_season}",
         **import_kwargs,
     )
     applied = result.apply_result
@@ -503,7 +502,6 @@ def import_missing_generator_to_game_display_state(model: Any, state: GeneratorD
     if not state.source_loaded:
         return empty_generator_display_state("Load generator source data before importing missing generated players.")
     _ensure_generator_import_path()
-    from contracts import GeneratorInputContract, OutputTarget
     from game_port import import_generated_players_to_game, missing_generated_players_and_active_placeholder_indices
 
     import_state = state
@@ -519,7 +517,9 @@ def import_missing_generator_to_game_display_state(model: Any, state: GeneratorD
         import_kwargs["progress_callback"] = progress_callback
     result = import_generated_players_to_game(
         model,
-        GeneratorInputContract(int(import_state.selected_season), _SOURCE_ROOT, OutputTarget.OVERWRITE_CURRENT_ROSTER, f"Player Generator Missing {import_state.selected_season}"),
+        int(import_state.selected_season),
+        _SOURCE_ROOT,
+        roster_label=f"Player Generator Missing {import_state.selected_season}",
         **import_kwargs,
     )
     applied = result.apply_result
@@ -685,15 +685,9 @@ def _evidence_positions(evidence: Any) -> tuple[str, ...]:
 
 def _generator_context_for_season(season: int) -> Any:
     _ensure_generator_import_path()
-    from contracts import GeneratorInputContract, OutputTarget
     from player_generator import season_context_index
 
-    contract = GeneratorInputContract(
-        season=int(season),
-        source_root=_SOURCE_ROOT,
-        output_target=OutputTarget.PREVIEW,
-    )
-    return season_context_index(contract)
+    return season_context_index(int(season), _SOURCE_ROOT)
 
 
 def _table_name(database: Path, sheet_name: str) -> str:

@@ -12,8 +12,8 @@ from typing import Any, Iterable
 
 from nba2k_editor.core import offsets as offsets_mod
 from nba2k_editor.models.schema import FieldEntry
-from contracts import GeneratorInputContract
 from player_evidence import PlayerEvidence, shotquality_contest_rows
+from source_data import GeneratorSourceInventory
 from player_generation_models import (
     FREE_THROW_FIELD_KEY,
     FreeThrowExecutionArtifact,
@@ -327,12 +327,7 @@ def generate_draft_class_proposals(
         raise ValueError("draft_year must be an int")
     draft_mode = mode if isinstance(mode, DraftClassMode) else DraftClassMode(str(mode))
     rookie_season = draft_year + 1
-    contract = GeneratorInputContract(
-        season=rookie_season,
-        source_root=Path(source_root) if source_root is not None else _GENERATOR_DIR / "NBA Player Data",
-        output_target="proposal",
-    )
-    context = season_context_index(contract, offsets_path=offsets_path)
+    context = season_context_index(rookie_season, source_root, offsets_path=offsets_path)
     if draft_mode is DraftClassMode.DRAFT_PICKS:
         proposals = _draft_pick_mode_proposals(context, draft_year)
     elif draft_mode is DraftClassMode.FIRST_APPEARANCE:
@@ -436,8 +431,7 @@ def _person_keys_for_seasons(database: Path, seasons: Iterable[int]) -> set[str]
     for season in seasons:
         if int(season) not in available:
             continue
-        contract = GeneratorInputContract(season=int(season), source_root=source_root, output_target="proposal")
-        context = season_context_index(contract)
+        context = season_context_index(int(season), source_root)
         for player_id, team in context.player_keys():
             person_key = _person_identity_key(context.evidence_for(player_id=player_id, team=team))
             if person_key:
@@ -547,19 +541,46 @@ def _int_value(value: Any) -> int | None:
         return None
 
 
+def validated_season(value: object) -> int:
+    """A generation run needs an explicit season-ending year; there is no default."""
+    if isinstance(value, bool):
+        raise ValueError("season must be an explicit season-ending year")
+    if isinstance(value, int):
+        season = value
+    elif isinstance(value, str) and value.strip().isdigit():
+        season = int(value.strip())
+    else:
+        raise ValueError("season must be an explicit season-ending year")
+    if season <= 0:
+        raise ValueError("season must be an explicit season-ending year")
+    return season
+
+
+def normalized_league(value: object) -> str | None:
+    """`None` means every league in the season, which is what "All Leagues" selects."""
+    league = str(value or "").strip().upper() or None
+    return None if league == "ALL LEAGUES" else league
+
+
 def season_context_index(
-    contract: GeneratorInputContract,
+    season: int,
+    source_root: str | Path | None = None,
     *,
+    selected_league: str | None = None,
     offsets_path: str | Path | None = None,
 ) -> SeasonPlayerContextIndex:
-    validated = contract.validate()
-    database_path = ensure_workbook_sqlite_database(validated.source_root)
+    resolved_season = validated_season(season)
+    root = Path(source_root) if source_root is not None else _GENERATOR_DIR / "NBA Player Data"
+    root = root.expanduser().resolve()
+    # Fail here rather than part-way through a several-hundred-player run.
+    GeneratorSourceInventory.from_root(root)
+    database_path = ensure_workbook_sqlite_database(root)
     offset_path = Path(offsets_path).expanduser().resolve() if offsets_path is not None else _DEFAULT_OFFSETS_PLAYERS_PATH.resolve()
     return _cached_season_context_index(
         str(database_path),
-        int(validated.season),
+        resolved_season,
         str(offset_path),
-        str(validated.selected_league or ""),
+        str(normalized_league(selected_league) or ""),
     )
 
 

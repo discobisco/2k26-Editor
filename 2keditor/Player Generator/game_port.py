@@ -7,12 +7,14 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 
 from nba2k_editor.models.schema import FieldEntry
-from contracts import GeneratorInputContract, OutputTarget
 from player_generator import (
     authored_player_field_index,
     generate_player_proposals_from_index,
     season_context_index,
+    validated_season,
 )
+
+
 
 @dataclass(frozen=True)
 class GamePortFieldResult:
@@ -95,8 +97,11 @@ class GeneratedPlayerGameImportResult:
 
 def import_generated_players_to_game(
     model: Any,
-    contract: GeneratorInputContract,
+    season: int,
+    source_root: str | Path | None = None,
     *,
+    roster_label: str,
+    selected_league: str | None = None,
     generated_players: Iterable[Any] | None = None,
     team_filter: str | None = None,
     player_indices: Iterable[int] | None = None,
@@ -105,12 +110,20 @@ def import_generated_players_to_game(
     stop_on_error: bool = False,
     progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> GeneratedPlayerGameImportResult:
-    validated = contract.validate()
-    if validated.output_target is not OutputTarget.OVERWRITE_CURRENT_ROSTER:
-        raise ValueError("import to game requires overwrite_current_roster output target")
+    resolved_season = validated_season(season)
+    label = str(roster_label or "").strip()
+    if not label:
+        # This writes over the roster in the loaded game, so the caller has to name
+        # what is being overwritten. It is also reported back on the result.
+        raise ValueError("roster_label is required to import generated players into the game")
 
     if generated_players is None:
-        context = season_context_index(validated, offsets_path=offsets_path)
+        context = season_context_index(
+            resolved_season,
+            source_root,
+            selected_league=selected_league,
+            offsets_path=offsets_path,
+        )
         batch = generate_player_proposals_from_index(context, team_filter=team_filter)
         generated_tuple = batch.proposals
         field_index = context.field_index
@@ -136,8 +149,8 @@ def import_generated_players_to_game(
         progress_callback=progress_callback,
     )
     return GeneratedPlayerGameImportResult(
-        season=int(validated.season),
-        roster_label=str(validated.roster_label or ""),
+        season=resolved_season,
+        roster_label=label,
         team_filter=team_filter,
         apply_result=apply_result,
     )
