@@ -25,8 +25,7 @@ The current editor is centered on NBA 2K26. Target detection and offset metadata
 - Player and team record editing
 - Player season-stat selection and Stat ID reset tools
 - Historical Player Generator with preview, draft-class generation, player-pool synchronization, and live import workflows
-- Franchise command center with persistent franchise state, team profiles, phase control, and roster decision workflows
-- Optional Hermes Agent or OpenAI-compatible LLM integration for Franchise features
+
 - Background loading and cancellable long-running operations
 - PyInstaller configuration for a standalone Windows executable
 
@@ -41,6 +40,7 @@ The current editor is centered on NBA 2K26. Target detection and offset metadata
   - `numpy`
 
 Development and packaging also use `pytest` and `PyInstaller`.
+
 
 The repository does not currently include a dependency lockfile. Create a Windows virtual environment and install the dependencies explicitly:
 
@@ -117,24 +117,6 @@ Large datasets and generated subdirectories are intentionally excluded by `.giti
 
 Do not commit licensed, private, or generated datasets unless you have the right to redistribute them.
 
-## Optional Franchise LLM Configuration
-
-Franchise AI workflows can use Hermes Agent, the Hermes API server, or an OpenAI-compatible endpoint. The rest of the editor does not require an LLM.
-
-Common environment variables:
-
-| Variable | Purpose |
-|---|---|
-| `FRANCHISE_LLM_BACKEND` | Selects `auto`, `hermes`, `hermes_api`, or `openai` |
-| `FRANCHISE_HERMES_BASE_URL` | Hermes OpenAI-compatible API base URL |
-| `FRANCHISE_HERMES_API_KEY` | Hermes API key |
-| `FRANCHISE_HERMES_MODEL` | Hermes model name |
-| `FRANCHISE_LLM_BASE_URL` | OpenAI-compatible API base URL |
-| `FRANCHISE_LLM_API_KEY` | OpenAI-compatible API key |
-| `FRANCHISE_LLM_MODEL` | OpenAI-compatible model name |
-| `OPENAI_API_KEY` | Standard OpenAI API-key fallback |
-
-Never commit API keys. Local `.env` files are ignored by Git.
 
 ## Project Structure
 
@@ -149,7 +131,7 @@ Never commit API keys. Local `.env` files are ignored by Git.
 │   ├── memory/                      # Win32 process and memory primitives
 │   ├── models/                      # Editor state, scanning, routing, and writes
 │   ├── ui/                          # PyQt6 application, theme, and widgets
-│   ├── franchise/                   # Franchise state, simulation, and LLM workflows
+│   ├── franchise/                   # Franchise state and simulation workflows
 │   ├── Player Generator/            # Historical player generation pipeline
 │   └── entrypoints/                 # GUI and runtime-cleanup entrypoints
 ├── tests/                           # Automated tests

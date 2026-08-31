@@ -1,13 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Iterable
 
 from nba2k_editor.franchise.models import FantasyDraftStoredPick, FranchiseRecord
-
-
-PREGENERATED_TEAM_PROFILE_DIRECTORY = Path(__file__).resolve().parent / "team_profiles"
 
 
 @dataclass(frozen=True)
@@ -40,21 +36,11 @@ class DraftPick:
 
 
 @dataclass(frozen=True)
-class TeamProfile:
-    team_index: int
-    path: str
-    exists: bool
-    name: str
-    body: str
-
-
-@dataclass(frozen=True)
 class FantasyDraftBoard:
     mode: str
     source: str
     user_team_index: int
     current_position: DraftPosition
-    profile: TeamProfile
     pool_count: int
     available_count: int
     available_players: tuple[DraftPoolPlayer, ...]
@@ -140,8 +126,7 @@ def build_active_player_draft_pool(model: Any, *, team_count: int = 30) -> tuple
 
 
 def league_team_indexes(record: FranchiseRecord) -> tuple[int, ...]:
-    indexes = {int(record.setup.user_team_index), *(int(index) for index in record.setup.llm_gm_team_indexes)}
-    return tuple(sorted(indexes))
+    return tuple(sorted(int(team.team_index) for team in record.team_options))
 
 
 def draft_position(
@@ -202,8 +187,6 @@ def stored_pick_from_player(
     *,
     position: DraftPosition,
     picked_by: str,
-    raw_llm_response: str = "",
-    rationale: str = "",
 ) -> FantasyDraftStoredPick:
     return FantasyDraftStoredPick(
         pick_number=position.pick_number,
@@ -216,39 +199,13 @@ def stored_pick_from_player(
         source_slot=player.source_slot,
         source_slot_field=player.source_slot_field,
         picked_by=picked_by,
-        raw_llm_response=raw_llm_response,
-        rationale=rationale,
     )
 
 
 def draft_turn_owner(position: DraftPosition, record: FranchiseRecord) -> str:
     if int(position.team_index) == int(record.setup.user_team_index):
         return "user"
-    if int(position.team_index) in set(record.setup.llm_gm_team_indexes):
-        return "llm"
-    return "excluded"
-
-
-def _profile_name(text: str, fallback: str) -> str:
-    lines = text.splitlines()
-    if lines and lines[0].strip() == "---":
-        for line in lines[1:]:
-            if line.strip() == "---":
-                break
-            if line.strip().startswith("name:"):
-                return line.split(":", 1)[1].strip()
-    for line in lines:
-        if line.startswith("#"):
-            return line.lstrip("#").strip()
-    return fallback
-
-
-def load_team_profile(team_index: int, profile_dir: str | Path) -> TeamProfile:
-    path = Path(profile_dir) / f"team_{int(team_index):02d}_profile.md"
-    if not path.is_file():
-        return TeamProfile(int(team_index), str(path), False, f"Team {int(team_index)} Profile", "")
-    body = path.read_text(encoding="utf-8")
-    return TeamProfile(int(team_index), str(path), True, _profile_name(body, f"Team {int(team_index)} Profile"), body)
+    return "manual"
 
 
 def build_fantasy_draft_board(
@@ -258,7 +215,6 @@ def build_fantasy_draft_board(
     team_count: int = 30,
     current_pick_number: int = 1,
     drafted_picks: Iterable[DraftPick | FantasyDraftStoredPick] = (),
-    profile_dir: str | Path = PREGENERATED_TEAM_PROFILE_DIRECTORY,
 ) -> FantasyDraftBoard:
     labels = team_labels_from_model(model, team_count=team_count)
     position = draft_position(current_pick_number, team_count=team_count, user_team_index=user_team_index, team_labels=labels)
@@ -269,7 +225,6 @@ def build_fantasy_draft_board(
         source="Players/ISACTIVE active player offset",
         user_team_index=int(user_team_index),
         current_position=position,
-        profile=load_team_profile(position.team_index, profile_dir),
         pool_count=len(pool),
         available_count=len(available),
         available_players=available,
@@ -283,7 +238,6 @@ def build_fantasy_draft_markdown(
     team_count: int = 30,
     current_pick_number: int = 1,
     drafted_picks: Iterable[DraftPick | FantasyDraftStoredPick] = (),
-    profile_dir: str | Path = PREGENERATED_TEAM_PROFILE_DIRECTORY,
 ) -> str:
     picks = tuple(drafted_picks)
     board = build_fantasy_draft_board(
@@ -292,7 +246,6 @@ def build_fantasy_draft_markdown(
         team_count=team_count,
         current_pick_number=current_pick_number,
         drafted_picks=picks,
-        profile_dir=profile_dir,
     )
     lines = [
         "# Franchise Manager Fantasy Draft Room",

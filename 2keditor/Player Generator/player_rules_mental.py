@@ -5,6 +5,7 @@ import math
 import statistics
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
 
@@ -25,7 +26,42 @@ _ROW_PREFIXES: dict[str, tuple[str, ...]] = {
     "play_by_play": ("play_by_play", "player_play_by_play"),
     "team_totals": ("team_totals",),
     "team_stats_per_game": ("team_stats_per_game",),
+    "team_summary": ("team_summaries", "team_summary"),
 }
+
+_NBL_HUSTLE_WEIGHTS = (("games_share", 0.50), ("fta_per_game", 0.30), ("team_win_pct", 0.20))
+_NBL_INTANGIBLES_WEIGHTS = (("team_win_pct", 0.50), ("nbl_scoring_share", 0.30), ("games_share", 0.20))
+_NBL_BAA_REFERENCE_KEYS = {
+    "HUSTLE": "nbl_baa_hustle_reference_values",
+    "INTANGIBLES": "nbl_baa_intangibles_reference_values",
+}
+_NBL_WEIGHTS_BY_FIELD = {
+    "HUSTLE": _NBL_HUSTLE_WEIGHTS,
+    "INTANGIBLES": _NBL_INTANGIBLES_WEIGHTS,
+}
+
+
+@dataclass(frozen=True)
+class _NblCalculationTable:
+    population: tuple[Any, ...]
+    signal_populations: dict[str, tuple[float, ...]]
+    composite_populations: dict[str, tuple[float, ...]]
+    composite_moments: dict[str, tuple[float, float]]
+    composite_winners: dict[str, tuple[str, str]]
+
+
+_NBL_CALCULATION_TABLE_CACHE: dict[
+    tuple[int, int],
+    tuple[object, _NblCalculationTable],
+] = {}
+_MENTAL_POPULATION_CACHE: dict[
+    tuple[int, int],
+    tuple[object, tuple[Any, ...]],
+] = {}
+_MENTAL_SIGNAL_SUMMARY_CACHE: dict[
+    tuple[int, str],
+    tuple[object, tuple[float, float] | None],
+] = {}
 
 
 def _optional_number(value: Any) -> float | None:
@@ -253,6 +289,9 @@ _SIGNAL_PROVENANCE: dict[str, tuple[str, ...]] = {
     "trb_rate": ("per_36.trb_per_36_min",),
     "dws": ("advanced.dws",),
     "games_share": ("per_game.g", "team_stats_per_game.g"),
+    "fta_per_game": ("per_game.fta_per_game",),
+    "team_win_pct": ("team_summary.w", "team_summary.l"),
+    "nbl_scoring_share": ("per_game.pts_per_game", "team_stats_per_game.pts_per_game"),
     "ft_percent": ("per_game.ft_percent",),
     "mid_attempt_rate": ("shooting.percent_fga_from_x10_16_range", "shooting.percent_fga_from_x16_3p_range"),
     "three_attempt_rate": ("advanced.x3p_ar", "totals.x3pa", "totals.fga"),
@@ -319,12 +358,18 @@ _TRANSITION_SPOTUP_RECIPES = (
 
 def _population(evidence: Any, rows: Any) -> tuple[Any, ...]:
     season = _season(evidence)
-    return tuple(
+    cache_key = (id(rows), season)
+    cached = _MENTAL_POPULATION_CACHE.get(cache_key)
+    if cached is not None and cached[0] is rows:
+        return cached[1]
+    population = tuple(
         row
         for row in rows
         if _gp(row) is not None
         and (not season or not _season(row) or _season(row) == season)
     )
+    _MENTAL_POPULATION_CACHE[cache_key] = (rows, population)
+    return population
 
 
 def _robust_summary(values: list[float]) -> tuple[float, float] | None:
@@ -338,6 +383,20 @@ def _robust_summary(values: list[float]) -> tuple[float, float] | None:
         q3 = ordered[(3 * (len(ordered) - 1)) // 4]
         scale = (q3 - q1) / 1.349
     return (median, scale) if scale > 1e-12 else None
+
+
+def _signal_summary(population: tuple[Any, ...], signal: str) -> tuple[float, float] | None:
+    cache_key = (id(population), signal)
+    cached = _MENTAL_SIGNAL_SUMMARY_CACHE.get(cache_key)
+    if cached is not None and cached[0] is population:
+        return cached[1]
+    summary = _robust_summary([
+        value
+        for row in population
+        if (value := _signal(row, signal)) is not None
+    ])
+    _MENTAL_SIGNAL_SUMMARY_CACHE[cache_key] = (population, summary)
+    return summary
 
 
 # Every signal in these recipes is a rate over the same denominator -- the playing
@@ -387,7 +446,7 @@ def _recipe_score(evidence: Any, population: tuple[Any, ...], recipe: _Recipe) -
         current = _signal(evidence, name)
         if current is None:
             continue
-        summary = _robust_summary([value for row in population if (value := _signal(row, name)) is not None])
+        summary = _signal_summary(population, name)
         if summary is None:
             continue
         median, scale = summary
@@ -457,21 +516,280 @@ def _intangibles_rating_from_vorp(vorp: float | None) -> int:
     return min(range(25, 100), key=lambda rating: abs(_intangibles_forward_value(rating) - vorp))
 
 
+def _nbl_population(evidence: Any, rows: Any) -> tuple[Any, ...]:
+    season = _season(evidence)
+    return tuple(
+        row
+        for row in rows
+        if _gp(row) is not None
+        and _league(row) == "NBL"
+        and (not season or not _season(row) or _season(row) == season)
+    )
+
+
+def _nbl_team_key(row: Any, ordinal: int) -> str:
+    team = _text_value(row, "season_info", "team").upper()
+    return team or f"__ROW_{ordinal}"
+
+
+def _identity_key(source: Any) -> tuple[str, str]:
+    player_id = str(
+        getattr(source, "player_id", "")
+        or _text_value(source, "identity", "player_id")
+        or _text_value(source, "season_info", "player_id")
+    ).strip().upper()
+    team = str(
+        getattr(source, "team", "")
+        or _text_value(source, "season_info", "team")
+    ).strip().upper()
+    return player_id, team
+
+
+def _nbl_source_value(source: Any, namespace: str, key: str) -> float | None:
+    if not isinstance(source, Mapping):
+        return _source_value(source, namespace, key)
+    nested = source.get(namespace)
+    if isinstance(nested, Mapping) and (value := _optional_number(nested.get(key))) is not None:
+        return value
+    for prefix in _ROW_PREFIXES.get(namespace, (namespace,)):
+        if (value := _optional_number(source.get(f"{prefix}.{key}"))) is not None:
+            return value
+    return _optional_number(source.get(key))
+
+
+def _nbl_signal(source: Any, name: str) -> float | None:
+    if name == "games_share":
+        return _ratio(
+            _nbl_source_value(source, "per_game", "g"),
+            _nbl_source_value(source, "team_stats_per_game", "g"),
+        )
+    if name == "fta_per_game":
+        return _nbl_source_value(source, "per_game", "fta_per_game")
+    if name == "team_win_pct":
+        wins = _nbl_source_value(source, "team_summary", "w")
+        losses = _nbl_source_value(source, "team_summary", "l")
+        if wins is None or losses is None or wins < 0.0 or losses < 0.0 or wins + losses <= 0.0:
+            return None
+        return wins / (wins + losses)
+    if name == "nbl_scoring_share":
+        return _ratio(
+            _nbl_source_value(source, "per_game", "pts_per_game"),
+            _nbl_source_value(source, "team_stats_per_game", "pts_per_game"),
+        )
+    return None
+
+
+def _nbl_signal_population(rows: tuple[Any, ...], signal: str) -> tuple[float, ...]:
+    if signal == "team_win_pct":
+        team_values: dict[str, float] = {}
+        for ordinal, row in enumerate(rows):
+            value = _nbl_signal(row, signal)
+            if value is not None:
+                team_values.setdefault(_nbl_team_key(row, ordinal), value)
+        return tuple(sorted(team_values.values()))
+    return tuple(sorted(value for row in rows if (value := _nbl_signal(row, signal)) is not None))
+
+
+def _midrank_percentile(value: float, population: tuple[float, ...]) -> float | None:
+    if len(population) < 2:
+        return None
+    left = bisect.bisect_left(population, value)
+    right = bisect.bisect_right(population, value)
+    midrank = (left + right - 1) / 2.0
+    return max(0.0, min(1.0, midrank / (len(population) - 1)))
+
+
+def _linear_percentile(values: tuple[float, ...], percentile: float) -> float:
+    position = max(0.0, min(1.0, percentile)) * (len(values) - 1)
+    lower = int(position)
+    upper = min(len(values) - 1, lower + 1)
+    if lower == upper:
+        return values[lower]
+    fraction = position - lower
+    return values[lower] + fraction * (values[upper] - values[lower])
+
+
+def _nbl_composite_score(
+    source: Any,
+    population: tuple[Any, ...],
+    weights: tuple[tuple[str, float], ...],
+    *,
+    signal_populations: Mapping[str, tuple[float, ...]] | None = None,
+    include_evidence: bool = True,
+) -> tuple[float, tuple[str, ...]] | None:
+    components: list[tuple[str, float, float]] = []
+    evidence_keys: list[str] = []
+    for signal, weight in weights:
+        current = _nbl_signal(source, signal)
+        ranked_population = (
+            signal_populations.get(signal, ())
+            if signal_populations is not None
+            else _nbl_signal_population(population, signal)
+        )
+        if current is None or not ranked_population:
+            return None
+        percentile = _midrank_percentile(current, ranked_population)
+        if percentile is None:
+            return None
+        components.append((signal, weight, percentile))
+        if include_evidence:
+            evidence_keys.extend(_SIGNAL_PROVENANCE[signal])
+            evidence_keys.append(f"raw_{signal}={current:.8f}")
+            evidence_keys.append(f"same_season_nbl_percentile[{signal}]={percentile:.8f}")
+    return sum(weight * percentile for _signal_name, weight, percentile in components), tuple(evidence_keys)
+
+
+def _nbl_calculation_table(evidence: Any, rows: Any) -> _NblCalculationTable:
+    season = _season(evidence)
+    cache_key = (id(rows), season)
+    cached = _NBL_CALCULATION_TABLE_CACHE.get(cache_key)
+    if cached is not None and cached[0] is rows:
+        return cached[1]
+
+    population = _nbl_population(evidence, rows)
+    signals = tuple(dict.fromkeys(
+        signal
+        for weights in _NBL_WEIGHTS_BY_FIELD.values()
+        for signal, _weight in weights
+    ))
+    signal_populations = {
+        signal: _nbl_signal_population(population, signal)
+        for signal in signals
+    }
+    composite_populations: dict[str, tuple[float, ...]] = {}
+    composite_moments: dict[str, tuple[float, float]] = {}
+    composite_winners: dict[str, tuple[str, str]] = {}
+    for field, weights in _NBL_WEIGHTS_BY_FIELD.items():
+        ranked = tuple(
+            (result[0], _identity_key(row))
+            for row in population
+            if (
+                result := _nbl_composite_score(
+                    row,
+                    population,
+                    weights,
+                    signal_populations=signal_populations,
+                    include_evidence=False,
+                )
+            ) is not None
+        )
+        composites = tuple(sorted(score for score, _identity in ranked))
+        composite_populations[field] = composites
+        composite_moments[field] = (
+            statistics.mean(composites) if composites else 0.0,
+            statistics.pstdev(composites) if len(composites) >= 2 else 0.0,
+        )
+        if ranked:
+            top_score = max(score for score, _identity in ranked)
+            composite_winners[field] = min(identity for score, identity in ranked if score == top_score)
+    table = _NblCalculationTable(
+        population=population,
+        signal_populations=signal_populations,
+        composite_populations=composite_populations,
+        composite_moments=composite_moments,
+        composite_winners=composite_winners,
+    )
+    _NBL_CALCULATION_TABLE_CACHE[cache_key] = (rows, table)
+    return table
+
+
+@lru_cache(maxsize=None)
+def _reference_moments(values: tuple[float, ...]) -> tuple[float, float]:
+    return statistics.mean(values), statistics.pstdev(values)
+
+
+def _derive_nbl_adjusted_attribute(
+    field: str,
+    evidence: Any,
+    rows: Any,
+    *,
+    weights: tuple[tuple[str, float], ...],
+) -> dict[str, Any] | None:
+    if _gp(evidence) is None:
+        return None
+    table = _nbl_calculation_table(evidence, rows)
+    scored = _nbl_composite_score(
+        evidence,
+        table.population,
+        weights,
+        signal_populations=table.signal_populations,
+    )
+    if scored is None:
+        return None
+    composite, evidence_keys = scored
+    composite_population = table.composite_populations.get(field, ())
+    context = _source_map(evidence, "source_context")
+    reference_key = _NBL_BAA_REFERENCE_KEYS[field]
+    raw_reference = context.get(reference_key)
+    if not isinstance(raw_reference, (list, tuple)):
+        return None
+    reference_values = tuple(sorted(
+        number
+        for value in raw_reference
+        if (number := _optional_number(value)) is not None
+    ))
+    if len(reference_values) < 2 or len(composite_population) < 2:
+        return None
+    if field == "INTANGIBLES":
+        percentile = _midrank_percentile(composite, composite_population)
+        winner = table.composite_winners.get(field)
+        if percentile is None or winner is None:
+            return None
+        mapped_value = max(25, min(99, int(round(_linear_percentile(reference_values, percentile)))))
+        unique_league_maximum = composite == composite_population[-1] and _identity_key(evidence) == winner
+        value = 99 if unique_league_maximum else min(98, mapped_value)
+        mapping_keys = (
+            f"same_season_nbl_composite_percentile={percentile:.8f}",
+            f"unique_99_winner={winner[0]}:{winner[1]}",
+            f"unique_99_applied={str(unique_league_maximum).lower()}",
+            "mapping=round(linear_percentile(same-season_BAA_generated_values,NBL_composite_rank));only_unique_league_winner_may_equal_99",
+        )
+    else:
+        nbl_mean, nbl_sd = table.composite_moments[field]
+        reference_mean, reference_sd = _reference_moments(reference_values)
+        if nbl_sd <= 0.0 or reference_sd <= 0.0:
+            return None
+        standardized = (composite - nbl_mean) / nbl_sd
+        value = max(25, min(99, int(round(reference_mean + standardized * reference_sd))))
+        mapping_keys = (
+            f"nbl_composite_mean={nbl_mean:.8f}",
+            f"nbl_composite_population_sd={nbl_sd:.8f}",
+            f"reference_mean={reference_mean:.8f}",
+            f"reference_population_sd={reference_sd:.8f}",
+            f"standardized_nbl_composite={standardized:.8f}",
+            "mapping=round(BAA_mean+standardized_NBL_composite*BAA_population_sd);clamp=25..99",
+        )
+    weight_text = ",".join(f"{signal}:{weight:.2f}" for signal, weight in weights)
+    return {
+        "value": value,
+        "score": composite,
+        "source_rule": f"derive_attribute_{field.lower()}_nbl_team_record_counting_stats",
+        "evidence_keys": tuple(dict.fromkeys((
+            "season_info.lg",
+            "league_rule=NBL",
+            *evidence_keys,
+            "population=same-season,NBL,GP>0",
+            "team_win_population=unique_exact_team",
+            f"weights={weight_text}",
+            f"reference={reference_key};same-season BAA generated output distribution",
+            f"reference_count={len(reference_values)}",
+            *mapping_keys,
+        ))),
+    }
+
+
 def derive_attribute_hands(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:
     return _derive("HANDS", evidence, league_player_rows, _HANDS_RECIPES, tendency=False)
 
 
 def derive_attribute_hustle(evidence: Any, *, league_player_rows: Any = ()) -> dict[str, Any] | None:
     if _league(evidence) == "NBL":
-        return {
-            "value": 80,
-            "source_rule": "derive_attribute_hustle_nbl_fixed",
-            "evidence_keys": (
-                "season_info.lg",
-                "league_rule=NBL",
-                "mapping=fixed_80",
-            ),
-        }
+        return _derive_nbl_adjusted_attribute(
+            "HUSTLE",
+            evidence,
+            league_player_rows,
+            weights=_NBL_HUSTLE_WEIGHTS,
+        )
     return _derive("HUSTLE", evidence, league_player_rows, _HUSTLE_RECIPES, tendency=False)
 
 
@@ -481,15 +799,12 @@ def derive_attribute_intangibles(
     league_player_rows: Any = (),
 ) -> dict[str, Any] | None:
     if _league(evidence) == "NBL":
-        return {
-            "value": 60,
-            "source_rule": "derive_attribute_intangibles_nbl_fixed",
-            "evidence_keys": (
-                "season_info.lg",
-                "league_rule=NBL",
-                "mapping=fixed_60",
-            ),
-        }
+        return _derive_nbl_adjusted_attribute(
+            "INTANGIBLES",
+            evidence,
+            league_player_rows,
+            weights=_NBL_INTANGIBLES_WEIGHTS,
+        )
     if _gp(evidence) is None:
         return None
     raw_vorp = _source_value(evidence, "advanced", "vorp")
@@ -518,16 +833,30 @@ def derive_attribute_intangibles(
     win_shares = _source_value(evidence, "advanced", "ws")
     if win_shares is None:
         return None
+    population_rows = tuple(
+        row
+        for row in _population(evidence, league_player_rows)
+        if _source_value(row, "advanced", "ws") is not None
+    )
     population = sorted(
         value
-        for row in _population(evidence, league_player_rows)
+        for row in population_rows
         if (value := _source_value(row, "advanced", "ws")) is not None
     )
     if not population:
         return None
     percentile = bisect.bisect_right(population, win_shares) / len(population)
+    mapped_value = max(25, min(99, int(round(25.0 + 74.0 * percentile))))
+    top_win_shares = population[-1]
+    winner = min(
+        _identity_key(row)
+        for row in population_rows
+        if _source_value(row, "advanced", "ws") == top_win_shares
+    )
+    unique_league_maximum = win_shares == top_win_shares and _identity_key(evidence) == winner
+    value = 99 if unique_league_maximum else min(98, mapped_value)
     return {
-        "value": max(25, min(99, int(round(25.0 + 74.0 * percentile)))),
+        "value": value,
         "score": percentile,
         "source_rule": "derive_attribute_intangibles_historical_win_share_rank",
         "evidence_keys": (
@@ -539,9 +868,11 @@ def derive_attribute_intangibles(
             "keeps the field ordered within an era instead of flooring every player at 25",
             f"raw_win_shares={win_shares}",
             f"win_share_rank_score={percentile:.8f}",
+            f"unique_99_winner={winner[0]}:{winner[1]}",
+            f"unique_99_applied={str(unique_league_maximum).lower()}",
             "population=same-season,GP>0,win-share-recorded"
             ";league-filtered when the generator contract selects one",
-            "mapping=round(25+74*win_share_rank_score)",
+            "mapping=round(25+74*win_share_rank_score);only_unique_league_winner_may_equal_99",
         ),
     }
 

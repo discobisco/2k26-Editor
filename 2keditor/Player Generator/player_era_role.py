@@ -83,6 +83,7 @@ _MODEL: tuple[_Adj, ...] = (
     _Adj("Tendencies/PLAYDISCIPLINE", "scale", 1.15, None, "set-play weave/give-and-go offense", "ball_dominant"),
     # -- driving: slower, more deliberate, no rim-attack athletes ------------
     _Adj("Tendencies/DRIVE", "scale", 0.72, None, "deliberate half-court sets", "drive"),
+    _Adj("Tendencies/DRIVE", "scale", 0.4, "pivot", "centers and pivots finished post actions rather than initiating perimeter drives", "drive"),
     _Adj("Tendencies/ATTACKSTRONGONDRIVE", "scale", 0.7, None, "few power finishers at the rim", "drive"),
     _Adj("Tendencies/DRIVEPULLUPMID", "cap", 8, None, "off-dribble pull-up is modern", "off_dribble_jumper"),
     _Adj("Tendencies/DRIVEPULLUPMIDRANGE", "cap", 8, None, "off-dribble pull-up is modern", "off_dribble_jumper"),

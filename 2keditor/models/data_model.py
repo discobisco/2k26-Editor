@@ -1361,7 +1361,7 @@ class EditorDataModel:
                         failed += 1
         return {"attempted": attempted, "succeeded": succeeded, "failed": failed}
 
-    def _player_editor_reset_value(self, entry: FieldEntry) -> int | str | None:
+    def _player_editor_reset_value(self, entry: FieldEntry) -> int | float | str | None:
         if entry.domain != "Players":
             return None
         normalized = str(entry.normalized_name).upper()
@@ -1371,6 +1371,26 @@ class EditorDataModel:
             return "Z"
         if normalized == "BIRTHYEAR":
             return 2006
+        if normalized == "HEIGHT":
+            return 60
+        if normalized == "WEIGHT":
+            return 100
+        if normalized == "WINGSPAN":
+            return 60
+        if normalized == "WINGSPANCM":
+            return 152.4
+        if normalized == "AGE":
+            return 18
+        if normalized in {"PLAYTYPE2", "PLAYTYPE3", "PLAYTYPE4"}:
+            return "None"
+        if normalized == "AVERAGEPERCENT":
+            return 34
+        if normalized in {"BUSTPERCENTAGE", "BOOMPERCENTAGE"}:
+            return 33
+        if normalized == "MAXIMUMPOTENTIAL":
+            return 40
+        if normalized == "MINIMUMPOTENTIAL":
+            return 41
         if entry.section == "Attributes":
             return 25
         if entry.section == "Tendencies":

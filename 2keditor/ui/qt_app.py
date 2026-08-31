@@ -54,6 +54,7 @@ from nba2k_editor.models.team_record_routing import (
     team_record_row_group,
     team_record_rows,
 )
+from ..franchise.hermes_bridge import HermesEditorBridge
 APP_TITLE = "Offline Player Data Editor"
 APP_VIEWPORT_WIDTH = 1600
 APP_VIEWPORT_HEIGHT = 900
@@ -243,6 +244,7 @@ class QtEditorApp(QMainWindow):
         super().__init__()
         apply_qt_theme(_ensure_qapplication())
         self.model = model
+        self.hermes_bridge = HermesEditorBridge(model)
         self.state = EditorUiState()
         self.setWindowTitle(APP_TITLE)
         self.resize(APP_VIEWPORT_WIDTH, APP_VIEWPORT_HEIGHT)
@@ -392,10 +394,6 @@ class QtEditorApp(QMainWindow):
             self._sync_player_generator_status()
             if not getattr(self.player_generator_state, "source_loaded", False) and not self.operation_worker.is_running():
                 self._load_player_generator_source()
-        if screen == FRANCHISE_SCREEN:
-            franchise_widget = self.screen_widgets.get(FRANCHISE_SCREEN)
-            if franchise_widget is not None and hasattr(franchise_widget, "refresh_entry_menu"):
-                franchise_widget.refresh_entry_menu()
         if screen == "NBA Records":
             self._show_record_screen_rows()
 
@@ -2115,12 +2113,21 @@ class QtEditorApp(QMainWindow):
     def run(self, *, load_on_start: bool = True) -> int:
         app = _ensure_qapplication()
         apply_qt_theme(app)
+        try:
+            self.hermes_bridge.start()
+        except OSError as exc:
+            print(f"HERMES_EDITOR_BRIDGE_UNAVAILABLE {exc}", flush=True)
+        else:
+            print(f"HERMES_EDITOR_BRIDGE {self.hermes_bridge.base_url}", flush=True)
         self.show()
         print("QT_OPENED NBA2K Editor", flush=True)
         if load_on_start:
             self._attach_and_load_all()
         self.operation_timer.start(50)
-        return int(app.exec())
+        try:
+            return int(app.exec())
+        finally:
+            self.hermes_bridge.stop()
 
 
 __all__ = [

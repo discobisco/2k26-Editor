@@ -296,6 +296,12 @@ PLAYER_RULE_SCHEME: dict[str, PlayerRuleSpec] = {
     field_key: PlayerRuleSpec(field_key=field_key, module=module, function=function)
     for field_key, (module, function) in _RULE_BINDINGS.items()
 }
+_NBL_BAA_CENTER_SCORING_FIELDS = frozenset({
+    "Attributes/CLOSESHOT",
+    "Attributes/DRIVINGLAYUP",
+    "Attributes/MIDRANGE",
+    "Attributes/IQSHOT",
+})
 _COMPARISON_POPULATION_CACHE: dict[
     tuple[int, int],
     tuple[object, tuple[dict[str, Any], ...]],
@@ -398,11 +404,58 @@ def derive_formula_rule_values(
         if value is None:
             continue
         values[field_key] = value
+
     # Pre-shot-clock (<=1954) playstyle post-pass: push each archetype toward how
     # it was actually played in its era. No-op for every later season and when
     # PLAYERGEN_ERA_ROLE_PLAYSTYLE is disabled.
     values = _apply_era_role_playstyle(evidence, positions, values)
+    values = _apply_nbl_baa_center_scoring_caps(evidence, values)
     return _apply_shot_family_gate(values)
+
+
+def _apply_nbl_baa_center_scoring_caps(
+    evidence: PlayerEvidence,
+    values: dict[str, RuleValue],
+) -> dict[str, RuleValue]:
+    league = str(evidence.season_info.get("lg") or "").strip().upper()
+    family = str(evidence.per_game.get("fg_percent_position_family") or "").strip().upper()
+    caps = evidence.source_context.get("nbl_baa_center_scoring_caps")
+    if league != "NBL" or family != "C" or not isinstance(caps, dict):
+        return values
+
+    calibrated = dict(values)
+    for field_key in _NBL_BAA_CENTER_SCORING_FIELDS:
+        current = calibrated.get(field_key)
+        cap = caps.get(field_key)
+        if current is None or not isinstance(cap, (int, float)):
+            continue
+        cap_value = _clamp_rule_value(field_key, int(cap))
+        mapped = min(int(current.value), cap_value)
+        fixed_layup_cap = field_key == "Attributes/DRIVINGLAYUP"
+        calibrated[field_key] = replace(
+            current,
+            value=mapped,
+            source_rule=(
+                f"{current.source_rule}_fixed_nbl_center_cap"
+                if fixed_layup_cap
+                else f"{current.source_rule}_same_season_baa_center_cap"
+            ),
+            evidence_keys=current.evidence_keys + (
+                f"pre_baa_center_cap_value={int(current.value)}",
+                (
+                    f"fixed_nbl_center_driving_layup_cap={cap_value}"
+                    if fixed_layup_cap
+                    else f"same_season_baa_center_cap={cap_value}"
+                ),
+                f"baa_center_cap_applied={str(mapped < int(current.value)).lower()}",
+                (
+                    "mapping=min(generated_value,user_approved_fixed_NBL_center_layup_cap)"
+                    if fixed_layup_cap
+                    else "mapping=min(generated_value,same_season_BAA_center_generated_max)"
+                ),
+            ),
+        )
+    return calibrated
 
 
 # ATD "Shot family vs subtypes": Shot Mid and Shot Three carry the total share for

@@ -16,13 +16,12 @@ from nba2k_editor.franchise.models import (
     FranchiseTeamOption,
     LEAGUE_MODE_COLLEGE,
     LEAGUE_MODE_NBA,
-    TeamRecommendation,
+    ManualDraftPick,
     normalize_league_mode,
 )
 from nba2k_editor.franchise.sim_phases import (
     STATUS_READY,
     STATUS_WAITING_FOR_GAME_ADVANCE,
-    STATUS_WAITING_FOR_USER_TRADE,
     game_advance_instruction,
     franchise_phase_sequence,
     initial_phase,
@@ -84,11 +83,7 @@ class FranchiseRepository:
                 label TEXT NOT NULL,
                 display_label TEXT NOT NULL
             );
-            CREATE TABLE IF NOT EXISTS llm_gm_teams (
-                team_index INTEGER PRIMARY KEY,
-                label TEXT NOT NULL,
-                display_label TEXT NOT NULL
-            );
+
             CREATE TABLE IF NOT EXISTS league_saves (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 created_at TEXT NOT NULL,
@@ -126,22 +121,14 @@ class FranchiseRepository:
                 source_slot INTEGER NOT NULL,
                 source_slot_field TEXT NOT NULL,
                 picked_by TEXT NOT NULL,
-                raw_llm_response TEXT NOT NULL,
-                rationale TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
-            CREATE TABLE IF NOT EXISTS team_recommendations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                team_index INTEGER NOT NULL,
-                team_label TEXT NOT NULL,
-                recommended_action TEXT NOT NULL,
-                reasoning TEXT NOT NULL,
-                owner_approval_required INTEGER NOT NULL,
-                trade_with_user_team INTEGER NOT NULL DEFAULT 0,
-                blocked_reason TEXT NOT NULL,
-                raw_llm_response TEXT NOT NULL,
-                status TEXT NOT NULL,
-                created_at TEXT NOT NULL
+            CREATE TABLE IF NOT EXISTS manual_draft_picks (
+                draft_year INTEGER NOT NULL,
+                round_number INTEGER NOT NULL CHECK (round_number IN (1, 2)),
+                original_team_index INTEGER NOT NULL REFERENCES franchise_teams(team_index),
+                current_team_index INTEGER NOT NULL REFERENCES franchise_teams(team_index),
+                PRIMARY KEY(draft_year, round_number, original_team_index)
             );
             CREATE TABLE IF NOT EXISTS college_conferences (
                 conference_id TEXT PRIMARY KEY,
@@ -297,13 +284,6 @@ class FranchiseRepository:
             WHERE status = 'active'
             """
         )
-        recommendation_columns = {
-            str(row[1]) for row in connection.execute("PRAGMA table_info(team_recommendations)")
-        }
-        if "trade_with_user_team" not in recommendation_columns:
-            connection.execute(
-                "ALTER TABLE team_recommendations ADD COLUMN trade_with_user_team INTEGER NOT NULL DEFAULT 0"
-            )
         fantasy_draft_columns = {
             str(row[1]) for row in connection.execute("PRAGMA table_info(fantasy_draft_state)")
         }
@@ -349,17 +329,11 @@ class FranchiseRepository:
         league_mode = normalize_league_mode(setup.league_mode)
         if league_mode == LEAGUE_MODE_COLLEGE and setup.fantasy_draft:
             raise ValueError("College mode does not use the NBA fantasy draft workflow.")
-        options_by_index = {int(option.team_index): option for option in team_options}
-        llm_indexes = {int(index) for index in setup.llm_gm_team_indexes}
-        llm_indexes.discard(int(setup.user_team_index))
-        active_indexes = {*llm_indexes, int(setup.user_team_index)}
-        missing_indexes = tuple(sorted(active_indexes.difference(options_by_index)))
-        if missing_indexes:
-            raise ValueError(f"franchise team indexes are not loaded: {missing_indexes}")
-        active_teams = tuple(options_by_index[index] for index in sorted(active_indexes))
-        llm_teams = tuple(options_by_index[index] for index in sorted(llm_indexes))
+        active_teams = tuple(sorted(team_options, key=lambda option: int(option.team_index)))
+        active_indexes = {int(option.team_index) for option in active_teams}
+        if int(setup.user_team_index) not in active_indexes:
+            raise ValueError("franchise teams do not include the user-controlled team")
         franchise_id = uuid4().hex
-        profile_directory = str((self.db_path.parent / "team_profiles" / franchise_id).resolve())
         now = _utc_now_text()
         connection = self._connect()
         try:
@@ -378,16 +352,14 @@ class FranchiseRepository:
             ):
                 connection.execute(f"DELETE FROM {table}")
             connection.execute("DELETE FROM franchise_meta")
+            connection.execute("DELETE FROM manual_draft_picks")
             connection.execute("DELETE FROM franchise_teams")
-            connection.execute("DELETE FROM llm_gm_teams")
             connection.execute("DELETE FROM league_saves")
             connection.execute("DELETE FROM franchise_sim_state")
             connection.execute("DELETE FROM fantasy_draft_state")
             connection.execute("DELETE FROM fantasy_draft_picks")
-            connection.execute("DELETE FROM team_recommendations")
             meta = {
                 "franchise_id": franchise_id,
-                "profile_directory": profile_directory,
                 "start_year": str(int(setup.start_year)),
                 "user_team_index": str(int(setup.user_team_index)),
                 "keep_full_league_save": "1" if setup.keep_full_league_save else "0",
@@ -410,10 +382,21 @@ class FranchiseRepository:
                 "INSERT INTO franchise_teams(team_index, label, display_label) VALUES(?, ?, ?)",
                 ((team.team_index, team.label, team.display_label) for team in active_teams),
             )
-            connection.executemany(
-                "INSERT INTO llm_gm_teams(team_index, label, display_label) VALUES(?, ?, ?)",
-                ((team.team_index, team.label, team.display_label) for team in llm_teams),
-            )
+            if league_mode == LEAGUE_MODE_NBA:
+                connection.executemany(
+                    """
+                    INSERT INTO manual_draft_picks(
+                        draft_year, round_number, original_team_index, current_team_index
+                    ) VALUES(?, ?, ?, ?)
+                    """,
+                    (
+                        (draft_year, round_number, int(team.team_index), int(team.team_index))
+                        for draft_year in range(int(setup.start_year) + 1, int(setup.start_year) + 6)
+                        for round_number in (1, 2)
+                        for team in active_teams
+                    ),
+                )
+
             if league_snapshot is not None:
                 connection.execute(
                     "INSERT INTO league_saves(created_at, target_executable, payload_json) VALUES(?, ?, ?)",
@@ -441,6 +424,112 @@ class FranchiseRepository:
         finally:
             connection.close()
 
+    def ensure_manual_draft_picks(
+        self,
+        *,
+        start_year: int,
+        team_options: Iterable[FranchiseTeamOption],
+    ) -> tuple[ManualDraftPick, ...]:
+        teams = tuple(sorted(team_options, key=lambda team: int(team.team_index)))
+        if not teams:
+            raise ValueError("manual draft-pick tracking requires franchise teams")
+        connection = self._connect()
+        try:
+            self.initialize(connection)
+            connection.executemany(
+                """
+                INSERT OR IGNORE INTO manual_draft_picks(
+                    draft_year, round_number, original_team_index, current_team_index
+                ) VALUES(?, ?, ?, ?)
+                """,
+                (
+                    (draft_year, round_number, int(team.team_index), int(team.team_index))
+                    for draft_year in range(int(start_year) + 1, int(start_year) + 6)
+                    for round_number in (1, 2)
+                    for team in teams
+                ),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        return self.list_manual_draft_picks()
+
+    def list_manual_draft_picks(self) -> tuple[ManualDraftPick, ...]:
+        connection = self._connect()
+        try:
+            self.initialize(connection)
+            rows = connection.execute(
+                """
+                SELECT draft_year, round_number, original_team_index, current_team_index
+                FROM manual_draft_picks
+                ORDER BY draft_year, round_number, original_team_index
+                """
+            ).fetchall()
+            connection.commit()
+        finally:
+            connection.close()
+        return tuple(
+            ManualDraftPick(
+                draft_year=int(row[0]),
+                round_number=int(row[1]),
+                original_team_index=int(row[2]),
+                current_team_index=int(row[3]),
+            )
+            for row in rows
+        )
+
+    def update_manual_draft_pick_owner(
+        self,
+        *,
+        draft_year: int,
+        round_number: int,
+        original_team_index: int,
+        current_team_index: int,
+    ) -> ManualDraftPick:
+        if int(round_number) not in (1, 2):
+            raise ValueError("manual draft-pick round must be 1 or 2")
+        now = _utc_now_text()
+        connection = self._connect()
+        try:
+            self.initialize(connection)
+            owner_exists = connection.execute(
+                "SELECT 1 FROM franchise_teams WHERE team_index = ?",
+                (int(current_team_index),),
+            ).fetchone()
+            if owner_exists is None:
+                raise ValueError(f"current draft-pick owner is not a franchise team: {int(current_team_index)}")
+            cursor = connection.execute(
+                """
+                UPDATE manual_draft_picks
+                SET current_team_index = ?
+                WHERE draft_year = ? AND round_number = ? AND original_team_index = ?
+                """,
+                (
+                    int(current_team_index),
+                    int(draft_year),
+                    int(round_number),
+                    int(original_team_index),
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError(
+                    f"manual draft pick not found: {int(draft_year)} round {int(round_number)} "
+                    f"original team {int(original_team_index)}"
+                )
+            connection.execute(
+                "INSERT OR REPLACE INTO franchise_meta(key, value) VALUES(?, ?)",
+                ("updated_at", now),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        return ManualDraftPick(
+            draft_year=int(draft_year),
+            round_number=int(round_number),
+            original_team_index=int(original_team_index),
+            current_team_index=int(current_team_index),
+        )
+
     def load(self) -> FranchiseRecord:
         connection = self._connect()
         try:
@@ -452,10 +541,6 @@ class FranchiseRepository:
                     "SELECT team_index, label, display_label FROM franchise_teams ORDER BY team_index"
                 )
             )
-            llm_gm_team_indexes = tuple(
-                int(row[0])
-                for row in connection.execute("SELECT team_index FROM llm_gm_teams ORDER BY team_index")
-            )
             save_count = int(connection.execute("SELECT COUNT(*) FROM league_saves").fetchone()[0])
             connection.commit()
         finally:
@@ -463,7 +548,6 @@ class FranchiseRepository:
         setup = FranchiseSetup(
             start_year=int(meta.get("start_year", "2025")),
             keep_full_league_save=meta.get("keep_full_league_save", "0") == "1",
-            llm_gm_team_indexes=llm_gm_team_indexes,
             fantasy_draft=meta.get("fantasy_draft", "0") == "1",
             user_team_index=int(meta.get("user_team_index", "0")),
             league_mode=normalize_league_mode(meta.get("league_mode", LEAGUE_MODE_NBA)),
@@ -476,7 +560,6 @@ class FranchiseRepository:
             created_at=meta.get("created_at", ""),
             updated_at=meta.get("updated_at", ""),
             franchise_id=meta.get("franchise_id", ""),
-            profile_directory=meta.get("profile_directory", ""),
         )
 
     def load_sim_state(self) -> FranchiseSimState | None:
@@ -658,55 +741,6 @@ class FranchiseRepository:
             raise RuntimeError("franchise simulation resume was not saved")
         return resumed
 
-    def pause_for_user_trade(self, required_user_action: str) -> FranchiseSimState:
-        state = self.ensure_sim_state()
-        if state.status != STATUS_READY:
-            raise ValueError("franchise simulation is already paused")
-        now = _utc_now_text()
-        connection = self._connect()
-        try:
-            self.initialize(connection)
-            connection.execute(
-                """
-                UPDATE franchise_sim_state
-                SET status = ?, required_user_action = ?, updated_at = ?
-                WHERE id = 1
-                """,
-                (STATUS_WAITING_FOR_USER_TRADE, str(required_user_action), now),
-            )
-            connection.execute("INSERT OR REPLACE INTO franchise_meta(key, value) VALUES(?, ?)", ("updated_at", now))
-            connection.commit()
-        finally:
-            connection.close()
-        paused = self.load_sim_state()
-        if paused is None:
-            raise RuntimeError("user-team trade pause was not saved")
-        return paused
-
-    def resume_after_user_trade(self) -> FranchiseSimState:
-        state = self.ensure_sim_state()
-        if state.status != STATUS_WAITING_FOR_USER_TRADE:
-            raise ValueError("franchise simulation is not waiting for a user-team trade decision")
-        now = _utc_now_text()
-        connection = self._connect()
-        try:
-            self.initialize(connection)
-            connection.execute(
-                """
-                UPDATE franchise_sim_state
-                SET status = ?, required_user_action = '', updated_at = ?
-                WHERE id = 1
-                """,
-                (STATUS_READY, now),
-            )
-            connection.execute("INSERT OR REPLACE INTO franchise_meta(key, value) VALUES(?, ?)", ("updated_at", now))
-            connection.commit()
-        finally:
-            connection.close()
-        resumed = self.load_sim_state()
-        if resumed is None:
-            raise RuntimeError("user-team trade resume was not saved")
-        return resumed
 
     def start_fantasy_draft(
         self,
@@ -807,8 +841,7 @@ class FranchiseRepository:
             rows = connection.execute(
                 """
                 SELECT pick_number, round_number, team_index, team_label, player_index, player_label,
-                       source_team_index, source_slot, source_slot_field, picked_by,
-                       raw_llm_response, rationale, created_at
+                       source_team_index, source_slot, source_slot_field, picked_by, created_at
                 FROM fantasy_draft_picks
                 ORDER BY pick_number
                 """
@@ -828,9 +861,7 @@ class FranchiseRepository:
                 source_slot=int(row[7]),
                 source_slot_field=str(row[8]),
                 picked_by=str(row[9]),
-                raw_llm_response=str(row[10]),
-                rationale=str(row[11]),
-                created_at=str(row[12]),
+                created_at=str(row[10]),
             )
             for row in rows
         )
@@ -844,9 +875,8 @@ class FranchiseRepository:
                 """
                 INSERT OR REPLACE INTO fantasy_draft_picks(
                     pick_number, round_number, team_index, team_label, player_index, player_label,
-                    source_team_index, source_slot, source_slot_field, picked_by,
-                    raw_llm_response, rationale, created_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    source_team_index, source_slot, source_slot_field, picked_by, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     int(pick.pick_number),
@@ -859,8 +889,6 @@ class FranchiseRepository:
                     int(pick.source_slot),
                     str(pick.source_slot_field),
                     str(pick.picked_by),
-                    str(pick.raw_llm_response),
-                    str(pick.rationale),
                     now,
                 ),
             )
@@ -883,128 +911,5 @@ class FranchiseRepository:
             source_slot=pick.source_slot,
             source_slot_field=pick.source_slot_field,
             picked_by=pick.picked_by,
-            raw_llm_response=pick.raw_llm_response,
-            rationale=pick.rationale,
             created_at=now,
-        )
-
-    def undo_last_fantasy_draft_pick(self, *, picked_by: str = "llm") -> FantasyDraftStoredPick | None:
-        now = _utc_now_text()
-        connection = self._connect()
-        try:
-            self.initialize(connection)
-            row = connection.execute(
-                """
-                SELECT pick_number, round_number, team_index, team_label, player_index, player_label,
-                       source_team_index, source_slot, source_slot_field, picked_by,
-                       raw_llm_response, rationale, created_at
-                FROM fantasy_draft_picks
-                ORDER BY pick_number DESC
-                LIMIT 1
-                """
-            ).fetchone()
-            if row is None or str(row[9]) != str(picked_by):
-                connection.commit()
-                return None
-            connection.execute("DELETE FROM fantasy_draft_picks WHERE pick_number = ?", (int(row[0]),))
-            connection.execute(
-                "UPDATE fantasy_draft_state SET current_pick_number = ?, updated_at = ? WHERE id = 1",
-                (int(row[0]), now),
-            )
-            connection.execute("INSERT OR REPLACE INTO franchise_meta(key, value) VALUES(?, ?)", ("updated_at", now))
-            connection.commit()
-        finally:
-            connection.close()
-        return FantasyDraftStoredPick(
-            pick_number=int(row[0]),
-            round_number=int(row[1]),
-            team_index=int(row[2]),
-            team_label=str(row[3]),
-            player_index=int(row[4]),
-            player_label=str(row[5]),
-            source_team_index=int(row[6]),
-            source_slot=int(row[7]),
-            source_slot_field=str(row[8]),
-            picked_by=str(row[9]),
-            raw_llm_response=str(row[10]),
-            rationale=str(row[11]),
-            created_at=str(row[12]),
-        )
-
-    def record_team_recommendation(self, recommendation: TeamRecommendation) -> TeamRecommendation:
-        now = recommendation.created_at or _utc_now_text()
-        connection = self._connect()
-        try:
-            self.initialize(connection)
-            cursor = connection.execute(
-                """
-                INSERT INTO team_recommendations(
-                    team_index, team_label, recommended_action, reasoning,
-                    owner_approval_required, trade_with_user_team, blocked_reason,
-                    raw_llm_response, status, created_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    int(recommendation.team_index),
-                    str(recommendation.team_label),
-                    str(recommendation.recommended_action),
-                    str(recommendation.reasoning),
-                    1 if recommendation.owner_approval_required else 0,
-                    1 if recommendation.trade_with_user_team else 0,
-                    str(recommendation.blocked_reason),
-                    str(recommendation.raw_llm_response),
-                    str(recommendation.status),
-                    now,
-                ),
-            )
-            connection.execute("INSERT OR REPLACE INTO franchise_meta(key, value) VALUES(?, ?)", ("updated_at", now))
-            connection.commit()
-            recommendation_id = int(cursor.lastrowid or 0)
-        finally:
-            connection.close()
-        return TeamRecommendation(
-            team_index=recommendation.team_index,
-            team_label=recommendation.team_label,
-            recommended_action=recommendation.recommended_action,
-            reasoning=recommendation.reasoning,
-            owner_approval_required=recommendation.owner_approval_required,
-            trade_with_user_team=recommendation.trade_with_user_team,
-            blocked_reason=recommendation.blocked_reason,
-            raw_llm_response=recommendation.raw_llm_response,
-            status=recommendation.status,
-            created_at=now,
-            recommendation_id=recommendation_id,
-        )
-
-    def list_team_recommendations(self) -> tuple[TeamRecommendation, ...]:
-        connection = self._connect()
-        try:
-            self.initialize(connection)
-            rows = connection.execute(
-                """
-                SELECT id, team_index, team_label, recommended_action, reasoning,
-                       owner_approval_required, trade_with_user_team, blocked_reason,
-                       raw_llm_response, status, created_at
-                FROM team_recommendations
-                ORDER BY id
-                """
-            ).fetchall()
-            connection.commit()
-        finally:
-            connection.close()
-        return tuple(
-            TeamRecommendation(
-                recommendation_id=int(row[0]),
-                team_index=int(row[1]),
-                team_label=str(row[2]),
-                recommended_action=str(row[3]),
-                reasoning=str(row[4]),
-                owner_approval_required=bool(int(row[5])),
-                trade_with_user_team=bool(int(row[6])),
-                blocked_reason=str(row[7]),
-                raw_llm_response=str(row[8]),
-                status=str(row[9]),
-                created_at=str(row[10]),
-            )
-            for row in rows
         )

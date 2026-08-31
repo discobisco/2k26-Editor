@@ -220,6 +220,11 @@ def _percentile_from_calibration(
     return calibration[-1][1]
 
 
+def _smoothstep01(value: float) -> float:
+    bounded = max(0.0, min(1.0, value))
+    return bounded * bounded * (3.0 - 2.0 * bounded)
+
+
 def _raw_position_tokens(value: Any) -> tuple[str, ...]:
     text = str(value or "").upper().replace("/", "-").replace(" ", "")
     return tuple(token for token in text.split("-") if token in _POSITION_INTERIOR_SCORE)
@@ -269,21 +274,64 @@ def _primary_position_is_guard(evidence: PlayerEvidence) -> bool:
     return bool(tokens and _position_family(tokens[0]) == "G")
 
 
-def _sparse_body_context(evidence: PlayerEvidence) -> tuple[float, tuple[str, ...]] | None:
-    values: list[float] = []
-    keys: list[str] = []
+def _sparse_height_context(evidence: PlayerEvidence) -> tuple[float, tuple[str, ...]] | None:
     height = _source_number(evidence, "identity.ht_in_in")
     if height is not None and height > 0.0:
-        values.append(_percentile_from_calibration(height, _POOL_HEIGHT_PERCENTILES))
-        keys.append("identity.ht_in_in")
+        raw_height_score = _percentile_from_calibration(height, _POOL_HEIGHT_PERCENTILES)
+        if str(_source(evidence, "season_info").get("lg") or "").strip().upper() == "NBL":
+            curved_height_score = _smoothstep01(raw_height_score)
+            return curved_height_score, (
+                "identity.ht_in_in",
+                "height_context=continuous_2026_pool_height_percentiles",
+                f"raw_height_percentile_score={raw_height_score:.8f}",
+                f"nbl_height_s_curve_score={curved_height_score:.8f}",
+                "height_curve=smoothstep(x)=x^2*(3-2x)",
+            )
+        return raw_height_score, (
+            "identity.ht_in_in",
+            "height_context=continuous_2026_pool_height_percentiles",
+        )
+    return None
+
+
+def _sparse_weight_context(evidence: PlayerEvidence) -> tuple[float, tuple[str, ...]] | None:
     weight = _source_number(evidence, "identity.wt")
     if weight is not None and weight > 0.0:
-        values.append(_percentile_from_calibration(weight, _POOL_WEIGHT_PERCENTILES))
-        keys.append("identity.wt")
+        return _percentile_from_calibration(weight, _POOL_WEIGHT_PERCENTILES), (
+            "identity.wt",
+            "weight_context=continuous_2026_pool_weight_percentiles",
+        )
+    return None
+
+
+def _sparse_body_context(evidence: PlayerEvidence) -> tuple[float, tuple[str, ...]] | None:
+    contexts = tuple(context for context in (_sparse_height_context(evidence), _sparse_weight_context(evidence)) if context is not None)
+    if not contexts:
+        return None
+    values = [context[0] for context in contexts]
+    keys = [key for context in contexts for key in context[1]]
     if not values:
         return None
     keys.append("body_context=continuous_2026_pool_height_weight_percentiles")
     return sum(values) / len(values), tuple(keys)
+
+
+def _nbl_ppg(evidence: PlayerEvidence) -> float | None:
+    points = _source_number(evidence, "per_game.pts_per_game")
+    return points if points is not None and points >= 0.0 else None
+
+
+def _nbl_games_share(evidence: PlayerEvidence) -> float | None:
+    games = _source_number(evidence, "per_game.g")
+    team_games = _source_number(evidence, "team_stats_per_game.g")
+    if games is None or team_games is None or games < 0.0 or team_games <= 0.0:
+        return None
+    return games / team_games
+
+
+def _nbl_row_ppg(row: Mapping[str, Any]) -> float | None:
+    points = _row_number(row, ("player_per_game.pts_per_game", "per_game.pts_per_game"))
+    return points if points is not None and points >= 0.0 else None
 
 
 def _ratio_rank(
@@ -651,8 +699,15 @@ def _pretracking_attribute_result(
     if position is None:
         return None
     position_score, position_keys = position
+    is_nbl = str(_source(evidence, "season_info").get("lg") or "").strip().upper() == "NBL"
+    win_shares = _historical_win_share_rank(evidence, rows, side=side)
+    nbl_missing_side_win_shares = is_nbl and rebound_signal is None and win_shares is None
 
-    components: list[tuple[float, float, str]] = [(position_score, 0.50, "position")]
+    if nbl_missing_side_win_shares:
+        position_weight = 0.20 if side == "orb" else 0.30
+    else:
+        position_weight = 0.35 if rebound_signal is None else 0.50
+    components: list[tuple[float, float, str]] = [(position_score, position_weight, "position")]
     evidence_keys: list[str] = ["per_game.g", *position_keys]
     if rebound_signal is not None:
         rebound_score = _midrank_percentile(rebound_signal.value, rebound_signal.population)
@@ -669,17 +724,39 @@ def _pretracking_attribute_result(
         if rebound_signal.historical_substitute:
             evidence_keys.append(f"historical_substitute={rebound_signal.historical_substitute}")
     else:
-        body = _sparse_body_context(evidence)
-        if body is None:
-            return None
-        body_score, body_keys = body
-        components.append((body_score, 0.35, "body"))
-        evidence_keys.extend((*body_keys, f"body_rank={body_score:.8f}"))
+        if is_nbl:
+            height = _sparse_height_context(evidence)
+            weight = _sparse_weight_context(evidence)
+            if height is None or weight is None:
+                return None
+            height_score, height_keys = height
+            weight_score, weight_keys = weight
+            height_weight = 0.60 if nbl_missing_side_win_shares else 0.25
+            components.extend(((height_score, height_weight, "height"), (weight_score, 0.10, "weight")))
+            evidence_keys.extend((
+                *height_keys,
+                *weight_keys,
+                f"height_rank={height_score:.8f}",
+                f"weight_rank={weight_score:.8f}",
+                (
+                    "nbl_sparse_missing_side_win_shares_weights="
+                    f"position:{position_weight:.2f},height:0.60,weight:0.10"
+                    if nbl_missing_side_win_shares
+                    else "nbl_sparse_body_weights=height:0.25,weight:0.10"
+                ),
+            ))
+        else:
+            body = _sparse_body_context(evidence)
+            if body is None:
+                return None
+            body_score, body_keys = body
+            components.append((body_score, 0.35, "body"))
+            evidence_keys.extend((*body_keys, f"body_rank={body_score:.8f}"))
 
-    win_shares = _historical_win_share_rank(evidence, rows, side=side)
     if win_shares is not None:
         win_share_score, win_share_keys = win_shares
-        components.append((win_share_score, 0.15, "ows" if side == "orb" else "dws"))
+        win_share_weight = 0.30 if rebound_signal is None else 0.15
+        components.append((win_share_score, win_share_weight, "ows" if side == "orb" else "dws"))
         evidence_keys.extend(win_share_keys)
     else:
         evidence_keys.append(
@@ -690,39 +767,100 @@ def _pretracking_attribute_result(
     if available_weight <= 0.0:
         return None
     score = sum(component_score * weight for component_score, weight, _label in components) / available_weight
+    if is_nbl:
+        games_share = _nbl_games_share(evidence)
+        if games_share is None:
+            return None
+        if side == "orb":
+            ppg = _nbl_ppg(evidence)
+            ppg_population = tuple(sorted(
+                points
+                for row in rows
+                if (points := _nbl_row_ppg(row)) is not None
+            ))
+            ppg_rank = _midrank_percentile(ppg, ppg_population) if ppg is not None else None
+            if ppg_rank is None:
+                return None
+            if win_shares is None:
+                score = 0.25 * score + 0.45 * ppg_rank + 0.30 * games_share
+                blend_contract = "nbl_missing_ows_offensive_rebound_final_blend=current_physical_position_score:0.25,ppg_rank:0.45,games_share:0.30"
+            else:
+                score = 0.45 * score + 0.25 * ppg_rank + 0.30 * games_share
+                blend_contract = "nbl_offensive_rebound_final_blend=current_physical_position_score:0.45,ppg_rank:0.25,games_share:0.30"
+            evidence_keys.extend((
+                "per_game.pts_per_game",
+                f"ppg={ppg:.8f}",
+                f"same_season_nbl_ppg_rank={ppg_rank:.8f}",
+                blend_contract,
+            ))
+        else:
+            score = 0.70 * score + 0.30 * games_share
+            evidence_keys.append("nbl_defensive_rebound_final_blend=current_score:0.70,games_share:0.30")
+        evidence_keys.extend((
+            "per_game.g",
+            "team_stats_per_game.g",
+            f"games_share={games_share:.8f}",
+        ))
+    guard_control = "pre_tracking_guard_control=absolute_primary_secondary_position_weight_0.50;no_TRB_primary_guard_ceiling_55"
     if rebound_signal is None and _primary_position_is_guard(evidence):
         raw_inferred_value = _rank_attribute_value(score)
         score *= 1.10
         scaled_uncapped_value = _rank_attribute_value(score)
-        guard_ceiling_score = (55.0 - 25.0) / 74.0
+        height = _source_number(evidence, "identity.ht_in_in")
+        short_nbl_missing_proof = (
+            is_nbl
+            and win_shares is None
+            and height is not None
+            and height <= 72.0
+        )
+        guard_ceiling_value = 55
+        guard_ceiling_score = (guard_ceiling_value - 25.0) / 74.0
         score = min(score, guard_ceiling_score)
         normalized_guard_score = score / guard_ceiling_score
         if normalized_guard_score < 0.90:
             normalized_guard_score = 0.90 * ((normalized_guard_score / 0.90) ** 4)
             score = guard_ceiling_score * normalized_guard_score
         curved_value = _rank_attribute_value(score)
+        pre_short_guard_cap_value = curved_value
+        if short_nbl_missing_proof:
+            score = min(score, (49.0 - 25.0) / 74.0)
+            curved_value = _rank_attribute_value(score)
         evidence_keys.extend(
             (
                 "no_total_rebound_primary_guard_distribution_scale=1.10",
-                "no_total_rebound_primary_guard_ceiling=55",
-                "no_total_rebound_primary_guard_drop_curve=preserve_top_10_percent_of_25_to_55_span;below_90_percent_use_fourth_power",
+                f"no_total_rebound_primary_guard_ceiling={guard_ceiling_value}",
+                f"no_total_rebound_primary_guard_drop_curve=preserve_top_10_percent_of_25_to_{guard_ceiling_value}_span;below_90_percent_use_fourth_power",
                 f"no_total_rebound_primary_guard_raw_value={raw_inferred_value}",
                 f"no_total_rebound_primary_guard_scaled_uncapped_value={scaled_uncapped_value}",
                 f"no_total_rebound_primary_guard_curved_value={curved_value}",
                 "first_tracked_anchor=1951_NBA_TRB;1947_BAA_guard_overlap=7;max_TRB_per_game=5.0",
             )
         )
+        if short_nbl_missing_proof:
+            evidence_keys.extend((
+                "identity.ht_in_in",
+                f"short_nbl_guard_height_inches={height:.8f}",
+                "short_nbl_guard_missing_rebound_proof=true;TRB_split_and_side_win_shares_unavailable",
+                f"short_nbl_guard_pre_cap_value={pre_short_guard_cap_value}",
+                "short_nbl_guard_rebound_ceiling=49",
+                f"short_nbl_guard_post_cap_value={curved_value}",
+            ))
+            guard_control = "pre_tracking_guard_control=absolute_primary_secondary_position_weight_0.50;short_NBL_guard_without_rebound_proof_ceiling_49"
     component_weights = ",".join(f"{label}:{weight:.2f}" for _score, weight, label in components)
-    evidence_keys.extend(
+    evidence_keys.extend((
+        f"pre_tracking_rebound_weights={component_weights}",
+        f"available_weight={available_weight:.2f}",
+        guard_control,
         (
-            f"pre_tracking_rebound_weights={component_weights}",
-            f"available_weight={available_weight:.2f}",
-            "pre_tracking_guard_control=absolute_primary_secondary_position_weight_0.50;no_TRB_primary_guard_ceiling_55",
-            "pre_tracking_role_and_scoring_share_excluded=true",
-            "comparison_scope=same_season_same_league_gp_positive",
-            "mapping=round(25+74*same_season_same_league_rank_score)",
-        )
-    )
+            "pre_tracking_role_excluded=true;NBL_missing_OWS_offensive_PPG_rank_final_weight=0.45"
+            if is_nbl and side == "orb" and win_shares is None
+            else "pre_tracking_role_excluded=true;NBL_offensive_PPG_rank_final_weight=0.25"
+            if is_nbl and side == "orb"
+            else "pre_tracking_role_and_scoring_share_excluded=true"
+        ),
+        "comparison_scope=same_season_same_league_gp_positive",
+        "mapping=round(25+74*same_season_same_league_rank_score)",
+    ))
     return {
         "value": _rank_attribute_value(score),
         "score": score,

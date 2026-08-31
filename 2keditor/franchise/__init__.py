@@ -1,6 +1,6 @@
-"""Franchise screen and read-only LLM control helpers."""
+"""Franchise setup, phase, draft, and college workflows."""
 
-from nba2k_editor.franchise.models import FranchiseSetup, FranchiseTeamOption, TeamRecommendation
+from nba2k_editor.franchise.models import FranchiseSetup, FranchiseTeamOption
 from nba2k_editor.franchise.storage import DEFAULT_FRANCHISE_DB_PATH, FranchiseRepository, franchise_sql_exists
 
 __all__ = [
@@ -8,6 +8,5 @@ __all__ = [
     "FranchiseRepository",
     "FranchiseSetup",
     "FranchiseTeamOption",
-    "TeamRecommendation",
     "franchise_sql_exists",
 ]
