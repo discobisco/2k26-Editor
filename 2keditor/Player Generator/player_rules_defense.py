@@ -69,6 +69,11 @@ _DEFENSE_QUALITY_WEIGHTS = {
     "team_win_pct": 0.10,
     "team_opp_ppg": 0.10,
 }
+_BAA_DEFENSE_QUALITY_WEIGHTS = {
+    "dws": 0.65,
+    "team_win_pct": 0.175,
+    "team_opp_ppg": 0.175,
+}
 _NBL_BAA_DEFENSE_REFERENCE_KEYS = {
     "perimeter_defense": "nbl_baa_perimeter_defense_reference_values",
     "defense_consistency": "nbl_baa_defense_consistency_reference_values",
@@ -76,6 +81,10 @@ _NBL_BAA_DEFENSE_REFERENCE_KEYS = {
 _NBL_DISTRIBUTION_POPULATION_CACHE: dict[
     tuple[int, str],
     tuple[tuple[dict[str, Any], ...], tuple[tuple[float, float], ...]],
+] = {}
+_BAA_ROUTED_DEFENSE_POPULATION_CACHE: dict[
+    tuple[int, str],
+    tuple[tuple[dict[str, Any], ...], tuple[float, ...]],
 ] = {}
 # Direct-source weights are field-specific.  Blocks never supply more than ten
 # percent of a broad-defense score, and steals do not author broad defense.
@@ -502,11 +511,6 @@ def _population_rank(value: float, population: tuple[float, ...]) -> float | Non
     return (left + right + 1.0) / (2.0 * (len(population) + 1.0))
 
 
-def _smoothstep01(value: float) -> float:
-    bounded = max(0.0, min(1.0, value))
-    return bounded * bounded * (3.0 - 2.0 * bounded)
-
-
 def _direct_score(
     evidence: Any,
     rows: tuple[dict[str, Any], ...],
@@ -777,6 +781,35 @@ def _defense_quality_component_values(evidence: Any) -> dict[str, float | None]:
     }
 
 
+def _defense_quality_weights(source: Any) -> dict[str, float]:
+    league = _row_league(source) if isinstance(source, dict) else _league(source)
+    if league == "NBL":
+        # NBL has no individual DWS. Wins are an overall team outcome, not an
+        # individual defensive measurement, so use the defensive team signal.
+        return {"team_opp_ppg": 1.0}
+    if league == "BAA":
+        return _BAA_DEFENSE_QUALITY_WEIGHTS
+    return _DEFENSE_QUALITY_WEIGHTS
+
+
+def _defense_quality_component_score(
+    name: str,
+    value: float,
+    population: tuple[float, ...],
+    *,
+    league: str,
+) -> float:
+    if name == "dws" and league == "BAA":
+        minimum = population[0]
+        maximum = population[-1]
+        if maximum <= minimum:
+            return 0.5
+        return max(0.0, min(1.0, (value - minimum) / (maximum - minimum)))
+    if name == "team_opp_ppg":
+        return (len(population) - bisect.bisect_left(population, value)) / len(population)
+    return bisect.bisect_right(population, value) / len(population)
+
+
 def _row_team_key(row: dict[str, Any], ordinal: int) -> str:
     for key in ("team", "player_season_info.team", "season_info.team"):
         text = str(row.get(key) or "").strip().upper()
@@ -825,27 +858,48 @@ def _defense_quality_score(
     eligible_rows: tuple[dict[str, Any], ...],
 ) -> tuple[float, tuple[str, ...]] | None:
     component_values = _defense_quality_component_values(evidence)
-    component_populations = _defense_quality_component_populations(eligible_rows)
+    population_rows = eligible_rows
+    if _league(evidence) == "NBL":
+        population_rows = tuple(row for row in eligible_rows if _row_league(row) == "NBL")
+    component_populations = _defense_quality_component_populations(population_rows)
     components: list[tuple[str, float, float]] = []
     quality_keys: list[str] = []
-    for name, weight in _DEFENSE_QUALITY_WEIGHTS.items():
+    weights = _defense_quality_weights(evidence)
+    league = _league(evidence)
+    for name, weight in weights.items():
         value = component_values.get(name)
         population = component_populations.get(name, ())
         if value is None or not population:
             continue
-        if name == "team_opp_ppg":
-            component_score = (len(population) - bisect.bisect_left(population, value)) / len(population)
+        component_score = _defense_quality_component_score(
+            name,
+            value,
+            population,
+            league=league,
+        )
+        if name == "dws" and league == "BAA":
+            quality_keys.extend((
+                "advanced.dws",
+                f"dws={value:.8f}",
+                f"dws_same_league_min={population[0]:.8f}",
+                f"dws_same_league_max={population[-1]:.8f}",
+                f"dws_minmax_score={component_score:.8f}",
+                f"dws_minmax_rating_25_99={round(25.0 + 74.0 * component_score)}",
+                "dws_mapping=minimum_DWS:25,maximum_DWS:99",
+            ))
         else:
-            component_score = bisect.bisect_right(population, value) / len(population)
+            quality_keys.extend(_defense_quality_component_provenance(name, value, component_score))
         components.append((name, weight, component_score))
-        quality_keys.extend(_defense_quality_component_provenance(name, value, component_score))
     total_weight = sum(weight for _name, weight, _component_score in components)
     if total_weight <= 0.0:
         return None
     score = sum(weight * component_score for _name, weight, component_score in components) / total_weight
     return score, (
         *quality_keys,
-        "defense_quality_weights=dws:0.80,team_win_pct:0.10,team_opp_ppg:0.10",
+        "defense_quality_weights=" + ",".join(
+            f"{name}:{weight:.2f}" if weight == round(weight, 2) else f"{name}:{weight:.3f}"
+            for name, weight in weights.items()
+        ),
         "team_opp_ppg_direction=lower_is_better",
         f"available_weight={total_weight:.8f}",
         "missing_components=omitted_and_available_weights_renormalized",
@@ -863,15 +917,18 @@ def _row_defense_quality_score(
         "team_opp_ppg": _team_opponent_points_per_game(row),
     }
     components: list[tuple[float, float]] = []
-    for name, weight in _DEFENSE_QUALITY_WEIGHTS.items():
+    league = _row_league(row)
+    for name, weight in _defense_quality_weights(row).items():
         value = values.get(name)
         population = component_populations.get(name, ())
         if value is None or not population:
             continue
-        if name == "team_opp_ppg":
-            component_score = (len(population) - bisect.bisect_left(population, value)) / len(population)
-        else:
-            component_score = bisect.bisect_right(population, value) / len(population)
+        component_score = _defense_quality_component_score(
+            name,
+            value,
+            population,
+            league=league,
+        )
         components.append((weight, component_score))
     total_weight = sum(weight for weight, _score in components)
     if total_weight <= 0.0:
@@ -923,6 +980,30 @@ def _row_has_researched_defense_override(row: dict[str, Any]) -> bool:
     ) is not None
 
 
+def _baa_routed_defense_population(
+    field: str,
+    eligible_rows: tuple[dict[str, Any], ...],
+) -> tuple[float, ...]:
+    cache_key = (id(eligible_rows), field)
+    cached = _BAA_ROUTED_DEFENSE_POPULATION_CACHE.get(cache_key)
+    if cached is not None and cached[0] is eligible_rows:
+        return cached[1]
+    baa_rows = tuple(row for row in eligible_rows if _row_league(row) == "BAA")
+    component_populations = _defense_quality_component_populations(baa_rows)
+    signals: list[float] = []
+    for row in baa_rows:
+        if _row_has_researched_defense_override(row):
+            continue
+        quality_score = _row_defense_quality_score(row, component_populations)
+        mix = _row_position_mix(row)
+        if quality_score is None or mix is None:
+            continue
+        signals.append(quality_score * _position_side_multiplier(mix, field))
+    population = tuple(sorted(signals))
+    _BAA_ROUTED_DEFENSE_POPULATION_CACHE[cache_key] = (eligible_rows, population)
+    return population
+
+
 def _nbl_distribution_population(
     field: str,
     eligible_rows: tuple[dict[str, Any], ...],
@@ -931,9 +1012,10 @@ def _nbl_distribution_population(
     cached = _NBL_DISTRIBUTION_POPULATION_CACHE.get(cache_key)
     if cached is not None and cached[0] is eligible_rows:
         return cached[1]
-    component_populations = _defense_quality_component_populations(eligible_rows)
+    nbl_rows = tuple(row for row in eligible_rows if _row_league(row) == "NBL")
+    component_populations = _defense_quality_component_populations(nbl_rows)
     signals: list[tuple[float, float]] = []
-    for row in eligible_rows:
+    for row in nbl_rows:
         if field == "perimeter_defense" and _row_has_researched_defense_override(row):
             continue
         quality_score = _row_defense_quality_score(row, component_populations)
@@ -1085,10 +1167,15 @@ def _derive_dws_defense(rule_name: str, field: str, evidence: Any, rows: Any) ->
             and (value := _row_value(row, "identity.ht_in_in")) is not None
             and value > 0.0
         ))
-        raw_height_rank = _population_rank(height, height_population) if height is not None and height > 0.0 else None
-        if raw_height_rank is None:
+        if height is None or height <= 0.0 or not height_population:
             return None
-        height_score = _smoothstep01(raw_height_rank)
+        minimum_height = height_population[0]
+        maximum_height = height_population[-1]
+        height_score = (
+            0.5
+            if maximum_height <= minimum_height
+            else max(0.0, min(1.0, (height - minimum_height) / (maximum_height - minimum_height)))
+        )
         routed_score = score * multiplier
         adjusted_score = 0.80 * routed_score + 0.20 * height_score
         return {
@@ -1097,18 +1184,40 @@ def _derive_dws_defense(rule_name: str, field: str, evidence: Any, rows: Any) ->
             "source_rule": f"{rule_name}_nbl_height_blend",
             "evidence_keys": quality_keys + position_keys + (
                 "identity.ht_in_in",
-                f"height_same_season_nbl_percentile={raw_height_rank:.8f}",
-                f"height_same_season_nbl_s_curve_score={height_score:.8f}",
-                "height_curve=smoothstep(x)=x^2*(3-2x)",
+                f"height_same_season_nbl_min={minimum_height:.8f}",
+                f"height_same_season_nbl_max={maximum_height:.8f}",
+                f"height_same_season_nbl_span_score={height_score:.8f}",
                 "nbl_interior_defense_weights=current_routed_defense:0.80,height:0.20",
                 "height_population=same_season_NBL_GP_positive",
             ),
         }
+    if special_rule is None and _league(evidence) == "BAA":
+        population = _baa_routed_defense_population(field, eligible_rows)
+        routed_score = score * multiplier
+        if len(population) >= 2 and population[-1] > population[0]:
+            minimum = population[0]
+            maximum = population[-1]
+            final_score = max(0.0, min(1.0, (routed_score - minimum) / (maximum - minimum)))
+            return {
+                "value": _legal_value(field, 25 + 74 * final_score),
+                "score": score,
+                "source_rule": quality_rule,
+                "evidence_keys": quality_keys + position_keys + (
+                    f"baa_routed_defense_score={routed_score:.8f}",
+                    f"baa_routed_defense_min={minimum:.8f}",
+                    f"baa_routed_defense_max={maximum:.8f}",
+                    f"baa_routed_defense_minmax_score={final_score:.8f}",
+                    "baa_final_mapping=minimum_routed_BAA_value:25,maximum_routed_BAA_value:99",
+                    "final_mapping=round(25+74*BAA_routed_minmax_score);clamp=25..99",
+                ),
+            }
     return {
-        "value": round(25 + score * 74 * multiplier),
+        "value": _legal_value(field, 25 + score * 74 * multiplier),
         "score": score,
         "source_rule": quality_rule,
-        "evidence_keys": quality_keys + position_keys,
+        "evidence_keys": quality_keys + position_keys + (
+            "final_mapping=round(25+74*defense_quality_score*position_side_multiplier);clamp=25..99",
+        ),
     }
 
 

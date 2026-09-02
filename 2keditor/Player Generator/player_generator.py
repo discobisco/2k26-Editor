@@ -14,6 +14,13 @@ from typing import Any, Iterable
 from nba2k_editor.core import offsets as offsets_mod
 from nba2k_editor.models.schema import FieldEntry
 from player_evidence import PlayerEvidence, shotquality_contest_rows
+from player_honors import season_honors_by_player
+from pre_nba_sqlite import available_pre_nba_seasons, load_pre_nba_season_payload
+from nbl_baa_projection import (
+    PROJECTED_FIELD_KEYS as NBL_BAA_PROJECTED_FIELD_KEYS,
+    REFERENCE_CONTEXT_KEY as NBL_BAA_REFERENCE_CONTEXT_KEY,
+    make_baa_projection_reference,
+)
 import player_rules_mental as mental_rules
 from player_generation_models import (
     FREE_THROW_FIELD_KEY,
@@ -247,6 +254,8 @@ def generate_player_proposal(
             "team": source_team,
             "team_abbrev": source_team,
             "team_name": _team_display_name(evidence),
+            "source_league": evidence.season_info.get("lg") or evidence.source_context.get("lg"),
+            "source_leagues": evidence.source_context.get("source_leagues"),
             "multi_team_stat_shares": evidence.source_context.get("multi_team_stat_shares"),
             "source": evidence.source_context.get("source"),
         },
@@ -459,6 +468,8 @@ def _person_keys_for_seasons(database: Path, seasons: Iterable[int]) -> set[str]
 
 
 def _available_source_seasons(database: Path) -> tuple[int, ...]:
+    if database.name.lower() == "pre_nba.sqlite":
+        return available_pre_nba_seasons(database.parent)
     seasons: set[int] = set()
     try:
         table_name = _workbook_table_name(database, _BASE_PLAYER_SEASON_SHEET)
@@ -471,6 +482,17 @@ def _available_source_seasons(database: Path) -> tuple[int, ...]:
             value = _int_value(season)
             if value is not None:
                 seasons.add(value)
+    return tuple(sorted(seasons))
+
+
+def available_source_seasons(source_root: str | Path | None = None) -> tuple[int, ...]:
+    root = Path(source_root) if source_root is not None else _GENERATOR_DIR / "NBA Player Data"
+    resolved_root = root.expanduser().resolve()
+    master_database = ensure_workbook_sqlite_database(resolved_root)
+    seasons = set(_available_source_seasons(master_database))
+    pre_nba_database = resolved_root / "pre_nba.sqlite"
+    if pre_nba_database.is_file():
+        seasons.update(available_pre_nba_seasons(resolved_root))
     return tuple(sorted(seasons))
 
 
@@ -590,16 +612,32 @@ def season_context_index(
 ) -> SeasonPlayerContextIndex:
     resolved_season = validated_season(season)
     root = Path(source_root) if source_root is not None else _GENERATOR_DIR / "NBA Player Data"
+    resolved_root = root.expanduser().resolve()
+    offset_path = Path(offsets_path).expanduser().resolve() if offsets_path is not None else _DEFAULT_OFFSETS_PLAYERS_PATH.resolve()
+    selected = str(normalized_league(selected_league) or "")
+    if 1898 <= resolved_season <= 1946:
+        payload = load_pre_nba_season_payload(
+            resolved_root,
+            resolved_season,
+            selected_league=selected,
+        )
+        return SeasonPlayerContextIndex(
+            season=resolved_season,
+            source_database_path=payload.database_path,
+            selected_league=payload.selected_league,
+            comparison_rows=payload.comparison_rows,
+            evidence_by_key=dict(payload.evidence_by_key),
+            field_index=dict(_cached_authored_player_field_index(str(offset_path))),
+        )
     # ensure_workbook_sqlite_database checks the root, the database file and its
     # workbook metadata, so a missing or unusable source fails here rather than
     # part-way through a whole-season run.
-    database_path = ensure_workbook_sqlite_database(root.expanduser().resolve())
-    offset_path = Path(offsets_path).expanduser().resolve() if offsets_path is not None else _DEFAULT_OFFSETS_PLAYERS_PATH.resolve()
+    database_path = ensure_workbook_sqlite_database(resolved_root)
     return _cached_season_context_index(
         str(database_path),
         resolved_season,
         str(offset_path),
-        str(normalized_league(selected_league) or ""),
+        selected,
     )
 
 
@@ -695,6 +733,12 @@ def _cached_season_context_index(
                 shotquality_contest,
                 include_bare=False,
             )
+
+    season_honors = season_honors_by_player(database, season)
+    for (player_id, _team), merged in rows_by_key.items():
+        honors = season_honors.get(player_id)
+        if honors:
+            merged["season_honors"] = honors
 
     if _impute_sparse_fg_percent(database, season, player_sheet_rows[_PLAYER_PER_GAME_SHEET]):
         per_game_prefix = _context_prefix(_PLAYER_PER_GAME_SHEET)
@@ -851,7 +895,7 @@ def _same_season_baa_defense_reference(
     team_sheet_rows: dict[str, dict[str, dict[str, Any]]],
     team_rosters: dict[str, list[dict[str, Any]]],
     shotquality_by_player_id: dict[str, dict[str, Any]],
-) -> dict[str, tuple[int, ...]]:
+) -> dict[str, Any]:
     baa_keys = tuple(
         key
         for key in sorted(rows_by_key)
@@ -875,6 +919,7 @@ def _same_season_baa_defense_reference(
         reference_key: []
         for reference_key in _NBL_BAA_DEFENSE_REFERENCE_FIELDS.values()
     }
+    projection_references: list[dict[str, Any]] = []
     for evidence in evidence_by_key.values():
         positions = select_positions_from_evidence(
             evidence.play_by_play,
@@ -884,18 +929,30 @@ def _same_season_baa_defense_reference(
             evidence,
             positions=positions,
             league_player_rows=baa_rows,
-            active_field_keys=set(_NBL_BAA_DEFENSE_REFERENCE_FIELDS),
+            active_field_keys=set(_NBL_BAA_DEFENSE_REFERENCE_FIELDS) | set(NBL_BAA_PROJECTED_FIELD_KEYS),
         )
         for field_key, reference_key in _NBL_BAA_DEFENSE_REFERENCE_FIELDS.items():
             value = result.values.get(field_key)
             if value is None or value.source_rule.endswith("_researched_exact_player_override"):
                 continue
             values_by_reference[reference_key].append(int(value.value))
-    return {
+        projection_targets = {
+            field_key: int(value.value)
+            for field_key in NBL_BAA_PROJECTED_FIELD_KEYS
+            if (value := result.values.get(field_key)) is not None
+        }
+        if projection_targets:
+            projection_references.append(
+                make_baa_projection_reference(evidence, baa_rows, projection_targets)
+            )
+    references: dict[str, Any] = {
         reference_key: tuple(sorted(values))
         for reference_key, values in values_by_reference.items()
         if len(values) >= 2
     }
+    if projection_references:
+        references[NBL_BAA_REFERENCE_CONTEXT_KEY] = tuple(projection_references)
+    return references
 
 
 def _same_season_baa_mental_reference(rows: Iterable[dict[str, Any]]) -> dict[str, tuple[int, ...]]:
@@ -1441,6 +1498,7 @@ __all__ = [
     "GeneratedDraftClass",
     "DraftClassMode",
     "SeasonPlayerContextIndex",
+    "available_source_seasons",
     "authored_player_field_index",
     "generate_player_proposal",
     "generate_player_proposal_from_index",

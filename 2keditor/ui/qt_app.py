@@ -188,6 +188,7 @@ class EditorUiState:
     player_team_filter: str | int = "All Players"
     player_position_filter: str = PLAYER_POSITION_FILTER_ALL
     player_search_text: str = ""
+    staff_search_text: str = ""
     player_roster_export_folder: str = str(PLAYER_ROSTER_EXPORTS_DIR)
     player_roster_snapshot_filename: str = PLAYER_ROSTER_DEFAULT_EXPORT_FILE
     player_roster_export_mode: str = PLAYER_ROSTER_EXPORT_MODES[0]
@@ -266,6 +267,7 @@ class QtEditorApp(QMainWindow):
         self.player_filter_combo: QComboBox | None = None
         self.player_position_filter_combo: QComboBox | None = None
         self.player_search_input: QLineEdit | None = None
+        self.staff_search_input: QLineEdit | None = None
         self.player_movement = PlayerMovement(model)
         self.operation_dialog: OperationDialog | None = None
         self.operation_worker = BackgroundOperationWorker()
@@ -565,6 +567,15 @@ class QtEditorApp(QMainWindow):
 
     def _build_generic_domain_screen(self, domain: str) -> QWidget:
         widget, layout = self._base_domain_screen(domain)
+        if domain == "Staff":
+            controls = QHBoxLayout()
+            staff_search_input = QLineEdit()
+            staff_search_input.setPlaceholderText("Search staff")
+            staff_search_input.textChanged.connect(self._set_staff_search_text)
+            self.staff_search_input = staff_search_input
+            controls.addWidget(QLabel("Search"))
+            controls.addWidget(staff_search_input)
+            layout.addLayout(controls)
         record_list = RecordListWidget(lambda indexes, current, d=domain: self._select_item_indexes(d, indexes, current))
         self.domain_lists[domain] = record_list
         detail_widget = QWidget()
@@ -879,7 +890,8 @@ class QtEditorApp(QMainWindow):
                 or self.state.player_position_filter != PLAYER_POSITION_FILTER_ALL
                 or self.state.player_search_text.strip()
             )
-            if not player_filter_active:
+            staff_filter_active = domain == "Staff" and bool(self.state.staff_search_text.strip())
+            if not player_filter_active and not staff_filter_active:
                 self._set_count(domain, f"{self._display_label(domain)}: {len(items)}")
             if domain in self.status_labels:
                 self.status_labels[domain].setText(view.status)
@@ -893,6 +905,10 @@ class QtEditorApp(QMainWindow):
                         selected,
                         visible_indexes=visible_indexes,
                     )
+                elif domain == "Staff":
+                    self.domain_lists[domain].set_all_records(records, selected)
+                    if staff_filter_active:
+                        self._sync_staff_list()
                 else:
                     self.domain_lists[domain].set_records(records, selected)
         if any(view.domain == "Teams" for view in views):
@@ -927,6 +943,8 @@ class QtEditorApp(QMainWindow):
         selected = self.state.selected_item_indexes.get(domain, set())
         if domain in self.domain_lists:
             self.domain_lists[domain].set_records([(int(item.index), item.display_label) for item in items], selected)
+            if domain == "Staff" and self.state.staff_search_text.strip():
+                self._sync_staff_list()
         self._update_detail_panel(domain)
         self._refresh_dashboard_metrics()
 
@@ -1013,6 +1031,27 @@ class QtEditorApp(QMainWindow):
     def _set_player_search_text(self, value: str) -> None:
         self.state.player_search_text = value
         self._sync_player_list()
+
+    def _set_staff_search_text(self, value: str) -> None:
+        self.state.staff_search_text = value
+        self._sync_staff_list()
+
+    def _sync_staff_list(self) -> None:
+        query = self.state.staff_search_text.strip().casefold()
+        items = tuple(self.model.domain_items("Staff"))
+        visible = tuple(
+            item
+            for item in items
+            if not query or query in str(item.display_label).casefold()
+        )
+        self._set_count("Staff", f"Staff: {len(visible)}")
+        selected = self.state.selected_item_indexes.get("Staff", set())
+        record_list = self.domain_lists.get("Staff")
+        if record_list is not None:
+            record_list.set_visible_records(
+                [(int(item.index), item.display_label) for item in visible],
+                selected,
+            )
 
     def _update_detail_panel(self, domain: str) -> None:
         item = self.model.selected_item(domain) if hasattr(self.model, "selected_item") else None
@@ -1954,20 +1993,92 @@ class QtEditorApp(QMainWindow):
             self._refresh_player_generator_dropdowns()
             state_snapshot = self.player_generator_state
 
-            def worker() -> str:
-                try:
-                    self.player_generator_state = display.import_generator_to_game_display_state(
-                        self.model,
-                        state_snapshot,
-                        match_existing_player_names=match_existing_player_names,
-                        progress_callback=self._background_operation_progress,
-                    )
-                except Exception as exc:
-                    self.player_generator_state = display.empty_generator_display_state(f"Import failed: {exc}")
-                    raise
-                return str(getattr(self.player_generator_state, "status", "Import complete."))
+            def start_import(team_import_plan: Any | None = None) -> None:
+                def worker() -> str:
+                    try:
+                        self.player_generator_state = display.import_generator_to_game_display_state(
+                            self.model,
+                            state_snapshot,
+                            match_existing_player_names=match_existing_player_names,
+                            team_import_plan=team_import_plan,
+                            progress_callback=self._background_operation_progress,
+                        )
+                    except Exception as exc:
+                        self.player_generator_state = display.empty_generator_display_state(f"Import failed: {exc}")
+                        raise
+                    return str(getattr(self.player_generator_state, "status", "Import complete."))
 
-            self._start_background_operation("Import Generated Players", worker, done_callback=self._sync_player_generator_status)
+                self._start_background_operation("Import Generated Players", worker, done_callback=self._sync_player_generator_status)
+
+            if match_existing_player_names:
+                start_import()
+                return
+            if not hasattr(display, "generator_team_import_preview"):
+                QMessageBox.warning(self, "Import By Team Matching", "Team import review is unavailable; no players were written.")
+                return
+
+            def preview_worker() -> object:
+                return display.generator_team_import_preview(self.model, state_snapshot)
+
+            def show_review(result: object) -> None:
+                if not isinstance(result, dict):
+                    raise TypeError("team import preview did not return a review summary")
+                self._confirm_generator_team_import(result, lambda: start_import(result.get("plan")))
+
+            self._start_background_operation(
+                "Prepare Team Import Review",
+                preview_worker,
+                done_callback=show_review,
+            )
+
+    def _confirm_generator_team_import(self, summary: dict[str, Any], on_accept: Callable[[], None]) -> None:
+        generated_count = int(summary.get("generated_count") or 0)
+        source_generated_count = int(summary.get("source_generated_count") or generated_count)
+        authored_count = int(summary.get("authored_count") or generated_count)
+        population_count = int(summary.get("population_count") or generated_count)
+        assignment_count = int(summary.get("assignment_count") or 0)
+        team_assignment_count = int(summary.get("team_assignment_count") or 0)
+        free_agent_assignment_count = int(summary.get("free_agent_assignment_count") or 0)
+        target_count = int(summary.get("target_count") or 0)
+        team_count = int(summary.get("team_count") or 0)
+        issue_count = int(summary.get("issue_count") or 0)
+        blocking_issue_count = int(summary.get("blocking_issue_count") or 0)
+        ready = bool(summary.get("ready"))
+        lines = tuple(str(line) for line in summary.get("lines", ()))
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Review Team Import")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("Review the complete authored player-to-live-PLAYER-slot plan. No player data has been written."))
+        layout.addWidget(
+            QLabel(
+                f"1946-47 total: {population_count}   Source preview: {source_generated_count}   "
+                f"Authored roster: {authored_count}   "
+                f"Team players: {team_assignment_count}   Free agents: {free_agent_assignment_count}   "
+                f"Import list: {assignment_count}   "
+                f"Live slots: {target_count}   Teams: {team_count}   Notes: {issue_count}   "
+                f"Blocking: {blocking_issue_count}"
+            )
+        )
+        text = QTextEdit()
+        text.setReadOnly(True)
+        text.setPlainText("\n".join(lines))
+        configure_output_text(text)
+        layout.addWidget(text, 1)
+        buttons = QHBoxLayout()
+        cancel_button = QPushButton("Cancel")
+        import_button = QPushButton("Approve and Import")
+        cancel_button.clicked.connect(dialog.reject)
+        import_button.clicked.connect(dialog.accept)
+        import_button.setEnabled(ready)
+        if not ready:
+            import_button.setToolTip("Resolve every team assignment before importing.")
+        dialog.accepted.connect(on_accept)
+        buttons.addStretch(1)
+        buttons.addWidget(cancel_button)
+        buttons.addWidget(import_button)
+        layout.addLayout(buttons)
+        dialog.resize(760, 560)
+        dialog.show()
 
     def _confirm_missing_generator_import(self, summary: dict[str, Any], on_accept: Callable[[], None]) -> None:
         names = tuple(str(name) for name in summary.get("names", ()))

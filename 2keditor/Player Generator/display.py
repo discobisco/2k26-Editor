@@ -452,7 +452,90 @@ def _draft_class_snapshot(proposals: tuple[Any, ...]) -> dict[str, Any]:
     }
 
 
-def import_generator_to_game_display_state(model: Any, state: GeneratorDisplayState, *, match_existing_player_names: bool = False, progress_callback: Any | None = None) -> GeneratorDisplayState:
+def generator_team_import_preview(model: Any, state: GeneratorDisplayState) -> dict[str, Any]:
+    if not state.source_loaded:
+        raise ValueError("Load generator source data before reviewing generated players.")
+    if getattr(state, "preview_target", "Players") == "Draft Class":
+        raise ValueError("Current preview targets Draft Class; use Import Draft Class.")
+    if not state.generated_proposals:
+        raise ValueError("Display preview before reviewing generated players.")
+    _ensure_generator_import_path()
+    from game_port import plan_generated_players_by_team, plan_generated_team_rosters
+
+    roster_plan = plan_generated_team_rosters(state.generated_proposals)
+    plan = plan_generated_players_by_team(
+        model,
+        roster_plan.generated_players,
+        roster_plan=roster_plan,
+    )
+    team_counts: dict[str, int] = {}
+    for assignment in plan.assignments:
+        team_counts[assignment.generated_team_key] = team_counts.get(assignment.generated_team_key, 0) + 1
+    lines: list[str] = []
+    previous_team = ""
+    for assignment in plan.assignments:
+        if assignment.generated_team_key != previous_team:
+            if lines:
+                lines.append("")
+            if assignment.destination_kind == "free_agent":
+                lines.append(f"Free Agents ({team_counts[assignment.generated_team_key]} players)")
+            else:
+                lines.append(
+                    f"{assignment.generated_team_label or assignment.generated_team_key} -> "
+                    f"[{assignment.live_team_index}] {assignment.live_team_label} "
+                    f"({team_counts[assignment.generated_team_key]} players) [{assignment.team_source}]"
+                )
+            previous_team = assignment.generated_team_key
+        if assignment.destination_kind == "free_agent":
+            lines.append(
+                f"  {assignment.generated_player_label} -> FA "
+                f"[{assignment.target_player_index}] {assignment.target_player_label}"
+            )
+        else:
+            lines.append(
+                f"  {assignment.generated_player_label} -> PLAYER{assignment.team_slot} "
+                f"[{assignment.target_player_index}] {assignment.target_player_label}"
+            )
+    if plan.issues:
+        if lines:
+            lines.append("")
+        blocking_issue_count = sum(1 for issue in plan.issues if issue.blocking)
+        lines.append(
+            "BLOCKING AUTHORED ROSTER ISSUES — no writes allowed"
+            if blocking_issue_count
+            else "AUTHORED ROSTER NOTES — listed members below are not imported"
+        )
+        lines.extend(
+            f"  {issue.generated_player_label} ({issue.generated_team_label or issue.generated_team_key or 'no team'}): {issue.reason}"
+            for issue in plan.issues
+        )
+    return {
+        "plan": plan,
+        "ready": plan.ready,
+        "generated_count": roster_plan.generated_count,
+        "source_generated_count": roster_plan.source_generated_count,
+        "authored_count": roster_plan.authored_count,
+        "free_agent_count": roster_plan.free_agent_count,
+        "population_count": roster_plan.authored_count + roster_plan.free_agent_count,
+        "assignment_count": len(plan.assignments),
+        "team_assignment_count": sum(assignment.destination_kind == "team" for assignment in plan.assignments),
+        "free_agent_assignment_count": sum(assignment.destination_kind == "free_agent" for assignment in plan.assignments),
+        "target_count": plan.target_count,
+        "team_count": sum(key != "FREEAGENTS" for key in team_counts),
+        "issue_count": len(plan.issues),
+        "blocking_issue_count": sum(1 for issue in plan.issues if issue.blocking),
+        "lines": tuple(lines),
+    }
+
+
+def import_generator_to_game_display_state(
+    model: Any,
+    state: GeneratorDisplayState,
+    *,
+    match_existing_player_names: bool = False,
+    team_import_plan: Any | None = None,
+    progress_callback: Any | None = None,
+) -> GeneratorDisplayState:
     if not state.source_loaded:
         return empty_generator_display_state("Load generator source data before importing generated players.")
     _ensure_generator_import_path()
@@ -463,11 +546,31 @@ def import_generator_to_game_display_state(model: Any, state: GeneratorDisplaySt
         return replace(import_state, status="Current preview targets Draft Class; use Import Draft Class.")
     if not import_state.generated_proposals:
         return replace(import_state, status="Display preview before importing generated players.")
+    generated_players = import_state.generated_proposals
+    player_indices: tuple[int, ...] | None = None
+    if not match_existing_player_names and team_import_plan is None:
+        return replace(import_state, status="Review and approve the team import assignments before writing players.")
+    if not match_existing_player_names:
+        if not bool(getattr(team_import_plan, "ready", False)):
+            return replace(import_state, status="Team import review is unresolved; no players were written.")
+        reviewed_source_count = int(
+            getattr(
+                team_import_plan,
+                "source_generated_count",
+                getattr(team_import_plan, "generated_count", -1),
+            )
+        )
+        if reviewed_source_count != len(import_state.generated_proposals):
+            return replace(import_state, status="Team import review no longer matches the displayed preview; no players were written.")
+        generated_players = tuple(getattr(team_import_plan, "generated_players"))
+        player_indices = tuple(getattr(team_import_plan, "player_indices"))
     import_kwargs: dict[str, Any] = {
-        "generated_players": import_state.generated_proposals,
+        "generated_players": generated_players,
         "team_filter": None if import_state.selected_source_team == _SOURCE_TEAM_ALL else import_state.selected_source_team,
         "match_existing_player_names": match_existing_player_names,
     }
+    if player_indices is not None:
+        import_kwargs["player_indices"] = player_indices
     if progress_callback is not None:
         import_kwargs["progress_callback"] = progress_callback
     result = import_generated_players_to_game(
@@ -610,21 +713,28 @@ def _database_path() -> Path:
 
 
 def _season_options(database: Path) -> tuple[str, ...]:
-    table = _table_name(database, _BASE_PLAYER_SEASON_SHEET)
-    with sqlite3.connect(database) as connection:
-        rows = connection.execute(f'SELECT DISTINCT season FROM "{table}" WHERE season IS NOT NULL ORDER BY season DESC').fetchall()
-    seasons = {str(int(row[0])) for row in rows}
-    return tuple(sorted(seasons, key=lambda value: int(value), reverse=True))
+    _ensure_generator_import_path()
+    from player_generator import available_source_seasons
+
+    seasons = available_source_seasons(database.parent)
+    return tuple(str(season) for season in sorted(seasons, reverse=True))
 
 
 def _league_options(database: Path, season: int) -> tuple[str, ...]:
     context = _generator_context_for_season(season)
-    leagues = {_evidence_league(context.evidence_for(player_id=player_id, team=team)) for player_id, team in context.player_keys()}
+    leagues: set[str] = set()
+    for player_id, team in context.player_keys():
+        evidence = context.evidence_for(player_id=player_id, team=team)
+        source_leagues = evidence.source_context.get("source_leagues")
+        if isinstance(source_leagues, (list, tuple)):
+            leagues.update(str(league or "").strip().upper() for league in source_leagues)
+        else:
+            leagues.add(_evidence_league(evidence))
     return tuple(sorted(league for league in leagues if league))
 
 
 def _source_team_options(database: Path, season: int, league: str) -> tuple[str, ...]:
-    context = _generator_context_for_season(season)
+    context = _generator_context_for_season(season, league)
     return tuple(
         sorted(
             {
@@ -637,7 +747,7 @@ def _source_team_options(database: Path, season: int, league: str) -> tuple[str,
 
 
 def _position_options(database: Path, season: int, league: str) -> tuple[str, ...]:
-    context = _generator_context_for_season(season)
+    context = _generator_context_for_season(season, league)
     positions: set[str] = set()
     for player_id, team in context.player_keys():
         evidence = context.evidence_for(player_id=player_id, team=team)
@@ -649,7 +759,7 @@ def _position_options(database: Path, season: int, league: str) -> tuple[str, ..
 
 
 def _player_options(database: Path, season: int, league: str, source_team: str, position: str) -> tuple[str, ...]:
-    context = _generator_context_for_season(season)
+    context = _generator_context_for_season(season, league)
     team_filter = None if not source_team or source_team == _SOURCE_TEAM_ALL else source_team
     selected_position = str(position or "").strip().upper()
     labels: list[str] = []
@@ -683,11 +793,11 @@ def _evidence_positions(evidence: Any) -> tuple[str, ...]:
     return tuple(position for position in selected.all_positions if position)
 
 
-def _generator_context_for_season(season: int) -> Any:
+def _generator_context_for_season(season: int, selected_league: str | None = None) -> Any:
     _ensure_generator_import_path()
     from player_generator import season_context_index
 
-    return season_context_index(int(season), _SOURCE_ROOT)
+    return season_context_index(int(season), _SOURCE_ROOT, selected_league=selected_league)
 
 
 def _table_name(database: Path, sheet_name: str) -> str:

@@ -95,6 +95,82 @@ class GeneratedPlayerGameImportResult:
         return self.apply_result.ok
 
 
+@dataclass(frozen=True)
+class GeneratedPlayerTeamAssignment:
+    generated_player: Any
+    generated_player_label: str
+    generated_team_key: str
+    generated_team_label: str
+    team_source: str
+    live_team_index: int
+    live_team_address: int
+    live_team_label: str
+    target_player_index: int
+    target_player_label: str
+    team_slot: int
+    destination_kind: str = "team"
+
+
+@dataclass(frozen=True)
+class GeneratedPlayerTeamImportIssue:
+    generated_player_label: str
+    generated_team_key: str
+    generated_team_label: str
+    reason: str
+    blocking: bool = True
+
+
+@dataclass(frozen=True)
+class GeneratedPlayerTeamRosterEntry:
+    generated_player: Any
+    generated_player_label: str
+    generated_team_key: str
+    generated_team_label: str
+    team_source: str
+    destination_kind: str = "team"
+
+
+@dataclass(frozen=True)
+class GeneratedPlayerTeamRosterPlan:
+    entries: tuple[GeneratedPlayerTeamRosterEntry, ...]
+    issues: tuple[GeneratedPlayerTeamImportIssue, ...]
+    generated_count: int
+    source_generated_count: int
+    authored_count: int
+    free_agent_count: int
+
+    @property
+    def ready(self) -> bool:
+        return len(self.entries) == self.generated_count and not any(issue.blocking for issue in self.issues)
+
+    @property
+    def generated_players(self) -> tuple[Any, ...]:
+        return tuple(entry.generated_player for entry in self.entries)
+
+
+@dataclass(frozen=True)
+class GeneratedPlayerTeamImportPlan:
+    assignments: tuple[GeneratedPlayerTeamAssignment, ...]
+    issues: tuple[GeneratedPlayerTeamImportIssue, ...]
+    generated_count: int
+    target_count: int
+    source_generated_count: int = 0
+    authored_count: int = 0
+    free_agent_count: int = 0
+
+    @property
+    def ready(self) -> bool:
+        return not any(issue.blocking for issue in self.issues)
+
+    @property
+    def generated_players(self) -> tuple[Any, ...]:
+        return tuple(assignment.generated_player for assignment in self.assignments)
+
+    @property
+    def player_indices(self) -> tuple[int, ...]:
+        return tuple(assignment.target_player_index for assignment in self.assignments)
+
+
 def import_generated_players_to_game(
     model: Any,
     season: int,
@@ -250,10 +326,11 @@ def apply_generated_players_to_game(
 ) -> GamePortBatchResult:
     generated_tuple = tuple(generated_players)
     if player_indices is None:
-        index_tuple, target_count = _player_team_slot_indices_for_generated(model, generated_tuple)
-    else:
-        index_tuple = tuple(int(index) for index in player_indices)
-        target_count = len(index_tuple)
+        raise ValueError("team imports require player indices from an approved cemented roster plan")
+    index_tuple = tuple(int(index) for index in player_indices)
+    if len(index_tuple) != len(generated_tuple):
+        raise ValueError("generated player count and approved target-player count differ")
+    target_count = len(index_tuple)
     player_results: list[GamePortResult] = []
     extra_row_tuple = tuple(extra_rows)
     allowed_sections = frozenset(str(section) for section in include_sections) if include_sections is not None else None
@@ -612,76 +689,333 @@ def validate_generated_player_names_match_offsets(
 
 
 _BASE_TEAM_COUNT = 30
-_TEAM_SLOT_LIMIT = 15
 
 
-def _player_team_slot_indices_for_generated(model: Any, generated_players: tuple[Any, ...]) -> tuple[tuple[int, ...], int]:
-    if not generated_players:
-        return (), 0
+def plan_generated_team_rosters(generated_players: Iterable[Any]) -> GeneratedPlayerTeamRosterPlan:
+    generated_tuple = tuple(generated_players)
+    seasons = {
+        int(season)
+        for generated in generated_tuple
+        if (season := getattr(generated, "season", None)) is not None
+    }
+    if seasons == {1947}:
+        return _plan_authored_1947_team_rosters(generated_tuple)
+
+    entries: list[GeneratedPlayerTeamRosterEntry] = []
+    issues: list[GeneratedPlayerTeamImportIssue] = []
+    for generated in generated_tuple:
+        identity = _generated_team_plan_identity(generated)
+        if not identity.team_key:
+            issues.append(
+                GeneratedPlayerTeamImportIssue(
+                    generated_player_label=_generated_player_label(generated),
+                    generated_team_key="",
+                    generated_team_label=identity.team_label,
+                    reason=identity.exclude_reason or "generated player has no source team identity",
+                    blocking=True,
+                )
+            )
+            continue
+        entries.append(
+            GeneratedPlayerTeamRosterEntry(
+                generated_player=generated,
+                generated_player_label=_generated_player_label(generated),
+                generated_team_key=identity.team_key,
+                generated_team_label=identity.team_label,
+                team_source=identity.team_source,
+            )
+        )
+        if identity.exclude_reason:
+            issues.append(
+                GeneratedPlayerTeamImportIssue(
+                    generated_player_label=_generated_player_label(generated),
+                    generated_team_key=identity.team_key,
+                    generated_team_label=identity.team_label,
+                    reason=identity.exclude_reason,
+                    blocking=identity.blocking,
+                )
+            )
+    return GeneratedPlayerTeamRosterPlan(
+        entries=tuple(entries),
+        issues=tuple(issues),
+        generated_count=len(generated_tuple),
+        source_generated_count=len(generated_tuple),
+        authored_count=len(generated_tuple),
+        free_agent_count=0,
+    )
+
+
+def _plan_authored_1947_team_rosters(
+    generated_players: tuple[Any, ...],
+) -> GeneratedPlayerTeamRosterPlan:
+    from opening_rosters_1947 import (
+        AUTHORED_OPENING_ROSTER_BY_PLAYER_ID_1947,
+        AUTHORED_OPENING_ROSTERS_1947,
+    )
+
+    entries: list[GeneratedPlayerTeamRosterEntry] = []
+    for generated in generated_players:
+        player_id = str(getattr(generated, "player_id", "") or "").strip()
+        authored = AUTHORED_OPENING_ROSTER_BY_PLAYER_ID_1947.get(player_id)
+        if authored is None:
+            entries.append(
+                GeneratedPlayerTeamRosterEntry(
+                    generated_player=generated,
+                    generated_player_label=_generated_player_label(generated),
+                    generated_team_key="FREEAGENTS",
+                    generated_team_label="Free Agents",
+                    team_source="not on the authored 1946-47 opening-day team rosters",
+                    destination_kind="free_agent",
+                )
+            )
+            continue
+        team, member = authored
+        entries.append(
+            GeneratedPlayerTeamRosterEntry(
+                generated_player=generated,
+                generated_player_label=member.name,
+                generated_team_key=_identity(team.team_name),
+                generated_team_label=team.team_name,
+                team_source=(
+                    f"authored 1946-47 opening roster "
+                    f"({team.league} {team.confidence}; {member.status})"
+                ),
+            )
+        )
+
+    issues = tuple(
+        GeneratedPlayerTeamImportIssue(
+            generated_player_label=member.name,
+            generated_team_key=_identity(team.team_name),
+            generated_team_label=team.team_name,
+            reason="authored opening-roster member has no PlayerGen source record",
+            blocking=False,
+        )
+        for team in AUTHORED_OPENING_ROSTERS_1947
+        for member in team.members
+        if member.player_id is None
+    )
+    return GeneratedPlayerTeamRosterPlan(
+        entries=tuple(entries),
+        issues=issues,
+        generated_count=len(entries),
+        source_generated_count=len(generated_players),
+        authored_count=sum(len(team.members) for team in AUTHORED_OPENING_ROSTERS_1947),
+        free_agent_count=sum(entry.destination_kind == "free_agent" for entry in entries),
+    )
+
+
+def plan_generated_players_by_team(
+    model: Any,
+    generated_players: Iterable[Any],
+    *,
+    roster_plan: GeneratedPlayerTeamRosterPlan | None = None,
+) -> GeneratedPlayerTeamImportPlan:
+    generated_tuple = tuple(generated_players)
+    if not generated_tuple:
+        return GeneratedPlayerTeamImportPlan(assignments=(), issues=(), generated_count=0, target_count=0)
+    if roster_plan is None:
+        raise ValueError("live target planning requires an approved cemented roster plan")
+    cemented = roster_plan
+    if cemented.generated_count != len(generated_tuple):
+        raise ValueError("cemented team roster no longer matches generated players")
+    if tuple(id(player) for player in cemented.generated_players) != tuple(id(player) for player in generated_tuple):
+        raise ValueError("cemented team roster no longer matches the displayed player order")
+    if not cemented.ready:
+        return GeneratedPlayerTeamImportPlan(
+            assignments=(),
+            issues=cemented.issues,
+            generated_count=cemented.generated_count,
+            target_count=0,
+            source_generated_count=cemented.source_generated_count,
+            authored_count=cemented.authored_count,
+            free_agent_count=cemented.free_agent_count,
+        )
     teams = _loaded_items(model, "Teams")
     players = _loaded_items(model, "Players")
     if not teams:
-        raise ValueError("load Teams before applying generated players by team slots")
+        raise ValueError("load Teams before planning generated players by team")
     if not players:
-        raise ValueError("load Players before applying generated players by team slots")
+        raise ValueError("load Players before planning generated players by team")
 
-    generated_team_order = _generated_team_order(generated_players)
-    team_by_generated_key = _assign_generated_teams_to_live_teams(model, generated_team_order, teams, generated_players)
-    player_indices_by_team_address = _player_indices_by_team_address(model, players)
+    base_teams = tuple(teams[:_BASE_TEAM_COUNT])
+    team_entries = tuple(entry for entry in cemented.entries if entry.destination_kind == "team")
+    free_agent_entries = tuple(entry for entry in cemented.entries if entry.destination_kind == "free_agent")
+    generated_team_order = tuple(dict.fromkeys(entry.generated_team_key for entry in team_entries))
+    generated_profiles = {
+        team_key: _GeneratedTeamMatchProfile(city_keys=(), name_keys=(), full_keys=(team_key,))
+        for team_key in generated_team_order
+    }
+    team_by_generated_key = _assign_generated_profiles_to_live_teams(
+        model,
+        generated_team_order,
+        base_teams,
+        generated_profiles,
+    )
+    target_records_by_team_address = _team_target_records_by_address(model, base_teams)
+    players_by_team: dict[str, list[Any]] = {key: [] for key in generated_team_order}
+    team_labels: dict[str, str] = {}
+    team_sources: dict[str, str] = {}
+    authored_labels_by_object: dict[int, str] = {}
+    for entry in team_entries:
+        players_by_team[entry.generated_team_key].append(entry.generated_player)
+        team_labels.setdefault(entry.generated_team_key, entry.generated_team_label)
+        team_sources.setdefault(entry.generated_team_key, entry.team_source)
+        authored_labels_by_object[id(entry.generated_player)] = entry.generated_player_label
 
+    assignments: list[GeneratedPlayerTeamAssignment] = []
+    issues: list[GeneratedPlayerTeamImportIssue] = list(cemented.issues)
+    used_target_player_indices: set[int] = set()
     assigned_addresses = {int(team.address) for team in team_by_generated_key.values()}
-    target_count = sum(min(len(player_indices_by_team_address.get(address, ())), _TEAM_SLOT_LIMIT) for address in assigned_addresses)
-    used_offsets: dict[int, int] = {}
-    used_player_indices: set[int] = set()
-    indices: list[int] = []
+    free_agent_targets = _free_agent_target_items(model) if free_agent_entries else ()
+    target_count = (
+        sum(len(target_records_by_team_address.get(address, ())) for address in assigned_addresses)
+        + len(free_agent_targets)
+    )
 
-    def take_slot(address: int, *, assigned: bool) -> int | None:
-        team_player_indices = player_indices_by_team_address.get(address, ())
-        limit = min(len(team_player_indices), _TEAM_SLOT_LIMIT) if assigned else len(team_player_indices)
-        offset = used_offsets.get(address, 0)
-        while offset < limit and team_player_indices[offset] in used_player_indices:
-            offset += 1
-        used_offsets[address] = offset
-        if offset >= limit:
-            return None
-        player_index = team_player_indices[offset]
-        used_offsets[address] = offset + 1
-        used_player_indices.add(player_index)
-        return player_index
-
-    def take_spill_slot() -> int | None:
-        for team in teams:
-            address = int(team.address)
-            if address in assigned_addresses:
-                continue
-            player_index = take_slot(address, assigned=False)
-            if player_index is not None:
-                return player_index
-        return None
-
-    for generated in generated_players:
-        generated_key = _generated_team_key(generated)
+    for generated_key in generated_team_order:
+        source_players = tuple(players_by_team.get(generated_key, ()))
+        if not source_players:
+            continue
+        generated_team_label = team_labels.get(generated_key) or generated_key
+        team_source = team_sources.get(generated_key, "generator source team")
         live_team = team_by_generated_key.get(generated_key)
-        player_index: int | None = None
+        if live_team is None:
+            for generated in source_players:
+                issues.append(
+                    GeneratedPlayerTeamImportIssue(
+                        generated_player_label=authored_labels_by_object.get(id(generated), _generated_player_label(generated)),
+                        generated_team_key=generated_key,
+                        generated_team_label=generated_team_label,
+                        reason=f"source team {generated_team_label or generated_key} did not match one live team",
+                    )
+                )
+            continue
 
-        for alternate_key in _generated_alternate_team_keys(generated):
-            alternate_team = team_by_generated_key.get(alternate_key)
-            if alternate_team is None:
+        live_team_address = int(live_team.address)
+        target_records = target_records_by_team_address.get(live_team_address, ())
+        for offset, generated in enumerate(source_players):
+            if offset >= len(target_records):
+                issues.append(
+                    GeneratedPlayerTeamImportIssue(
+                        generated_player_label=authored_labels_by_object.get(id(generated), _generated_player_label(generated)),
+                        generated_team_key=generated_key,
+                        generated_team_label=generated_team_label,
+                        reason=f"live team {_safe_label(live_team)} has no remaining authored PLAYER slot",
+                        blocking=False,
+                    )
+                )
                 continue
-            alternate_address = int(alternate_team.address)
-            if alternate_address == int(getattr(live_team, "address", -1)):
+            target_player, placement = target_records[offset]
+            target_player_index = int(target_player.index)
+            if target_player_index in used_target_player_indices:
+                issues.append(
+                    GeneratedPlayerTeamImportIssue(
+                        generated_player_label=authored_labels_by_object.get(id(generated), _generated_player_label(generated)),
+                        generated_team_key=generated_key,
+                        generated_team_label=generated_team_label,
+                        reason=f"live PLAYER slot reuses player index {target_player_index}",
+                    )
+                )
                 continue
-            player_index = take_slot(alternate_address, assigned=True)
-            if player_index is not None:
-                break
+            used_target_player_indices.add(target_player_index)
+            assignments.append(
+                GeneratedPlayerTeamAssignment(
+                    generated_player=generated,
+                    generated_player_label=authored_labels_by_object.get(id(generated), _generated_player_label(generated)),
+                    generated_team_key=generated_key,
+                    generated_team_label=generated_team_label,
+                    team_source=team_source,
+                    live_team_index=int(live_team.index),
+                    live_team_address=live_team_address,
+                    live_team_label=_safe_label(live_team),
+                    target_player_index=target_player_index,
+                    target_player_label=_safe_label(target_player),
+                    team_slot=int(placement["team_slot"]),
+                )
+            )
 
-        if player_index is None and live_team is not None:
-            player_index = take_slot(int(live_team.address), assigned=True)
-        if player_index is None:
-            player_index = take_spill_slot()
-        if player_index is not None:
-            indices.append(player_index)
-    return tuple(indices), target_count
+    for offset, entry in enumerate(free_agent_entries):
+        if offset >= len(free_agent_targets):
+            issues.append(
+                GeneratedPlayerTeamImportIssue(
+                    generated_player_label=entry.generated_player_label,
+                    generated_team_key="FREEAGENTS",
+                    generated_team_label="Free Agents",
+                    reason="no remaining live Free Agent target record",
+                    blocking=False,
+                )
+            )
+            continue
+        target_player = free_agent_targets[offset]
+        target_player_index = int(target_player.index)
+        if target_player_index in used_target_player_indices:
+            issues.append(
+                GeneratedPlayerTeamImportIssue(
+                    generated_player_label=entry.generated_player_label,
+                    generated_team_key="FREEAGENTS",
+                    generated_team_label="Free Agents",
+                    reason=f"Free Agent target reuses player index {target_player_index}",
+                )
+            )
+            continue
+        used_target_player_indices.add(target_player_index)
+        assignments.append(
+            GeneratedPlayerTeamAssignment(
+                generated_player=entry.generated_player,
+                generated_player_label=entry.generated_player_label,
+                generated_team_key="FREEAGENTS",
+                generated_team_label="Free Agents",
+                team_source=entry.team_source,
+                live_team_index=-1,
+                live_team_address=0,
+                live_team_label="Free Agents",
+                target_player_index=target_player_index,
+                target_player_label=_safe_label(target_player),
+                team_slot=0,
+                destination_kind="free_agent",
+            )
+        )
+
+    return GeneratedPlayerTeamImportPlan(
+        assignments=tuple(assignments),
+        issues=tuple(issues),
+        generated_count=len(generated_tuple),
+        target_count=target_count,
+        source_generated_count=cemented.source_generated_count,
+        authored_count=cemented.authored_count,
+        free_agent_count=cemented.free_agent_count,
+    )
+
+
+def _free_agent_target_items(model: Any) -> tuple[Any, ...]:
+    prepare = getattr(model, "prepare_player_list_view", None)
+    if not callable(prepare):
+        raise ValueError("team import planning requires the model Free Agents filter")
+    view = prepare("Free Agents")
+    items = getattr(view, "items", ())
+    if not isinstance(items, (list, tuple)):
+        raise TypeError("model Free Agents filter returned a non-sequence")
+    return tuple(items)
+
+
+def _team_target_records_by_address(
+    model: Any,
+    teams: tuple[Any, ...],
+) -> dict[int, tuple[tuple[Any, dict[str, Any]], ...]]:
+    roster_reader = getattr(model, "player_roster_slot_items_for_team_items", None)
+    if not callable(roster_reader):
+        raise ValueError("team import planning requires the authored Team PLAYER-slot reader")
+    grouped: dict[int, tuple[tuple[Any, dict[str, Any]], ...]] = {}
+    for team in teams:
+        raw_rows = roster_reader((team,))
+        if not isinstance(raw_rows, (list, tuple)):
+            raise TypeError("authored Team PLAYER-slot reader returned a non-sequence")
+        rows = tuple(raw_rows)
+        grouped[int(team.address)] = tuple(
+            sorted(rows, key=lambda row: int(row[1]["team_slot"]))
+        )
+    return grouped
 
 
 
@@ -739,10 +1073,14 @@ def _team_match_profiles(model: Any, teams: tuple[Any, ...]) -> tuple[_TeamMatch
     return tuple(profiles)
 
 
-def _assign_generated_teams_to_live_teams(model: Any, generated_team_order: tuple[str, ...], teams: tuple[Any, ...], generated_players: tuple[Any, ...]) -> dict[str, Any]:
+def _assign_generated_profiles_to_live_teams(
+    model: Any,
+    generated_team_order: tuple[str, ...],
+    teams: tuple[Any, ...],
+    generated_profiles: dict[str, _GeneratedTeamMatchProfile],
+) -> dict[str, Any]:
     base_teams = tuple(teams[:_BASE_TEAM_COUNT])
     live_profiles = _team_match_profiles(model, base_teams)
-    generated_profiles = _generated_team_profiles(generated_players)
 
     assigned: dict[str, Any] = {}
     used_addresses: set[int] = set()
@@ -765,14 +1103,76 @@ class _GeneratedTeamMatchProfile:
     full_keys: tuple[str, ...]
 
 
-def _generated_team_profiles(generated_players: tuple[Any, ...]) -> dict[str, _GeneratedTeamMatchProfile]:
-    profiles: dict[str, _GeneratedTeamMatchProfile] = {}
-    for generated in generated_players:
-        generated_key = _generated_team_key(generated)
-        if generated_key in profiles:
-            continue
-        profiles[generated_key] = _generated_team_match_profile(generated)
-    return profiles
+@dataclass(frozen=True)
+class _GeneratedTeamPlanIdentity:
+    team_key: str
+    team_label: str
+    team_source: str
+    profile: _GeneratedTeamMatchProfile | None
+    exclude_reason: str | None = None
+    blocking: bool = True
+
+
+def _generated_team_plan_identity(generated: Any) -> _GeneratedTeamPlanIdentity:
+    identity = getattr(generated, "identity", None)
+    identity = identity if isinstance(identity, dict) else {}
+    default_label = _generated_team_label(generated)
+    default_key = _identity(default_label)
+    default_profile = _generated_team_match_profile(generated)
+    source_league = str(identity.get("source_league") or "").strip().upper()
+    raw_source_leagues = identity.get("source_leagues")
+    source_leagues = (
+        tuple(str(league or "").strip().upper() for league in raw_source_leagues)
+        if isinstance(raw_source_leagues, (list, tuple))
+        else ()
+    )
+    if source_league == "NBL" or (source_leagues and set(source_leagues) == {"NBL"}):
+        return _GeneratedTeamPlanIdentity(
+            default_key,
+            default_label,
+            "generator source team (NBL; transaction files do not cover NBL)",
+            default_profile,
+        )
+
+    from baa_nba_transactions import resolve_baa_nba_transaction_team
+
+    resolution = resolve_baa_nba_transaction_team(
+        season=int(getattr(generated, "season", 0) or 0),
+        player_name=_generated_player_label(generated),
+        source_league=source_league,
+        source_leagues=source_leagues,
+    )
+    if not resolution.covered:
+        return _GeneratedTeamPlanIdentity(default_key, default_label, "generator source team", default_profile)
+    if resolution.ambiguous:
+        return _GeneratedTeamPlanIdentity(
+            default_key,
+            default_label,
+            "BAA/NBA transactions",
+            default_profile,
+            exclude_reason="BAA/NBA transaction player name is ambiguous",
+        )
+    if not resolution.matched:
+        return _GeneratedTeamPlanIdentity(
+            default_key,
+            default_label,
+            "generator source team (no exact BAA/NBA transaction match)",
+            default_profile,
+        )
+    event = resolution.event
+    event_label = (
+        f"{event.event_type} {event.event_date.isoformat()}"
+        if event is not None
+        else "final transaction"
+    )
+    team_label = str(resolution.team_name or "").strip()
+    team_key = _identity(team_label)
+    return _GeneratedTeamPlanIdentity(
+        team_key,
+        team_label,
+        f"BAA/NBA transactions: {event_label}",
+        _GeneratedTeamMatchProfile(city_keys=(), name_keys=(), full_keys=(team_key,)),
+    )
 
 
 def _generated_team_match_profile(generated: Any) -> _GeneratedTeamMatchProfile:
@@ -817,8 +1217,6 @@ def _match_live_team_by_city_then_name(
         name_matches = tuple(profile for profile in city_matches if _generated_matches_live_name(generated, profile))
         if name_matches:
             return name_matches[0].team
-        if len(city_matches) == 1:
-            return city_matches[0].team
 
     name_matches = tuple(profile for profile in available if _generated_matches_live_name(generated, profile))
     if name_matches:
@@ -858,46 +1256,6 @@ def _read_team_value(model: Any, team: Any, field_names: tuple[str, ...]) -> str
     return ""
 
 
-def _add_team_key(values: set[str], value: object) -> None:
-    key = _identity(value)
-    if key and key not in {"--", "NONE", "NULL"}:
-        values.add(key)
-
-
-def _player_indices_by_team_address(model: Any, players: tuple[Any, ...]) -> dict[int, tuple[int, ...]]:
-    grouped: dict[int, list[int]] = {}
-    for player in players:
-        team_address = _player_current_team_address(model, player)
-        if team_address is None:
-            continue
-        grouped.setdefault(team_address, []).append(int(player.index))
-    return {address: tuple(indices) for address, indices in grouped.items()}
-
-
-def _player_current_team_address(model: Any, player: Any) -> int | None:
-    pointer_reader = getattr(model, "_player_current_team_pointer", None)
-    if callable(pointer_reader):
-        try:
-            value = pointer_reader(player)
-            return int(str(value)) if value is not None else None
-        except Exception:
-            return None
-    team_address = getattr(player, "team_address", None)
-    if team_address is not None:
-        try:
-            return int(str(team_address))
-        except Exception:
-            return None
-    cache = getattr(model, "_player_team_pointer_cache", None)
-    if isinstance(cache, dict):
-        value = cache.get(getattr(player, "index", None))
-        try:
-            return int(str(value)) if value is not None else None
-        except Exception:
-            return None
-    return None
-
-
 def _generated_team_key(generated: Any) -> str:
     for attr in ("team", "team_abbrev", "roster_team"):
         value = getattr(generated, attr, None)
@@ -913,20 +1271,31 @@ def _generated_team_key(generated: Any) -> str:
     return ""
 
 
-def _generated_alternate_team_keys(generated: Any) -> tuple[str, ...]:
-    primary = _generated_team_key(generated)
+def _generated_team_label(generated: Any) -> str:
     identity = getattr(generated, "identity", None)
-    shares = identity.get("multi_team_stat_shares") if isinstance(identity, dict) else None
-    if not isinstance(shares, (list, tuple)):
-        return ()
-    keys: list[str] = []
-    for share in shares:
-        if not isinstance(share, dict):
-            continue
-        key = _identity(share.get("team"))
-        if key and key != primary and key not in keys:
-            keys.append(key)
-    return tuple(keys)
+    identity = identity if isinstance(identity, dict) else {}
+    for value in (
+        identity.get("team_name"),
+        getattr(generated, "team_name", None),
+        getattr(generated, "team", None),
+        identity.get("team"),
+        getattr(generated, "roster_team", None),
+        identity.get("roster_team"),
+        getattr(generated, "team_abbrev", None),
+        identity.get("team_abbrev"),
+    ):
+        text = str(value or "").strip()
+        if text:
+            return text
+    return _generated_team_key(generated)
+
+
+def _generated_player_label(generated: Any) -> str:
+    for value in _generated_player_name_values(generated):
+        text = _strip_record_index_prefix(value).strip()
+        if text:
+            return text
+    return str(getattr(generated, "player_id", "")).strip()
 
 
 def _identity(value: object) -> str:

@@ -11,8 +11,10 @@ import player_rules_defense as defense
 import player_rules_mental as mental
 import player_rules_offense as offense
 import player_rules_rebounding as rebounding
+from nbl_baa_projection import DEFENSIVE_SKILL_FIELD_KEYS, project_nbl_fields
 from player_era_role import adjust_values as _apply_era_role_playstyle
 from player_evidence import PlayerEvidence
+from player_honors import HONOR_ATTRIBUTE_KEYS, early_honor_attribute_bonus
 
 
 POSITIONS: tuple[str, ...] = ("PG", "SG", "SF", "PF", "C")
@@ -380,6 +382,49 @@ def derive_formula_rule_values(
 ) -> dict[str, RuleValue]:
     if not _has_required_games_played(evidence):
         return {}
+    positions = positions or select_positions_from_evidence(
+        evidence.play_by_play,
+        evidence.season_info.get("pos") or evidence.identity.get("pos"),
+    )
+    fallback_positions = (
+        tuple(positions.all_positions)
+        if not positions.position_weights and len(positions.all_positions) > 1
+        else ()
+    )
+    if fallback_positions:
+        generated_by_position = tuple(
+            (
+                position,
+                _derive_formula_rule_values_once(
+                    _evidence_for_single_fallback_position(evidence, position),
+                    positions=PositionSelection(
+                        primary=position,
+                        secondary=None,
+                        all_positions=(position,),
+                        position_weights=((position, 1.0),),
+                    ),
+                    league_player_rows=league_player_rows,
+                    active_field_keys=active_field_keys,
+                ),
+            )
+            for position in fallback_positions
+        )
+        return _higher_multi_position_fallback_values(generated_by_position)
+    return _derive_formula_rule_values_once(
+        evidence,
+        positions=positions,
+        league_player_rows=league_player_rows,
+        active_field_keys=active_field_keys,
+    )
+
+
+def _derive_formula_rule_values_once(
+    evidence: PlayerEvidence,
+    *,
+    positions: PositionSelection,
+    league_player_rows: Any,
+    active_field_keys: set[str] | None,
+) -> dict[str, RuleValue]:
     # Drive from the editor's field list when it is supplied: a field is
     # generated only if the loaded game exposes it AND a rule is bound to it.
     # Otherwise (standalone/tests) fall back to every bound field.
@@ -410,7 +455,69 @@ def derive_formula_rule_values(
     # PLAYERGEN_ERA_ROLE_PLAYSTYLE is disabled.
     values = _apply_era_role_playstyle(evidence, positions, values)
     values = _apply_nbl_baa_center_scoring_caps(evidence, values)
+    values = _apply_nbl_baa_common_feature_projection(evidence, rows, values)
+    values = _apply_early_season_honor_attributes(evidence, values)
+    values = _apply_baa_nbl_defensive_hustle_boost(evidence, values)
     return _apply_shot_family_gate(values)
+
+
+def _evidence_for_single_fallback_position(evidence: PlayerEvidence, position: str) -> PlayerEvidence:
+    season_info = dict(evidence.season_info)
+    season_info["pos"] = position
+    identity = dict(evidence.identity)
+    identity["pos"] = position
+    source_context = dict(evidence.source_context)
+    for key in (
+        "player_season_info.pos",
+        "season_info.pos",
+        "player_info.pos",
+        "identity.pos",
+        "pos",
+    ):
+        source_context[key] = position
+    return replace(
+        evidence,
+        season_info=season_info,
+        identity=identity,
+        source_context=source_context,
+    )
+
+
+def _higher_multi_position_fallback_values(
+    generated_by_position: tuple[tuple[str, dict[str, RuleValue]], ...],
+) -> dict[str, RuleValue]:
+    field_keys = tuple(dict.fromkeys(
+        field_key
+        for _position, values in generated_by_position
+        for field_key in values
+    ))
+    combined: dict[str, RuleValue] = {}
+    positions_text = ",".join(position for position, _values in generated_by_position)
+    for field_key in field_keys:
+        candidates = tuple(
+            (position, value)
+            for position, values in generated_by_position
+            if (value := values.get(field_key)) is not None
+            and isinstance(value.value, (int, float))
+        )
+        if not candidates:
+            continue
+        winner_position, winner = max(candidates, key=lambda item: int(item[1].value))
+        combined[field_key] = replace(
+            winner,
+            source_rule=f"{winner.source_rule}_multi_position_higher_value_fallback",
+            evidence_keys=winner.evidence_keys + (
+                f"multi_position_fallback_positions={positions_text}",
+                "multi_position_fallback_policy=calculate_each_position_independently_and_use_higher_generated_value",
+                "multi_position_fallback_scope=Attributes,Tendencies",
+                "multi_position_generated_values=" + ",".join(
+                    f"{position}:{int(value.value)}" for position, value in candidates
+                ),
+                f"multi_position_selected_position={winner_position}",
+                f"multi_position_selected_value={int(winner.value)}",
+            ),
+        )
+    return combined
 
 
 def _apply_nbl_baa_center_scoring_caps(
@@ -456,6 +563,110 @@ def _apply_nbl_baa_center_scoring_caps(
             ),
         )
     return calibrated
+
+
+def _apply_nbl_baa_common_feature_projection(
+    evidence: PlayerEvidence,
+    league_player_rows: tuple[dict[str, Any], ...],
+    values: dict[str, RuleValue],
+) -> dict[str, RuleValue]:
+    projected = project_nbl_fields(evidence, league_player_rows, values)
+    if not projected:
+        return values
+    calibrated = dict(values)
+    for field_key, projection in projected.items():
+        current = calibrated.get(field_key)
+        if current is None:
+            calibrated[field_key] = RuleValue(
+                value=projection.value,
+                source_rule=projection.source_rule,
+                evidence_keys=projection.evidence_keys + (
+                    "replaced_sparse_nbl_rule=unresolved",
+                ),
+            )
+            continue
+        calibrated[field_key] = replace(
+            current,
+            value=projection.value,
+            source_rule=projection.source_rule,
+            evidence_keys=projection.evidence_keys + (
+                f"replaced_sparse_nbl_rule={current.source_rule}",
+            ),
+        )
+    return calibrated
+
+
+def _apply_early_season_honor_attributes(
+    evidence: PlayerEvidence,
+    values: dict[str, RuleValue],
+) -> dict[str, RuleValue]:
+    bonus, honor_keys = early_honor_attribute_bonus(evidence)
+    if bonus <= 0 or not honor_keys:
+        return values
+    adjusted = dict(values)
+    for field_key in HONOR_ATTRIBUTE_KEYS:
+        current = adjusted.get(field_key)
+        if current is None or not isinstance(current.value, (int, float)):
+            continue
+        stored = min(99, int(current.value) + bonus)
+        if stored == int(current.value):
+            continue
+        adjusted[field_key] = replace(
+            current,
+            value=stored,
+            source_rule=f"{current.source_rule}_early_honor_bonus",
+            evidence_keys=current.evidence_keys + honor_keys + (
+                f"pre_honor_value={int(current.value)}",
+                f"post_honor_value={stored}",
+                "mapping=min(99,generated_value+highest_exact_season_honor_bonus)",
+            ),
+        )
+    return adjusted
+
+
+def _apply_baa_nbl_defensive_hustle_boost(
+    evidence: PlayerEvidence,
+    values: dict[str, RuleValue],
+) -> dict[str, RuleValue]:
+    league = str(evidence.season_info.get("lg") or "").strip().upper()
+    if league not in {"BAA", "NBL"}:
+        return values
+    hustle = values.get("Attributes/HUSTLE")
+    if hustle is None or not isinstance(hustle.value, (int, float)):
+        return values
+    qualifying = tuple(
+        sorted(
+            (field_key, int(field.value))
+            for field_key in DEFENSIVE_SKILL_FIELD_KEYS
+            if (field := values.get(field_key)) is not None
+            and isinstance(field.value, (int, float))
+            and int(field.value) > 50
+        )
+    )
+    if not qualifying:
+        return values
+    stored = min(99, int(hustle.value) + 10)
+    if stored == int(hustle.value):
+        return values
+    adjusted = dict(values)
+    adjusted["Attributes/HUSTLE"] = replace(
+        hustle,
+        value=stored,
+        source_rule=f"{hustle.source_rule}_defensive_skill_boost",
+        evidence_keys=hustle.evidence_keys + (
+            "hustle_defensive_skill_scope=BAA,NBL",
+            "hustle_defensive_skill_threshold=strictly_above_50",
+            "hustle_defensive_skill_exclusions=DEFENSECONSISTENCY,HUSTLE",
+            "qualifying_defensive_skills=" + ",".join(
+                f"{field_key}:{value}" for field_key, value in qualifying
+            ),
+            "hustle_defensive_skill_bonus=10",
+            f"pre_defensive_skill_hustle={int(hustle.value)}",
+            f"post_defensive_skill_hustle={stored}",
+            "mapping=min(99,calculated_hustle+10_if_any_qualifying_defensive_skill_gt_50)",
+        ),
+    )
+    return adjusted
 
 
 # ATD "Shot family vs subtypes": Shot Mid and Shot Three carry the total share for

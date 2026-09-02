@@ -85,7 +85,9 @@ def _plausible_record_name_part(value: object) -> bool:
 
 def _valid_record_list_label_part(value: object) -> bool:
     text = str(value or "").strip()
-    return bool(text) and any(char.isalpha() for char in text) and all(char.isalnum() or char in " .'-" for char in text)
+    return bool(text) and any(char.isalpha() or char == "#" for char in text) and all(
+        char.isalnum() or char in " .'-#" for char in text
+    )
 
 
 def _valid_record_list_label_values(values: list[Any]) -> bool:

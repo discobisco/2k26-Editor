@@ -823,19 +823,18 @@ def derive_attribute_intangibles(
             ),
         }
 
-    # VORP is not computed before 1974, so every pre-1974 player used to land on the
-    # curve's floor of 25 and the field carried no information for those eras. Win
-    # shares are recorded all the way back to 1947, so rank them in the same season
-    # and league instead. WS is a counting stat, which is why this is a rank rather
-    # than a second absolute curve: a season's total is not comparable across eras
-    # with different schedule lengths, but a player's standing within his own league
-    # is. Missing WS stays unresolved rather than becoming a floor.
+    # VORP is not computed before 1974. Same-season, same-league Win Shares preserve
+    # the magnitude gap between early stars: a rank would put 18.6, 16.3, and 11.8
+    # next to one another even though their contributed-win totals are far apart.
+    # Dividing positive WS by the exact league maximum keeps the comparison inside
+    # one schedule and league while retaining that spacing. Missing WS is unresolved.
     win_shares = _source_value(evidence, "advanced", "ws")
     if win_shares is None:
         return None
     population_rows = tuple(
         row
         for row in _population(evidence, league_player_rows)
+        if _league(row) == _league(evidence)
         if _source_value(row, "advanced", "ws") is not None
     )
     population = sorted(
@@ -845,34 +844,38 @@ def derive_attribute_intangibles(
     )
     if not population:
         return None
-    percentile = bisect.bisect_right(population, win_shares) / len(population)
-    mapped_value = max(25, min(99, int(round(25.0 + 74.0 * percentile))))
     top_win_shares = population[-1]
-    winner = min(
-        _identity_key(row)
-        for row in population_rows
-        if _source_value(row, "advanced", "ws") == top_win_shares
+    magnitude_score = max(0.0, win_shares) / top_win_shares if top_win_shares > 0.0 else 0.0
+    mapped_value = max(25, min(99, int(round(25.0 + 74.0 * magnitude_score))))
+    winner = (
+        min(
+            _identity_key(row)
+            for row in population_rows
+            if _source_value(row, "advanced", "ws") == top_win_shares
+        )
+        if top_win_shares > 0.0
+        else ("", "")
     )
-    unique_league_maximum = win_shares == top_win_shares and _identity_key(evidence) == winner
+    unique_league_maximum = top_win_shares > 0.0 and win_shares == top_win_shares and _identity_key(evidence) == winner
     value = 99 if unique_league_maximum else min(98, mapped_value)
     return {
         "value": value,
-        "score": percentile,
-        "source_rule": "derive_attribute_intangibles_historical_win_share_rank",
+        "score": magnitude_score,
+        "source_rule": "derive_attribute_intangibles_historical_win_share_magnitude",
         "evidence_keys": (
             "per_game.g",
             "advanced.ws",
             "unavailable_direct_source=advanced.vorp (first computed for season 1974)",
-            "substitute_evidence=same-season same-league win share rank",
-            "validity=WS is recorded from 1947 and measures contributed wins; ranking it "
-            "keeps the field ordered within an era instead of flooring every player at 25",
+            "substitute_evidence=same-season same-league win share magnitude",
+            "validity=WS is recorded from 1947 and measures contributed wins; same-league "
+            "maximum normalization preserves the spacing between early-season stars",
             f"raw_win_shares={win_shares}",
-            f"win_share_rank_score={percentile:.8f}",
+            f"same_league_max_win_shares={top_win_shares}",
+            f"win_share_magnitude_score={magnitude_score:.8f}",
             f"unique_99_winner={winner[0]}:{winner[1]}",
             f"unique_99_applied={str(unique_league_maximum).lower()}",
-            "population=same-season,GP>0,win-share-recorded"
-            ";league-filtered when the generator contract selects one",
-            "mapping=round(25+74*win_share_rank_score);only_unique_league_winner_may_equal_99",
+            "population=exact_same-season,same-league,GP>0,win-share-recorded",
+            "mapping=round(25+74*max(0,WS)/same_league_max_WS);only_unique_league_winner_may_equal_99",
         ),
     }
 
