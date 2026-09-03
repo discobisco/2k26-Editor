@@ -37,7 +37,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from player_era_context import player_era_context
-from player_star_profiles import star_profile_for
 
 _PRE_SHOT_CLOCK_ERA_KEY = "pre_shot_clock"
 
@@ -97,7 +96,7 @@ class _Adj:
     amount: float
     gate: str | None
     why: str
-    tag: str = ""  # a documented-calling-card exemption (player_star_profiles) suppresses this adjustment
+    tag: str = ""  # retained so each adjustment stays self-describing in provenance
 
 
 # The era playstyle pass reshapes tendencies only. Its three attribute adjustments --
@@ -259,8 +258,6 @@ def adjust_values(evidence: Any, positions: Any, values: dict[str, Any]) -> dict
 
     season_info = getattr(evidence, "season_info", {}) or {}
     mix = role_mix(positions, season_info.get("pos"))
-    star = star_profile_for(getattr(evidence, "player_id", ""), era.season)
-    exempt = star.exempt if star else frozenset()
 
     out = dict(values)
 
@@ -274,10 +271,9 @@ def adjust_values(evidence: Any, positions: Any, values: dict[str, Any]) -> dict
             evidence_keys=tuple(current.evidence_keys) + (f"pre_playstyle_value={int(current.value)}",) + provenance,
         )
 
-    # 1) blanket era playstyle, skipping any adjustment a star is documented to be exempt from
+    # Blanket era playstyle. The per-player exemption list went with the star
+    # profiles, so the era model now applies to every player in the era.
     for adj in _MODEL:
-        if adj.tag and adj.tag in exempt:
-            continue
         current = out.get(adj.field)
         if current is None or not isinstance(getattr(current, "value", None), (int, float)):
             continue
@@ -306,35 +302,6 @@ def adjust_values(evidence: Any, positions: Any, values: dict[str, Any]) -> dict
                 f"era_role_reason={adj.why}",
             ),
         )
-
-    # 2) named-player calling cards and documented limitations (mappings/STAR_PLAYERS.md)
-    if star is not None:
-        for field_key, op, amount in (*star.boost, *star.limit):
-            current = out.get(field_key)
-            if current is None or not isinstance(getattr(current, "value", None), (int, float)):
-                continue
-            original = float(current.value)
-            if op == "raise_to" and _is_demonstrated_floor(field_key, current):
-                continue
-            if op == "raise_to":
-                new_value = max(original, amount)
-            elif op == "cap":
-                new_value = min(original, amount)
-            elif op == "scale":
-                new_value = original * amount
-            else:
-                continue
-            _write(
-                field_key,
-                new_value,
-                current,
-                (
-                    f"star_profile={star.player_id}:{star.name}",
-                    f"star_op={op}:{amount:g}",
-                    f"star_source={star.evidence[0] if star.evidence else 'STAR_PLAYERS.md'}",
-                    f"star_calling_card_exemptions={','.join(sorted(star.exempt)) or 'none'}",
-                ),
-            )
 
     return out
 

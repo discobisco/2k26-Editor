@@ -136,6 +136,13 @@
             }
           ]
         },
+        "FranchiseProspectMembership": {
+          "address": 132205008,
+          "chain": [],
+          "record_count": 150,
+          "slot_stride": 1408,
+          "player_pointer_offset": 0
+        },
         "DraftClass": {
           "address": 111407616,
           "chain": [],
@@ -151,9 +158,14 @@
           "chain": []
         },
         "TeamStatsEdit": {
-          "address": 132279056,
-          "chain": [],
-          "finalOffset": 4638676
+          "address": 132276528,
+          "chain": [
+            {
+              "offset": 552,
+              "dereference": true
+            }
+          ],
+          "finalOffset": -23304
         },
         "Staff": {
           "address": 132279176,
@@ -185,12 +197,13 @@
           "chain": []
         },
         "HallOfFame": {
-          "address": 5348811252,
-          "chain": []
-        },
-        "Cursor": {
-          "address": 0,
-          "chain": []
+          "address": 132276528,
+          "chain": [
+            {
+              "offset": 824,
+              "dereference": true
+            }
+          ]
         }
       },
       "stride_constants": {

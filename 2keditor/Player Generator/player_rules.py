@@ -10,6 +10,7 @@ import player_rules_athleticism as athleticism
 import player_rules_defense as defense
 import player_rules_mental as mental
 import player_rules_offense as offense
+import player_rules_pre1952 as pre_1952_rules
 import player_rules_rebounding as rebounding
 from nbl_baa_projection import project_nbl_fields
 from player_era_role import adjust_values as _apply_era_role_playstyle
@@ -405,33 +406,52 @@ def derive_formula_rule_values(
         if not positions.position_weights and len(positions.all_positions) > 1
         else ()
     )
+    # Everything is generated once, from the player. The per-position pass below then
+    # re-runs only the tendencies, because only a tendency reads position: an attribute
+    # scored under each of a hyphenated player's listed positions returned the same
+    # number every time -- 16,912 field-instances, none of them different -- so merging
+    # them was picking the maximum of a list of identical values.
+    values = _derive_formula_rule_values_once(
+        evidence,
+        positions=positions,
+        league_player_rows=league_player_rows,
+        active_field_keys=active_field_keys,
+    )
     if fallback_positions:
-        generated_by_position = tuple(
-            (
-                position,
-                _derive_formula_rule_values_once(
-                    _evidence_for_single_fallback_position(evidence, position),
-                    positions=PositionSelection(
-                        primary=position,
-                        secondary=None,
-                        all_positions=(position,),
-                        position_weights=((position, 1.0),),
+        tendency_keys = {key for key in values if key.startswith("Tendencies/")}
+        if active_field_keys is not None:
+            tendency_keys &= set(active_field_keys)
+        if tendency_keys:
+            generated_by_position = tuple(
+                (
+                    position,
+                    _derive_formula_rule_values_once(
+                        _evidence_for_single_fallback_position(evidence, position),
+                        positions=PositionSelection(
+                            primary=position,
+                            secondary=None,
+                            all_positions=(position,),
+                            position_weights=((position, 1.0),),
+                        ),
+                        league_player_rows=league_player_rows,
+                        active_field_keys=tendency_keys,
                     ),
-                    league_player_rows=league_player_rows,
-                    active_field_keys=active_field_keys,
-                ),
+                )
+                for position in fallback_positions
             )
-            for position in fallback_positions
-        )
-        values = _higher_multi_position_fallback_values(generated_by_position)
-    else:
-        values = _derive_formula_rule_values_once(
-            evidence,
-            positions=positions,
-            league_player_rows=league_player_rows,
-            active_field_keys=active_field_keys,
-        )
+            merged = _higher_multi_position_fallback_values(generated_by_position)
+            # Tendencies only. The per-position pass returns whatever its rules produce,
+            # attributes included, and letting those back in would reinstate exactly the
+            # per-position scoring this removes.
+            values.update({
+                key: value for key, value in merged.items() if key.startswith("Tendencies/")
+            })
     values = _apply_nbl_unrecorded_assist_calibration(evidence, league_player_rows, values)
+    # Last of the attribute passes, after the NBL projection and the unrecorded-assist
+    # calibration, both of which rewrite fields this one owns. For the 1947-51 fields
+    # the operator authored by hand, the authored rule is the answer rather than a
+    # starting point for a later pass to overwrite. Cross-field ceilings still apply.
+    values = pre_1952_rules.apply_pre_1952_ratings(evidence, values)
     return _apply_cross_field_ceilings(values)
 
 
@@ -530,18 +550,6 @@ def _evidence_for_single_fallback_position(evidence: PlayerEvidence, position: s
     )
 
 
-#: Fields where the listed position *is* the rating, so taking the higher of a
-#: hyphenated player's two branches systematically inflates him. Rebounding is the
-#: clear case: reach decides it, and "G-F" means a guard who also plays forward, not a
-#: forward. The repo already reads a hyphenated label this way -- player_rules_mental
-#: reads a hyphenated label the same way when building a position vector.
-_PRIMARY_POSITION_FIELDS = frozenset({
-    "Attributes/OFFENSIVEREBOUND",
-    "Attributes/DEFENSEREBOUND",
-})
-_PRIMARY_POSITION_WEIGHT = 0.55
-
-
 def _higher_multi_position_fallback_values(
     generated_by_position: tuple[tuple[str, dict[str, RuleValue]], ...],
 ) -> dict[str, RuleValue]:
@@ -561,39 +569,6 @@ def _higher_multi_position_fallback_values(
         )
         if not candidates:
             continue
-        if field_key in _PRIMARY_POSITION_FIELDS and len(candidates) > 1:
-            # Taking the higher branch is wrong where position *is* the rating. A
-            # hyphenated "G-F" banked the forward's rebounding every time, and the 1947
-            # NBL lists 64% of its players hyphenated against the BAA's 29% -- so NBL
-            # guards rated twelve points above BAA guards at the same job. The listed
-            # order is information: the first token is the primary position.
-            primary_weight = _PRIMARY_POSITION_WEIGHT
-            ordered = sorted(
-                candidates,
-                key=lambda item: generated_by_position.index(
-                    next(entry for entry in generated_by_position if entry[0] == item[0])
-                ),
-            )
-            blended = (
-                primary_weight * int(ordered[0][1].value)
-                + (1.0 - primary_weight) * int(ordered[1][1].value)
-            )
-            winner_position, winner = ordered[0]
-            winner = replace(winner, value=_clamp_rule_value(field_key, int(round(blended))))
-            combined[field_key] = replace(
-                winner,
-                source_rule=f"{winner.source_rule}_multi_position_primary_weighted",
-                evidence_keys=winner.evidence_keys + (
-                    f"multi_position_fallback_positions={positions_text}",
-                    "multi_position_fallback_policy=primary_position_weighted_blend",
-                    "multi_position_generated_values=" + ",".join(
-                        f"{position}:{int(value.value)}" for position, value in candidates
-                    ),
-                    f"multi_position_primary_weight={primary_weight:.2f}",
-                    f"multi_position_selected_value={int(round(blended))}",
-                ),
-            )
-            continue
         winner_position, winner = max(candidates, key=lambda item: int(item[1].value))
         combined[field_key] = replace(
             winner,
@@ -601,7 +576,7 @@ def _higher_multi_position_fallback_values(
             evidence_keys=winner.evidence_keys + (
                 f"multi_position_fallback_positions={positions_text}",
                 "multi_position_fallback_policy=calculate_each_position_independently_and_use_higher_generated_value",
-                "multi_position_fallback_scope=Attributes,Tendencies",
+                "multi_position_fallback_scope=Tendencies",
                 "multi_position_generated_values=" + ",".join(
                     f"{position}:{int(value.value)}" for position, value in candidates
                 ),
@@ -675,18 +650,6 @@ def _apply_nbl_baa_center_scoring_caps(
     return calibrated
 
 
-def _star_profile_authored_fields(evidence: PlayerEvidence) -> frozenset[str]:
-    """Fields a documented calling card sets for this exact player, if any."""
-
-    from player_era_context import player_era_context
-    from player_star_profiles import star_profile_for
-
-    star = star_profile_for(str(getattr(evidence, "player_id", "") or ""), player_era_context(evidence).season)
-    if star is None:
-        return frozenset()
-    return frozenset(field_key for field_key, _op, _amount in (*star.boost, *star.limit))
-
-
 def _apply_nbl_unrecorded_assist_calibration(
     evidence: PlayerEvidence,
     league_player_rows: Any,
@@ -696,20 +659,15 @@ def _apply_nbl_unrecorded_assist_calibration(
         return values
     calibrated = dict(values)
     offense = _RULE_MODULES["offense"]
-    # This pass runs after the multi-position merge, which puts it after the era pass
-    # that applies documented calling cards. Rewriting a field a star profile authored
-    # discards the calling card: it took Bob Davies, whose entire documented signature
-    # is the handle, from his authored BALLCONTROL of 86 back down to 76. The player
-    # identity is the gate for those, so the authored field wins here too.
-    authored = _star_profile_authored_fields(evidence)
+    # This used to skip any field a documented calling card had authored for this exact
+    # player. The star profiles were removed, so there is no per-player authored set to
+    # protect and every NBL player is calibrated the same way.
     for field_key in (
         "Attributes/BALLCONTROL",
         "Attributes/PASSACCURACY",
         "Attributes/PASSIQ",
         "Attributes/PASSVISION",
     ):
-        if field_key in authored:
-            continue
         current = calibrated.get(field_key)
         if current is None or current.source_rule.endswith("_researched_exact_player_override"):
             continue

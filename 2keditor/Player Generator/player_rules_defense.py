@@ -321,25 +321,6 @@ def _eligible_rows(evidence: Any, rows: Any) -> tuple[dict[str, Any], ...]:
     return result
 
 
-def _position_mix_from_text(text: object) -> tuple[tuple[str, float], ...] | None:
-    text = str(text or "").upper().strip()
-    compact = re.sub(r"[^A-Z]+", "", text)
-    historical = {
-        "G": ("PG", "SG"),
-        "GF": ("SG", "SF"),
-        "FG": ("SF", "SG"),
-        "F": ("SF", "PF"),
-        "FC": ("PF", "C"),
-        "CF": ("C", "PF"),
-        "C": ("C",),
-    }.get(compact)
-    positions = historical or tuple(dict.fromkeys(re.findall(r"(?:PG|SG|SF|PF|C)", text)))
-    if not positions:
-        return None
-    weight = 1.0 / len(positions)
-    return tuple((position, weight) for position in positions)
-
-
 def _player_key(evidence: Any) -> tuple[int, str, str]:
     player_id = str(getattr(evidence, "player_id", "") or _source(evidence, "identity").get("player_id") or "").strip().upper()
     team = str(getattr(evidence, "team", "") or _source(evidence, "season_info").get("team") or "").strip().upper()
@@ -385,17 +366,6 @@ def _defensive_matchup_rows_2018() -> dict[tuple[str, str], dict[str, Any]]:
             (str(row["player_id"]).strip().upper(), str(row["team"]).strip().upper()): dict(row)
             for row in connection.execute("SELECT * FROM crafted_defensive_versatility_2018 WHERE season = 2018")
         }
-
-
-def _interpolate_role(position_number: float) -> float:
-    points = ((1.0, 1.0), (2.0, 0.8), (3.0, 0.5), (4.0, 0.2), (5.0, 0.0))
-    if position_number <= 1.0:
-        return 1.0
-    if position_number >= 5.0:
-        return 0.0
-    lower = int(position_number)
-    fraction = position_number - lower
-    return points[lower - 1][1] + fraction * (points[lower][1] - points[lower - 1][1])
 
 
 def _crafted_value(evidence: Any, key: str) -> float | None:
@@ -813,20 +783,6 @@ _FIELD_ATTRIBUTE_NAMES = {
     "block": "BLOCK",
 }
 
-#: How much of a field's substitute value comes from defensive win shares when the era
-#: never recorded the field's own evidence. Each field earns its own share: perimeter and
-#: interior defence are the closest things to what DWS actually measures, so they take the
-#: most; a block and a steal are discrete events DWS reflects only partly, so they take
-#: less. Without this the substitute was the body prediction alone, and the one recorded
-#: defensive measurement of the pre-tracking era reached none of these fields.
-_DWS_SUBSTITUTE_WEIGHT = {
-    "interior_defense": 0.45,
-    "perimeter_defense": 0.50,
-    "steal": 0.40,
-    "block": 0.35,
-    "help_defense": 0.45,
-    "pass_perception": 0.40,
-}
 
 #: Interior defence: rating points at the edge of the weight-for-height band. An
 #: underweight big gets moved off the block; a heavy one holds it.
@@ -874,34 +830,15 @@ def _defensive_substitute_adjustment(
 ) -> tuple[float, tuple[str, ...]]:
     """The substitute value for a field whose own evidence the era never recorded.
 
-    The body prediction is the starting point, defensive win shares are blended in at the
-    field's own weight, and each field then takes the one body or age term that is
-    specifically about it. Everything here is continuous; nothing switches on a threshold.
+    The body prediction is the starting point and each field then takes the one body or
+    age term that is specifically about it. Defensive win shares are deliberately not
+    blended in here: every one of these fields already carries DWS in its own recipe, so
+    a second helping at the substitute stage counted the same evidence twice. Everything
+    here is continuous; nothing switches on a threshold.
     """
 
     value = context_value
     keys: list[str] = []
-
-    weight = _DWS_SUBSTITUTE_WEIGHT.get(field)
-    dws = _read(evidence, "advanced.dws")
-    if weight is not None and dws is not None:
-        population = sorted(
-            value_
-            for row in rows
-            if (value_ := _row_value(row, "advanced.dws")) is not None
-        )
-        if len(population) >= 2 and population[-1] > population[0]:
-            share = max(0.0, min(1.0, (dws - population[0]) / (population[-1] - population[0])))
-            dws_value = 25.0 + 74.0 * share
-            value = (1.0 - weight) * value + weight * dws_value
-            keys.extend((
-                "advanced.dws",
-                f"dws={dws:.8f}",
-                f"dws_substitute_weight={weight:.2f}",
-                f"same_league_dws_magnitude_score={share:.8f}",
-                f"dws_substitute_value={dws_value:.8f}",
-                "dws_substitute_mapping=blend(body_prediction,25+74*(dws-min)/(max-min))",
-            ))
 
     height = _read(evidence, "identity.ht_in_in")
     player_weight = _read(evidence, "identity.wt")
@@ -1124,7 +1061,7 @@ def _nbl_baa_distribution_value(
     eligible_rows: tuple[dict[str, Any], ...],
     *,
     quality_score: float,
-    position_multiplier: float = 1.0,
+    reach_multiplier: float = 1.0,
 ) -> tuple[int, tuple[str, ...]] | None:
     reference_key = _NBL_BAA_DEFENSE_REFERENCE_KEYS[field]
     raw_reference = _source(evidence, "source_context").get(reference_key)
@@ -1139,7 +1076,7 @@ def _nbl_baa_distribution_value(
     population = _nbl_distribution_population(field, eligible_rows)
     if len(reference_values) < 2 or games_share is None or len(population) < 2:
         return None
-    routed_score = quality_score * position_multiplier if field == "perimeter_defense" else quality_score
+    routed_score = quality_score * reach_multiplier if field == "perimeter_defense" else quality_score
     signal = (routed_score, games_share)
     percentile = _midrank_signal_percentile(signal, population)
     if percentile is None:
@@ -1162,7 +1099,7 @@ def _nbl_baa_distribution_value(
 
 
 def _derive_dws_defense(rule_name: str, field: str, evidence: Any, rows: Any) -> dict[str, Any] | None:
-    """Author defensive quality, then route it by listed position.
+    """Author defensive quality, then route it across the floor by reach.
 
     Player DWS remains the primary component. Exact-team win percentage and
     lower-is-better opponent points per game supply team context and become the complete quality
@@ -1213,7 +1150,7 @@ def _derive_dws_defense(rule_name: str, field: str, evidence: Any, rows: Any) ->
             evidence,
             eligible_rows,
             quality_score=score,
-            position_multiplier=multiplier,
+            reach_multiplier=multiplier,
         )
         if mapped is not None:
             value, mapping_keys = mapped

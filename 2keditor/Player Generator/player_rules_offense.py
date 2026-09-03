@@ -333,37 +333,14 @@ def _parse_positions(value: Any) -> dict[str, float]:
     return result
 
 
-def _position_family(source: Any) -> str:
-    if isinstance(source, dict):
-        value = source.get("player_season_info.pos") or source.get("pos")
-    else:
-        value = getattr(source, "season_info", {}).get("pos") or getattr(source, "identity", {}).get("pos")
-    token = str(value or "").strip().upper().replace("/", "-").split("-", 1)[0]
-    if token in {"G", "PG", "SG"}:
-        return "G"
-    if token in {"F", "SF", "PF"}:
-        return "F"
-    return "C" if token == "C" else ""
-
-
-def _reference_position_family(reference: Mapping[str, Any]) -> str:
-    family = str(reference.get("position_family") or "").strip().upper()[:1]
-    if family in {"G", "F", "C"}:
-        return family
-    features = reference.get("features")
-    if not isinstance(features, (tuple, list)) or len(features) < 5:
-        return ""
-    position = max(range(5), key=lambda index: float(features[index]))
-    return "G" if position < 2 else "F" if position < 4 else "C"
-
-
 def _baa_reference_values(evidence: Any, field_key: str) -> tuple[float, ...]:
-    """Every BAA reference value for this field, league-wide."""
+    """Every BAA reference value for this field, league-wide.
 
-    return _baa_position_reference_values(evidence, field_key, "")
+    This used to take a position family and return only the BAA players carrying that
+    label, so an NBL player's target distribution was chosen by the letter beside his
+    name. There is no family argument any more.
+    """
 
-
-def _baa_position_reference_values(evidence: Any, field_key: str, family: str) -> tuple[float, ...]:
     context = getattr(evidence, "source_context", {})
     references = context.get(NBL_BAA_REFERENCE_CONTEXT_KEY) if isinstance(context, Mapping) else None
     if not isinstance(references, (tuple, list)):
@@ -371,8 +348,6 @@ def _baa_position_reference_values(evidence: Any, field_key: str, family: str) -
     values = []
     for reference in references:
         if not isinstance(reference, Mapping):
-            continue
-        if family and _reference_position_family(reference) != family:
             continue
         targets = reference.get("targets")
         value = targets.get(field_key) if isinstance(targets, Mapping) else None
@@ -946,36 +921,21 @@ def _recipe_rank_score(
     return score, (*evidence_keys, *rank_evidence)
 
 
-def _fallback_position_families(source: Any) -> tuple[str, ...]:
-    if isinstance(source, dict):
-        value = source.get("player_season_info.pos") or source.get("pos")
-    else:
-        value = getattr(source, "season_info", {}).get("pos") or getattr(source, "identity", {}).get("pos")
-    families: list[str] = []
-    for token in str(value or "").strip().upper().replace("/", "-").split("-"):
-        family = "G" if token in {"G", "PG", "SG"} else "F" if token in {"F", "SF", "PF"} else "C" if token == "C" else ""
-        if family and family not in families:
-            families.append(family)
-    return tuple(families) or ((_position_family(source),) if _position_family(source) else ())
-
-
 def _unrecorded_assist_raw_value(
     field: str,
     source: dict[str, Any],
     population: tuple[dict[str, Any], ...],
 ) -> float | None:
+    # Scored once. This used to re-score the player under each of his listed position
+    # families and keep the highest, so a "G-F" outscored a "G" on the strength of the
+    # second letter. The recipe no longer reads position, so every branch returned the
+    # same number and the maximum was over a list of identical values.
     recipe = next(recipe for recipe in _ATTR_RECIPES[field] if recipe.name.startswith("unrecorded_assist_era_"))
     center, scale = _ATTRIBUTE_CALIBRATION[field]
-    values: list[float] = []
-    for position in _fallback_position_families(source):
-        comparison_row = dict(source)
-        comparison_row["player_season_info.pos"] = position
-        comparison_row["player_info.pos"] = position
-        comparison_row["pos"] = position
-        scored = _recipe_score(comparison_row, population, recipe)
-        if scored is not None:
-            values.append(float(max(25, min(99, int(round(center + scored[0] * scale))))))
-    return max(values) if values else None
+    scored = _recipe_score(source, population, recipe)
+    if scored is None:
+        return None
+    return float(max(25, min(99, int(round(center + scored[0] * scale)))))
 
 
 #: Matches nbl_baa_projection._TEAM_SUCCESS_BLEND_WEIGHT. The passing fields kept
@@ -1026,15 +986,14 @@ def nbl_baa_assist_calibrated_value(
     population = tuple(
         row for row in _population(evidence, league_player_rows) if _league(row) == "NBL"
     )
-    # No position family. This mapped an NBL player's rank among his own listed position
-    # onto the BAA distribution for that same position, so the label picked both his peer
-    # group and his target -- a "G" and a "C" with identical box scores landed in
-    # different places for no reason the evidence supports. Both sides are league-wide.
-    family = ""
+    # League-wide on both sides. This mapped an NBL player's rank among his own listed
+    # position onto the BAA distribution for that same position, so the label picked both
+    # his peer group and his target -- a "G" and a "C" with identical box scores landed in
+    # different places for no reason the evidence supports.
     reference_values = _baa_reference_values(evidence, f"Attributes/{field}")
     player_id = str(getattr(evidence, "player_id", "") or "").strip().upper()
     team = str(getattr(evidence, "team", "") or "").strip().upper()
-    cache_key = (id(population), field, family)
+    cache_key = (id(population), field)
     cached = _NBL_ASSIST_RAW_CACHE.get(cache_key)
     if cached is not None and cached[0] is population:
         raw_by_key, ordered_raw = cached[1], cached[2]
@@ -1092,11 +1051,11 @@ def nbl_baa_assist_calibrated_value(
         f"individual_value={individual:.8f}",
         f"same_season_nbl_team_win_percentile={team_percentile:.8f}",
         f"team_success_reference_value={team_value:.8f}",
-        "team_success_reference=same_position_BAA_recorded_assist_distribution",
+        "team_success_reference=league_wide_BAA_recorded_assist_distribution",
         f"team_success_blend_weight={_NBL_TEAM_SUCCESS_BLEND_WEIGHT:.2f}",
         "mapping=round("
-        f"{1.0 - _NBL_TEAM_SUCCESS_BLEND_WEIGHT:.2f}*same_position_BAA_recorded_assist_quantile(NBL_raw_percentile)+"
-        f"{_NBL_TEAM_SUCCESS_BLEND_WEIGHT:.2f}*same_position_BAA_recorded_assist_quantile(NBL_team_win_percentile))",
+        f"{1.0 - _NBL_TEAM_SUCCESS_BLEND_WEIGHT:.2f}*BAA_recorded_assist_quantile(NBL_raw_percentile)+"
+        f"{_NBL_TEAM_SUCCESS_BLEND_WEIGHT:.2f}*BAA_recorded_assist_quantile(NBL_team_win_percentile))",
     )
 
 

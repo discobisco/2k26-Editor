@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Iterable
 
 from nba2k_editor.core import offsets as offsets_mod
@@ -20,7 +21,10 @@ from nbl_baa_projection import (
     REFERENCE_CONTEXT_KEY as NBL_BAA_REFERENCE_CONTEXT_KEY,
     make_baa_projection_reference,
 )
+import player_pre1952_scale as pre_1952_scale
+import player_rules_athleticism as athleticism_rules
 import player_rules_mental as mental_rules
+import player_rules_pre1952 as pre_1952_rules
 from player_generation_models import (
     FREE_THROW_FIELD_KEY,
     FreeThrowExecutionArtifact,
@@ -158,6 +162,14 @@ class SeasonPlayerContextIndex:
     comparison_rows: tuple[dict[str, Any], ...]
     evidence_by_key: dict[tuple[str, str], PlayerEvidence]
     field_index: dict[str, FieldEntry]
+    #: 1947-51 only: the season's players in every league, whatever the operator
+    #: selected. Those seasons are rated on one cross-league scale, so the population a
+    #: rule compares against must not move when the league selection does. Empty for
+    #: every other season, which keeps the selected-scope behaviour.
+    pooled_comparison_rows: tuple[dict[str, Any], ...] = ()
+
+    def rating_rows(self) -> tuple[dict[str, Any], ...]:
+        return self.pooled_comparison_rows or self.comparison_rows
 
     def comparison_row_for(self, *, player_id: str, team: str) -> dict[str, Any]:
         key = _player_team_key(player_id, team)
@@ -319,7 +331,7 @@ def generate_player_proposal_from_index(
     return generate_player_proposal(
         evidence,
         field_index=context.field_index,
-        league_player_rows=context.comparison_rows,
+        league_player_rows=context.rating_rows(),
         free_throw_artifact=free_throw_artifact,
     )
 
@@ -778,6 +790,25 @@ def _cached_season_context_index(
             if _comparison_row_league(row) == "NBL":
                 row.update(baa_reference)
 
+    # Stamped before the league filter below, deliberately. A 1947 player is scaled
+    # against everyone who played that season, not against whichever league the
+    # operator selected -- scaling inside one league gave the NBL and the BAA a 99
+    # apiece and made the two sets of cards unreadable against each other.
+    if 0 < season <= pre_1952_scale.LAST_PRE_1952_SEASON:
+        pooled = pre_1952_scale.build_population_snapshot(rows_by_key.values())
+        nbl_only = tuple(entry for entry in pooled if entry.get("league") == "NBL")
+        for row in rows_by_key.values():
+            row[pre_1952_scale.POOLED_POPULATION_KEY] = pooled
+            if nbl_only:
+                row[pre_1952_scale.NBL_TOTALS_KEY] = nbl_only
+        # Stamped second, and read by nothing above: the pass that consumes these
+        # distributions is a no-op while they are absent, so the run that builds them
+        # produces exactly the unstretched values they are supposed to describe.
+        distributions = _pre_1952_field_distributions(rows_by_key)
+        if distributions:
+            for row in rows_by_key.values():
+                row[pre_1952_scale.FIELD_DISTRIBUTIONS_KEY] = distributions
+
     normalized_league = str(selected_league or "").strip().upper()
     selected_keys = tuple(
         key
@@ -799,6 +830,13 @@ def _cached_season_context_index(
         source_context_by_key=rows_by_key,
         shotquality_by_player_id=shotquality_by_player_id,
     )
+    pooled_comparison_rows: tuple[dict[str, Any], ...] = ()
+    if 0 < season <= pre_1952_scale.LAST_PRE_1952_SEASON:
+        pooled_comparison_rows = tuple(
+            rows_by_key[key]
+            for key in sorted(rows_by_key)
+            if _comparison_row_has_positive_games(rows_by_key[key])
+        )
     return SeasonPlayerContextIndex(
         season=season,
         source_database_path=database,
@@ -806,6 +844,7 @@ def _cached_season_context_index(
         comparison_rows=comparison_rows,
         evidence_by_key=evidence_by_key,
         field_index=dict(field_index),
+        pooled_comparison_rows=pooled_comparison_rows,
     )
 
 
@@ -858,13 +897,12 @@ def _same_season_baa_center_scoring_caps(
     )
     caps: dict[str, int] = {}
     for evidence in evidence_by_key.values():
-        family = str(
-            evidence.season_info.get("pos")
-            or evidence.per_game.get("pos")
-            or evidence.identity.get("pos")
-            or ""
-        ).strip().upper()[:1]
-        if family != "C":
+        # Built from the tall players, not the ones labelled "C". The cap is applied by
+        # reach, so the ceiling it carries has to be measured on the same players it will
+        # bind -- taking it from the league's listed centres meant a 6'2" centre helped
+        # set the ceiling a 6'10" forward would never be measured against.
+        height = evidence.identity.get("ht_in_in")
+        if not isinstance(height, (int, float)) or float(height) < _CENTER_CAP_SOURCE_HEIGHT:
             continue
         positions = select_positions_from_evidence(
             evidence.play_by_play,
@@ -940,13 +978,6 @@ def _same_season_baa_defense_reference(
         }
         if projection_targets:
             reference = make_baa_projection_reference(evidence, baa_rows, projection_targets)
-            position = str(evidence.season_info.get("pos") or evidence.identity.get("pos") or "").strip().upper().replace("/", "-").split("-", 1)[0]
-            reference["position_family"] = (
-                "G" if position in {"G", "PG", "SG"}
-                else "F" if position in {"F", "SF", "PF"}
-                else "C" if position == "C"
-                else ""
-            )
             projection_references.append(reference)
     references: dict[str, Any] = {
         reference_key: tuple(sorted(values))
@@ -956,6 +987,76 @@ def _same_season_baa_defense_reference(
     if projection_references:
         references[NBL_BAA_REFERENCE_CONTEXT_KEY] = tuple(projection_references)
     return references
+
+
+def _pre_1952_field_distributions(
+    rows_by_key: dict[tuple[str, str], dict[str, Any]],
+) -> dict[str, tuple[float, ...]]:
+    """The season's spread for the fields that are restretched rather than rebuilt.
+
+    Vertical, Speed and Speed with Ball keep the shape their own rules give them and
+    only need their range opened to the full 25-99; Hustle needs to know which values
+    are the season's top twenty-five. All four therefore need the season's own
+    distribution.
+
+    These rules are called directly rather than regenerating every player. Building
+    these by running the full rule set over the season cost twenty-one seconds on 1947
+    -- a hundred times any other season, while the generator screen was still opening.
+    """
+
+    rows = tuple(
+        rows_by_key[key]
+        for key in sorted(rows_by_key)
+        if _comparison_row_has_positive_games(rows_by_key[key])
+    )
+    if len(rows) < 2:
+        return {}
+    collected: dict[str, list[float]] = {field_key: [] for field_key in pre_1952_scale_fields()}
+    for row in rows:
+        body = SimpleNamespace(
+            identity={
+                "ht_in_in": _row_context_number(row, "player_info.ht_in_in", "identity.ht_in_in"),
+                "wt": _row_context_number(row, "player_info.wt", "identity.wt"),
+            },
+            per_game={"g": _row_context_number(row, "player_per_game.g", "per_game.g")},
+            season_info={"age": _row_context_number(row, "player_season_info.age", "season_info.age")},
+            source_profile={},
+        )
+        for field_key, result in (
+            ("Attributes/VERTICAL", athleticism_rules.derive_attribute_vertical(body, None, rows)),
+            ("Attributes/SPEED", athleticism_rules.derive_attribute_speed(body, None, rows)),
+            ("Attributes/SPEEDWITHBALL", athleticism_rules.derive_attribute_speedwithball(body, None, rows)),
+            ("Attributes/HUSTLE", mental_rules.derive_attribute_hustle(row, league_player_rows=rows)),
+        ):
+            if result is not None and isinstance(result.get("value"), (int, float)):
+                collected[field_key].append(float(result["value"]))
+    return {
+        field_key: tuple(sorted(values))
+        for field_key, values in collected.items()
+        if len(values) >= 2
+    }
+
+
+def pre_1952_scale_fields() -> tuple[str, ...]:
+    """Fields whose season distribution the pre-1952 pass needs."""
+
+    return tuple(pre_1952_rules.RESTRETCHED_FIELDS) + ("Attributes/HUSTLE",)
+
+
+def _row_context_number(row: dict[str, Any], *keys: str) -> float | None:
+    for key in keys:
+        value = row.get(key)
+        if value is None:
+            section, _, leaf = key.partition(".")
+            nested = row.get(section)
+            value = nested.get(leaf) if isinstance(nested, dict) else None
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
+    return None
 
 
 def _same_season_baa_mental_reference(rows: Iterable[dict[str, Any]]) -> dict[str, tuple[int, ...]]:
@@ -1281,7 +1382,7 @@ def _sparse_fg_percent_distribution(database_path: str, season: int) -> tuple[tu
                 return ()
             rows = connection.execute(
                 """
-                SELECT pos_family AS family, pts_pg, fg, fga
+                SELECT pts_pg, fg, fga
                 FROM generated_pseudo_per_1947_1951
                 WHERE season = ?
                   AND upper(lg) = 'BAA'
@@ -1296,7 +1397,6 @@ def _sparse_fg_percent_distribution(database_path: str, season: int) -> tuple[tu
 
     grouped: dict[str, list[tuple[float, float, float]]] = {}
     for row in rows:
-        family = str(row["family"] or "").strip().upper()[:1]
         points = _float(row["pts_pg"])
         made = _float(row["fg"])
         attempted = _float(row["fga"])
@@ -1368,11 +1468,6 @@ def _share_correlation(left: tuple[float, ...], right: tuple[float, ...]) -> flo
     ) ** 0.5
     return numerator / denominator if denominator > 0.0 else 0.0
 
-def _position_family(row: dict[str, Any]) -> str:
-    pos = str(row.get("pos") or row.get("player_per_game.pos") or "").strip().upper()
-    return pos[:1] if pos[:1] in {"G", "F", "C"} else ""
-
-
 def _impute_sparse_fg_percent(
     database: Path,
     season: int,
@@ -1393,14 +1488,12 @@ def _impute_sparse_fg_percent(
         and (_float(candidate.get("g")) or 0.0) > 0.0
         and (points := _float(candidate.get("pts_per_game"))) is not None
     ))
-    ppg_by_family: dict[str, tuple[float, ...]] = {family: league_ppg for family in distributions}
 
     imputed = 0
     for row in per_game_rows.values():
         if str(row.get("lg") or "").strip().upper() != "NBL" or row.get("fg_percent") is not None:
             continue
-        family = ""
-        distribution = distributions.get(family)
+        distribution = distributions.get("")
         points = _float(row.get("pts_per_game"))
         placement = _midrank_percentile(points, league_ppg) if points is not None else None
         if distribution is None or placement is None:
@@ -1417,7 +1510,6 @@ def _impute_sparse_fg_percent(
             row["e_fg_percent"] = 0.0
             row["fga_per_game"] = 0.0
             row["fg_percent_source"] = "recorded_zero_made_field_goals"
-            row["fg_percent_position_family"] = family
             row["fg_percent_imputed"] = False
             row["fg_percent_imputation_reliability"] = 1.0
             imputed += 1
@@ -1431,12 +1523,16 @@ def _impute_sparse_fg_percent(
         row["fg_percent_imputed"] = True
         row["fg_percent_source"] = "same_season_baa_ppg_quantile_fg_curve"
         row["fg_percent_imputation_reliability"] = imputation_reliability
-        row["fg_percent_position_family"] = family
         row["fg_percent_nbl_ppg_percentile"] = placement
         row["fg_percent_baa_curve_count"] = len(curve)
         row["fg_percent_baa_quantile_match"] = percent
         imputed += 1
     return imputed
+
+
+#: The NBL rim-scoring cap is measured on BAA players of 6'8" and up -- the reach at
+#: which the cap binds in full where it is applied.
+_CENTER_CAP_SOURCE_HEIGHT = 80.0
 
 
 def _multi_team_primary_teams(database: Path, season: int) -> dict[str, str]:

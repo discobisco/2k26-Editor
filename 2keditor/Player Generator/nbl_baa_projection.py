@@ -31,9 +31,10 @@ _TEAM_SUCCESS_FIELDS = _PASSING_FIELDS | _MENTAL_FIELDS
 _TEAM_SUCCESS_BLEND_WEIGHT = 0.40
 _NEIGHBOR_COUNT = 12
 _DISTANCE_FLOOR = 0.05
-_POSITIONS = ("PG", "SG", "SF", "PF", "C")
+# No position dimension. The five position features were the largest single term in the
+# distance metric -- 40% of the passing distance, 30% of the defensive -- so the label,
+# not the player, chose which BAA players an NBL player's ratings were projected from.
 _FEATURE_NAMES = (
-    *("position_" + position.lower() for position in _POSITIONS),
     "height", "weight", "games_share", "team_defense", "points_share",
     "field_goal_share", "fta_share", "ft_percent", "age",
 )
@@ -43,10 +44,10 @@ _GROUP_WEIGHTS = {
     # passing distance -- so the label, not the player, chose the neighbours his ratings
     # were projected from. Its share moves to the body and the box score, which are what
     # the label was standing in for.
-    "defense": {"position": 0.00, "height": 0.35, "weight": 0.20, "games_share": 0.10, "team_defense": 0.35},
-    "rebound": {"position": 0.00, "height": 0.65, "weight": 0.15, "games_share": 0.05, "team_defense": 0.05, "points_share": 0.05, "fta_share": 0.05},
-    "passing": {"position": 0.00, "height": 0.20, "games_share": 0.15, "points_share": 0.20, "field_goal_share": 0.15, "fta_share": 0.10, "ft_percent": 0.20},
-    "mental": {"position": 0.00, "games_share": 0.35, "team_defense": 0.10, "points_share": 0.20, "field_goal_share": 0.10, "fta_share": 0.10, "ft_percent": 0.10, "age": 0.05},
+    "defense": {"height": 0.35, "weight": 0.20, "games_share": 0.10, "team_defense": 0.35},
+    "rebound": {"height": 0.65, "weight": 0.15, "games_share": 0.05, "team_defense": 0.05, "points_share": 0.05, "fta_share": 0.05},
+    "passing": {"height": 0.20, "games_share": 0.15, "points_share": 0.20, "field_goal_share": 0.15, "fta_share": 0.10, "ft_percent": 0.20},
+    "mental": {"games_share": 0.35, "team_defense": 0.10, "points_share": 0.20, "field_goal_share": 0.10, "fta_share": 0.10, "ft_percent": 0.10, "age": 0.05},
     # Height leads for rebounding, not the position label. The 1947 NBL records 64% of
     # its players with hyphenated positions against the BAA's 29%, and the
     # multi-position fallback takes the higher branch -- so a 6'1" "G-F" was encoded as
@@ -188,7 +189,6 @@ def project_nbl_fields(
 
 
 def common_feature_vector(source: Any, league_rows: tuple[dict[str, Any], ...]) -> tuple[float, ...]:
-    position = _position_vector(_source_value(source, "season_info.pos", "player_season_info.pos", "identity.pos", "player_info.pos"))
     height = _number(_source_value(source, "identity.ht_in_in", "player_info.ht_in_in"))
     weight = _number(_source_value(source, "identity.wt", "player_info.wt"))
     games = _number(_source_value(source, "per_game.g", "player_per_game.g"))
@@ -215,7 +215,6 @@ def common_feature_vector(source: Any, league_rows: tuple[dict[str, Any], ...]) 
     fta_share = free_throw_attempts / team_free_throw_attempts if free_throw_attempts is not None and team_free_throw_attempts is not None and team_free_throw_attempts > 0.0 else None
 
     return (
-        *position,
         _span_score(height, height_population),
         _span_score(weight, weight_population),
         _bounded(games_share),
@@ -231,13 +230,10 @@ def common_feature_vector(source: Any, league_rows: tuple[dict[str, Any], ...]) 
 def _feature_distance(field_key: str, left: tuple[float, ...], right: tuple[float, ...]) -> float:
     if len(left) != len(_FEATURE_NAMES) or len(right) != len(_FEATURE_NAMES):
         return math.inf
-    position_distance = sum((left[index] - right[index]) ** 2 for index in range(5)) / 2.0
     weights = _weights_for_field(field_key)
-    distance = weights.get("position", 0.0) * position_distance
+    distance = 0.0
     feature_index = {name: index for index, name in enumerate(_FEATURE_NAMES)}
     for name, weight in weights.items():
-        if name == "position":
-            continue
         index = feature_index[name]
         distance += weight * (left[index] - right[index]) ** 2
     return math.sqrt(max(0.0, distance))
@@ -251,26 +247,6 @@ def _weights_for_field(field_key: str) -> dict[str, float]:
     if field_key in _MENTAL_FIELDS:
         return _GROUP_WEIGHTS["mental"]
     return _GROUP_WEIGHTS["defense"]
-
-
-def _position_vector(value: object) -> tuple[float, ...]:
-    text = str(value or "").strip().upper().replace("/", "-")
-    tokens = tuple(token for token in text.split("-") if token)
-    token_weights = (0.65, 0.35) if len(tokens) > 1 else (1.0,)
-    result = {position: 0.0 for position in _POSITIONS}
-    for token, weight in zip(tokens, token_weights):
-        if token == "G":
-            result["PG"] += weight * 0.5
-            result["SG"] += weight * 0.5
-        elif token == "F":
-            result["SF"] += weight * 0.5
-            result["PF"] += weight * 0.5
-        elif token in result:
-            result[token] += weight
-    total = sum(result.values())
-    if total <= 0.0:
-        return (0.0,) * len(_POSITIONS)
-    return tuple(result[position] / total for position in _POSITIONS)
 
 
 def _population(
@@ -398,7 +374,6 @@ def _bounded(value: float) -> float:
 
 def _source_paths() -> tuple[str, ...]:
     return (
-        "season_info.pos",
         "identity.ht_in_in",
         "identity.wt",
         "per_game.g",

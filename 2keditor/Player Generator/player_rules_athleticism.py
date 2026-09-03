@@ -10,39 +10,9 @@ from typing import Any, Callable, Iterable
 RuleOutput = dict[str, Any] | None
 
 
-_POSITION_COORDINATE: dict[str, float] = {
-    "PG": 0.0,
-    "G": 0.5,
-    "SG": 1.0,
-    "G-F": 1.5,
-    "F-G": 1.5,
-    "SF": 2.0,
-    "F": 2.5,
-    "PF": 3.0,
-    "F-C": 3.25,
-    "C-F": 3.5,
-    "C": 4.0,
-}
-
-
-# Position and position-squared coefficients are zero: the body model reads height,
-# weight and age only. Their contribution is folded into each intercept at the neutral
-# SF coordinate so the fields keep their level. Position is not a rating input.
-#
-# Exact GP-valid calibration. The absolute 2K scale is a continuous quadratic
-# fit to editor_capture_003's no-stat primary-position medians; these are
-# distribution anchors, not output bands. Body response uses the 765-package
-# Overall-controlled coefficients from editor_capture_001/002 at observed mean
-# Overall. Overall is deliberately not a runtime input.
-_POOL_BODY_HEIGHT = (72.610940780, 1.672155160, 0.031797407)
-_POOL_BODY_WEIGHT = (178.365457631, 8.699552963, 0.478873439)
-
-
 @dataclass(frozen=True)
 class _AthleticModel:
     intercept: float
-    position: float
-    position_squared: float
     height_residual: float
     weight_residual_per_ten: float
     source: str
@@ -51,19 +21,15 @@ class _AthleticModel:
 _ATHLETIC_MODELS: dict[str, _AthleticModel] = {
     "speed_with_ball": _AthleticModel(
         70.000000000,
-        0.0,
-        0.0,
         -0.620567496,
         -0.048917651,
-        "pool_run3_no_stats.position_median_quadratic.speed_with_ball+pool_gp765.overall_controlled_body",
+        "pool_gp765.overall_controlled_body",
     ),
     "vertical": _AthleticModel(
         75.700000000,
-        0.0,
-        0.0,
         0.049899040,
         0.390765020,
-        "pool_run3_no_stats.position_median_quadratic.vertical+pool_gp765.overall_controlled_body",
+        "pool_gp765.overall_controlled_body",
     ),
 }
 
@@ -266,40 +232,6 @@ def _age(evidence: Any) -> float | None:
     return None
 
 
-def _raw_position_coordinate(value: object) -> float | None:
-    text = str(value or "").strip().upper().replace("/", "-")
-    if not text:
-        return None
-    if text in _POSITION_COORDINATE:
-        return _POSITION_COORDINATE[text]
-    pieces = tuple(piece for piece in text.replace(",", "-").split("-") if piece)
-    values = tuple(_POSITION_COORDINATE[piece] for piece in pieces if piece in _POSITION_COORDINATE)
-    return sum(values) / len(values) if values else None
-
-
-def _position_coordinate(evidence: Any) -> tuple[float, tuple[str, ...]] | None:
-    play_by_play = getattr(evidence, "play_by_play", {})
-    weighted: list[tuple[float, float, str]] = []
-    if isinstance(play_by_play, dict):
-        for position, column in (("PG", "pg_percent"), ("SG", "sg_percent"), ("SF", "sf_percent"), ("PF", "pf_percent"), ("C", "c_percent")):
-            share = _number(play_by_play.get(column))
-            if share is not None and share > 0.0:
-                weighted.append((_POSITION_COORDINATE[position], share, column))
-    total = sum(share for _position, share, _column in weighted)
-    if total > 0.0:
-        coordinate = sum(position * share for position, share, _column in weighted) / total
-        keys = tuple(f"play_by_play.{column}" for _position, _share, column in weighted)
-        return coordinate, keys
-
-    season_info = getattr(evidence, "season_info", {})
-    identity = getattr(evidence, "identity", {})
-    raw = _dict_text(season_info, "pos", "position") or _dict_text(identity, "pos", "position")
-    coordinate = _raw_position_coordinate(raw)
-    if coordinate is None:
-        return None
-    return coordinate, ("season_info.pos", f"position_label={raw}")
-
-
 #: The pool's overall mean body -- the quadratics below evaluated at the neutral SF
 #: coordinate. Residuals are measured against this rather than against the body
 #: expected for a player's position: measuring a centre's height against "tall for a
@@ -311,12 +243,6 @@ _POOL_NEUTRAL_WEIGHT = 197.68706676
 
 def _pool_neutral_body() -> tuple[float, float]:
     return _POOL_NEUTRAL_HEIGHT, _POOL_NEUTRAL_WEIGHT
-
-
-def _pool_expected_body(position: float) -> tuple[float, float]:
-    height = _POOL_BODY_HEIGHT[0] + _POOL_BODY_HEIGHT[1] * position + _POOL_BODY_HEIGHT[2] * position * position
-    weight = _POOL_BODY_WEIGHT[0] + _POOL_BODY_WEIGHT[1] * position + _POOL_BODY_WEIGHT[2] * position * position
-    return height, weight
 
 
 def _row_value(row: dict[str, Any], nested: str, prefixed: str) -> object:
@@ -344,11 +270,9 @@ def _population_body_shift(
         games = _number(_row_value(row, "per_game", "player_per_game.g"))
         if games is None or games <= 0.0:
             continue
-        raw_position = _row_value(row, "season_info", "player_season_info.pos")
-        position = _raw_position_coordinate(raw_position)
         height = _number(_row_value(row, "identity", "player_info.ht_in_in"))
         weight = _number(_row_value(row, "identity", "player_info.wt"))
-        if position is None or height is None or weight is None:
+        if height is None or weight is None:
             continue
         expected_height, expected_weight = _pool_neutral_body()
         height_residuals.append(height - expected_height)
@@ -427,14 +351,10 @@ def _population_body_compactness_extrema(
 def _athletic_context(
     evidence: Any,
     league_player_rows: Iterable[dict[str, Any]],
-) -> tuple[float, float, float, float | None, tuple[str, ...]] | None:
+) -> tuple[float, float, float | None, tuple[str, ...]] | None:
     games = _games_played(evidence)
     if games is None or games <= 0.0:
         return None
-    selected = _position_coordinate(evidence)
-    if selected is None:
-        return None
-    position, position_keys = selected
     season = int(getattr(evidence, "season", 0) or 0)
     league = _dict_text(getattr(evidence, "season_info", {}), "lg", "league").upper()
     expected_height, expected_weight = _pool_neutral_body()
@@ -449,19 +369,18 @@ def _athletic_context(
     body_keys: list[str] = []
     if height is None:
         height = expected_height
-        body_keys.append("identity.height=missing; substitute=same_season_same_league_position_expected_height")
+        body_keys.append("identity.height=missing; substitute=same_season_same_league_expected_height")
     else:
         body_keys.extend(("identity.ht_in_in", f"identity_height_inches={height:.6g}"))
     if weight is None:
         weight = expected_weight
-        body_keys.append("identity.weight=missing; substitute=same_season_same_league_position_expected_weight")
+        body_keys.append("identity.weight=missing; substitute=same_season_same_league_expected_weight")
     else:
         body_keys.extend(("identity.wt", f"identity_weight_pounds={weight:.6g}"))
     age = _age(evidence)
     keys = (
         "per_game.g",
         f"games_played={games:.6g}",
-        *position_keys,
         *body_keys,
         f"population.same_season_same_league_gp_body_rows={population_count}",
         f"population.expected_height={expected_height:.6g}",
@@ -469,7 +388,7 @@ def _athletic_context(
         f"era.season={season}; league={league or 'unknown'}; direct_rating_penalty=none",
         "pool_identity=(run_id,player_index); captures=editor_capture_001,editor_capture_002; gp_valid_packages=765",
     )
-    return position, height - expected_height, (weight - expected_weight) / 10.0, age, keys
+    return height - expected_height, (weight - expected_weight) / 10.0, age, keys
 
 
 def _derive_athletic_field(
@@ -480,12 +399,10 @@ def _derive_athletic_field(
     context = _athletic_context(evidence, league_player_rows)
     if context is None:
         return None
-    position, height_residual, weight_residual, age, evidence_keys = context
+    height_residual, weight_residual, age, evidence_keys = context
     model = _ATHLETIC_MODELS[field]
     value = (
         model.intercept
-        + model.position * position
-        + model.position_squared * position * position
         + model.height_residual * height_residual
         + model.weight_residual_per_ten * weight_residual
     )
@@ -508,7 +425,7 @@ def _derive_athletic_field(
         f"calibration={model.source}",
         "pool_quantiles_are_distribution_evidence_not_rating_gates",
         f"unavailable_direct_source=individual_{field}_measurement",
-        "substitute_source=gp_valid_pool_position_body_relationship_plus_same_season_same_league_body_context_and_continuous_age",
+        "substitute_source=gp_valid_pool_body_relationship_plus_same_season_same_league_body_context_and_continuous_age",
         f"validity={field}_conditional_estimate_when_direct_athletic_measurement_is_absent; no_assist_or_production_input",
         "excluded_runtime_inputs=assists,overall,production",
     )
@@ -793,18 +710,10 @@ def _row_vertical_value(row: dict[str, Any]) -> float | None:
     weight = _number(_row_value(row, "identity", "player_info.wt"))
     if height is None or weight is None:
         return None
-    position = _raw_position_coordinate(
-        _row_value(row, "season_info", "player_season_info.pos")
-        or _row_value(row, "identity", "player_info.pos")
-    )
-    if position is None:
-        return None
     expected_height, expected_weight = _pool_neutral_body()
     model = _ATHLETIC_MODELS["vertical"]
     value = (
         model.intercept
-        + model.position * position
-        + model.position_squared * position * position
         + model.height_residual * (height - expected_height)
         + model.weight_residual_per_ten * (weight - expected_weight)
     )
@@ -912,6 +821,13 @@ def derive_attribute_vertical(evidence: Any, _field_index: Any = None, league_pl
     }
 
 
+#: Acceleration is a blend of straight-line speed and change of direction. Named so
+#: the pre-1952 pass can re-derive the field after it rewrites either input; the two
+#: call sites must not drift apart.
+ACCELERATION_SPEED_WEIGHT = 0.55
+ACCELERATION_AGILITY_WEIGHT = 0.45
+
+
 def derive_attribute_acceleration(evidence: Any, _field_index: Any = None, league_player_rows: Iterable[dict[str, Any]] = (), _positions: Any = None) -> RuleOutput:
     speed = derive_attribute_speed(evidence, league_player_rows=league_player_rows)
     agility = derive_attribute_agility(evidence, league_player_rows=league_player_rows)
@@ -920,7 +836,9 @@ def derive_attribute_acceleration(evidence: Any, _field_index: Any = None, leagu
     speed_value = int(speed["value"])
     agility_value = int(agility["value"])
     return {
-        "value": _attribute(0.55 * speed_value + 0.45 * agility_value),
+        "value": _attribute(
+            ACCELERATION_SPEED_WEIGHT * speed_value + ACCELERATION_AGILITY_WEIGHT * agility_value
+        ),
         "source_rule": "derive_attribute_acceleration_field_specific_context_substitute",
         "evidence_keys": (
             *tuple(speed["evidence_keys"]),

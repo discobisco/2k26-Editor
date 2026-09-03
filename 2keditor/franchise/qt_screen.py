@@ -56,6 +56,7 @@ from nba2k_editor.franchise.sim_phases import (
     phase_label,
 )
 from nba2k_editor.franchise.storage import DEFAULT_FRANCHISE_DB_PATH, FranchiseRepository, team_options_from_model
+from .hermes_bridge import HERMES_AI_SCREENS, HERMES_EXCLUDED_SCREENS
 
 
 FRANCHISE_SCREEN_TITLE = "Franchise"
@@ -68,9 +69,11 @@ class FranchiseScreen(QWidget):
         model: Any,
         *,
         db_path: str | Path = DEFAULT_FRANCHISE_DB_PATH,
+        hermes_bridge: Any | None = None,
     ) -> None:
         super().__init__()
         self.model = model
+        self.hermes_bridge = hermes_bridge
         self.repository = FranchiseRepository(db_path)
         self.team_options: tuple[FranchiseTeamOption, ...] = ()
         self.user_team_combo: QComboBox | None = None
@@ -98,11 +101,51 @@ class FranchiseScreen(QWidget):
         self.college_program_combo: QComboBox | None = None
         self.college_seed_input: QLineEdit | None = None
         self.college_playoff_indexes_input: QLineEdit | None = None
+        self.hermes_api_status_label: QLabel | None = None
         self.root_layout = QVBoxLayout(self)
         self.root_layout.setContentsMargins(12, 10, 12, 12)
         self.root_layout.setSpacing(8)
         self._body: QWidget | None = None
+        self.root_layout.addWidget(self._build_hermes_api_widget())
         self.refresh_entry_menu()
+
+    def _build_hermes_api_widget(self) -> QWidget:
+        box = QGroupBox("Hermes AI Editor Access")
+        box.setObjectName("HermesEditorApi")
+        layout = QVBoxLayout(box)
+        status = QLabel()
+        status.setObjectName("HermesEditorApiStatus")
+        status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.hermes_api_status_label = status
+        layout.addWidget(status)
+        layout.addWidget(QLabel(f"AI screens: {', '.join(HERMES_AI_SCREENS)}"))
+        layout.addWidget(QLabel(f"Excluded: {', '.join(HERMES_EXCLUDED_SCREENS)}"))
+        layout.addWidget(
+            QLabel(
+                "Hermes uses native MCP tools to list records, open the same section/group field view, "
+                "refresh screens, and write through the editor's normal save path."
+            )
+        )
+        controls = QHBoxLayout()
+        controls.addWidget(QPushButton("Refresh AI Status", clicked=self.refresh_hermes_api_status))
+        controls.addStretch(1)
+        layout.addLayout(controls)
+        self.refresh_hermes_api_status()
+        return box
+
+    def refresh_hermes_api_status(self) -> None:
+        if self.hermes_api_status_label is None:
+            return
+        bridge = self.hermes_bridge
+        if bridge is None:
+            self.hermes_api_status_label.setText("Local editor API: not connected")
+            return
+        state = "listening" if bool(bridge.is_running) else "starts with the editor"
+        self.hermes_api_status_label.setText(f"Local editor API: {bridge.base_url} ({state})")
+
+    def showEvent(self, event: Any) -> None:
+        self.refresh_hermes_api_status()
+        super().showEvent(event)
 
     def refresh_entry_menu(self) -> None:
         if self.repository.exists():
@@ -1140,8 +1183,13 @@ class FranchiseScreen(QWidget):
         return f"[{int(team_index)}] Team {int(team_index)}"
 
 
-def build_franchise_screen(model: Any, *, db_path: str | Path = DEFAULT_FRANCHISE_DB_PATH) -> FranchiseScreen:
-    return FranchiseScreen(model, db_path=db_path)
+def build_franchise_screen(
+    model: Any,
+    *,
+    db_path: str | Path = DEFAULT_FRANCHISE_DB_PATH,
+    hermes_bridge: Any | None = None,
+) -> FranchiseScreen:
+    return FranchiseScreen(model, db_path=db_path, hermes_bridge=hermes_bridge)
 
 
 __all__ = ["FRANCHISE_SCREEN_TITLE", "FranchiseScreen", "build_franchise_screen"]

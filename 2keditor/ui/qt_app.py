@@ -245,7 +245,10 @@ class QtEditorApp(QMainWindow):
         super().__init__()
         apply_qt_theme(_ensure_qapplication())
         self.model = model
-        self.hermes_bridge = HermesEditorBridge(model)
+        self.hermes_bridge = HermesEditorBridge(
+            model,
+            player_generator_state_provider=lambda: self.player_generator_state,
+        )
         self.state = EditorUiState()
         self.setWindowTitle(APP_TITLE)
         self.resize(APP_VIEWPORT_WIDTH, APP_VIEWPORT_HEIGHT)
@@ -545,7 +548,10 @@ class QtEditorApp(QMainWindow):
         if domain == PLAYER_GENERATOR_SCREEN:
             return self._build_player_generator_screen()
         if domain == FRANCHISE_SCREEN:
-            return import_module("nba2k_editor.franchise.qt_screen").build_franchise_screen(self.model)
+            return import_module("nba2k_editor.franchise.qt_screen").build_franchise_screen(
+                self.model,
+                hermes_bridge=self.hermes_bridge,
+            )
         return self._build_generic_domain_screen(domain)
 
     def _base_domain_screen(self, domain: str) -> tuple[QWidget, QVBoxLayout]:
