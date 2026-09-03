@@ -75,14 +75,6 @@ _BAA_DEFENSE_QUALITY_WEIGHTS = {
     "team_win_pct": 0.175,
     "team_opp_ppg": 0.175,
 }
-_NBL_BAA_DEFENSE_REFERENCE_KEYS = {
-    "perimeter_defense": "nbl_baa_perimeter_defense_reference_values",
-    "defense_consistency": "nbl_baa_defense_consistency_reference_values",
-}
-_NBL_DISTRIBUTION_POPULATION_CACHE: dict[
-    tuple[int, str],
-    tuple[tuple[dict[str, Any], ...], tuple[tuple[float, float], ...]],
-] = {}
 _BAA_ROUTED_DEFENSE_POPULATION_CACHE: dict[
     tuple[int, str],
     tuple[tuple[dict[str, Any], ...], tuple[float, ...]],
@@ -522,29 +514,6 @@ def _derive(rule_name: str, field: str, evidence: Any, league_player_rows: Any) 
         return None
     rows = _eligible_rows(evidence, league_player_rows)
     if field == "defense_consistency":
-        if _league(evidence) == "NBL":
-            quality = _defense_quality_score(evidence, rows)
-            if quality is None:
-                return None
-            score, quality_keys = quality
-            mapped = _nbl_baa_distribution_value(
-                field,
-                evidence,
-                rows,
-                quality_score=score,
-            )
-            if mapped is None:
-                return None
-            value, mapping_keys = mapped
-            return {
-                "value": value,
-                "score": score,
-                "source_rule": f"{rule_name}_nbl_baa_distribution_match",
-                "evidence_keys": (games[1],) + quality_keys + mapping_keys + (
-                    "rank_source=NBL_team_defense_quality;games_share_tiebreak_only",
-                    "target_distribution=same_season_BAA_DWS_only_defense_consistency",
-                ),
-            }
         dws = _read(evidence, "advanced.dws")
         dws_population = tuple(
             sorted(
@@ -960,18 +929,6 @@ def _row_defense_quality_score(
     return sum(weight * component_score for weight, component_score in components) / total_weight
 
 
-def _games_share(source: Any) -> float | None:
-    if isinstance(source, dict):
-        games = _row_value(source, "per_game.g")
-        team_games = _row_value(source, "team_stats_per_game.g")
-    else:
-        games = _read(source, "per_game.g")
-        team_games = _read(source, "team_stats_per_game.g")
-    if games is None or team_games is None or games < 0.0 or team_games <= 0.0:
-        return None
-    return games / team_games
-
-
 def _row_has_researched_defense_override(row: dict[str, Any]) -> bool:
     player_id = str(row.get("player_id") or row.get("player_season_info.player_id") or "").strip().upper()
     team = str(row.get("team") or row.get("player_season_info.team") or "").strip().upper()
@@ -1005,97 +962,6 @@ def _baa_routed_defense_population(
     population = tuple(sorted(signals))
     _BAA_ROUTED_DEFENSE_POPULATION_CACHE[cache_key] = (eligible_rows, population)
     return population
-
-
-def _nbl_distribution_population(
-    field: str,
-    eligible_rows: tuple[dict[str, Any], ...],
-) -> tuple[tuple[float, float], ...]:
-    cache_key = (id(eligible_rows), field)
-    cached = _NBL_DISTRIBUTION_POPULATION_CACHE.get(cache_key)
-    if cached is not None and cached[0] is eligible_rows:
-        return cached[1]
-    nbl_rows = tuple(row for row in eligible_rows if _row_league(row) == "NBL")
-    component_populations = _defense_quality_component_populations(nbl_rows)
-    signals: list[tuple[float, float]] = []
-    for row in nbl_rows:
-        if field == "perimeter_defense" and _row_has_researched_defense_override(row):
-            continue
-        quality_score = _row_defense_quality_score(row, component_populations)
-        games_share = _games_share(row)
-        if quality_score is None or games_share is None:
-            continue
-        if field == "perimeter_defense":
-            quality_score *= _side_multiplier_from_height(_row_value(row, "identity.ht_in_in"), field)
-        signals.append((quality_score, games_share))
-    population = tuple(sorted(signals))
-    _NBL_DISTRIBUTION_POPULATION_CACHE[cache_key] = (eligible_rows, population)
-    return population
-
-
-def _midrank_signal_percentile(
-    signal: tuple[float, float],
-    population: tuple[tuple[float, float], ...],
-) -> float | None:
-    if len(population) < 2:
-        return None
-    left = bisect.bisect_left(population, signal)
-    right = bisect.bisect_right(population, signal)
-    midrank = (left + right - 1) / 2.0
-    return max(0.0, min(1.0, midrank / (len(population) - 1)))
-
-
-def _linear_percentile(values: tuple[float, ...], percentile: float) -> float:
-    position = max(0.0, min(1.0, percentile)) * (len(values) - 1)
-    lower = int(position)
-    upper = min(len(values) - 1, lower + 1)
-    if lower == upper:
-        return values[lower]
-    fraction = position - lower
-    return values[lower] + fraction * (values[upper] - values[lower])
-
-
-def _nbl_baa_distribution_value(
-    field: str,
-    evidence: Any,
-    eligible_rows: tuple[dict[str, Any], ...],
-    *,
-    quality_score: float,
-    reach_multiplier: float = 1.0,
-) -> tuple[int, tuple[str, ...]] | None:
-    reference_key = _NBL_BAA_DEFENSE_REFERENCE_KEYS[field]
-    raw_reference = _source(evidence, "source_context").get(reference_key)
-    if not isinstance(raw_reference, (list, tuple)):
-        return None
-    reference_values = tuple(sorted(
-        number
-        for value in raw_reference
-        if (number := _optional_number(value)) is not None
-    ))
-    games_share = _games_share(evidence)
-    population = _nbl_distribution_population(field, eligible_rows)
-    if len(reference_values) < 2 or games_share is None or len(population) < 2:
-        return None
-    routed_score = quality_score * reach_multiplier if field == "perimeter_defense" else quality_score
-    signal = (routed_score, games_share)
-    percentile = _midrank_signal_percentile(signal, population)
-    if percentile is None:
-        return None
-    value = max(25, min(99, int(round(_linear_percentile(reference_values, percentile)))))
-    return value, (
-        "season_info.lg",
-        "league_rule=NBL",
-        f"nbl_distribution_primary_score={routed_score:.8f}",
-        "per_game.g",
-        "team_stats_per_game.g",
-        f"nbl_distribution_games_share_tiebreak={games_share:.8f}",
-        f"same_season_nbl_distribution_percentile={percentile:.8f}",
-        f"reference={reference_key};same-season BAA generated output distribution",
-        f"reference_count={len(reference_values)}",
-        f"nbl_population_count={len(population)}",
-        "mapping=round(linear_percentile(same-season_BAA_generated_values,NBL_rank));clamp=25..99",
-        "rank_order=defense_quality_then_games_share_tiebreak",
-    )
 
 
 def _derive_dws_defense(rule_name: str, field: str, evidence: Any, rows: Any) -> dict[str, Any] | None:
@@ -1144,55 +1010,6 @@ def _derive_dws_defense(rule_name: str, field: str, evidence: Any, rows: Any) ->
         f"reach_side_multiplier={multiplier:.8f}",
         "side_split=interior_rises_with_reach;perimeter_falls_with_reach;no_position_label",
     )
-    if special_rule is None and field == "perimeter_defense" and _league(evidence) == "NBL":
-        mapped = _nbl_baa_distribution_value(
-            field,
-            evidence,
-            eligible_rows,
-            quality_score=score,
-            reach_multiplier=multiplier,
-        )
-        if mapped is not None:
-            value, mapping_keys = mapped
-            return {
-                "value": value,
-                "score": score * multiplier,
-                "source_rule": f"{rule_name}_nbl_baa_distribution_match",
-                "evidence_keys": quality_keys + position_keys + mapping_keys,
-            }
-    if special_rule is None and field == "interior_defense" and _league(evidence) == "NBL":
-        height = _read(evidence, "identity.ht_in_in")
-        height_population = tuple(sorted(
-            value
-            for row in eligible_rows
-            if _row_league(row) == "NBL"
-            and (value := _row_value(row, "identity.ht_in_in")) is not None
-            and value > 0.0
-        ))
-        if height is None or height <= 0.0 or not height_population:
-            return None
-        minimum_height = height_population[0]
-        maximum_height = height_population[-1]
-        height_score = (
-            0.5
-            if maximum_height <= minimum_height
-            else max(0.0, min(1.0, (height - minimum_height) / (maximum_height - minimum_height)))
-        )
-        routed_score = score * multiplier
-        adjusted_score = 0.80 * routed_score + 0.20 * height_score
-        return {
-            "value": round(25 + adjusted_score * 74),
-            "score": adjusted_score,
-            "source_rule": f"{rule_name}_nbl_height_blend",
-            "evidence_keys": quality_keys + position_keys + (
-                "identity.ht_in_in",
-                f"height_same_season_nbl_min={minimum_height:.8f}",
-                f"height_same_season_nbl_max={maximum_height:.8f}",
-                f"height_same_season_nbl_span_score={height_score:.8f}",
-                "nbl_interior_defense_weights=current_routed_defense:0.80,height:0.20",
-                "height_population=same_season_NBL_GP_positive",
-            ),
-        }
     if special_rule is None and _league(evidence) == "BAA":
         population = _baa_routed_defense_population(field, eligible_rows)
         routed_score = score * multiplier
