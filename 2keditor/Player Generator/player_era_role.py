@@ -43,11 +43,51 @@ _PRE_SHOT_CLOCK_ERA_KEY = "pre_shot_clock"
 
 # kind:
 #   "scale"    -> value *= amount
-#   "cap"      -> value = min(value, amount)
+#   "cap"      -> value <= amount, order preserved beneath the ceiling (see _capped)
 #   "raise_to" -> value = max(value, amount)   (only when the gate is engaged)
 # gate: None applies to everyone; otherwise the adjustment strength scales with the
 # named archetype weight (0..1) so a hybrid forward gets a partial dose.
 _GATES = ("guard", "wing", "frontcourt", "pivot", "perimeter")
+
+
+#: Share of a cap the compressed band spans. A hard min() put every player in the
+#: league on the cap for the most heavily suppressed actions -- ALLEYOOP, POSTFACEUP
+#: and POSTSPIN each came out a single value across all 333 players in 1947 -- which
+#: states the era correctly and then throws away which players did it more often.
+#: Values already under the ceiling are untouched; the rest are compressed into the
+#: top of the band in their original order.
+_CAP_BAND_FLOOR = 0.6
+
+
+#: The attribute floor. A field sitting here resolved to it on the player's own
+#: evidence -- most often no made field goal all season. The era pass describes how an
+#: archetype played, not whether this player could, so it must not lift a field off
+#: the floor: raising post work because pivots posted up put players who never scored
+#: back up at 55.
+_ATTRIBUTE_FLOOR = 25.0
+
+
+def _is_demonstrated_floor(field_key: str, current: Any) -> bool:
+    # Attributes only. Tendencies legitimately live below 25 -- most of the era caps in
+    # this model are single digits -- so treating a low tendency as a floored attribute
+    # skipped its era cap and froze the field.
+    if not field_key.startswith("Attributes/"):
+        return False
+    value = getattr(current, "value", None)
+    return isinstance(value, (int, float)) and float(value) <= _ATTRIBUTE_FLOOR
+
+
+def _capped(original: float, amount: float, gate: float) -> float:
+    """Apply an era ceiling without flattening everyone onto it."""
+
+    ceiling = amount + (original - amount) * (1.0 - gate)
+    if original <= ceiling or ceiling <= 0.0:
+        return min(original, ceiling)
+    headroom = 100.0 - ceiling
+    if headroom <= 0.0:
+        return ceiling
+    position = (original - ceiling) / headroom
+    return ceiling * (_CAP_BAND_FLOOR + (1.0 - _CAP_BAND_FLOOR) * position)
 
 
 @dataclass(frozen=True)
@@ -60,6 +100,11 @@ class _Adj:
     tag: str = ""  # a documented-calling-card exemption (player_star_profiles) suppresses this adjustment
 
 
+# The era playstyle pass reshapes tendencies only. Its three attribute adjustments --
+# a guard-gated SPEEDWITHBALL cap and pivot-gated POSTHOOK/POSTCONTROL floors -- were
+# archetype gates, which is position deciding a rating, so they are gone. What a player
+# chose to do in 1947 is an era question; how well he could do it is a body and box-score
+# question, and only the first belongs here.
 _MODEL: tuple[_Adj, ...] = (
     # -- on-ball creation & handle: did not exist -------------------------------
     _Adj("Tendencies/SETUPWITHHESITATION", "cap", 8, None, "no live-dribble setup game pre-clock", "handle"),
@@ -73,8 +118,10 @@ _MODEL: tuple[_Adj, ...] = (
     _Adj("Tendencies/DRIBBLESPIN", "cap", 6, None, "combo dribble moves are modern", "handle"),
     _Adj("Tendencies/NOSETUPDRIBBLE", "scale", 1.3, "perimeter", "catch and go, no extended setup", ""),
     _Adj("Tendencies/NODRIVINGDRIBBLEMOVE", "scale", 1.35, None, "straight-line drives, no combo moves", ""),
-    _Adj("Attributes/BALLCONTROL", "cap", 70, "guard", "no crossover-era handle ratings", "handle"),
-    _Adj("Attributes/SPEEDWITHBALL", "cap", 80, "guard", "ball advancement, not dribble penetration", "handle"),
+    # No BALLCONTROL cap. The era suppressed the crossover *moves* -- the tendencies
+    # above already carry that -- but it did not stop the best ball handler in the
+    # league from being the best ball handler in the league. Capping the attribute at
+    # 70 held Bob Davies, whose whole calling card was the handle, to the ceiling.
     # -- isolation basketball: did not exist ----------------------------------
     _Adj("Tendencies/ISOVSAVERAGEDEFENDER", "cap", 12, None, "ball-movement offense, no iso", "iso"),
     _Adj("Tendencies/ISOVSGOODDEFENDER", "cap", 9, None, "ball-movement offense, no iso", "iso"),
@@ -119,8 +166,6 @@ _MODEL: tuple[_Adj, ...] = (
     _Adj("Tendencies/POSTSTEPBACKSHOT", "cap", 5, None, "post step-back is modern", "post_footwork"),
     _Adj("Tendencies/POSTDROPSTEP", "scale", 0.7, None, "drop step existed but was less emphasised", "post_footwork"),
     _Adj("Tendencies/HOPPOSTSHOT", "cap", 6, None, "hop shot is modern post footwork", "post_footwork"),
-    _Adj("Attributes/POSTHOOK", "raise_to", 60, "pivot", "hook was the core pivot skill", ""),
-    _Adj("Attributes/POSTCONTROL", "raise_to", 55, "pivot", "footwork and balance in the pivot", ""),
     # -- passing: give-and-go, not flair ----------------------------------
     _Adj("Tendencies/DISHTOOPENMAN", "scale", 1.15, None, "give-and-go, hit the cutter", "ball_dominant"),
     _Adj("Tendencies/FLASHYPASS", "cap", 6, None, "fundamental passing, no flair", "flair_pass"),
@@ -240,10 +285,12 @@ def adjust_values(evidence: Any, positions: Any, values: dict[str, Any]) -> dict
         if gate <= 0.0:
             continue
         original = float(current.value)
+        if _is_demonstrated_floor(adj.field, current):
+            continue
         if adj.kind == "scale":
             new_value = original * (1.0 + (adj.amount - 1.0) * gate)
         elif adj.kind == "cap":
-            new_value = min(original, adj.amount + (original - adj.amount) * (1.0 - gate))
+            new_value = _capped(original, adj.amount, gate)
         elif adj.kind == "raise_to":
             new_value = original + (adj.amount - original) * gate if original < adj.amount else original
         else:
@@ -267,6 +314,8 @@ def adjust_values(evidence: Any, positions: Any, values: dict[str, Any]) -> dict
             if current is None or not isinstance(getattr(current, "value", None), (int, float)):
                 continue
             original = float(current.value)
+            if op == "raise_to" and _is_demonstrated_floor(field_key, current):
+                continue
             if op == "raise_to":
                 new_value = max(original, amount)
             elif op == "cap":

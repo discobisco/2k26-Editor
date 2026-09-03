@@ -11,13 +11,27 @@ import player_rules_defense as defense
 import player_rules_mental as mental
 import player_rules_offense as offense
 import player_rules_rebounding as rebounding
-from nbl_baa_projection import DEFENSIVE_SKILL_FIELD_KEYS, project_nbl_fields
+from nbl_baa_projection import project_nbl_fields
 from player_era_role import adjust_values as _apply_era_role_playstyle
 from player_evidence import PlayerEvidence
-from player_honors import HONOR_ATTRIBUTE_KEYS, early_honor_attribute_bonus
 
 
 POSITIONS: tuple[str, ...] = ("PG", "SG", "SF", "PF", "C")
+
+# Keys in nbl_baa_projection.PROJECTED_FIELD_KEYS whose own NBL recipe outranks the
+# same-season BAA projection. The passing family earns this: its unrecorded-assist
+# recipes are calibrated against the league-wide BAA distribution and hold the
+# cross-league median gap inside a couple of points.
+#
+# OFFENSIVECONSISTENCY is deliberately absent. Its NBL recipe mapped a within-NBL
+# rank onto the BAA distribution and put ten NBL players at exactly 99 against the
+# BAA's four, so the projection owns it as PROJECTED_FIELD_KEYS declares.
+NBL_DIRECT_RULE_FIELDS: frozenset[str] = frozenset({
+    "Attributes/BALLCONTROL",
+    "Attributes/PASSACCURACY",
+    "Attributes/PASSIQ",
+    "Attributes/PASSVISION",
+})
 
 
 @dataclass(frozen=True)
@@ -409,13 +423,48 @@ def derive_formula_rule_values(
             )
             for position in fallback_positions
         )
-        return _higher_multi_position_fallback_values(generated_by_position)
-    return _derive_formula_rule_values_once(
-        evidence,
-        positions=positions,
-        league_player_rows=league_player_rows,
-        active_field_keys=active_field_keys,
+        values = _higher_multi_position_fallback_values(generated_by_position)
+    else:
+        values = _derive_formula_rule_values_once(
+            evidence,
+            positions=positions,
+            league_player_rows=league_player_rows,
+            active_field_keys=active_field_keys,
+        )
+    values = _apply_nbl_unrecorded_assist_calibration(evidence, league_player_rows, values)
+    return _apply_cross_field_ceilings(values)
+
+
+def _apply_cross_field_ceilings(values: dict[str, RuleValue]) -> dict[str, RuleValue]:
+    """Invariants between two finished fields, enforced after the position merge.
+
+    The merge takes the higher value per field independently, so a constraint applied
+    inside a rule can be broken by it: speed with ball from one position branch can
+    land above speed from another.
+    """
+
+    speed = values.get("Attributes/SPEED")
+    with_ball = values.get("Attributes/SPEEDWITHBALL")
+    if speed is None or with_ball is None:
+        return values
+    if not isinstance(speed.value, (int, float)) or not isinstance(with_ball.value, (int, float)):
+        return values
+    ceiling = int(athleticism.speed_with_ball_ceiling(float(speed.value)))
+    if int(with_ball.value) <= ceiling:
+        return values
+    adjusted = dict(values)
+    adjusted["Attributes/SPEEDWITHBALL"] = replace(
+        with_ball,
+        value=ceiling,
+        source_rule=f"{with_ball.source_rule}_speed_ceiling",
+        evidence_keys=with_ball.evidence_keys + (
+            f"speed_attribute={int(speed.value)}",
+            f"uncapped_speed_with_ball={int(with_ball.value)}",
+            "speed_with_ball_contract=never_above_the_player_own_speed",
+            "applied_after=multi_position_higher_value_fallback",
+        ),
     )
+    return adjusted
 
 
 def _derive_formula_rule_values_once(
@@ -456,8 +505,6 @@ def _derive_formula_rule_values_once(
     values = _apply_era_role_playstyle(evidence, positions, values)
     values = _apply_nbl_baa_center_scoring_caps(evidence, values)
     values = _apply_nbl_baa_common_feature_projection(evidence, rows, values)
-    values = _apply_early_season_honor_attributes(evidence, values)
-    values = _apply_baa_nbl_defensive_hustle_boost(evidence, values)
     return _apply_shot_family_gate(values)
 
 
@@ -483,6 +530,18 @@ def _evidence_for_single_fallback_position(evidence: PlayerEvidence, position: s
     )
 
 
+#: Fields where the listed position *is* the rating, so taking the higher of a
+#: hyphenated player's two branches systematically inflates him. Rebounding is the
+#: clear case: reach decides it, and "G-F" means a guard who also plays forward, not a
+#: forward. The repo already reads a hyphenated label this way -- player_rules_mental
+#: reads a hyphenated label the same way when building a position vector.
+_PRIMARY_POSITION_FIELDS = frozenset({
+    "Attributes/OFFENSIVEREBOUND",
+    "Attributes/DEFENSEREBOUND",
+})
+_PRIMARY_POSITION_WEIGHT = 0.55
+
+
 def _higher_multi_position_fallback_values(
     generated_by_position: tuple[tuple[str, dict[str, RuleValue]], ...],
 ) -> dict[str, RuleValue]:
@@ -502,6 +561,39 @@ def _higher_multi_position_fallback_values(
         )
         if not candidates:
             continue
+        if field_key in _PRIMARY_POSITION_FIELDS and len(candidates) > 1:
+            # Taking the higher branch is wrong where position *is* the rating. A
+            # hyphenated "G-F" banked the forward's rebounding every time, and the 1947
+            # NBL lists 64% of its players hyphenated against the BAA's 29% -- so NBL
+            # guards rated twelve points above BAA guards at the same job. The listed
+            # order is information: the first token is the primary position.
+            primary_weight = _PRIMARY_POSITION_WEIGHT
+            ordered = sorted(
+                candidates,
+                key=lambda item: generated_by_position.index(
+                    next(entry for entry in generated_by_position if entry[0] == item[0])
+                ),
+            )
+            blended = (
+                primary_weight * int(ordered[0][1].value)
+                + (1.0 - primary_weight) * int(ordered[1][1].value)
+            )
+            winner_position, winner = ordered[0]
+            winner = replace(winner, value=_clamp_rule_value(field_key, int(round(blended))))
+            combined[field_key] = replace(
+                winner,
+                source_rule=f"{winner.source_rule}_multi_position_primary_weighted",
+                evidence_keys=winner.evidence_keys + (
+                    f"multi_position_fallback_positions={positions_text}",
+                    "multi_position_fallback_policy=primary_position_weighted_blend",
+                    "multi_position_generated_values=" + ",".join(
+                        f"{position}:{int(value.value)}" for position, value in candidates
+                    ),
+                    f"multi_position_primary_weight={primary_weight:.2f}",
+                    f"multi_position_selected_value={int(round(blended))}",
+                ),
+            )
+            continue
         winner_position, winner = max(candidates, key=lambda item: int(item[1].value))
         combined[field_key] = replace(
             winner,
@@ -520,14 +612,30 @@ def _higher_multi_position_fallback_values(
     return combined
 
 
+#: The NBL rim-scoring cap binds by reach: nothing at 6'2", in full from 6'8".
+_CENTER_CAP_FREE_HEIGHT = 74.0
+_CENTER_CAP_HEIGHT_SPAN = 6.0
+
+
 def _apply_nbl_baa_center_scoring_caps(
     evidence: PlayerEvidence,
     values: dict[str, RuleValue],
 ) -> dict[str, RuleValue]:
     league = str(evidence.season_info.get("lg") or "").strip().upper()
-    family = str(evidence.per_game.get("fg_percent_position_family") or "").strip().upper()
     caps = evidence.source_context.get("nbl_baa_center_scoring_caps")
-    if league != "NBL" or family != "C" or not isinstance(caps, dict):
+    if league != "NBL" or not isinstance(caps, dict):
+        return values
+
+    # The cap used to fire only for players labelled "C", which is the label deciding
+    # the rating: a 6'2" listed centre took the same rim-scoring ceiling as Mikan while
+    # a 6'8" listed forward took none. It is a reach ceiling, so it binds by reach --
+    # fully at 6'8" and above, not at all at 6'2", straight line between.
+    height = evidence.identity.get("ht_in_in")
+    height = float(height) if isinstance(height, (int, float)) else None
+    if height is None:
+        return values
+    bind = max(0.0, min(1.0, (height - _CENTER_CAP_FREE_HEIGHT) / _CENTER_CAP_HEIGHT_SPAN))
+    if bind <= 0.0:
         return values
 
     calibrated = dict(values)
@@ -536,7 +644,9 @@ def _apply_nbl_baa_center_scoring_caps(
         cap = caps.get(field_key)
         if current is None or not isinstance(cap, (int, float)):
             continue
-        cap_value = _clamp_rule_value(field_key, int(cap))
+        # Loosen the cap toward 99 as reach falls away, so it never binds on a short
+        # player and binds in full on a tall one.
+        cap_value = _clamp_rule_value(field_key, int(round(cap + (1.0 - bind) * (99.0 - cap))))
         mapped = min(int(current.value), cap_value)
         fixed_layup_cap = field_key == "Attributes/DRIVINGLAYUP"
         calibrated[field_key] = replace(
@@ -552,7 +662,7 @@ def _apply_nbl_baa_center_scoring_caps(
                 (
                     f"fixed_nbl_center_driving_layup_cap={cap_value}"
                     if fixed_layup_cap
-                    else f"same_season_baa_center_cap={cap_value}"
+                    else f"same_season_baa_center_cap={cap_value};reach_bind={bind:.4f}"
                 ),
                 f"baa_center_cap_applied={str(mapped < int(current.value)).lower()}",
                 (
@@ -560,6 +670,63 @@ def _apply_nbl_baa_center_scoring_caps(
                     if fixed_layup_cap
                     else "mapping=min(generated_value,same_season_BAA_center_generated_max)"
                 ),
+            ),
+        )
+    return calibrated
+
+
+def _star_profile_authored_fields(evidence: PlayerEvidence) -> frozenset[str]:
+    """Fields a documented calling card sets for this exact player, if any."""
+
+    from player_era_context import player_era_context
+    from player_star_profiles import star_profile_for
+
+    star = star_profile_for(str(getattr(evidence, "player_id", "") or ""), player_era_context(evidence).season)
+    if star is None:
+        return frozenset()
+    return frozenset(field_key for field_key, _op, _amount in (*star.boost, *star.limit))
+
+
+def _apply_nbl_unrecorded_assist_calibration(
+    evidence: PlayerEvidence,
+    league_player_rows: Any,
+    values: dict[str, RuleValue],
+) -> dict[str, RuleValue]:
+    if str(evidence.season_info.get("lg") or "").strip().upper() != "NBL":
+        return values
+    calibrated = dict(values)
+    offense = _RULE_MODULES["offense"]
+    # This pass runs after the multi-position merge, which puts it after the era pass
+    # that applies documented calling cards. Rewriting a field a star profile authored
+    # discards the calling card: it took Bob Davies, whose entire documented signature
+    # is the handle, from his authored BALLCONTROL of 86 back down to 76. The player
+    # identity is the gate for those, so the authored field wins here too.
+    authored = _star_profile_authored_fields(evidence)
+    for field_key in (
+        "Attributes/BALLCONTROL",
+        "Attributes/PASSACCURACY",
+        "Attributes/PASSIQ",
+        "Attributes/PASSVISION",
+    ):
+        if field_key in authored:
+            continue
+        current = calibrated.get(field_key)
+        if current is None or current.source_rule.endswith("_researched_exact_player_override"):
+            continue
+        result = offense.nbl_baa_assist_calibrated_value(
+            field_key.split("/", 1)[1],
+            evidence,
+            league_player_rows,
+        )
+        if result is None:
+            continue
+        value, evidence_keys = result
+        calibrated[field_key] = replace(
+            current,
+            value=max(25, min(99, int(round(value)))),
+            source_rule=f"derive_attribute_{field_key.split('/', 1)[1].lower()}_nbl_unrecorded_assist_baa_centered",
+            evidence_keys=current.evidence_keys + evidence_keys + (
+                f"replaced_unrecorded_assist_rule={current.source_rule}",
             ),
         )
     return calibrated
@@ -575,6 +742,8 @@ def _apply_nbl_baa_common_feature_projection(
         return values
     calibrated = dict(values)
     for field_key, projection in projected.items():
+        if field_key in NBL_DIRECT_RULE_FIELDS:
+            continue
         current = calibrated.get(field_key)
         if current is None:
             calibrated[field_key] = RuleValue(
@@ -596,91 +765,6 @@ def _apply_nbl_baa_common_feature_projection(
     return calibrated
 
 
-def _apply_early_season_honor_attributes(
-    evidence: PlayerEvidence,
-    values: dict[str, RuleValue],
-) -> dict[str, RuleValue]:
-    bonus, honor_keys = early_honor_attribute_bonus(evidence)
-    if bonus <= 0 or not honor_keys:
-        return values
-    adjusted = dict(values)
-    for field_key in HONOR_ATTRIBUTE_KEYS:
-        current = adjusted.get(field_key)
-        if current is None or not isinstance(current.value, (int, float)):
-            continue
-        stored = min(99, int(current.value) + bonus)
-        if stored == int(current.value):
-            continue
-        adjusted[field_key] = replace(
-            current,
-            value=stored,
-            source_rule=f"{current.source_rule}_early_honor_bonus",
-            evidence_keys=current.evidence_keys + honor_keys + (
-                f"pre_honor_value={int(current.value)}",
-                f"post_honor_value={stored}",
-                "mapping=min(99,generated_value+highest_exact_season_honor_bonus)",
-            ),
-        )
-    return adjusted
-
-
-def _apply_baa_nbl_defensive_hustle_boost(
-    evidence: PlayerEvidence,
-    values: dict[str, RuleValue],
-) -> dict[str, RuleValue]:
-    league = str(evidence.season_info.get("lg") or "").strip().upper()
-    if league not in {"BAA", "NBL"}:
-        return values
-    hustle = values.get("Attributes/HUSTLE")
-    if hustle is None or not isinstance(hustle.value, (int, float)):
-        return values
-    qualifying = tuple(
-        sorted(
-            (field_key, int(field.value))
-            for field_key in DEFENSIVE_SKILL_FIELD_KEYS
-            if (field := values.get(field_key)) is not None
-            and isinstance(field.value, (int, float))
-            and int(field.value) > 50
-        )
-    )
-    if not qualifying:
-        return values
-    stored = min(99, int(hustle.value) + 10)
-    if stored == int(hustle.value):
-        return values
-    adjusted = dict(values)
-    adjusted["Attributes/HUSTLE"] = replace(
-        hustle,
-        value=stored,
-        source_rule=f"{hustle.source_rule}_defensive_skill_boost",
-        evidence_keys=hustle.evidence_keys + (
-            "hustle_defensive_skill_scope=BAA,NBL",
-            "hustle_defensive_skill_threshold=strictly_above_50",
-            "hustle_defensive_skill_exclusions=DEFENSECONSISTENCY,HUSTLE",
-            "qualifying_defensive_skills=" + ",".join(
-                f"{field_key}:{value}" for field_key, value in qualifying
-            ),
-            "hustle_defensive_skill_bonus=10",
-            f"pre_defensive_skill_hustle={int(hustle.value)}",
-            f"post_defensive_skill_hustle={stored}",
-            "mapping=min(99,calculated_hustle+10_if_any_qualifying_defensive_skill_gt_50)",
-        ),
-    )
-    return adjusted
-
-
-# ATD "Shot family vs subtypes": Shot Mid and Shot Three carry the total share for
-# their range, and the spot-up / off-screen / pull-up / stepback / contested /
-# directional values only choose the *route* once a shot of that range is taken. A
-# route cannot be taken more often than the range it belongs to exists, so a family
-# total of zero has to zero its whole family -- otherwise a player who took no
-# mid-range shots all season still carries a contested-mid or pull-up-mid branch and
-# the engine can select it.
-#
-# Deliberately not listed: SPINJUMPER and THREATTRIPLESHOT. Neither is named for a
-# range on the committee sheet (the game fields are "Spin Jumper Tendency" and
-# "Triple Threat Shoot"), and the sheet's triple-threat notes treat Shoot as its own
-# conditional stationary-catch branch rather than a member of a range family.
 _SHOT_FAMILY_GATES: dict[str, tuple[str, ...]] = {
     "Tendencies/MIDSHOT": (
         "Tendencies/MIDSPOTUPSHOT",

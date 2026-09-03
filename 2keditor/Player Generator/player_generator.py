@@ -14,7 +14,6 @@ from typing import Any, Iterable
 from nba2k_editor.core import offsets as offsets_mod
 from nba2k_editor.models.schema import FieldEntry
 from player_evidence import PlayerEvidence, shotquality_contest_rows
-from player_honors import season_honors_by_player
 from pre_nba_sqlite import available_pre_nba_seasons, load_pre_nba_season_payload
 from nbl_baa_projection import (
     PROJECTED_FIELD_KEYS as NBL_BAA_PROJECTED_FIELD_KEYS,
@@ -734,11 +733,6 @@ def _cached_season_context_index(
                 include_bare=False,
             )
 
-    season_honors = season_honors_by_player(database, season)
-    for (player_id, _team), merged in rows_by_key.items():
-        honors = season_honors.get(player_id)
-        if honors:
-            merged["season_honors"] = honors
 
     if _impute_sparse_fg_percent(database, season, player_sheet_rows[_PLAYER_PER_GAME_SHEET]):
         per_game_prefix = _context_prefix(_PLAYER_PER_GAME_SHEET)
@@ -776,6 +770,9 @@ def _cached_season_context_index(
                 row.update(defense_reference)
 
     baa_reference = _same_season_baa_mental_reference(rows_by_key.values())
+    overlap_intangibles = _nbl_baa_overlap_intangibles_reference_values(str(database))
+    if overlap_intangibles:
+        baa_reference[mental_rules.NBL_BAA_OVERLAP_INTANGIBLES_REFERENCE_KEY] = overlap_intangibles
     if baa_reference:
         for row in rows_by_key.values():
             if _comparison_row_league(row) == "NBL":
@@ -942,9 +939,15 @@ def _same_season_baa_defense_reference(
             if (value := result.values.get(field_key)) is not None
         }
         if projection_targets:
-            projection_references.append(
-                make_baa_projection_reference(evidence, baa_rows, projection_targets)
+            reference = make_baa_projection_reference(evidence, baa_rows, projection_targets)
+            position = str(evidence.season_info.get("pos") or evidence.identity.get("pos") or "").strip().upper().replace("/", "-").split("-", 1)[0]
+            reference["position_family"] = (
+                "G" if position in {"G", "PG", "SG"}
+                else "F" if position in {"F", "SF", "PF"}
+                else "C" if position == "C"
+                else ""
             )
+            projection_references.append(reference)
     references: dict[str, Any] = {
         reference_key: tuple(sorted(values))
         for reference_key, values in values_by_reference.items()
@@ -978,6 +981,61 @@ def _same_season_baa_mental_reference(rows: Iterable[dict[str, Any]]) -> dict[st
         "nbl_baa_hustle_reference_values": tuple(sorted(hustle_values)),
         "nbl_baa_intangibles_reference_values": tuple(sorted(intangibles_values)),
     }
+
+
+@lru_cache(maxsize=1)
+def _nbl_baa_overlap_intangibles_reference_values(database_path: str) -> tuple[int, ...]:
+    """Return BAA WS-path ratings for exact IDs also recorded in the NBL, 1947-50."""
+
+    uri = f"file:{database_path}?mode=ro"
+    with sqlite3.connect(uri, uri=True) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            """
+            WITH overlap_ids AS (
+                SELECT player_id
+                FROM player_season_info
+                WHERE season BETWEEN 1947 AND 1950
+                  AND upper(lg) IN ('BAA', 'NBL')
+                  AND player_id IS NOT NULL
+                GROUP BY player_id
+                HAVING count(DISTINCT upper(lg)) = 2
+            )
+            SELECT season, player_id, team, ws
+            FROM advanced
+            WHERE season BETWEEN 1947 AND 1950
+              AND upper(lg) = 'BAA'
+              AND player_id IN (SELECT player_id FROM overlap_ids)
+              AND ws IS NOT NULL
+            ORDER BY season, player_id, team
+            """
+        ).fetchall()
+        maxima = {
+            int(row["season"]): float(row["top_ws"])
+            for row in connection.execute(
+                """
+                SELECT season, max(ws) AS top_ws
+                FROM advanced
+                WHERE season BETWEEN 1947 AND 1950
+                  AND upper(lg) = 'BAA'
+                  AND ws IS NOT NULL
+                GROUP BY season
+                """
+            )
+        }
+    by_player_season: dict[tuple[str, int], list[tuple[str, float]]] = {}
+    for row in rows:
+        key = (str(row["player_id"]), int(row["season"]))
+        by_player_season.setdefault(key, []).append((str(row["team"] or "").strip().upper(), float(row["ws"])))
+    ratings_by_player: dict[str, list[int]] = {}
+    for (player_id, season), entries in by_player_season.items():
+        aggregate = next((value for team, value in entries if team == "TOT" or team.endswith("TM")), None)
+        win_shares = aggregate if aggregate is not None else sum(value for _team, value in entries)
+        top = maxima.get(season, 0.0)
+        score = max(0.0, win_shares) / top if top > 0.0 else 0.0
+        rating = max(25, min(98, int(round(25.0 + 74.0 * score))))
+        ratings_by_player.setdefault(player_id, []).append(rating)
+    return tuple(sorted(int(round(sum(values) / len(values))) for values in ratings_by_player.values()))
 
 
 def _context_sheet_rows(database: Path, sheet: str, season: int) -> tuple[dict[str, Any], ...]:
@@ -1209,8 +1267,8 @@ def _impute_sparse_fg_enabled() -> bool:
 
 
 @lru_cache(maxsize=None)
-def _sparse_fg_percent_distribution(database_path: str, season: int) -> tuple[tuple[str, tuple[float, float, float]], ...]:
-    """Return same-season BAA position-family 5th/mean/95th FG% anchors."""
+def _sparse_fg_percent_distribution(database_path: str, season: int) -> tuple[tuple[str, tuple[tuple[float, ...], float]], ...]:
+    """Return BAA FG% values ordered by league-wide PPG quantile."""
 
     try:
         uri = f"file:{database_path}?mode=ro"
@@ -1223,7 +1281,7 @@ def _sparse_fg_percent_distribution(database_path: str, season: int) -> tuple[tu
                 return ()
             rows = connection.execute(
                 """
-                SELECT pos_family AS family, fg, fga
+                SELECT pos_family AS family, pts_pg, fg, fga
                 FROM generated_pseudo_per_1947_1951
                 WHERE season = ?
                   AND upper(lg) = 'BAA'
@@ -1236,27 +1294,34 @@ def _sparse_fg_percent_distribution(database_path: str, season: int) -> tuple[tu
     except sqlite3.Error:
         return ()
 
-    grouped: dict[str, list[tuple[float, float]]] = {}
+    grouped: dict[str, list[tuple[float, float, float]]] = {}
     for row in rows:
         family = str(row["family"] or "").strip().upper()[:1]
+        points = _float(row["pts_pg"])
         made = _float(row["fg"])
         attempted = _float(row["fga"])
-        if family not in {"G", "F", "C"} or made is None or attempted is None or attempted <= 0.0:
+        if points is None or made is None or attempted is None or attempted <= 0.0:
             continue
-        grouped.setdefault(family, []).append((made, attempted))
+        # One league-wide curve. Reconstructing the missing denominator from the BAA
+        # players who shared a position label made an NBL player's shooting percentage --
+        # and every shooting attribute built on it -- move by up to 20 points on the label
+        # alone. Scoring rate is the evidence; the label is not.
+        grouped.setdefault("", []).append((points, made, attempted))
 
-    distributions: dict[str, tuple[float, float, float]] = {}
+    distributions: dict[str, tuple[tuple[float, ...], float]] = {}
     for family, values in grouped.items():
-        percentages = tuple(sorted(made / attempted for made, attempted in values))
-        total_attempts = sum(attempted for _made, attempted in values)
-        if len(percentages) < 2 or total_attempts <= 0.0:
-            continue
-        average = sum(made for made, _attempted in values) / total_attempts
-        distributions[family] = (
-            _linear_percentile(percentages, 0.05),
-            average,
-            _linear_percentile(percentages, 0.95),
+        by_points: dict[float, list[tuple[float, float]]] = {}
+        for points, made, attempted in values:
+            by_points.setdefault(points, []).append((made, attempted))
+        ordered_points = tuple(sorted(by_points))
+        curve = tuple(
+            sum(made for made, _attempted in by_points[points])
+            / sum(attempted for _made, attempted in by_points[points])
+            for points in ordered_points
         )
+        if len(curve) < 2:
+            continue
+        distributions[family] = (curve, abs(_share_correlation(ordered_points, curve)))
     return tuple(sorted(distributions.items()))
 
 
@@ -1279,11 +1344,29 @@ def _midrank_percentile(value: float, population: tuple[float, ...]) -> float | 
     return max(0.0, min(1.0, midrank / (len(population) - 1)))
 
 
-def _deviated_sparse_fg_percent(low: float, average: float, high: float, placement: float) -> float:
-    if placement <= 0.5:
-        return low + (average - low) * (placement / 0.5)
-    return average + (high - average) * ((placement - 0.5) / 0.5)
+def _share_correlation(left: tuple[float, ...], right: tuple[float, ...]) -> float:
+    """Correlation of two series compared as min-max shares, so gaps count.
 
+    Replaces a rank correlation: ranking the curve treated a scoring leader far clear
+    of the pack the same as one a point ahead, which is exactly the spacing this
+    reliability is meant to measure.
+    """
+
+    if len(left) != len(right) or len(left) < 2:
+        return 0.0
+    def shares(values: tuple[float, ...]) -> tuple[float, ...]:
+        low, high = min(values), max(values)
+        span = high - low
+        return tuple(0.0 for _ in values) if span <= 0.0 else tuple((v - low) / span for v in values)
+    a = shares(left)
+    b = shares(right)
+    mean_a = sum(a) / len(a)
+    mean_b = sum(b) / len(b)
+    numerator = sum((x - mean_a) * (y - mean_b) for x, y in zip(a, b))
+    denominator = (
+        sum((x - mean_a) ** 2 for x in a) * sum((y - mean_b) ** 2 for y in b)
+    ) ** 0.5
+    return numerator / denominator if denominator > 0.0 else 0.0
 
 def _position_family(row: dict[str, Any]) -> str:
     pos = str(row.get("pos") or row.get("player_per_game.pos") or "").strip().upper()
@@ -1303,40 +1386,55 @@ def _impute_sparse_fg_percent(
     if not distributions:
         return 0
 
-    ppg_by_family: dict[str, tuple[float, ...]] = {}
-    for family in distributions:
-        ppg_by_family[family] = tuple(sorted(
-            points
-            for candidate in per_game_rows.values()
-            if str(candidate.get("lg") or "").strip().upper() == "NBL"
-            and _position_family(candidate) == family
-            and (_float(candidate.get("g")) or 0.0) > 0.0
-            and (points := _float(candidate.get("pts_per_game"))) is not None
-        ))
+    league_ppg = tuple(sorted(
+        points
+        for candidate in per_game_rows.values()
+        if str(candidate.get("lg") or "").strip().upper() == "NBL"
+        and (_float(candidate.get("g")) or 0.0) > 0.0
+        and (points := _float(candidate.get("pts_per_game"))) is not None
+    ))
+    ppg_by_family: dict[str, tuple[float, ...]] = {family: league_ppg for family in distributions}
 
     imputed = 0
     for row in per_game_rows.values():
         if str(row.get("lg") or "").strip().upper() != "NBL" or row.get("fg_percent") is not None:
             continue
-        family = _position_family(row)
-        anchors = distributions.get(family)
+        family = ""
+        distribution = distributions.get(family)
         points = _float(row.get("pts_per_game"))
-        placement = _midrank_percentile(points, ppg_by_family.get(family, ())) if points is not None else None
-        if anchors is None or placement is None:
+        placement = _midrank_percentile(points, league_ppg) if points is not None else None
+        if distribution is None or placement is None:
             continue
-        low, average, high = anchors
-        percent = _deviated_sparse_fg_percent(low, average, high, placement)
+        curve, imputation_reliability = distribution
+        made_per_game = _float(row.get("fg_per_game"))
+        if made_per_game is not None and made_per_game <= 0.0:
+            # Nothing to impute. The imputation reconstructs an unrecorded denominator,
+            # but this player's numerator is recorded and it is zero: he made no field
+            # goal all season, so his percentage is zero whatever the attempts were.
+            # Filling it from the league curve handed a scoreless player an 11% floor
+            # and a mid-scale close shot.
+            row["fg_percent"] = 0.0
+            row["e_fg_percent"] = 0.0
+            row["fga_per_game"] = 0.0
+            row["fg_percent_source"] = "recorded_zero_made_field_goals"
+            row["fg_percent_position_family"] = family
+            row["fg_percent_imputed"] = False
+            row["fg_percent_imputation_reliability"] = 1.0
+            imputed += 1
+            continue
+        percent = _linear_percentile(curve, placement)
         row["fg_percent"] = round(percent, 4)
         row["e_fg_percent"] = round(percent, 4)  # no 3-point attempts in this era
         made_per_game = _float(row.get("fg_per_game"))
         if made_per_game is not None and made_per_game >= 0.0 and percent > 0.0:
             row["fga_per_game"] = round(made_per_game / percent, 2)
-        row["fg_percent_source"] = "same_season_baa_position_fg_distribution_by_nbl_ppg_rank"
+        row["fg_percent_imputed"] = True
+        row["fg_percent_source"] = "same_season_baa_ppg_quantile_fg_curve"
+        row["fg_percent_imputation_reliability"] = imputation_reliability
         row["fg_percent_position_family"] = family
         row["fg_percent_nbl_ppg_percentile"] = placement
-        row["fg_percent_baa_p05"] = low
-        row["fg_percent_baa_attempt_weighted_average"] = average
-        row["fg_percent_baa_p95"] = high
+        row["fg_percent_baa_curve_count"] = len(curve)
+        row["fg_percent_baa_quantile_match"] = percent
         imputed += 1
     return imputed
 

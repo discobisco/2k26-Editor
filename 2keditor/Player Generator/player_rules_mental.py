@@ -9,6 +9,11 @@ from functools import lru_cache
 from typing import Any
 
 
+#: Above 1.0 the curve pushes the ends of the league apart instead of crowding the
+#: middle. Intangibles is a separation field: the gap between the best player in a
+#: league and a replacement one should read as a gap.
+_INTANGIBLES_DISPARITY_EXPONENT = 1.6
+
 _INTANGIBLES_VORP_MAX = 12.47
 _INTANGIBLES_LINEAR_WEIGHT = 0.1318558994
 _INTANGIBLES_TAIL_WEIGHT = 0.8681331006
@@ -26,14 +31,16 @@ _ROW_PREFIXES: dict[str, tuple[str, ...]] = {
     "play_by_play": ("play_by_play", "player_play_by_play"),
     "team_totals": ("team_totals",),
     "team_stats_per_game": ("team_stats_per_game",),
+    "opponent_stats_per_game": ("opponent_stats_per_game",),
     "team_summary": ("team_summaries", "team_summary"),
 }
 
 _NBL_HUSTLE_WEIGHTS = (("games_share", 0.50), ("fta_per_game", 0.30), ("team_win_pct", 0.20))
-_NBL_INTANGIBLES_WEIGHTS = (("team_win_pct", 0.50), ("nbl_scoring_share", 0.30), ("games_share", 0.20))
+_NBL_INTANGIBLES_WEIGHTS = (("team_point_differential", 0.60), ("nbl_scoring_share", 0.40))
+NBL_BAA_OVERLAP_INTANGIBLES_REFERENCE_KEY = "nbl_baa_overlap_intangibles_reference_values"
 _NBL_BAA_REFERENCE_KEYS = {
     "HUSTLE": "nbl_baa_hustle_reference_values",
-    "INTANGIBLES": "nbl_baa_intangibles_reference_values",
+    "INTANGIBLES": NBL_BAA_OVERLAP_INTANGIBLES_REFERENCE_KEY,
 }
 _NBL_WEIGHTS_BY_FIELD = {
     "HUSTLE": _NBL_HUSTLE_WEIGHTS,
@@ -83,6 +90,14 @@ def _source_map(source: Any, namespace: str) -> Mapping[str, Any]:
 
 
 def _source_value(source: Any, namespace: str, key: str) -> float | None:
+    if isinstance(source, Mapping):
+        for prefix in _ROW_PREFIXES.get(namespace, (namespace,)):
+            if (value := _optional_number(source.get(f"{prefix}.{key}"))) is not None:
+                return value
+        nested_map = source.get(namespace)
+        if isinstance(nested_map, Mapping) and (value := _optional_number(nested_map.get(key))) is not None:
+            return value
+        return _optional_number(source.get(key))
     values = _source_map(source, namespace)
     nested = values.get(key)
     if nested is not None:
@@ -219,6 +234,33 @@ def _signal(source: Any, name: str) -> float | None:
         return _ratio(_estimated_total(source, "fga"), _team_total(source, "fga"))
     if name == "scoring_share":
         return _ratio(_estimated_total(source, "pts"), _team_total(source, "pts"))
+    if name == "hand_frame_fit":
+        height = _source_value(source, "identity", "ht_in_in")
+        if height is None:
+            return None
+        low, high = _HANDS_FRAME_BAND
+        distance = 0.0 if low <= height <= high else (low - height if height < low else height - high)
+        return max(0.0, 1.0 - distance / _HANDS_FRAME_FALLOFF)
+    if name == "catch_security":
+        # How reliably the ball stuck when it arrived. Nothing measures hand size, so
+        # the signifiers are finishing what was caught and holding onto it.
+        parts = [
+            value
+            for value in (
+                _source_value(source, "per_game", "fg_percent"),
+                _source_value(source, "per_game", "ft_percent"),
+            )
+            if value is not None
+        ]
+        return sum(parts) / len(parts) if parts else None
+    if name == "fg_stability":
+        return _source_value(source, "per_game", "fg_percent")
+    if name == "ft_stability":
+        return _source_value(source, "per_game", "ft_percent")
+    if name == "team_win_pct":
+        wins = _source_value(source, "team_summary", "w")
+        losses = _source_value(source, "team_summary", "l")
+        return _ratio(wins, (wins or 0.0) + (losses or 0.0))
     if name == "assist_share":
         return _ratio(_estimated_total(source, "ast"), _team_total(source, "ast"))
     if name == "foul_pressure":
@@ -276,6 +318,11 @@ def _signal(source: Any, name: str) -> float | None:
 _SIGNAL_PROVENANCE: dict[str, tuple[str, ...]] = {
     "attempt_share": ("totals.fga", "team_stats_per_game.fga_per_game", "team_stats_per_game.g"),
     "scoring_share": ("totals.pts", "team_stats_per_game.pts_per_game", "team_stats_per_game.g"),
+    "hand_frame_fit": ("identity.ht_in_in",),
+    "catch_security": ("per_game.fg_percent", "per_game.ft_percent"),
+    "fg_stability": ("per_game.fg_percent",),
+    "ft_stability": ("per_game.ft_percent",),
+    "team_win_pct": ("team_summary.w", "team_summary.l"),
     "assist_share": ("totals.ast", "team_stats_per_game.ast_per_game", "team_stats_per_game.g"),
     "foul_pressure": ("advanced.f_tr", "totals.fta", "totals.fga"),
     "turnover_rate": ("advanced.tov_percent", "per_36.tov_per_36_min", "per_game.tov_per_game"),
@@ -290,7 +337,7 @@ _SIGNAL_PROVENANCE: dict[str, tuple[str, ...]] = {
     "dws": ("advanced.dws",),
     "games_share": ("per_game.g", "team_stats_per_game.g"),
     "fta_per_game": ("per_game.fta_per_game",),
-    "team_win_pct": ("team_summary.w", "team_summary.l"),
+    "team_point_differential": ("team_stats_per_game.pts_per_game", "opponent_stats_per_game.opp_pts_per_game"),
     "nbl_scoring_share": ("per_game.pts_per_game", "team_stats_per_game.pts_per_game"),
     "ft_percent": ("per_game.ft_percent",),
     "mid_attempt_rate": ("shooting.percent_fga_from_x10_16_range", "shooting.percent_fga_from_x16_3p_range"),
@@ -315,7 +362,10 @@ class _Recipe:
 
 _CALIBRATION: dict[str, tuple[float, float]] = {
     "HANDS": (68.0, 23.722),
-    "HUSTLE": (65.0, 20.756),
+    # Narrowed from 20.756 once HUSTLE became DWS-led. At the pool scale the top of
+    # the defensive-win-share distribution was wide enough to put twelve players on
+    # 99 at once; at 13.0 the ceiling goes to the outright leader.
+    "HUSTLE": (65.0, 13.0),
     "ISOVSPOOR": (15.0, 14.83),  # ATD ISO vs Poor 5-25, cap 75
     "ISOVSAVERAGE": (10.0, 14.83),  # ATD ISO vs Average 0-20, cap 70
     "ISOVSGOOD": (7.5, 11.12),  # ATD ISO vs Good 0-15, cap 60
@@ -326,33 +376,52 @@ _CALIBRATION: dict[str, tuple[float, float]] = {
     "TRANSITIONSPOTUP": (50.0, 14.83),  # ATD Spot vs Cut 40-60, cap 85
 }
 
+#: Hands belong to the 6'6"-7'2" frame: big enough to palm and swallow a pass, not so
+#: big that everything is reach. Hand size is unmeasurable, so the frame sets the band
+#: and catching signifiers place a player inside it.
+_HANDS_FRAME_BAND = (78.0, 86.0)
+_HANDS_FRAME_FALLOFF = 10.0
+
 _HANDS_RECIPES = (
     _Recipe("tracked_catch_and_ball_security", (("lost_ball_security", 0.55), ("turnover_rate", -0.30), ("secure_possession_rate", 0.15)), ("lost_ball_security", "turnover_rate")),
-    _Recipe("historical_hand_eye_and_secure_possession", (("ft_percent", 0.40), ("assist_share", 0.35), ("secure_possession_rate", 0.25)), ("ft_percent", "assist_share", "secure_possession_rate"), "tracked lost-ball and catch outcomes", "recorded FT touch, team assist responsibility, and secured-possession activity", "the substitute estimates hand-eye control and possession security without using height or names"),
+    _Recipe("historical_hand_eye_and_secure_possession", (("hand_frame_fit", 0.40), ("catch_security", 0.35), ("secure_possession_rate", 0.15), ("ft_percent", 0.10)), ("ft_percent", "catch_security", "secure_possession_rate"), "tracked lost-ball and catch outcomes", "the frame that catches and holds a pass, plus recorded catching signifiers", "guards topped this field on free-throw touch alone; hands belong to the 6ft6-7ft2 frame and are placed inside that band by how reliably the ball stuck"),
+    # A player who never attempted a free throw, in a league that recorded no
+    # assists, rebounds or turnovers, has no possession evidence at all. Eighteen
+    # 1946-47 players are in that position -- every one of them a one-to-seven game
+    # appearance. Leaving the field unresolved dropped it off their card entirely and
+    # silently shifted every total-attribute comparison against them, so schedule
+    # exposure carries the field and states that it is doing so.
+    _Recipe("no_recorded_possession_evidence_exposure", (("games_share", 1.0),), ("games_share",), "lost-ball, catch, free-throw, assist, rebound and turnover outcomes", "schedule availability alone", "no possession evidence of any kind was recorded for this player; exposure is the only observed signal and it places brief appearances near the attribute floor rather than at the population centre"),
 )
 _HUSTLE_RECIPES = (
     _Recipe("recorded_effort_event_activity", (("orb_rate", 0.28), ("stl_rate", 0.20), ("blk_rate", 0.12), ("charge_rate", 0.12), ("foul_rate", 0.08), ("dws", 0.20)), ("orb_rate", "stl_rate", "blk_rate", "charge_rate")),
-    _Recipe("historical_rebound_foul_availability_activity", (("trb_rate", 0.52), ("foul_rate", 0.20), ("games_share", 0.08), ("dws", 0.20)), ("trb_rate", "foul_rate", "dws"), "offensive boards, steals, blocks, charges, and loose-ball recoveries", "recorded total-rebound activity, foul activity, schedule availability, and DWS", "these all-era events plus sustained defensive value measure repeated pursuit and physical activity; no body or name template authors HUSTLE"),
+    _Recipe("historical_rebound_foul_availability_activity", (("dws", 0.50), ("trb_rate", 0.25), ("foul_rate", 0.17), ("games_share", 0.08)), ("trb_rate", "foul_rate", "dws"), "offensive boards, steals, blocks, charges, and loose-ball recoveries", "sustained defensive value, recorded total-rebound activity, foul activity, and schedule availability", "defence is where hustle shows up, so defensive win shares lead; the rebound and foul terms keep the physical-activity evidence in the mix and no body or name template authors HUSTLE"),
 )
 _ISO_RECIPES = (
-    _Recipe("self_created_isolation_load", (("assisted_two_rate", -0.35), ("attempt_share", 0.25), ("foul_pressure", 0.25), ("role.creator", 0.15)), ("assisted_two_rate",)),
-    _Recipe("historical_creator_isolation_load", (("attempt_share", 0.40), ("foul_pressure", 0.30), ("role.creator", 0.30)), ("attempt_share", "scoring_share"), "isolation play-type and unassisted-shot event counts", "offensive responsibility, live-contact pressure, and continuous creator role", "the substitute estimates self-created possession load and the four defender classes share one base score"),
+    _Recipe("self_created_isolation_load", (("assisted_two_rate", -0.35), ("attempt_share", 0.25), ("foul_pressure", 0.25), ("role.creator", 0.10),), ("assisted_two_rate",)),
+    _Recipe("historical_creator_isolation_load", (("attempt_share", 0.40), ("foul_pressure", 0.30), ("role.creator", 0.10),), ("attempt_share", "scoring_share"), "isolation play-type and unassisted-shot event counts", "offensive responsibility, live-contact pressure, and continuous creator role", "the substitute estimates self-created possession load and the four defender classes share one base score"),
 )
 # Foul rate is a negative discipline signal in both recipes: a player who repeatedly
 # fouls is the player who leaves his assignment, gambles, and plays outside the call.
 # It is the one discipline signal every era records, so it also carries the historical
 # recipe when team totals are thin.
 _PLAY_DISCIPLINE_RECIPES = (
-    _Recipe("assisted_structure_and_decision_security", (("assisted_two_rate", 0.30), ("turnover_rate", -0.22), ("foul_rate", -0.18), ("attempt_share", -0.15), ("role.creator", -0.15)), ("assisted_two_rate", "turnover_rate")),
-    _Recipe("historical_team_role_discipline", (("attempt_share", -0.38), ("assist_share", 0.25), ("foul_rate", -0.22), ("role.creator", -0.15)), ("attempt_share", "assist_share", "foul_rate"), "play-call adherence and freelance possession events", "lower self-directed shot load, team assist responsibility, recorded foul activity, and reduced primary-creator role", "the substitute describes structured team-role behavior rather than shooting execution; fouling is the all-era record of playing outside the call"),
+    _Recipe("assisted_structure_and_decision_security", (("assisted_two_rate", 0.30), ("turnover_rate", -0.22), ("foul_rate", -0.18), ("attempt_share", -0.15), ("role.creator", 0.10),), ("assisted_two_rate", "turnover_rate")),
+    _Recipe("historical_team_role_discipline", (("attempt_share", -0.38), ("assist_share", 0.25), ("foul_rate", -0.22), ("role.creator", 0.10),), ("attempt_share", "assist_share", "foul_rate"), "play-call adherence and freelance possession events", "lower self-directed shot load, team assist responsibility, recorded foul activity, and reduced primary-creator role", "the substitute describes structured team-role behavior rather than shooting execution; fouling is the all-era record of playing outside the call"),
+    # The 1946-47 NBL recorded neither assists nor personal fouls, so both recipes
+    # above resolve to nothing and the tendency dropped off all 172 NBL cards. Scoring
+    # share is the load measure that league did record -- the research supplement is
+    # explicit that NBL FGM share is observed make production rather than attempt
+    # share -- and free-throw pressure stands in for the unrecorded foul activity.
+    _Recipe("nbl_recorded_stability_discipline", (("scoring_share", -0.25), ("fg_stability", 0.25), ("ft_stability", 0.25), ("team_win_pct", 0.25)), ("scoring_share", "fg_stability", "team_win_pct"), "assists, personal fouls, and freelance possession events", "recorded scoring share, reliability-weighted FG/FT stability, and exact team record", "all available NBL evidence contributes continuously; missing FT% is omitted rather than converted to zero"),
 )
 _ROLL_POP_RECIPES = (
-    _Recipe("screen_roll_rim_preference", (("mid_attempt_rate", -0.30), ("three_attempt_rate", -0.30), ("rim_attempt_rate", 0.20), ("role.wing", -0.10), ("role.interior", 0.10)), ("mid_attempt_rate", "three_attempt_rate", "rim_attempt_rate")),
-    _Recipe("historical_screen_roll_touch_role", (("ft_percent", -0.40), ("role.wing", -0.25), ("role.interior", 0.20), ("foul_pressure", 0.15)), ("ft_percent", "role.wing", "role.interior"), "screen roll/pop event destinations and shot locations", "recorded shooting touch plus continuous spacing-versus-interior role", "higher output means roll preference; the all-era substitute separates rim pressure from spacing"),
+    _Recipe("screen_roll_rim_preference", (("mid_attempt_rate", -0.30), ("three_attempt_rate", -0.30), ("rim_attempt_rate", 0.20), ("role.wing", 0.10), ("role.interior", 0.10),), ("mid_attempt_rate", "three_attempt_rate", "rim_attempt_rate")),
+    _Recipe("historical_screen_roll_touch_role", (("ft_percent", -0.40), ("foul_pressure", 0.15), ("role.wing", 0.10), ("role.interior", 0.10),), ("ft_percent", "foul_pressure", "role.wing", "role.interior"), "screen roll/pop event destinations and shot locations", "recorded shooting touch plus continuous spacing-versus-interior role", "higher output means roll preference; the all-era substitute separates rim pressure from spacing"),
 )
 _TRANSITION_SPOTUP_RECIPES = (
-    _Recipe("transition_perimeter_receiver_context", (("three_attempt_rate", 0.30), ("mid_attempt_rate", 0.25), ("assisted_two_rate", 0.25), ("role.creator", -0.20)), ("three_attempt_rate", "mid_attempt_rate", "assisted_two_rate")),
-    _Recipe("historical_transition_receiver_role", (("role.wing", 0.35), ("role.creator", -0.25), ("attempt_share", 0.20), ("ft_percent", 0.20)), ("role.wing", "role.creator"), "transition spot-up event and assisted-location counts", "off-ball wing role, reduced primary creation, shooting responsibility, and recorded touch", "the substitute estimates running to a receiving spot rather than transition pull-up creation"),
+    _Recipe("transition_perimeter_receiver_context", (("three_attempt_rate", 0.30), ("mid_attempt_rate", 0.25), ("assisted_two_rate", 0.25), ("role.creator", 0.10),), ("three_attempt_rate", "mid_attempt_rate", "assisted_two_rate")),
+    _Recipe("historical_transition_receiver_role", (("attempt_share", 0.20), ("ft_percent", 0.20), ("role.wing", 0.10), ("role.creator", 0.10),), ("role.wing", "role.creator"), "transition spot-up event and assisted-location counts", "off-ball wing role, reduced primary creation, shooting responsibility, and recorded touch", "the substitute estimates running to a receiving spot rather than transition pull-up creation"),
 )
 
 
@@ -451,6 +520,11 @@ def _recipe_score(evidence: Any, population: tuple[Any, ...], recipe: _Recipe) -
             continue
         median, scale = summary
         z_value = (current - median) / scale
+        if name == "fg_stability" and bool(_source_map(evidence, "per_game").get("fg_percent_imputed")):
+            imputed_reliability = _source_value(evidence, "per_game", "fg_percent_imputation_reliability")
+            if imputed_reliability is not None:
+                z_value *= max(0.0, min(1.0, imputed_reliability))
+                provenance.append(f"imputed_fg_reliability={imputed_reliability:.8f}")
         components.append((z_value, weight, name))
         provenance.extend(_SIGNAL_PROVENANCE.get(name, (name,)))
         provenance.append(f"same_season_same_league_z[{name}]={z_value:.8f}")
@@ -471,6 +545,8 @@ def _derive(field: str, evidence: Any, rows: Any, recipes: tuple[_Recipe, ...], 
         return None
     population = _population(evidence, rows)
     for recipe in recipes:
+        if recipe.name.startswith("nbl_") and _league(evidence) != "NBL":
+            continue
         scored = _recipe_score(evidence, population, recipe)
         if scored is None:
             continue
@@ -479,6 +555,8 @@ def _derive(field: str, evidence: Any, rows: Any, recipes: tuple[_Recipe, ...], 
         low, high = (0, 100) if tendency else (25, 99)
         value = max(low, min(high, int(round(center + score * scale))))
         source_rule = f"derive_{'tendency' if tendency else 'attribute'}_{field.lower()}"
+        if recipe.name == "nbl_recorded_stability_discipline":
+            source_rule += "_nbl_recorded_stability"
         if recipe.unavailable:
             source_rule += "_field_specific_context_substitute"
         provenance = (
@@ -571,6 +649,10 @@ def _nbl_signal(source: Any, name: str) -> float | None:
         if wins is None or losses is None or wins < 0.0 or losses < 0.0 or wins + losses <= 0.0:
             return None
         return wins / (wins + losses)
+    if name == "team_point_differential":
+        points = _nbl_source_value(source, "team_stats_per_game", "pts_per_game")
+        opponent_points = _nbl_source_value(source, "opponent_stats_per_game", "opp_pts_per_game")
+        return points - opponent_points if points is not None and opponent_points is not None else None
     if name == "nbl_scoring_share":
         return _ratio(
             _nbl_source_value(source, "per_game", "pts_per_game"),
@@ -580,7 +662,7 @@ def _nbl_signal(source: Any, name: str) -> float | None:
 
 
 def _nbl_signal_population(rows: tuple[Any, ...], signal: str) -> tuple[float, ...]:
-    if signal == "team_win_pct":
+    if signal in {"team_win_pct", "team_point_differential"}:
         team_values: dict[str, float] = {}
         for ordinal, row in enumerate(rows):
             value = _nbl_signal(row, signal)
@@ -742,7 +824,8 @@ def _derive_nbl_adjusted_attribute(
             f"same_season_nbl_composite_percentile={percentile:.8f}",
             f"unique_99_winner={winner[0]}:{winner[1]}",
             f"unique_99_applied={str(unique_league_maximum).lower()}",
-            "mapping=round(linear_percentile(same-season_BAA_generated_values,NBL_composite_rank));only_unique_league_winner_may_equal_99",
+            f"overlap_reference_count={len(reference_values)}",
+            "mapping=round(linear_percentile(1947-1950_BAA_WS_path_values_for_exact_NBL_BAA_overlap_IDs,NBL_composite_rank));only_unique_league_winner_may_equal_99",
         )
     else:
         nbl_mean, nbl_sd = table.composite_moments[field]
@@ -763,15 +846,23 @@ def _derive_nbl_adjusted_attribute(
     return {
         "value": value,
         "score": composite,
-        "source_rule": f"derive_attribute_{field.lower()}_nbl_team_record_counting_stats",
+        "source_rule": (
+            "derive_attribute_intangibles_nbl_cross_league_overlap_calibrated"
+            if field == "INTANGIBLES"
+            else f"derive_attribute_{field.lower()}_nbl_team_record_counting_stats"
+        ),
         "evidence_keys": tuple(dict.fromkeys((
             "season_info.lg",
             "league_rule=NBL",
             *evidence_keys,
             "population=same-season,NBL,GP>0",
-            "team_win_population=unique_exact_team",
+            "team_context_population=unique_exact_team",
             f"weights={weight_text}",
-            f"reference={reference_key};same-season BAA generated output distribution",
+            (
+                f"reference={reference_key};1947-1950 exact-ID NBL/BAA overlap calibrated to BAA win-share path"
+                if field == "INTANGIBLES"
+                else f"reference={reference_key};same-season BAA generated output distribution"
+            ),
             f"reference_count={len(reference_values)}",
             *mapping_keys,
         ))),
@@ -845,7 +936,17 @@ def derive_attribute_intangibles(
     if not population:
         return None
     top_win_shares = population[-1]
-    magnitude_score = max(0.0, win_shares) / top_win_shares if top_win_shares > 0.0 else 0.0
+    floor_win_shares = population[0]
+    # Normalise across the league's real range rather than clamping at zero. Clamping
+    # put every player at or below nothing on the same number -- 121 of 333 landed on
+    # the attribute floor together, and a -0.1 season read identically to a -2.4 one.
+    # Feerick's 18.6 down to Becker's -2.4 is 21 points of genuine separation.
+    span = top_win_shares - floor_win_shares
+    linear_score = (win_shares - floor_win_shares) / span if span > 0.0 else 0.0
+    # And widen it. A league where the best player contributed eighteen wins and the
+    # worst cost his team three is not a league of near-equals; a linear share still
+    # crowds the middle, so the curve pushes the ends apart.
+    magnitude_score = max(0.0, min(1.0, linear_score)) ** _INTANGIBLES_DISPARITY_EXPONENT
     mapped_value = max(25, min(99, int(round(25.0 + 74.0 * magnitude_score))))
     winner = (
         min(
@@ -875,7 +976,10 @@ def derive_attribute_intangibles(
             f"unique_99_winner={winner[0]}:{winner[1]}",
             f"unique_99_applied={str(unique_league_maximum).lower()}",
             "population=exact_same-season,same-league,GP>0,win-share-recorded",
-            "mapping=round(25+74*max(0,WS)/same_league_max_WS);only_unique_league_winner_may_equal_99",
+            f"same_league_min_win_shares={floor_win_shares}",
+            f"win_share_linear_share={linear_score:.8f}",
+            f"disparity_exponent={_INTANGIBLES_DISPARITY_EXPONENT:g}",
+            "mapping=round(25+74*((WS-same_league_min_WS)/(same_league_max_WS-same_league_min_WS))^disparity_exponent);only_unique_league_winner_may_equal_99",
         ),
     }
 

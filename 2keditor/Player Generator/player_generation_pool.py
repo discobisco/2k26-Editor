@@ -744,12 +744,28 @@ def _raw_int(value: dict[str, Any] | None) -> int | None:
         return None
 
 
+#: The game's blank roster-slot template is named "A Z" and carries 5'0", 115lb, age
+#: 18 with every attribute at 25. Eleven of them were captured alongside the 329 real
+#: players in editor_capture_002, and the Pool is a calibration source -- a block of
+#: floor values pulls every field-exact target it feeds.
+_EMPTY_ROSTER_SLOT_LABELS = frozenset({"a z", "az"})
+
+
+def _is_empty_roster_slot(player: Any) -> bool:
+    label = " ".join(str(getattr(player, "label", "") or "").split()).strip().lower()
+    return label in _EMPTY_ROSTER_SLOT_LABELS
+
+
 def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     loaded_teams = sorted(model.loaded_items.get("Teams", {}).values(), key=lambda item: int(item.index))
     active_teams = loaded_teams[:30]
     team_slots = {int(team.index): slot for slot, team in enumerate(active_teams)}
     players = sorted(
-        model.player_roster_slot_items_for_team_items(active_teams),
+        (
+            row
+            for row in model.player_roster_slot_items_for_team_items(active_teams)
+            if not _is_empty_roster_slot(row[0])
+        ),
         key=lambda row: (
             team_slots[int(row[1]["team_index"])],
             int(row[1]["team_slot"]),

@@ -38,10 +38,20 @@ _FEATURE_NAMES = (
     "field_goal_share", "fta_share", "ft_percent", "age",
 )
 _GROUP_WEIGHTS = {
-    "defense": {"position": 0.30, "height": 0.20, "weight": 0.10, "games_share": 0.10, "team_defense": 0.30},
-    "rebound": {"position": 0.30, "height": 0.25, "weight": 0.15, "games_share": 0.10, "team_defense": 0.10, "points_share": 0.05, "fta_share": 0.05},
-    "passing": {"position": 0.40, "games_share": 0.15, "points_share": 0.15, "field_goal_share": 0.10, "fta_share": 0.05, "ft_percent": 0.15},
-    "mental": {"position": 0.10, "games_share": 0.25, "team_defense": 0.10, "points_share": 0.20, "field_goal_share": 0.10, "fta_share": 0.10, "ft_percent": 0.10, "age": 0.05},
+    # Position carries no weight in the distance metric. It decided which BAA players an
+    # NBL player was compared against -- 30% of the defensive distance and 40% of the
+    # passing distance -- so the label, not the player, chose the neighbours his ratings
+    # were projected from. Its share moves to the body and the box score, which are what
+    # the label was standing in for.
+    "defense": {"position": 0.00, "height": 0.35, "weight": 0.20, "games_share": 0.10, "team_defense": 0.35},
+    "rebound": {"position": 0.00, "height": 0.65, "weight": 0.15, "games_share": 0.05, "team_defense": 0.05, "points_share": 0.05, "fta_share": 0.05},
+    "passing": {"position": 0.00, "height": 0.20, "games_share": 0.15, "points_share": 0.20, "field_goal_share": 0.15, "fta_share": 0.10, "ft_percent": 0.20},
+    "mental": {"position": 0.00, "games_share": 0.35, "team_defense": 0.10, "points_share": 0.20, "field_goal_share": 0.10, "fta_share": 0.10, "ft_percent": 0.10, "age": 0.05},
+    # Height leads for rebounding, not the position label. The 1947 NBL records 64% of
+    # its players with hyphenated positions against the BAA's 29%, and the
+    # multi-position fallback takes the higher branch -- so a 6'1" "G-F" was encoded as
+    # a pure small forward and matched to 6'6" BAA wings, inheriting their rebound
+    # numbers. Rebounding is won by reach, so reach decides who a player is compared to.
 }
 
 

@@ -90,10 +90,13 @@ _POSITION_INTERIOR_SCORE: dict[str, float] = {
 # context weights. The 2026 Pool is the 1.0 era endpoint; 1947 is the 0.0
 # endpoint, so sparse 1947 evidence cannot reach an unsupported elite extreme.
 _SPARSE_CONTEXT_MODELS: dict[str, tuple[float, float, float, float, float]] = {
-    "offensive_rebound": (0.18, 0.52, 0.18, 0.08, 0.04),
-    "defensive_rebound": (0.20, 0.48, 0.22, 0.06, 0.04),
-    "putback": (0.25, 0.30, 0.16, 0.11, 0.18),
-    "putback_dunk": (0.06, 0.28, 0.16, 0.06, 0.44),
+    # Position carries no weight. It used to be the largest term in every one of these
+    # -- more than reach itself -- so the listed label, not the player, decided the
+    # rating. Its share moves to the body term it was standing in for.
+    "offensive_rebound": (0.18, 0.00, 0.70, 0.08, 0.04),
+    "defensive_rebound": (0.20, 0.00, 0.70, 0.06, 0.04),
+    "putback": (0.25, 0.00, 0.46, 0.11, 0.18),
+    "putback_dunk": (0.06, 0.00, 0.44, 0.06, 0.44),
 }
 
 _POSITION_PERCENT_KEYS: tuple[tuple[str, str], ...] = (
@@ -194,6 +197,19 @@ def _curve_value(percentile: float, curve: Sequence[tuple[float, float]]) -> int
         share = (bounded - left_percentile) / width
         return int(round(left_value + (right_value - left_value) * share))
     return int(round(curve[-1][1]))
+
+
+#: A weighted mean of percentiles is compressed: no player is simultaneously top of
+#: the height, position and win-share components, so the blend topped out near 0.92
+#: and the best rebounder in the league read as 93. Expanding the blend about its
+#: midpoint restores both ends of the range without touching the ordering or the
+#: median. It applies to the blended pre-tracking score only, never to a direct
+#: ORB%/DRB% signal, which already spans its own range.
+_BLEND_EXPANSION = 1.25
+
+
+def _expand_blend(percentile: float) -> float:
+    return max(0.0, min(1.0, 0.5 + (percentile - 0.5) * _BLEND_EXPANSION))
 
 
 def _rank_attribute_value(percentile: float) -> int:
@@ -304,16 +320,31 @@ def _sparse_weight_context(evidence: PlayerEvidence) -> tuple[float, tuple[str, 
     return None
 
 
+#: Reach against mass in the rebounding body context. Rebounding is won above the rim
+#: first and on the floor second: a 6'4" 225lb centre must rate below a 6'6" 220lb one,
+#: which an equal average could not guarantee -- five pounds cancelled two inches.
+_REBOUND_HEIGHT_SHARE = 0.75
+
+
 def _sparse_body_context(evidence: PlayerEvidence) -> tuple[float, tuple[str, ...]] | None:
-    contexts = tuple(context for context in (_sparse_height_context(evidence), _sparse_weight_context(evidence)) if context is not None)
-    if not contexts:
+    height = _sparse_height_context(evidence)
+    weight = _sparse_weight_context(evidence)
+    if height is None and weight is None:
         return None
-    values = [context[0] for context in contexts]
-    keys = [key for context in contexts for key in context[1]]
-    if not values:
-        return None
+    keys: list[str] = []
+    if height is not None and weight is not None:
+        value = _REBOUND_HEIGHT_SHARE * height[0] + (1.0 - _REBOUND_HEIGHT_SHARE) * weight[0]
+        keys.extend((*height[1], *weight[1]))
+        keys.append(
+            f"body_context_weights=height:{_REBOUND_HEIGHT_SHARE:.2f},weight:{1.0 - _REBOUND_HEIGHT_SHARE:.2f}"
+        )
+    else:
+        present = height if height is not None else weight
+        assert present is not None
+        value = present[0]
+        keys.extend(present[1])
     keys.append("body_context=continuous_2026_pool_height_weight_percentiles")
-    return sum(values) / len(values), tuple(keys)
+    return value, tuple(keys)
 
 
 def _nbl_ppg(evidence: PlayerEvidence) -> float | None:
@@ -398,6 +429,21 @@ def _sparse_role_context(
         if percentile is not None:
             return percentile, (player_path, team_path, f"role_source={label}")
     return None
+
+
+#: Rebound ceiling as a line through height, in rating points per inch: 55 at 6'0",
+#: 99 at 6'10". Used where nothing records that the player rebounded, so reach is the
+#: only honest statement available.
+_REACH_CEILING_ANCHOR_HEIGHT = 72.0
+_REACH_CEILING_ANCHOR_VALUE = 55.0
+_REACH_CEILING_SLOPE = 4.4
+
+
+def _reach_rebound_ceiling(height: float | None) -> float:
+    if height is None:
+        return _REACH_CEILING_ANCHOR_VALUE
+    ceiling = _REACH_CEILING_ANCHOR_VALUE + (height - _REACH_CEILING_ANCHOR_HEIGHT) * _REACH_CEILING_SLOPE
+    return max(25.0, min(99.0, ceiling))
 
 
 def _sparse_rebound_context(
@@ -703,12 +749,13 @@ def _pretracking_attribute_result(
     win_shares = _historical_win_share_rank(evidence, rows, side=side)
     nbl_missing_side_win_shares = is_nbl and rebound_signal is None and win_shares is None
 
-    if nbl_missing_side_win_shares:
-        position_weight = 0.20 if side == "orb" else 0.30
-    else:
-        position_weight = 0.35 if rebound_signal is None else 0.50
-    components: list[tuple[float, float, str]] = [(position_score, position_weight, "position")]
-    evidence_keys: list[str] = ["per_game.g", *position_keys]
+    # Position carries no weight. Rebounding is won by reach and by the win shares that
+    # record it; the listed label added nothing that height was not already saying, and
+    # in the 1947 NBL -- where 64% of players carry a hyphenated position against the
+    # BAA's 29% -- it was the label, not the player, deciding the rating.
+    position_weight = 0.0
+    components: list[tuple[float, float, str]] = []
+    evidence_keys: list[str] = ["per_game.g", "position_weight=0;rebounding_reads_reach_and_win_shares"]
     if rebound_signal is not None:
         rebound_score = _midrank_percentile(rebound_signal.value, rebound_signal.population)
         if rebound_score is None:
@@ -783,10 +830,10 @@ def _pretracking_attribute_result(
                 return None
             if win_shares is None:
                 score = 0.25 * score + 0.45 * ppg_rank + 0.30 * games_share
-                blend_contract = "nbl_missing_ows_offensive_rebound_final_blend=current_physical_position_score:0.25,ppg_rank:0.45,games_share:0.30"
+                blend_contract = "nbl_missing_ows_offensive_rebound_final_blend=current_physical_score:0.25,ppg_rank:0.45,games_share:0.30"
             else:
                 score = 0.45 * score + 0.25 * ppg_rank + 0.30 * games_share
-                blend_contract = "nbl_offensive_rebound_final_blend=current_physical_position_score:0.45,ppg_rank:0.25,games_share:0.30"
+                blend_contract = "nbl_offensive_rebound_final_blend=current_physical_score:0.45,ppg_rank:0.25,games_share:0.30"
             evidence_keys.extend((
                 "per_game.pts_per_game",
                 f"ppg={ppg:.8f}",
@@ -801,19 +848,30 @@ def _pretracking_attribute_result(
             "team_stats_per_game.g",
             f"games_share={games_share:.8f}",
         ))
-    guard_control = "pre_tracking_guard_control=absolute_primary_secondary_position_weight_0.50;no_TRB_primary_guard_ceiling_55"
-    if rebound_signal is None and _primary_position_is_guard(evidence):
+    # Expand the blended percentile back toward its own ends before any ceiling is
+    # applied: the caps below are written as absolute ratings (the 55 guard
+    # ceiling), so they have to be enforced on the same scale the value ships on.
+    score = _expand_blend(score)
+    guard_control = "pre_tracking_reach_control=no_TRB_reach_ceiling_55_at_6ft_rising_4.4_per_inch"
+    if rebound_signal is None:
         raw_inferred_value = _rank_attribute_value(score)
         score *= 1.10
         scaled_uncapped_value = _rank_attribute_value(score)
         height = _source_number(evidence, "identity.ht_in_in")
+        # Missing evidence, not position: a short NBL player with no win shares on either
+        # side has nothing recording that he rebounded at all.
         short_nbl_missing_proof = (
             is_nbl
             and win_shares is None
             and height is not None
             and height <= 72.0
         )
-        guard_ceiling_value = 55
+        # A reach ceiling, not a guard gate. Without a recorded rebound the only honest
+        # statement is how high this player can get to the ball, so the ceiling is written
+        # as a line through height: 55 at 6'0" and 99 at 6'10", falling below six foot on
+        # the same slope. A 6'0" player tops out at 55 because he is 6'0", not because of
+        # the label beside his name -- a 6'4" one reaches 72 whatever he is listed as.
+        guard_ceiling_value = _reach_rebound_ceiling(height)
         guard_ceiling_score = (guard_ceiling_value - 25.0) / 74.0
         score = min(score, guard_ceiling_score)
         normalized_guard_score = score / guard_ceiling_score
@@ -827,12 +885,13 @@ def _pretracking_attribute_result(
             curved_value = _rank_attribute_value(score)
         evidence_keys.extend(
             (
-                "no_total_rebound_primary_guard_distribution_scale=1.10",
-                f"no_total_rebound_primary_guard_ceiling={guard_ceiling_value}",
-                f"no_total_rebound_primary_guard_drop_curve=preserve_top_10_percent_of_25_to_{guard_ceiling_value}_span;below_90_percent_use_fourth_power",
-                f"no_total_rebound_primary_guard_raw_value={raw_inferred_value}",
-                f"no_total_rebound_primary_guard_scaled_uncapped_value={scaled_uncapped_value}",
-                f"no_total_rebound_primary_guard_curved_value={curved_value}",
+                "identity.ht_in_in",
+                "no_total_rebound_distribution_scale=1.10",
+                f"no_total_rebound_reach_ceiling={guard_ceiling_value:.8f}",
+                f"no_total_rebound_reach_drop_curve=preserve_top_10_percent_of_25_to_{guard_ceiling_value:.0f}_span;below_90_percent_use_fourth_power",
+                f"no_total_rebound_raw_value={raw_inferred_value}",
+                f"no_total_rebound_scaled_uncapped_value={scaled_uncapped_value}",
+                f"no_total_rebound_curved_value={curved_value}",
                 "first_tracked_anchor=1951_NBA_TRB;1947_BAA_guard_overlap=7;max_TRB_per_game=5.0",
             )
         )
@@ -845,7 +904,7 @@ def _pretracking_attribute_result(
                 "short_nbl_guard_rebound_ceiling=49",
                 f"short_nbl_guard_post_cap_value={curved_value}",
             ))
-            guard_control = "pre_tracking_guard_control=absolute_primary_secondary_position_weight_0.50;short_NBL_guard_without_rebound_proof_ceiling_49"
+            guard_control = "pre_tracking_reach_control=short_NBL_without_rebound_proof_ceiling_49"
     component_weights = ",".join(f"{label}:{weight:.2f}" for _score, weight, label in components)
     evidence_keys.extend((
         f"pre_tracking_rebound_weights={component_weights}",
@@ -859,7 +918,9 @@ def _pretracking_attribute_result(
             else "pre_tracking_role_and_scoring_share_excluded=true"
         ),
         "comparison_scope=same_season_same_league_gp_positive",
-        "mapping=round(25+74*same_season_same_league_rank_score)",
+        "mapping=round(25+74*expand(same_season_same_league_rank_score))",
+        "blend_expansion=1.25",
+        "blend_expansion_reason=a_weighted_mean_of_percentiles_never_reaches_its_own_ends",
     ))
     return {
         "value": _rank_attribute_value(score),
