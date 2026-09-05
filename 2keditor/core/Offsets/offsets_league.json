@@ -8,27 +8,35 @@
       "Signature",
       "Contract",
       "Badges",
-      "Stats"
-    ],
-    "Draft Class": [
-      "Vitals",
-      "Gear",
-      "Attributes",
-      "Tendencies",
-      "Signature",
-      "Contract",
-      "Badges",
-      "Stats"
+      "Stats",
+      "Advanced",
+      "Base Tattoo Data",
+      "College",
+      "Player Accessory Data",
+      "Player Relationships",
+      "Scanned Morph Data",
+      "Skin Data"
     ],
     "Teams": [
       "Vitals",
       "Jerseys",
       "Business",
+      "Stats",
+      "Team Advanced",
+      "Team City",
+      "Team Dead Cap",
+      "Team Latest Record",
       "Team Lineups",
       "Team Players",
+      "Team Retired Jerseys",
+      "Team Season Stats",
       "Team Stadium",
       "Team Stats",
-      "Team Stats Edit"
+      "Team Stats Edit",
+      "Team Trade Exceptions"
+    ],
+    "History": [
+      "Hall of Famers"
     ],
     "Jerseys": [
       "Vitals",
@@ -52,6 +60,65 @@
     ],
     "NBA Records": [
       "Record"
+    ],
+    "AITuning": [
+      "AI Block Tuning",
+      "Body Up Defense",
+      "General Defense",
+      "Screen Defense",
+      "Shot Skill Boosts",
+      "Takeover Meter Multipliers"
+    ],
+    "DraftData": [
+      "Draft Data"
+    ],
+    "HistoricDraftData": [
+      "Historic Draft Data"
+    ],
+    "MatchupData": [
+      "Matchup Data"
+    ],
+    "NBAScheduleData": [
+      "Schedule Data"
+    ],
+    "Playbook": [
+      "Playbook"
+    ],
+    "RosterData": [
+      "Accessories",
+      "Animation",
+      "Attributes",
+      "Badges",
+      "Blacktop",
+      "Boosts",
+      "Cities",
+      "Colleges",
+      "Courts",
+      "Draft",
+      "Evolution",
+      "Finance",
+      "History",
+      "Indexes",
+      "Jerseys",
+      "Matchups",
+      "Names",
+      "Online Teamups",
+      "Playbooks",
+      "Players",
+      "Records",
+      "Roster",
+      "Schedule",
+      "Shoes",
+      "Stadiums",
+      "Staff Vitals",
+      "Stats",
+      "Teams",
+      "Trades",
+      "Uniforms",
+      "Vitals"
+    ],
+    "TeamHistory": [
+      "Team History"
     ]
   },
   "versions": {
@@ -94,28 +161,14 @@
         "Team": {
           "address": 132505568,
           "chain": []
-        },
-        "DraftClass": {
-          "address": 112991456,
-          "chain": [],
-          "finalOffset": 8,
-          "schema_alias": "Players",
-          "record_count": 150,
-          "signature": "draft_NBA_150",
-          "signature_offset": 112991432,
-          "pointer_offset": 24
         }
       },
-      "stride_constants": {
-        "draftClassSize": 2136,
-        "draftClassCount": 150,
-        "draftClassBodyOffset": 8
-      }
+      "stride_constants": {}
     },
     "2K26": {
       "game_info": {
         "executable": "NBA2K26.exe",
-        "version": "2026-06-24",
+        "version": "2026-09-05",
         "playerSize": 1176,
         "playerSeasonStatsSize": 64,
         "teamSize": 5672,
@@ -136,6 +189,13 @@
             }
           ]
         },
+        "FranchiseProspectMembership": {
+          "address": 132205008,
+          "chain": [],
+          "record_count": 150,
+          "slot_stride": 1408,
+          "player_pointer_offset": 0
+        },
         "DraftClass": {
           "address": 111407616,
           "chain": [],
@@ -151,9 +211,14 @@
           "chain": []
         },
         "TeamStatsEdit": {
-          "address": 132279056,
-          "chain": [],
-          "finalOffset": 4638676
+          "address": 132276528,
+          "chain": [
+            {
+              "offset": 552,
+              "dereference": true
+            }
+          ],
+          "finalOffset": -23304
         },
         "Staff": {
           "address": 132279176,
@@ -185,12 +250,13 @@
           "chain": []
         },
         "HallOfFame": {
-          "address": 5348811252,
-          "chain": []
-        },
-        "Cursor": {
-          "address": 0,
-          "chain": []
+          "address": 132276528,
+          "chain": [
+            {
+              "offset": 824,
+              "dereference": true
+            }
+          ]
         }
       },
       "stride_constants": {
@@ -207,6 +273,919 @@
         "historySize": 168,
         "hallOfFameSize": 108,
         "teamStatsEditSize": 62
+      }
+    },
+    "2K27": {
+      "game_info": {
+        "executable": "NBA2K27.exe",
+        "playerSize": 1272,
+        "teamSize": 5456,
+        "stadiumSize": 4728,
+        "staffSize": 456,
+        "nbaScheduleSize": 32,
+        "draftDataSize": 32,
+        "historicDraftDataSize": 16,
+        "matchupDataSize": 32,
+        "historySize": 168,
+        "hallOfFameSize": 108,
+        "teamHistorySize": 364,
+        "playerShotChartSize": 114,
+        "version": "2K27"
+      },
+      "base_pointers": {
+        "GameDataStore": {
+          "address": 161758904,
+          "chain": []
+        },
+        "RosterData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            }
+          ]
+        },
+        "RosterInfoData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 8,
+              "dereference": true
+            }
+          ],
+          "count_offset": 0,
+          "pointer_offset": 8
+        },
+        "Player": {
+          "address": 178581424,
+          "chain": [],
+          "count_offset": 16,
+          "pointer_offset": 24
+        },
+        "PlayerTemplateData": {
+          "address": 178581432,
+          "chain": [],
+          "count_offset": 32,
+          "pointer_offset": 40
+        },
+        "GenerationalPlayerTemplateData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 56,
+              "dereference": true
+            }
+          ],
+          "count_offset": 48,
+          "pointer_offset": 56
+        },
+        "PlayerCareerPresetData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 72,
+              "dereference": true
+            }
+          ],
+          "count_offset": 64,
+          "pointer_offset": 72
+        },
+        "FreeAgentData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 88,
+              "dereference": true
+            }
+          ],
+          "count_offset": 80,
+          "pointer_offset": 88
+        },
+        "Stadium": {
+          "address": 178581448,
+          "chain": [],
+          "count_offset": 96,
+          "pointer_offset": 104
+        },
+        "Team": {
+          "address": 178581456,
+          "chain": [],
+          "count_offset": 128,
+          "pointer_offset": 136
+        },
+        "CollegeData": {
+          "address": 178581480,
+          "chain": [],
+          "count_offset": 144,
+          "pointer_offset": 152
+        },
+        "NBAScheduleData": {
+          "address": 178581504,
+          "chain": [],
+          "count_offset": 160,
+          "pointer_offset": 168
+        },
+        "NBAAllTwiceScheduleData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 184,
+              "dereference": true
+            }
+          ],
+          "count_offset": 176,
+          "pointer_offset": 184
+        },
+        "NBAAllOnceScheduleData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 200,
+              "dereference": true
+            }
+          ],
+          "count_offset": 192,
+          "pointer_offset": 200
+        },
+        "NBAConfScheduleData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 216,
+              "dereference": true
+            }
+          ],
+          "count_offset": 208,
+          "pointer_offset": 216
+        },
+        "NBAISTScheduleData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 232,
+              "dereference": true
+            }
+          ],
+          "count_offset": 224,
+          "pointer_offset": 232
+        },
+        "GLEAGUEScheduleData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 312,
+              "dereference": true
+            }
+          ],
+          "count_offset": 304,
+          "pointer_offset": 312
+        },
+        "GLEAGUEAllTwiceScheduleData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 328,
+              "dereference": true
+            }
+          ],
+          "count_offset": 320,
+          "pointer_offset": 328
+        },
+        "GLEAGUEAllOnceScheduleData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 344,
+              "dereference": true
+            }
+          ],
+          "count_offset": 336,
+          "pointer_offset": 344
+        },
+        "GLEAGUEConfScheduleData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 360,
+              "dereference": true
+            }
+          ],
+          "count_offset": 352,
+          "pointer_offset": 360
+        },
+        "PreseasonScheduleData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 376,
+              "dereference": true
+            }
+          ],
+          "count_offset": 368,
+          "pointer_offset": 376
+        },
+        "Staff": {
+          "address": 178581520,
+          "chain": [],
+          "count_offset": 384,
+          "pointer_offset": 392
+        },
+        "StaffStatManagerData": {
+          "address": 178581528,
+          "chain": [],
+          "count_offset": 400,
+          "pointer_offset": 408
+        },
+        "StaffStatData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 424,
+              "dereference": true
+            }
+          ],
+          "count_offset": 416,
+          "pointer_offset": 424
+        },
+        "PlaybookData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 440,
+              "dereference": true
+            }
+          ],
+          "count_offset": 432,
+          "pointer_offset": 440
+        },
+        "PlayerStatManagerData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 456,
+              "dereference": true
+            }
+          ],
+          "count_offset": 448,
+          "pointer_offset": 456
+        },
+        "PlayerSeasonStats": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 472,
+              "dereference": true
+            }
+          ],
+          "count_offset": 464,
+          "pointer_offset": 472
+        },
+        "PlayerShotChartManagerData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 488,
+              "dereference": true
+            }
+          ],
+          "count_offset": 480,
+          "pointer_offset": 488
+        },
+        "PlayerShotChartData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 504,
+              "dereference": true
+            }
+          ],
+          "count_offset": 496,
+          "pointer_offset": 504
+        },
+        "TeamStatManagerData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 520,
+              "dereference": true
+            }
+          ],
+          "count_offset": 512,
+          "pointer_offset": 520
+        },
+        "TeamStatsData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 536,
+              "dereference": true
+            }
+          ],
+          "count_offset": 528,
+          "pointer_offset": 536
+        },
+        "TeamShotChartManagerData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 552,
+              "dereference": true
+            }
+          ],
+          "count_offset": 544,
+          "pointer_offset": 552
+        },
+        "TeamShotChartData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 568,
+              "dereference": true
+            }
+          ],
+          "count_offset": 560,
+          "pointer_offset": 568
+        },
+        "FirstNameData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 584,
+              "dereference": true
+            }
+          ],
+          "count_offset": 576,
+          "pointer_offset": 584
+        },
+        "LastNameData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 600,
+              "dereference": true
+            }
+          ],
+          "count_offset": 592,
+          "pointer_offset": 600
+        },
+        "CityNameData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 616,
+              "dereference": true
+            }
+          ],
+          "count_offset": 608,
+          "pointer_offset": 616
+        },
+        "TeamMascotNameData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 632,
+              "dereference": true
+            }
+          ],
+          "count_offset": 624,
+          "pointer_offset": 632
+        },
+        "CustomUniformData": {
+          "address": 178581544,
+          "chain": [],
+          "count_offset": 640,
+          "pointer_offset": 648
+        },
+        "Jersey": {
+          "address": 178581552,
+          "chain": [],
+          "count_offset": 656,
+          "pointer_offset": 664
+        },
+        "HeadData": {
+          "address": 178581576,
+          "chain": [],
+          "count_offset": 672,
+          "pointer_offset": 680
+        },
+        "SpecialTeamData": {
+          "address": 178581600,
+          "chain": [],
+          "count_offset": 688,
+          "pointer_offset": 696
+        },
+        "Record": {
+          "address": 178581624,
+          "chain": [],
+          "count_offset": 704,
+          "pointer_offset": 712
+        },
+        "NBAHistoryManager": {
+          "address": 178581648,
+          "chain": [],
+          "count_offset": 720,
+          "pointer_offset": 728
+        },
+        "NBAHistory": {
+          "address": 178581648,
+          "chain": [],
+          "finalOffset": 56,
+          "count_offset": 736,
+          "pointer_offset": 744
+        },
+        "DraftData": {
+          "address": 178581664,
+          "chain": [],
+          "count_offset": 752,
+          "pointer_offset": 760
+        },
+        "HistoricDraftData": {
+          "address": 178581672,
+          "chain": [],
+          "count_offset": 768,
+          "pointer_offset": 776
+        },
+        "MatchupData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 792,
+              "dereference": true
+            }
+          ],
+          "count_offset": 784,
+          "pointer_offset": 792
+        },
+        "HallOfFameManager": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 808,
+              "dereference": true
+            }
+          ],
+          "count_offset": 800,
+          "pointer_offset": 808
+        },
+        "HallOfFame": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 824,
+              "dereference": true
+            }
+          ],
+          "count_offset": 816,
+          "pointer_offset": 824
+        },
+        "OnlineTeamupData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 840,
+              "dereference": true
+            }
+          ],
+          "count_offset": 832,
+          "pointer_offset": 840
+        },
+        "PlayerAccessoryData": {
+          "address": 178581688,
+          "chain": [],
+          "count_offset": 880,
+          "pointer_offset": 888
+        },
+        "PlayerAccessoryManagerData": {
+          "address": 178581696,
+          "chain": [],
+          "count_offset": 896,
+          "pointer_offset": 904
+        },
+        "PlayerBoostData": {
+          "address": 178581712,
+          "chain": [],
+          "count_offset": 912,
+          "pointer_offset": 920
+        },
+        "PlayerBoostManagerData": {
+          "address": 178581720,
+          "chain": [],
+          "count_offset": 928,
+          "pointer_offset": 936
+        },
+        "AnimationData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 952,
+              "dereference": true
+            }
+          ],
+          "count_offset": 944,
+          "pointer_offset": 952
+        },
+        "AppearanceData": {
+          "address": 178581736,
+          "chain": [],
+          "count_offset": 960,
+          "pointer_offset": 968
+        },
+        "SkinData": {
+          "address": 178581744,
+          "chain": [],
+          "count_offset": 976,
+          "pointer_offset": 984
+        },
+        "SkinManagerData": {
+          "address": 178581768,
+          "chain": [],
+          "count_offset": 992,
+          "pointer_offset": 1000
+        },
+        "BaseTattooData": {
+          "address": 178581784,
+          "chain": [],
+          "count_offset": 1008,
+          "pointer_offset": 1016
+        },
+        "BaseTattooManagerData": {
+          "address": 178581792,
+          "chain": [],
+          "count_offset": 1024,
+          "pointer_offset": 1032
+        },
+        "BlacktopData": {
+          "address": 178581808,
+          "chain": [],
+          "count_offset": 1040,
+          "pointer_offset": 1048
+        },
+        "BlacktopManagerData": {
+          "address": 178581816,
+          "chain": [],
+          "count_offset": 1056,
+          "pointer_offset": 1064
+        },
+        "DeadCapData": {
+          "address": 178581832,
+          "chain": [],
+          "count_offset": 1072,
+          "pointer_offset": 1080
+        },
+        "DeadCapManagerData": {
+          "address": 178581840,
+          "chain": [],
+          "count_offset": 1088,
+          "pointer_offset": 1096
+        },
+        "RetiredJerseyData": {
+          "address": 178581856,
+          "chain": [],
+          "count_offset": 1104,
+          "pointer_offset": 1112
+        },
+        "RetiredJerseyManagerData": {
+          "address": 178581864,
+          "chain": [],
+          "count_offset": 1120,
+          "pointer_offset": 1128
+        },
+        "HistoricAllStarData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 1144,
+              "dereference": true
+            }
+          ],
+          "count_offset": 1136,
+          "pointer_offset": 1144
+        },
+        "CityData": {
+          "address": 178581880,
+          "chain": [],
+          "count_offset": 1152,
+          "pointer_offset": 1160
+        },
+        "Shoes": {
+          "address": 178581888,
+          "chain": [],
+          "count_offset": 1168,
+          "pointer_offset": 1176
+        },
+        "AttributeRangeData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 1192,
+              "dereference": true
+            }
+          ],
+          "count_offset": 1184,
+          "pointer_offset": 1192
+        },
+        "RosterIndexData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 1208,
+              "dereference": true
+            }
+          ],
+          "count_offset": 1200,
+          "pointer_offset": 1208
+        },
+        "ShoeOverrideData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 1224,
+              "dereference": true
+            }
+          ],
+          "count_offset": 1216,
+          "pointer_offset": 1224
+        },
+        "TradeExceptionData": {
+          "address": 178581904,
+          "chain": [],
+          "count_offset": 1232,
+          "pointer_offset": 1240
+        },
+        "TradeExceptionManagerData": {
+          "address": 178581912,
+          "chain": [],
+          "count_offset": 1248,
+          "pointer_offset": 1256
+        },
+        "ScannedMorphData": {
+          "address": 178581928,
+          "chain": [],
+          "count_offset": 1264,
+          "pointer_offset": 1272
+        },
+        "ScannedMorphManagerData": {
+          "address": 178581936,
+          "chain": [],
+          "count_offset": 1280,
+          "pointer_offset": 1288
+        },
+        "TeamHistory": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 1304,
+              "dereference": true
+            }
+          ],
+          "count_offset": 1296,
+          "pointer_offset": 1304
+        },
+        "AccessoryData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 1320,
+              "dereference": true
+            }
+          ],
+          "count_offset": 1312,
+          "pointer_offset": 1320
+        },
+        "IndexStorageData": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 1336,
+              "dereference": true
+            }
+          ],
+          "count_offset": 1328,
+          "pointer_offset": 1336
+        },
+        "TeamStatsEdit": {
+          "address": 161758904,
+          "chain": [
+            {
+              "offset": 168,
+              "dereference": true
+            },
+            {
+              "offset": 536,
+              "dereference": true
+            }
+          ],
+          "count_offset": 528,
+          "pointer_offset": 536
+        },
+        "AITuning": {
+          "address": 178681704,
+          "chain": [
+            {
+              "offset": 56,
+              "dereference": true
+            }
+          ],
+          "init_flag_offset": 48
+        }
+      },
+      "stride_constants": {
+        "rosterInfoSize": 240,
+        "playerSize": 1272,
+        "stadiumSize": 4728,
+        "teamSize": 5456,
+        "collegeSize": 72,
+        "staffSize": 456,
+        "playerSeasonStatsSize": 64,
+        "teamStatsSize": 64,
+        "jerseySize": 368,
+        "headSize": 60,
+        "recordSize": 64,
+        "playerAccessorySize": 304,
+        "playerAccessoryManagerSize": 56,
+        "appearanceSize": 104,
+        "skinSize": 2972,
+        "skinManagerSize": 56,
+        "baseTattooSize": 32,
+        "baseTattooManagerSize": 56,
+        "blacktopSize": 3520,
+        "blacktopManagerSize": 56,
+        "deadCapSize": 136,
+        "retiredJerseySize": 120,
+        "citySize": 128,
+        "shoeSize": 128,
+        "tradeExceptionSize": 112,
+        "scannedMorphSize": 920,
+        "scannedMorphManagerSize": 56,
+        "accessorySize": 68,
+        "indexStorageSize": 2,
+        "nbaScheduleSize": 32,
+        "draftDataSize": 32,
+        "historicDraftDataSize": 16,
+        "matchupDataSize": 32,
+        "historySize": 168,
+        "hallOfFameSize": 108,
+        "teamHistorySize": 364,
+        "playerShotChartSize": 114,
+        "teamStatsEditSize": 64,
+        "playbookSize": 536
       }
     }
   },
@@ -244,10 +1223,11 @@
           "Post Game": {},
           "Freelance": {},
           "Defense": {},
-          "Tendencies": {}
+          "Hot Zones": {}
         },
         "Signature": {
           "Jump Shooting": {},
+          "Jump Shooting II": {},
           "Layups And Dunks": {},
           "Post Game": {},
           "Ball Handling": {},
@@ -273,85 +1253,90 @@
           "Career High Stats": {},
           "Season High Stats": {},
           "Stat IDs": {},
+          "Advanced Defense": {},
           "Awards": {},
-          "Basic Info": {},
+          "Awards & Honors": {},
+          "Defense": {},
           "Edit": {},
-          "Game Stats": {},
-          "Other Stats": {},
-          "Rebounds Stats": {},
-          "Scoring Stats": {},
-          "Season IDs": {}
-        }
-      },
-      "Draft Class": {
-        "Vitals": {
-          "ID": {},
-          "Body": {},
-          "Vitals": {},
-          "Health": {},
-          "Team": {},
-          "Type": {}
-        },
-        "Gear": {
-          "Shoes/Gear": {},
-          "Upper Body Accessories": {},
-          "Lower Body Accessories": {}
-        },
-        "Attributes": {
-          "Offense": {},
-          "Defense": {},
-          "Athleticism": {},
-          "Durability": {},
-          "Mental": {},
-          "Misc": {},
-          "Rebounding": {}
-        },
-        "Tendencies": {
-          "Jump Shooting": {},
-          "Layups And Dunks": {},
-          "Drive Setup": {},
-          "Driving": {},
-          "Passing": {},
-          "Post Game": {},
-          "Freelance": {},
-          "Defense": {},
-          "Tendencies": {}
-        },
-        "Signature": {
-          "Jump Shooting": {},
-          "Layups And Dunks": {},
-          "Post Game": {},
-          "Ball Handling": {},
-          "Misc": {}
-        },
-        "Contract": {
-          "Contract Terms": {},
-          "Contract Options": {},
-          "Contract Status": {},
-          "Salary": {}
-        },
-        "Badges": {
-          "Inside Scoring": {},
-          "Outside Scoring": {},
+          "History": {},
+          "Internal / Links": {},
+          "Milestones": {},
+          "Participation": {},
           "Playmaking": {},
-          "Defending": {},
-          "Athleticism": {},
+          "Ratings": {},
           "Rebounding": {},
-          "Personality": {},
-          "General": {}
+          "Scoring & Impact": {},
+          "Season Context": {},
+          "Season IDs": {},
+          "Shooting": {}
         },
-        "Stats": {
-          "Career High Stats": {},
-          "Season High Stats": {},
-          "Stat IDs": {},
-          "Awards": {},
-          "Basic Info": {},
-          "Edit": {},
-          "Game Stats": {},
-          "Other Stats": {},
-          "Rebounds Stats": {},
-          "Scoring Stats": {},
-          "Season IDs": {}
+        "Advanced": {
+          "Engine": {},
+          "Flags": {},
+          "IDs": {},
+          "Internal / Blacktop Manager": {},
+          "Modes": {},
+          "Other": {},
+          "Reserved": {}
+        },
+        "Base Tattoo Data": {
+          "Identity": {},
+          "Internal / Links": {},
+          "Internal / Manager": {},
+          "Placement": {},
+          "Style": {}
+        },
+        "College": {
+          "Appearance": {},
+          "Audio": {},
+          "Eligibility & Flags": {},
+          "Geography": {},
+          "Identity": {},
+          "Prospect Generation": {},
+          "Record": {},
+          "Schedule & Conference": {}
+        },
+        "Player Accessory Data": {
+          "Attribute Boosts": {},
+          "Brand": {},
+          "Identity": {},
+          "Internal / Links": {},
+          "Internal / Manager": {},
+          "Reputation Boosts": {},
+          "Status": {}
+        },
+        "Player Relationships": {
+          "Pointers": {}
+        },
+        "Scanned Morph Data": {
+          "Body Hair": {},
+          "Body Profile": {},
+          "Eyes": {},
+          "Hair": {},
+          "Internal / Flags": {},
+          "Internal / Manager": {},
+          "Mouth": {},
+          "Proportions / Head": {},
+          "Proportions / Lower Body": {},
+          "Proportions / Torso": {},
+          "Proportions / Upper Body": {},
+          "Scan Data": {},
+          "Skeleton / Head & Neck": {},
+          "Skeleton / Lower Body": {},
+          "Skeleton / Torso": {},
+          "Skeleton / Upper Body": {},
+          "Skin & Color": {},
+          "Skin Surface": {}
+        },
+        "Skin Data": {
+          "Blacklight Tattoo Files": {},
+          "Internal / Links": {},
+          "Internal / Manager": {},
+          "Other Assets": {},
+          "Scan Data": {},
+          "Scan Files": {},
+          "Scan Settings": {},
+          "Tattoo Files": {}
         }
       }
     },
@@ -365,15 +1350,17 @@
           "Colors": {},
           "Accessory": {},
           "Sock": {},
-          "Combos": {},
-          "Jersey": {}
+          "Combos": {}
         }
       }
     },
     "offsets_shoes.json": {
       "Shoes": {
         "Shoes": {
-          "Vitals": {}
+          "Vitals": {},
+          "Classification": {},
+          "Flags": {},
+          "Identity": {}
         },
         "Shoes Gear": {
           "Shoes Gear": {}
@@ -422,6 +1409,36 @@
           "Budget": {},
           "Pricing": {}
         },
+        "Stats": {
+          "Other": {},
+          "Teams": {}
+        },
+        "Team Advanced": {
+          "Engine": {},
+          "Flags": {},
+          "IDs": {},
+          "Other": {}
+        },
+        "Team City": {
+          "Climate & Tax": {},
+          "Geography": {},
+          "Identity": {},
+          "Links": {},
+          "Market": {},
+          "Relocation": {},
+          "Visuals": {}
+        },
+        "Team Dead Cap": {
+          "Contract/Salary": {},
+          "Identity": {},
+          "Internal": {},
+          "Links": {}
+        },
+        "Team Latest Record": {
+          "Classification": {},
+          "Identity": {},
+          "Internal": {}
+        },
         "Team Lineups": {
           "3PT": {},
           "Bench": {},
@@ -435,6 +1452,21 @@
         "Team Players": {
           "Team Players": {}
         },
+        "Team Retired Jerseys": {
+          "Dates": {},
+          "Identity": {},
+          "Internal": {},
+          "Jersey": {},
+          "Links": {},
+          "Presentation": {},
+          "Tenures": {}
+        },
+        "Team Season Stats": {
+          "Defense": {},
+          "Internal": {},
+          "Offense": {},
+          "Season": {}
+        },
         "Team Stadium": {
           "Team Stadium": {}
         },
@@ -443,10 +1475,23 @@
         },
         "Team Stats Edit": {
           "Teams": {}
+        },
+        "Team Trade Exceptions": {
+          "Contract/Salary": {},
+          "Dates": {},
+          "Flags": {},
+          "Identity": {},
+          "Internal": {},
+          "Links": {}
         }
       }
     },
     "offsets_history.json": {
+      "History": {
+        "Hall of Famers": {
+          "Fields": {}
+        }
+      },
       "NBA History": {
         "History Tab": {
           "History Tab": {}
@@ -457,6 +1502,216 @@
           "Basic Info": {},
           "Date Info": {},
           "Record Stats": {}
+        }
+      }
+    },
+    "offsets_ai_tuning.json": {
+      "AITuning": {
+        "AI Block Tuning": {
+          "Opaque Structures": {}
+        },
+        "Body Up Defense": {
+          "Body Up Tuning": {}
+        },
+        "General Defense": {
+          "Defense Tuning": {}
+        },
+        "Screen Defense": {
+          "Screen Tuning": {}
+        },
+        "Shot Skill Boosts": {
+          "Shot & Perfect-Window Multipliers": {}
+        },
+        "Takeover Meter Multipliers": {
+          "Assist Multiplier": {},
+          "Defender Blocked Shot Multiplier": {},
+          "FG Made Multiplier": {},
+          "Free Throw Made Multiplier": {},
+          "Free Throw Missed Multiplier": {},
+          "Inside FG Made Multiplier": {}
+        }
+      }
+    },
+    "offsets_draft_data.json": {
+      "DraftData": {
+        "Draft Data": {
+          "Fields": {}
+        }
+      }
+    },
+    "offsets_historic_draft_data.json": {
+      "HistoricDraftData": {
+        "Historic Draft Data": {
+          "Fields": {}
+        }
+      }
+    },
+    "offsets_matchup_data.json": {
+      "MatchupData": {
+        "Matchup Data": {
+          "Fields": {}
+        }
+      }
+    },
+    "offsets_nba_schedule_data.json": {
+      "NBAScheduleData": {
+        "Schedule Data": {
+          "Fields": {}
+        }
+      }
+    },
+    "offsets_playbook.json": {
+      "Playbook": {
+        "Playbook": {
+          "Identity": {},
+          "Internal": {},
+          "Lineup References": {},
+          "Plays": {}
+        }
+      }
+    },
+    "offsets_roster_data.json": {
+      "RosterData": {
+        "Accessories": {
+          "Count": {},
+          "Manager": {},
+          "Pointer": {}
+        },
+        "Animation": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Attributes": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Badges": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Blacktop": {
+          "Count": {},
+          "Manager": {},
+          "Pointer": {}
+        },
+        "Boosts": {
+          "Count": {},
+          "Manager": {},
+          "Pointer": {}
+        },
+        "Cities": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Colleges": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Courts": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Draft": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Evolution": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Finance": {
+          "Count": {},
+          "Manager": {},
+          "Pointer": {}
+        },
+        "History": {
+          "Count": {},
+          "Manager": {},
+          "Pointer": {}
+        },
+        "Indexes": {
+          "Count": {},
+          "Pointer": {},
+          "Storage": {}
+        },
+        "Jerseys": {
+          "Count": {},
+          "Manager": {},
+          "Pointer": {}
+        },
+        "Matchups": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Names": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Online Teamups": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Playbooks": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Players": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Records": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Roster": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Schedule": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Shoes": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Stadiums": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Staff Vitals": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Stats": {
+          "Count": {},
+          "Manager": {},
+          "Pointer": {}
+        },
+        "Teams": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Trades": {
+          "Count": {},
+          "Manager": {},
+          "Pointer": {}
+        },
+        "Uniforms": {
+          "Count": {},
+          "Pointer": {}
+        },
+        "Vitals": {
+          "Count": {},
+          "Manager": {},
+          "Pointer": {}
+        }
+      }
+    },
+    "offsets_team_history.json": {
+      "TeamHistory": {
+        "Team History": {
+          "Fields": {}
         }
       }
     }

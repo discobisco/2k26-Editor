@@ -7,7 +7,6 @@ from nba2k_editor.franchise.models import LEAGUE_MODE_COLLEGE, LEAGUE_MODE_NBA, 
 
 STATUS_READY = "ready"
 STATUS_WAITING_FOR_GAME_ADVANCE = "waiting_for_game_advance"
-STATUS_WAITING_FOR_USER_TRADE = "waiting_for_user_trade"
 
 
 @dataclass(frozen=True)

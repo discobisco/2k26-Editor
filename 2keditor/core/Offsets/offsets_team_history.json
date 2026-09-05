@@ -1,0 +1,83 @@
+{
+  "TeamHistory": {
+    "Team History": {
+      "Fields": [
+        {
+          "normalized_name": "CITYNAME",
+          "display_name": "City Name",
+          "versions": {
+            "2K27": {
+              "address": 54,
+              "hex": "0x36",
+              "length": 25,
+              "readonly": true,
+              "type": "wstring"
+            }
+          }
+        },
+        {
+          "normalized_name": "ENDYEAR",
+          "display_name": "End Year",
+          "versions": {
+            "2K27": {
+              "address": 362,
+              "hex": "0x16a",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "FILENAME",
+          "display_name": "File Name",
+          "versions": {
+            "2K27": {
+              "address": 104,
+              "hex": "0x68",
+              "length": 256,
+              "readonly": true,
+              "type": "string"
+            }
+          }
+        },
+        {
+          "normalized_name": "STARTYEAR",
+          "display_name": "Start Year",
+          "versions": {
+            "2K27": {
+              "address": 360,
+              "hex": "0x168",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMNAME",
+          "display_name": "Team Name",
+          "versions": {
+            "2K27": {
+              "address": 4,
+              "hex": "0x4",
+              "length": 25,
+              "readonly": true,
+              "type": "wstring"
+            }
+          }
+        },
+        {
+          "normalized_name": "UNIQUESIGNATUREIDCRC",
+          "display_name": "Unique Signature ID CRC",
+          "versions": {
+            "2K27": {
+              "address": 0,
+              "hex": "0x0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

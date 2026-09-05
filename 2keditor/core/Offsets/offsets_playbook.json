@@ -1,0 +1,1586 @@
+{
+  "Playbook": {
+    "Playbook": {
+      "Identity": [
+        {
+          "normalized_name": "LOCALIZEDNAMEHASH",
+          "display_name": "LocalizedNameHash",
+          "versions": {
+            "2K27": {
+              "address": 56,
+              "hex": "0x38",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "UNIQUEID",
+          "display_name": "UniqueId",
+          "versions": {
+            "2K27": {
+              "address": 66,
+              "enum": "PLAYBOOK_ID",
+              "hex": "0x42",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "UNLOCALIZEDNAME",
+          "display_name": "UnlocalizedName",
+          "versions": {
+            "2K27": {
+              "address": 0,
+              "hex": "0x0",
+              "length": 28,
+              "readonly": true,
+              "type": "wstring"
+            }
+          }
+        }
+      ],
+      "Internal": [
+        {
+          "normalized_name": "HEADER0X40UNRESOLVED",
+          "display_name": "Header0x40 (Unresolved)",
+          "versions": {
+            "2K27": {
+              "address": 64,
+              "hex": "0x40",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "TAIL0X1CC0X217UNRESOLVEDRAW",
+          "display_name": "Tail 0x1CC-0x217 (Unresolved Raw)",
+          "versions": {
+            "2K27": {
+              "address": 460,
+              "hex": "0x1CC",
+              "length": 76,
+              "readonly": true,
+              "type": "hex_bytes"
+            }
+          }
+        }
+      ],
+      "Lineup References": [
+        {
+          "normalized_name": "FAVORITELINEUPREFERENCESRAW",
+          "display_name": "Favorite Lineup References (Raw)",
+          "versions": {
+            "2K27": {
+              "address": 68,
+              "hex": "0x44",
+              "length": 40,
+              "readonly": true,
+              "type": "hex_bytes"
+            }
+          }
+        }
+      ],
+      "Plays": [
+        {
+          "normalized_name": "PLAYCRCSLOT1",
+          "display_name": "Play CRC Slot #1",
+          "versions": {
+            "2K27": {
+              "address": 108,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x6C",
+              "observed_distinct": 96,
+              "observed_hash_hits": 218,
+              "observed_nonzero": 218,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT2",
+          "display_name": "Play CRC Slot #2",
+          "versions": {
+            "2K27": {
+              "address": 112,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x70",
+              "observed_distinct": 101,
+              "observed_hash_hits": 218,
+              "observed_nonzero": 218,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT3",
+          "display_name": "Play CRC Slot #3",
+          "versions": {
+            "2K27": {
+              "address": 116,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x74",
+              "observed_distinct": 101,
+              "observed_hash_hits": 217,
+              "observed_nonzero": 218,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT4",
+          "display_name": "Play CRC Slot #4",
+          "versions": {
+            "2K27": {
+              "address": 120,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x78",
+              "observed_distinct": 109,
+              "observed_hash_hits": 218,
+              "observed_nonzero": 218,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT5",
+          "display_name": "Play CRC Slot #5",
+          "versions": {
+            "2K27": {
+              "address": 124,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x7C",
+              "observed_distinct": 105,
+              "observed_hash_hits": 218,
+              "observed_nonzero": 218,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT6",
+          "display_name": "Play CRC Slot #6",
+          "versions": {
+            "2K27": {
+              "address": 128,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x80",
+              "observed_distinct": 107,
+              "observed_hash_hits": 217,
+              "observed_nonzero": 218,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT7",
+          "display_name": "Play CRC Slot #7",
+          "versions": {
+            "2K27": {
+              "address": 132,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x84",
+              "observed_distinct": 109,
+              "observed_hash_hits": 217,
+              "observed_nonzero": 218,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT8",
+          "display_name": "Play CRC Slot #8",
+          "versions": {
+            "2K27": {
+              "address": 136,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x88",
+              "observed_distinct": 107,
+              "observed_hash_hits": 218,
+              "observed_nonzero": 218,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT9",
+          "display_name": "Play CRC Slot #9",
+          "versions": {
+            "2K27": {
+              "address": 140,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x8C",
+              "observed_distinct": 108,
+              "observed_hash_hits": 218,
+              "observed_nonzero": 218,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT10",
+          "display_name": "Play CRC Slot #10",
+          "versions": {
+            "2K27": {
+              "address": 144,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x90",
+              "observed_distinct": 105,
+              "observed_hash_hits": 218,
+              "observed_nonzero": 218,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT11",
+          "display_name": "Play CRC Slot #11",
+          "versions": {
+            "2K27": {
+              "address": 148,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x94",
+              "observed_distinct": 106,
+              "observed_hash_hits": 217,
+              "observed_nonzero": 217,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT12",
+          "display_name": "Play CRC Slot #12",
+          "versions": {
+            "2K27": {
+              "address": 152,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x98",
+              "observed_distinct": 102,
+              "observed_hash_hits": 216,
+              "observed_nonzero": 216,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT13",
+          "display_name": "Play CRC Slot #13",
+          "versions": {
+            "2K27": {
+              "address": 156,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x9C",
+              "observed_distinct": 104,
+              "observed_hash_hits": 216,
+              "observed_nonzero": 216,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT14",
+          "display_name": "Play CRC Slot #14",
+          "versions": {
+            "2K27": {
+              "address": 160,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xA0",
+              "observed_distinct": 104,
+              "observed_hash_hits": 215,
+              "observed_nonzero": 215,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT15",
+          "display_name": "Play CRC Slot #15",
+          "versions": {
+            "2K27": {
+              "address": 164,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xA4",
+              "observed_distinct": 101,
+              "observed_hash_hits": 212,
+              "observed_nonzero": 212,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT16",
+          "display_name": "Play CRC Slot #16",
+          "versions": {
+            "2K27": {
+              "address": 168,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xA8",
+              "observed_distinct": 101,
+              "observed_hash_hits": 210,
+              "observed_nonzero": 210,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT17",
+          "display_name": "Play CRC Slot #17",
+          "versions": {
+            "2K27": {
+              "address": 172,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xAC",
+              "observed_distinct": 98,
+              "observed_hash_hits": 210,
+              "observed_nonzero": 210,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT18",
+          "display_name": "Play CRC Slot #18",
+          "versions": {
+            "2K27": {
+              "address": 176,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xB0",
+              "observed_distinct": 98,
+              "observed_hash_hits": 206,
+              "observed_nonzero": 206,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT19",
+          "display_name": "Play CRC Slot #19",
+          "versions": {
+            "2K27": {
+              "address": 180,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xB4",
+              "observed_distinct": 98,
+              "observed_hash_hits": 203,
+              "observed_nonzero": 203,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT20",
+          "display_name": "Play CRC Slot #20",
+          "versions": {
+            "2K27": {
+              "address": 184,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xB8",
+              "observed_distinct": 93,
+              "observed_hash_hits": 200,
+              "observed_nonzero": 200,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT21",
+          "display_name": "Play CRC Slot #21",
+          "versions": {
+            "2K27": {
+              "address": 188,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xBC",
+              "observed_distinct": 87,
+              "observed_hash_hits": 196,
+              "observed_nonzero": 196,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT22",
+          "display_name": "Play CRC Slot #22",
+          "versions": {
+            "2K27": {
+              "address": 192,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xC0",
+              "observed_distinct": 92,
+              "observed_hash_hits": 196,
+              "observed_nonzero": 196,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT23",
+          "display_name": "Play CRC Slot #23",
+          "versions": {
+            "2K27": {
+              "address": 196,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xC4",
+              "observed_distinct": 87,
+              "observed_hash_hits": 191,
+              "observed_nonzero": 192,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT24",
+          "display_name": "Play CRC Slot #24",
+          "versions": {
+            "2K27": {
+              "address": 200,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xC8",
+              "observed_distinct": 85,
+              "observed_hash_hits": 190,
+              "observed_nonzero": 190,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT25",
+          "display_name": "Play CRC Slot #25",
+          "versions": {
+            "2K27": {
+              "address": 204,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xCC",
+              "observed_distinct": 80,
+              "observed_hash_hits": 186,
+              "observed_nonzero": 186,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT26",
+          "display_name": "Play CRC Slot #26",
+          "versions": {
+            "2K27": {
+              "address": 208,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xD0",
+              "observed_distinct": 80,
+              "observed_hash_hits": 186,
+              "observed_nonzero": 186,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT27",
+          "display_name": "Play CRC Slot #27",
+          "versions": {
+            "2K27": {
+              "address": 212,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xD4",
+              "observed_distinct": 76,
+              "observed_hash_hits": 176,
+              "observed_nonzero": 176,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT28",
+          "display_name": "Play CRC Slot #28",
+          "versions": {
+            "2K27": {
+              "address": 216,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xD8",
+              "observed_distinct": 74,
+              "observed_hash_hits": 174,
+              "observed_nonzero": 174,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT29",
+          "display_name": "Play CRC Slot #29",
+          "versions": {
+            "2K27": {
+              "address": 220,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xDC",
+              "observed_distinct": 73,
+              "observed_hash_hits": 172,
+              "observed_nonzero": 172,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT30",
+          "display_name": "Play CRC Slot #30",
+          "versions": {
+            "2K27": {
+              "address": 224,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xE0",
+              "observed_distinct": 70,
+              "observed_hash_hits": 172,
+              "observed_nonzero": 172,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT31",
+          "display_name": "Play CRC Slot #31",
+          "versions": {
+            "2K27": {
+              "address": 228,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xE4",
+              "observed_distinct": 67,
+              "observed_hash_hits": 169,
+              "observed_nonzero": 169,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT32",
+          "display_name": "Play CRC Slot #32",
+          "versions": {
+            "2K27": {
+              "address": 232,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xE8",
+              "observed_distinct": 67,
+              "observed_hash_hits": 167,
+              "observed_nonzero": 167,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT33",
+          "display_name": "Play CRC Slot #33",
+          "versions": {
+            "2K27": {
+              "address": 236,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xEC",
+              "observed_distinct": 66,
+              "observed_hash_hits": 166,
+              "observed_nonzero": 166,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT34",
+          "display_name": "Play CRC Slot #34",
+          "versions": {
+            "2K27": {
+              "address": 240,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xF0",
+              "observed_distinct": 64,
+              "observed_hash_hits": 164,
+              "observed_nonzero": 164,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT35",
+          "display_name": "Play CRC Slot #35",
+          "versions": {
+            "2K27": {
+              "address": 244,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xF4",
+              "observed_distinct": 62,
+              "observed_hash_hits": 162,
+              "observed_nonzero": 162,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT36",
+          "display_name": "Play CRC Slot #36",
+          "versions": {
+            "2K27": {
+              "address": 248,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xF8",
+              "observed_distinct": 58,
+              "observed_hash_hits": 159,
+              "observed_nonzero": 159,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT37",
+          "display_name": "Play CRC Slot #37",
+          "versions": {
+            "2K27": {
+              "address": 252,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0xFC",
+              "observed_distinct": 54,
+              "observed_hash_hits": 155,
+              "observed_nonzero": 155,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT38",
+          "display_name": "Play CRC Slot #38",
+          "versions": {
+            "2K27": {
+              "address": 256,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x100",
+              "observed_distinct": 52,
+              "observed_hash_hits": 154,
+              "observed_nonzero": 154,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT39",
+          "display_name": "Play CRC Slot #39",
+          "versions": {
+            "2K27": {
+              "address": 260,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x104",
+              "observed_distinct": 51,
+              "observed_hash_hits": 154,
+              "observed_nonzero": 154,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT40",
+          "display_name": "Play CRC Slot #40",
+          "versions": {
+            "2K27": {
+              "address": 264,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x108",
+              "observed_distinct": 49,
+              "observed_hash_hits": 153,
+              "observed_nonzero": 153,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT41",
+          "display_name": "Play CRC Slot #41",
+          "versions": {
+            "2K27": {
+              "address": 268,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x10C",
+              "observed_distinct": 50,
+              "observed_hash_hits": 153,
+              "observed_nonzero": 153,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT42",
+          "display_name": "Play CRC Slot #42",
+          "versions": {
+            "2K27": {
+              "address": 272,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x110",
+              "observed_distinct": 47,
+              "observed_hash_hits": 150,
+              "observed_nonzero": 150,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT43",
+          "display_name": "Play CRC Slot #43",
+          "versions": {
+            "2K27": {
+              "address": 276,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x114",
+              "observed_distinct": 50,
+              "observed_hash_hits": 150,
+              "observed_nonzero": 150,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT44",
+          "display_name": "Play CRC Slot #44",
+          "versions": {
+            "2K27": {
+              "address": 280,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x118",
+              "observed_distinct": 51,
+              "observed_hash_hits": 145,
+              "observed_nonzero": 145,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT45",
+          "display_name": "Play CRC Slot #45",
+          "versions": {
+            "2K27": {
+              "address": 284,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x11C",
+              "observed_distinct": 49,
+              "observed_hash_hits": 144,
+              "observed_nonzero": 144,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT46",
+          "display_name": "Play CRC Slot #46",
+          "versions": {
+            "2K27": {
+              "address": 288,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x120",
+              "observed_distinct": 49,
+              "observed_hash_hits": 138,
+              "observed_nonzero": 138,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT47",
+          "display_name": "Play CRC Slot #47",
+          "versions": {
+            "2K27": {
+              "address": 292,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x124",
+              "observed_distinct": 49,
+              "observed_hash_hits": 138,
+              "observed_nonzero": 138,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT48",
+          "display_name": "Play CRC Slot #48",
+          "versions": {
+            "2K27": {
+              "address": 296,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x128",
+              "observed_distinct": 48,
+              "observed_hash_hits": 97,
+              "observed_nonzero": 97,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT49",
+          "display_name": "Play CRC Slot #49",
+          "versions": {
+            "2K27": {
+              "address": 300,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x12C",
+              "observed_distinct": 46,
+              "observed_hash_hits": 96,
+              "observed_nonzero": 96,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT50",
+          "display_name": "Play CRC Slot #50",
+          "versions": {
+            "2K27": {
+              "address": 304,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x130",
+              "observed_distinct": 47,
+              "observed_hash_hits": 97,
+              "observed_nonzero": 97,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT51",
+          "display_name": "Play CRC Slot #51",
+          "versions": {
+            "2K27": {
+              "address": 308,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x134",
+              "observed_distinct": 46,
+              "observed_hash_hits": 97,
+              "observed_nonzero": 97,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT52",
+          "display_name": "Play CRC Slot #52",
+          "versions": {
+            "2K27": {
+              "address": 312,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x138",
+              "observed_distinct": 44,
+              "observed_hash_hits": 96,
+              "observed_nonzero": 96,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT53",
+          "display_name": "Play CRC Slot #53",
+          "versions": {
+            "2K27": {
+              "address": 316,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x13C",
+              "observed_distinct": 46,
+              "observed_hash_hits": 96,
+              "observed_nonzero": 96,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT54",
+          "display_name": "Play CRC Slot #54",
+          "versions": {
+            "2K27": {
+              "address": 320,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x140",
+              "observed_distinct": 45,
+              "observed_hash_hits": 95,
+              "observed_nonzero": 95,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT55",
+          "display_name": "Play CRC Slot #55",
+          "versions": {
+            "2K27": {
+              "address": 324,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x144",
+              "observed_distinct": 43,
+              "observed_hash_hits": 94,
+              "observed_nonzero": 94,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT56",
+          "display_name": "Play CRC Slot #56",
+          "versions": {
+            "2K27": {
+              "address": 328,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x148",
+              "observed_distinct": 44,
+              "observed_hash_hits": 94,
+              "observed_nonzero": 94,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT57",
+          "display_name": "Play CRC Slot #57",
+          "versions": {
+            "2K27": {
+              "address": 332,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x14C",
+              "observed_distinct": 44,
+              "observed_hash_hits": 94,
+              "observed_nonzero": 94,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT58",
+          "display_name": "Play CRC Slot #58",
+          "versions": {
+            "2K27": {
+              "address": 336,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x150",
+              "observed_distinct": 44,
+              "observed_hash_hits": 94,
+              "observed_nonzero": 94,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT59",
+          "display_name": "Play CRC Slot #59",
+          "versions": {
+            "2K27": {
+              "address": 340,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x154",
+              "observed_distinct": 42,
+              "observed_hash_hits": 92,
+              "observed_nonzero": 92,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT60",
+          "display_name": "Play CRC Slot #60",
+          "versions": {
+            "2K27": {
+              "address": 344,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x158",
+              "observed_distinct": 38,
+              "observed_hash_hits": 88,
+              "observed_nonzero": 88,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT61",
+          "display_name": "Play CRC Slot #61",
+          "versions": {
+            "2K27": {
+              "address": 348,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x15C",
+              "observed_distinct": 22,
+              "observed_hash_hits": 21,
+              "observed_nonzero": 21,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT62",
+          "display_name": "Play CRC Slot #62",
+          "versions": {
+            "2K27": {
+              "address": 352,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x160",
+              "observed_distinct": 21,
+              "observed_hash_hits": 21,
+              "observed_nonzero": 21,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT63",
+          "display_name": "Play CRC Slot #63",
+          "versions": {
+            "2K27": {
+              "address": 356,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x164",
+              "observed_distinct": 22,
+              "observed_hash_hits": 21,
+              "observed_nonzero": 21,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT64",
+          "display_name": "Play CRC Slot #64",
+          "versions": {
+            "2K27": {
+              "address": 360,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x168",
+              "observed_distinct": 22,
+              "observed_hash_hits": 21,
+              "observed_nonzero": 21,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT65",
+          "display_name": "Play CRC Slot #65",
+          "versions": {
+            "2K27": {
+              "address": 364,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x16C",
+              "observed_distinct": 22,
+              "observed_hash_hits": 21,
+              "observed_nonzero": 21,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT66",
+          "display_name": "Play CRC Slot #66",
+          "versions": {
+            "2K27": {
+              "address": 368,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x170",
+              "observed_distinct": 22,
+              "observed_hash_hits": 21,
+              "observed_nonzero": 21,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT67",
+          "display_name": "Play CRC Slot #67",
+          "versions": {
+            "2K27": {
+              "address": 372,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x174",
+              "observed_distinct": 22,
+              "observed_hash_hits": 21,
+              "observed_nonzero": 21,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT68",
+          "display_name": "Play CRC Slot #68",
+          "versions": {
+            "2K27": {
+              "address": 376,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x178",
+              "observed_distinct": 22,
+              "observed_hash_hits": 21,
+              "observed_nonzero": 21,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT69",
+          "display_name": "Play CRC Slot #69",
+          "versions": {
+            "2K27": {
+              "address": 380,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x17C",
+              "observed_distinct": 20,
+              "observed_hash_hits": 19,
+              "observed_nonzero": 19,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT70",
+          "display_name": "Play CRC Slot #70",
+          "versions": {
+            "2K27": {
+              "address": 384,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x180",
+              "observed_distinct": 19,
+              "observed_hash_hits": 18,
+              "observed_nonzero": 18,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT71",
+          "display_name": "Play CRC Slot #71",
+          "versions": {
+            "2K27": {
+              "address": 388,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x184",
+              "observed_distinct": 17,
+              "observed_hash_hits": 16,
+              "observed_nonzero": 16,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT72",
+          "display_name": "Play CRC Slot #72",
+          "versions": {
+            "2K27": {
+              "address": 392,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x188",
+              "observed_distinct": 15,
+              "observed_hash_hits": 14,
+              "observed_nonzero": 14,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT73",
+          "display_name": "Play CRC Slot #73",
+          "versions": {
+            "2K27": {
+              "address": 396,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x18C",
+              "observed_distinct": 13,
+              "observed_hash_hits": 12,
+              "observed_nonzero": 12,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT74",
+          "display_name": "Play CRC Slot #74",
+          "versions": {
+            "2K27": {
+              "address": 400,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x190",
+              "observed_distinct": 12,
+              "observed_hash_hits": 11,
+              "observed_nonzero": 11,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT75",
+          "display_name": "Play CRC Slot #75",
+          "versions": {
+            "2K27": {
+              "address": 404,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x194",
+              "observed_distinct": 12,
+              "observed_hash_hits": 11,
+              "observed_nonzero": 11,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT76",
+          "display_name": "Play CRC Slot #76",
+          "versions": {
+            "2K27": {
+              "address": 408,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x198",
+              "observed_distinct": 10,
+              "observed_hash_hits": 9,
+              "observed_nonzero": 9,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT77",
+          "display_name": "Play CRC Slot #77",
+          "versions": {
+            "2K27": {
+              "address": 412,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x19C",
+              "observed_distinct": 10,
+              "observed_hash_hits": 9,
+              "observed_nonzero": 9,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT78",
+          "display_name": "Play CRC Slot #78",
+          "versions": {
+            "2K27": {
+              "address": 416,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x1A0",
+              "observed_distinct": 9,
+              "observed_hash_hits": 8,
+              "observed_nonzero": 8,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT79",
+          "display_name": "Play CRC Slot #79",
+          "versions": {
+            "2K27": {
+              "address": 420,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x1A4",
+              "observed_distinct": 8,
+              "observed_hash_hits": 7,
+              "observed_nonzero": 7,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT80",
+          "display_name": "Play CRC Slot #80",
+          "versions": {
+            "2K27": {
+              "address": 424,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x1A8",
+              "observed_distinct": 5,
+              "observed_hash_hits": 4,
+              "observed_nonzero": 4,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT81",
+          "display_name": "Play CRC Slot #81",
+          "versions": {
+            "2K27": {
+              "address": 428,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x1AC",
+              "observed_distinct": 2,
+              "observed_hash_hits": 164,
+              "observed_nonzero": 164,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT82",
+          "display_name": "Play CRC Slot #82",
+          "versions": {
+            "2K27": {
+              "address": 432,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x1B0",
+              "observed_distinct": 2,
+              "observed_hash_hits": 164,
+              "observed_nonzero": 164,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT83",
+          "display_name": "Play CRC Slot #83",
+          "versions": {
+            "2K27": {
+              "address": 436,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x1B4",
+              "observed_distinct": 2,
+              "observed_hash_hits": 164,
+              "observed_nonzero": 164,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT84",
+          "display_name": "Play CRC Slot #84",
+          "versions": {
+            "2K27": {
+              "address": 440,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x1B8",
+              "observed_distinct": 2,
+              "observed_hash_hits": 164,
+              "observed_nonzero": 164,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT85",
+          "display_name": "Play CRC Slot #85",
+          "versions": {
+            "2K27": {
+              "address": 444,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x1BC",
+              "observed_distinct": 2,
+              "observed_hash_hits": 164,
+              "observed_nonzero": 164,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT86",
+          "display_name": "Play CRC Slot #86",
+          "versions": {
+            "2K27": {
+              "address": 448,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x1C0",
+              "observed_distinct": 2,
+              "observed_hash_hits": 164,
+              "observed_nonzero": 164,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT87",
+          "display_name": "Play CRC Slot #87",
+          "versions": {
+            "2K27": {
+              "address": 452,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x1C4",
+              "observed_distinct": 2,
+              "observed_hash_hits": 164,
+              "observed_nonzero": 164,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYCRCSLOT88",
+          "display_name": "Play CRC Slot #88",
+          "versions": {
+            "2K27": {
+              "address": 456,
+              "enum": "PLAYBOOKDATA_PLAY_CRC32",
+              "hex": "0x1C8",
+              "observed_distinct": 2,
+              "observed_hash_hits": 164,
+              "observed_nonzero": 164,
+              "readonly": true,
+              "type": "uint",
+              "values_file": "/mnt/d/hermes/Offsetbuilder/build2k27/PLAYBOOKDATA_PLAY_CRC32.json"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

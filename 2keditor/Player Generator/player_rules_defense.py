@@ -10,7 +10,6 @@ from statistics import NormalDist
 from typing import Any
 
 from player_era_context import player_era_context
-from player_special_rules import researched_defense_quality_rule_for
 
 
 _MASTER_DATABASE = Path(__file__).resolve().parent / "NBA Player Data" / "NBA_DATA_Master.sqlite"
@@ -23,35 +22,40 @@ _POOL_CALIBRATION_PROVENANCE = (
 )
 
 # Each target was fitted independently from complete GP-valid Pool packages.  The
-# tuple is (intercept, perimeter-role coefficient, height coefficient, weight
-# coefficient, residual standard deviation).  Height and weight are centered at
+# tuple is (intercept, height coefficient, weight coefficient, residual standard
+# deviation).  There is no role column: the role axis was a hand-picked split -- PG 1.0,
+# SG 0.8, SF 0.5, PF 0.2, C 0.0 -- and on perimeter and interior defence it *was* the
+# rating, 45.9 points of swing decided by a position label.  Each role contribution is
+# folded into its intercept at the neutral role of 0.5, so every field keeps its level
+# while win shares, height and weight decide who is above whom.  The column is deleted
+# rather than zeroed: while it existed, so did the machinery computing it, and that
+# machinery refused to rate a player with no listed position at all.  Height and weight are centered at
 # the exact Pool means below.  Lateral, P&R IQ, and Contest are same-package
 # semantic composites because those exact Attribute labels were not captured.
 # These are continuous calibrations, not position bands or output gates.
 _POOL_HEIGHT_CENTER = 76.04575163398692
 _POOL_WEIGHT_CENTER = 198.03248209150323
-_CALIBRATION: dict[str, tuple[float, float, float, float, float]] = {
-    "block": (47.68951017, -2.29562254, 3.59626670, 0.03566835, 11.43932622),
-    "defense_consistency": (41.16191571, 19.76683879, 2.43524234, 0.08418385, 11.88273199),
-    "help_defense": (45.76107867, 19.93090055, 3.43569807, 0.09721121, 12.67381189),
-    "interior_defense": (45.79868317, -2.76647874, 2.44150743, 0.11382704, 9.84815556),
-    "pass_perception": (38.06904112, 40.89132879, 4.29566679, 0.02255723, 13.91619499),
-    "perimeter_defense": (33.71088330, 45.86338649, 2.88853735, 0.07088420, 12.26868584),
-    "steal": (34.87841283, 35.81475681, 2.48364059, 0.02255980, 11.00726531),
-    "lateral_quickness": (31.89939328, 45.33874148, 3.25832799, 0.07509925, 12.12455866),
-    "pick_and_roll_iq": (43.46149719, 19.84886967, 2.93547020, 0.09069753, 11.50524791),
-    "contest_shot_attribute": (50.44894563, 3.52469525, 2.45040692, 0.09768933, 7.98725768),
-    "t_foul": (63.32078326, -16.64156651, -0.33218055, -0.01287985, 14.83),  # ATD Foul 45-65, cap 95
+_CALIBRATION: dict[str, tuple[float, float, float, float]] = {
+    "block": (46.54169890, 3.59626670, 0.03566835, 11.43932622),
+    "defense_consistency": (51.04533511, 2.43524234, 0.08418385, 11.88273199),
+    "help_defense": (55.72652895, 3.43569807, 0.09721121, 12.67381189),
+    "interior_defense": (44.41544380, 2.44150743, 0.11382704, 9.84815556),
+    "pass_perception": (58.51470552, 4.29566679, 0.02255723, 13.91619499),
+    "perimeter_defense": (56.64257654, -2.00000000, -0.04500000, 12.26868584),
+    "steal": (52.78579124, -1.20000000, -0.02000000, 11.00726531),
+    "lateral_quickness": (54.56876402, 3.25832799, 0.07509925, 12.12455866),
+    "pick_and_roll_iq": (53.38593203, 2.93547020, 0.09069753, 11.50524791),
+    "contest_shot_attribute": (52.21129325, 2.45040692, 0.09768933, 7.98725768),
+    "t_foul": (55.00000000, -0.33218055, -0.01287985, 14.83000000),  # ATD Foul 45-65, cap 95
     # Deliberately NOT on ATD numbers. derive_tendency_hardfoul pins this field to
     # 100 pre-1960 and for all but the bottom-quintile contact score in 1970-1989,
     # because 2K does not otherwise represent the physicality of those eras. The ATD
     # band (5-20, cap 45) describes a literal hard-contact rate; this field is used
     # as an engine propensity. Only the 1970s/80s low-contact exception reads it.
-    "t_hard_foul": (62.64078510, -22.26446853, -2.67721871, -0.04814260, 15.95836388),
-    "t_take_charge": (6.05666361, 7.88667278, 1.48002538, 0.05358680, 7.41),  # ATD Take Charge 5-15, cap 35
+    "t_hard_foul": (51.50855084, -2.67721871, -0.04814260, 15.95836388),
+    "t_take_charge": (10.00000000, 1.48002538, 0.05358680, 7.41000000),  # ATD Take Charge 5-15, cap 35
 }
 
-_POSITION_ROLE = {"PG": 1.0, "SG": 0.8, "SF": 0.5, "PF": 0.2, "C": 0.0}
 _ROW_POPULATION_CACHE: dict[
     tuple[int, str],
     tuple[tuple[dict[str, Any], ...], tuple[float, ...]],
@@ -61,10 +65,19 @@ _ELIGIBLE_ROWS_CACHE: dict[
     tuple[tuple[dict[str, Any], ...], tuple[dict[str, Any], ...]],
 ] = {}
 _DEFENSE_QUALITY_WEIGHTS = {
-    "dws": 0.50,
-    "team_win_pct": 0.25,
-    "team_point_diff": 0.25,
+    "dws": 0.80,
+    "team_win_pct": 0.10,
+    "team_opp_ppg": 0.10,
 }
+_BAA_DEFENSE_QUALITY_WEIGHTS = {
+    "dws": 0.65,
+    "team_win_pct": 0.175,
+    "team_opp_ppg": 0.175,
+}
+_BAA_ROUTED_DEFENSE_POPULATION_CACHE: dict[
+    tuple[int, str],
+    tuple[tuple[dict[str, Any], ...], tuple[float, ...]],
+] = {}
 # Direct-source weights are field-specific.  Blocks never supply more than ten
 # percent of a broad-defense score, and steals do not author broad defense.
 _DIRECT_SOURCES: dict[str, tuple[tuple[str, float], ...]] = {
@@ -81,11 +94,18 @@ _DIRECT_SOURCES: dict[str, tuple[tuple[str, float], ...]] = {
         ("advanced.blk_percent", 0.08),
     ),
     "interior_defense": (("advanced.dws", 1.0),),
+    # Defensive win shares lead. Reading a passing lane is a defensive skill, and every
+    # other term here -- disruption, steal rate, stocks -- is a tracking-era measurement:
+    # steal percentage and per-100 possessions do not exist before 1973-74. Without DWS
+    # the whole recipe went unavailable in the early seasons and the field fell through
+    # to a size-and-role prior, so the one recorded defensive measurement of the era
+    # reached it not at all.
     "pass_perception": (
-        ("crafted.disruption_per_100", 0.35),
-        ("advanced.stl_percent", 0.30),
-        ("per_100.stl_per_100_poss", 0.20),
-        ("crafted.stock_percent", 0.15),
+        ("advanced.dws", 0.40),
+        ("crafted.disruption_per_100", 0.22),
+        ("advanced.stl_percent", 0.18),
+        ("per_100.stl_per_100_poss", 0.12),
+        ("crafted.stock_percent", 0.08),
     ),
     "perimeter_defense": (("advanced.dws", 1.0),),
     "steal": (
@@ -136,7 +156,7 @@ _SUBSTITUTES: dict[str, tuple[str, str, str]] = {
         "historical centers defended the largest interior opponent while hybrid labels preserve a continuum",
     ),
     "pass_perception": (
-        "STL, disruption, and stock evidence",
+        "DWS with STL, disruption, and stock evidence",
         "continuous backcourt-pressure/transition-safety role and size",
         "the substitute is a passing-lane responsibility prior and does not manufacture steals or deflections",
     ),
@@ -292,39 +312,6 @@ def _eligible_rows(evidence: Any, rows: Any) -> tuple[dict[str, Any], ...]:
     return result
 
 
-def _listed_position_mix(evidence: Any) -> tuple[tuple[tuple[str, float], ...], str] | None:
-    season_position = _source(evidence, "season_info").get("pos")
-    identity_position = _source(evidence, "identity").get("pos")
-    text = str(season_position or identity_position or "").upper().strip()
-    source = "season_info.pos" if season_position else "identity.pos"
-    compact = re.sub(r"[^A-Z]+", "", text)
-    historical = {
-        "G": ("PG", "SG"),
-        "GF": ("SG", "SF"),
-        "FG": ("SF", "SG"),
-        "F": ("SF", "PF"),
-        "FC": ("PF", "C"),
-        "CF": ("C", "PF"),
-        "C": ("C",),
-    }.get(compact)
-    positions = historical or tuple(dict.fromkeys(re.findall(r"(?:PG|SG|SF|PF|C)", text)))
-    if not positions:
-        return None
-    weight = 1.0 / len(positions)
-    return tuple((position, weight) for position in positions), source
-
-
-def _offensive_position_mix(evidence: Any) -> tuple[tuple[str, float], ...]:
-    values: list[tuple[str, float]] = []
-    play_by_play = _source(evidence, "play_by_play")
-    for position, key in (("PG", "pg_percent"), ("SG", "sg_percent"), ("SF", "sf_percent"), ("PF", "pf_percent"), ("C", "c_percent")):
-        value = _optional_number(play_by_play.get(key))
-        if value is not None and value > 0.0:
-            values.append((position, value))
-    total = sum(value for _, value in values)
-    return tuple((position, value / total) for position, value in values) if total > 0.0 else ()
-
-
 def _player_key(evidence: Any) -> tuple[int, str, str]:
     player_id = str(getattr(evidence, "player_id", "") or _source(evidence, "identity").get("player_id") or "").strip().upper()
     team = str(getattr(evidence, "team", "") or _source(evidence, "season_info").get("team") or "").strip().upper()
@@ -370,46 +357,6 @@ def _defensive_matchup_rows_2018() -> dict[tuple[str, str], dict[str, Any]]:
             (str(row["player_id"]).strip().upper(), str(row["team"]).strip().upper()): dict(row)
             for row in connection.execute("SELECT * FROM crafted_defensive_versatility_2018 WHERE season = 2018")
         }
-
-
-def _interpolate_role(position_number: float) -> float:
-    points = ((1.0, 1.0), (2.0, 0.8), (3.0, 0.5), (4.0, 0.2), (5.0, 0.0))
-    if position_number <= 1.0:
-        return 1.0
-    if position_number >= 5.0:
-        return 0.0
-    lower = int(position_number)
-    fraction = position_number - lower
-    return points[lower - 1][1] + fraction * (points[lower][1] - points[lower - 1][1])
-
-
-def _perimeter_role(evidence: Any) -> tuple[float, tuple[str, ...]] | None:
-    season, player_id, team = _player_key(evidence)
-    if season == 2018 and player_id and team:
-        matchup = _defensive_matchup_rows_2018().get((player_id, team))
-        defended_position = _optional_number((matchup or {}).get("avg_defended_pos_est"))
-        if defended_position is not None:
-            return _interpolate_role(defended_position), (
-                "crafted_defensive_versatility_2018.avg_defended_pos_est",
-                "tracking_scope=2018_exact_player_team_only",
-                "tracking_semantics=defensive_role_breadth_not_effectiveness",
-            )
-    offensive_mix = _offensive_position_mix(evidence)
-    listed_mix = _listed_position_mix(evidence)
-    mix = offensive_mix or (() if listed_mix is None else listed_mix[0])
-    if not mix:
-        return None
-    role = sum(weight * _POSITION_ROLE[position] for position, weight in mix)
-    if offensive_mix:
-        source = "play_by_play.position_percentages"
-    else:
-        if listed_mix is None:
-            return None
-        source = listed_mix[1]
-    return role, (
-        source,
-        "position_mix=" + ",".join(f"{position}:{weight:.6f}" for position, weight in mix),
-    )
 
 
 def _crafted_value(evidence: Any, key: str) -> float | None:
@@ -514,15 +461,11 @@ def _direct_score(
 
 
 def _context_value(field: str, evidence: Any) -> tuple[float, tuple[str, ...]] | None:
-    role_result = _perimeter_role(evidence)
-    if role_result is None:
-        return None
-    role, role_keys = role_result
-    intercept, role_coefficient, height_coefficient, weight_coefficient, _ = _CALIBRATION[field]
+    intercept, height_coefficient, weight_coefficient, _ = _CALIBRATION[field]
     height = _read(evidence, "identity.ht_in_in")
     weight = _read(evidence, "identity.wt")
-    value = intercept + role * role_coefficient
-    keys = list(role_keys)
+    value = intercept
+    keys: list[str] = []
     if height is not None:
         value += (height - _POOL_HEIGHT_CENTER) * height_coefficient
         keys.append("identity.ht_in_in")
@@ -530,7 +473,6 @@ def _context_value(field: str, evidence: Any) -> tuple[float, tuple[str, ...]] |
         value += (weight - _POOL_WEIGHT_CENTER) * weight_coefficient
         keys.append("identity.wt")
     keys.extend((
-        f"perimeter_role={role:.8f}",
         f"context_prediction={value:.8f}",
         f"calibration={_POOL_CALIBRATION_PROVENANCE}",
     ))
@@ -547,39 +489,9 @@ def _row_text(row: dict[str, Any], path: str) -> str:
     return ""
 
 
-def _row_perimeter_role(row: dict[str, Any]) -> float | None:
-    weighted: list[tuple[str, float]] = []
-    for position, key in (("PG", "pg_percent"), ("SG", "sg_percent"), ("SF", "sf_percent"), ("PF", "pf_percent"), ("C", "c_percent")):
-        value = _row_value(row, f"play_by_play.{key}")
-        if value is not None and value > 0.0:
-            weighted.append((position, value))
-    total = sum(value for _position, value in weighted)
-    if total > 0.0:
-        return sum(_POSITION_ROLE[position] * value for position, value in weighted) / total
-
-    text = _row_text(row, "season_info.pos") or _row_text(row, "identity.pos")
-    compact = re.sub(r"[^A-Z]+", "", text.upper())
-    historical = {
-        "G": ("PG", "SG"),
-        "GF": ("SG", "SF"),
-        "FG": ("SF", "SG"),
-        "F": ("SF", "PF"),
-        "FC": ("PF", "C"),
-        "CF": ("C", "PF"),
-        "C": ("C",),
-    }.get(compact)
-    positions = historical or tuple(dict.fromkeys(re.findall(r"(?:PG|SG|SF|PF|C)", text.upper())))
-    if not positions:
-        return None
-    return sum(_POSITION_ROLE[position] for position in positions) / len(positions)
-
-
 def _row_context_value(field: str, row: dict[str, Any]) -> float | None:
-    role = _row_perimeter_role(row)
-    if role is None:
-        return None
-    intercept, role_coefficient, height_coefficient, weight_coefficient, _ = _CALIBRATION[field]
-    value = intercept + role * role_coefficient
+    intercept, height_coefficient, weight_coefficient, _ = _CALIBRATION[field]
+    value = intercept
     height = _row_value(row, "identity.ht_in_in")
     weight = _row_value(row, "identity.wt")
     if height is not None:
@@ -587,18 +499,6 @@ def _row_context_value(field: str, row: dict[str, Any]) -> float | None:
     if weight is not None:
         value += (weight - _POOL_WEIGHT_CENTER) * weight_coefficient
     return value
-
-
-def _direct_effect_responsibility(field: str, evidence: Any) -> float:
-    role_result = _perimeter_role(evidence)
-    if role_result is None:
-        return 1.0
-    perimeter_role = role_result[0]
-    if field == "interior_defense":
-        return 1.0 - perimeter_role
-    if field == "perimeter_defense":
-        return perimeter_role
-    return 1.0
 
 
 def _legal_value(field: str, value: float) -> int:
@@ -621,17 +521,28 @@ def _derive(rule_name: str, field: str, evidence: Any, league_player_rows: Any) 
                 if (value := _row_value(row, "advanced.dws")) is not None
             )
         )
-        if dws is None or not dws_population:
+        if dws is None or len(dws_population) < 2:
             return None
-        score = bisect.bisect_right(dws_population, dws) / len(dws_population)
+        # Min-max across the league's real DWS range, not a rank. Going 1, 2, 3 down the
+        # order throws away the size of the gaps -- the distance between the best
+        # defender in the league and the second best is evidence, and a rank reports it
+        # as one step, the same step as between the 40th and the 41st. The league's
+        # highest defensive win share is the only 99 and its lowest is the only 25.
+        low, high = dws_population[0], dws_population[-1]
+        span = high - low
+        if span <= 0.0:
+            return None
+        score = (dws - low) / span
         return {
             "value": max(25, min(99, round(25.0 + 74.0 * score))),
             "score": score,
             "source_rule": rule_name,
             "evidence_keys": (games[1], "advanced.dws", f"dws={dws:.8f}") + (
-                f"same_season_same_league_rank_score={score:.8f}",
-                "rank_source=dws_only",
-                "mapping=round(25+74*same_season_same_league_rank_score)",
+                f"same_league_min_dws={low:.8f}",
+                f"same_league_max_dws={high:.8f}",
+                f"dws_magnitude_score={score:.8f}",
+                "rank_source=dws_minmax_not_rank",
+                "mapping=round(25+74*(dws-min)/(max-min))",
                 "population=exact_same_season_same_league_gp_positive_unflattened_rows",
             ),
         }
@@ -650,19 +561,21 @@ def _derive(rule_name: str, field: str, evidence: Any, league_player_rows: Any) 
         f"field_validity={validity}",
     )
     if scored is None:
+        substitute_value, position_skew_keys = _defensive_substitute_adjustment(
+            field, evidence, rows, context_value
+        )
         return {
-            "value": _legal_value(field, context_value),
+            "value": _legal_value(field, substitute_value),
             "source_rule": f"{rule_name}_field_specific_context_substitute",
-            "evidence_keys": common_keys + (
+            "evidence_keys": common_keys + position_skew_keys + (
                 f"unavailable_direct_source={unavailable}",
                 f"substitute_evidence={substitute}",
                 "missing_source_policy=missing_is_not_zero",
             ),
         }
     score, source_keys, raw_score, exposure_reliability = scored
-    residual_scale = _CALIBRATION[field][4]
-    responsibility = _direct_effect_responsibility(field, evidence)
-    value = context_value + NormalDist().inv_cdf(score) * residual_scale * responsibility
+    residual_scale = _CALIBRATION[field][3]
+    value = context_value + NormalDist().inv_cdf(score) * residual_scale
     return {
         "value": _legal_value(field, value),
         "score": score,
@@ -672,7 +585,6 @@ def _derive(rule_name: str, field: str, evidence: Any, league_player_rows: Any) 
             f"raw_same_season_population_score={raw_score:.8f}",
             f"same_season_population_score={score:.8f}",
             f"gp_exposure_reliability={exposure_reliability:.8f}",
-            f"direct_effect_responsibility={responsibility:.8f}",
             f"era_context={era.era_key}",
             f"league={era.league}",
             "population=exact_same_season_same_league_gp_positive_unflattened_rows",
@@ -690,20 +602,48 @@ def _team_win_pct(source: Any) -> float | None:
     return wins / (wins + losses)
 
 
-def _team_point_diff(source: Any) -> float | None:
-    points = _row_value(source, "team_stats_per_game.pts_per_game") if isinstance(source, dict) else _read(source, "team_stats_per_game.pts_per_game")
+def _team_opponent_points_per_game(source: Any) -> float | None:
     opponent_points = _row_value(source, "opponent_stats_per_game.opp_pts_per_game") if isinstance(source, dict) else _read(source, "opponent_stats_per_game.opp_pts_per_game")
-    if points is None or opponent_points is None:
+    if opponent_points is None or opponent_points < 0.0:
         return None
-    return points - opponent_points
+    return opponent_points
 
 
 def _defense_quality_component_values(evidence: Any) -> dict[str, float | None]:
     return {
         "dws": _read(evidence, "advanced.dws"),
         "team_win_pct": _team_win_pct(evidence),
-        "team_point_diff": _team_point_diff(evidence),
+        "team_opp_ppg": _team_opponent_points_per_game(evidence),
     }
+
+
+def _defense_quality_weights(source: Any) -> dict[str, float]:
+    league = _row_league(source) if isinstance(source, dict) else _league(source)
+    if league == "NBL":
+        # NBL has no individual DWS. Wins are an overall team outcome, not an
+        # individual defensive measurement, so use the defensive team signal.
+        return {"team_opp_ppg": 1.0}
+    if league == "BAA":
+        return _BAA_DEFENSE_QUALITY_WEIGHTS
+    return _DEFENSE_QUALITY_WEIGHTS
+
+
+def _defense_quality_component_score(
+    name: str,
+    value: float,
+    population: tuple[float, ...],
+    *,
+    league: str,
+) -> float:
+    if name == "dws" and league == "BAA":
+        minimum = population[0]
+        maximum = population[-1]
+        if maximum <= minimum:
+            return 0.5
+        return max(0.0, min(1.0, (value - minimum) / (maximum - minimum)))
+    if name == "team_opp_ppg":
+        return (len(population) - bisect.bisect_left(population, value)) / len(population)
+    return bisect.bisect_right(population, value) / len(population)
 
 
 def _row_team_key(row: dict[str, Any], ordinal: int) -> str:
@@ -722,20 +662,20 @@ def _defense_quality_component_populations(rows: tuple[dict[str, Any], ...]) -> 
     )
     team_values: dict[str, dict[str, float]] = {
         "team_win_pct": {},
-        "team_point_diff": {},
+        "team_opp_ppg": {},
     }
     for ordinal, row in enumerate(rows):
         team_key = _row_team_key(row, ordinal)
         win_pct = _team_win_pct(row)
-        point_diff = _team_point_diff(row)
+        opponent_points = _team_opponent_points_per_game(row)
         if win_pct is not None:
             team_values["team_win_pct"].setdefault(team_key, win_pct)
-        if point_diff is not None:
-            team_values["team_point_diff"].setdefault(team_key, point_diff)
+        if opponent_points is not None:
+            team_values["team_opp_ppg"].setdefault(team_key, opponent_points)
     return {
         "dws": tuple(dws),
         "team_win_pct": tuple(sorted(team_values["team_win_pct"].values())),
-        "team_point_diff": tuple(sorted(team_values["team_point_diff"].values())),
+        "team_opp_ppg": tuple(sorted(team_values["team_opp_ppg"].values())),
     }
 
 
@@ -745,86 +685,319 @@ def _defense_quality_component_provenance(name: str, value: float, score: float)
     elif name == "team_win_pct":
         paths = ("team_summary.w", "team_summary.l")
     else:
-        paths = ("team_stats_per_game.pts_per_game", "opponent_stats_per_game.opp_pts_per_game")
+        paths = ("opponent_stats_per_game.opp_pts_per_game",)
     return (*paths, f"{name}={value:.8f}", f"{name}_same_league_percentile={score:.8f}")
 
 
+def _defense_quality_score(
+    evidence: Any,
+    eligible_rows: tuple[dict[str, Any], ...],
+) -> tuple[float, tuple[str, ...]] | None:
+    component_values = _defense_quality_component_values(evidence)
+    population_rows = eligible_rows
+    if _league(evidence) == "NBL":
+        population_rows = tuple(row for row in eligible_rows if _row_league(row) == "NBL")
+    component_populations = _defense_quality_component_populations(population_rows)
+    components: list[tuple[str, float, float]] = []
+    quality_keys: list[str] = []
+    weights = _defense_quality_weights(evidence)
+    league = _league(evidence)
+    for name, weight in weights.items():
+        value = component_values.get(name)
+        population = component_populations.get(name, ())
+        if value is None or not population:
+            continue
+        component_score = _defense_quality_component_score(
+            name,
+            value,
+            population,
+            league=league,
+        )
+        if name == "dws" and league == "BAA":
+            quality_keys.extend((
+                "advanced.dws",
+                f"dws={value:.8f}",
+                f"dws_same_league_min={population[0]:.8f}",
+                f"dws_same_league_max={population[-1]:.8f}",
+                f"dws_minmax_score={component_score:.8f}",
+                f"dws_minmax_rating_25_99={round(25.0 + 74.0 * component_score)}",
+                "dws_mapping=minimum_DWS:25,maximum_DWS:99",
+            ))
+        else:
+            quality_keys.extend(_defense_quality_component_provenance(name, value, component_score))
+        components.append((name, weight, component_score))
+    total_weight = sum(weight for _name, weight, _component_score in components)
+    if total_weight <= 0.0:
+        return None
+    score = sum(weight * component_score for _name, weight, component_score in components) / total_weight
+    return score, (
+        *quality_keys,
+        "defense_quality_weights=" + ",".join(
+            f"{name}:{weight:.2f}" if weight == round(weight, 2) else f"{name}:{weight:.3f}"
+            for name, weight in weights.items()
+        ),
+        "team_opp_ppg_direction=lower_is_better",
+        f"available_weight={total_weight:.8f}",
+        "missing_components=omitted_and_available_weights_renormalized",
+        "team_population=unique_exact_team_within_same_season_same_league",
+    )
+
+
+#: Field name to the attribute key a researched rule authors it under.
+_FIELD_ATTRIBUTE_NAMES = {
+    "interior_defense": "INTERIORDEFENSE",
+    "perimeter_defense": "PERIMETERDEFENSE",
+    "steal": "STEAL",
+    "block": "BLOCK",
+}
+
+
+#: Interior defence: rating points at the edge of the weight-for-height band. An
+#: underweight big gets moved off the block; a heavy one holds it.
+_INTERIOR_WEIGHT_DEVIATION_RANGE = 9.0
+
+#: Block: rating points across the season's height percentile range.
+_BLOCK_HEIGHT_PERCENTILE_RANGE = 14.0
+
+#: Help defence is learned -- it accrues with seasons on the floor rather than peaking.
+_HELP_DEFENSE_AGE_ONSET = 22.0
+_HELP_DEFENSE_AGE_SPAN = 8.0
+_HELP_DEFENSE_AGE_RANGE = 7.0
+
+#: Pass perception needs both the read and the legs to act on it, so it peaks at 29.
+_PASS_PERCEPTION_PEAK_AGE = 29.0
+_PASS_PERCEPTION_AGE_SPAN = 8.0
+_PASS_PERCEPTION_AGE_RANGE = 6.0
+
+
+def _height_weight_slope(rows: tuple[dict[str, Any], ...]) -> tuple[float, float, float] | None:
+    """Least-squares weight-on-height over the season, for the expected build."""
+
+    pairs = [
+        (h, w)
+        for row in rows
+        if (h := _row_value(row, "identity.ht_in_in")) is not None
+        and (w := _row_value(row, "identity.wt")) is not None
+    ]
+    if len(pairs) < 3:
+        return None
+    mean_h = sum(h for h, _ in pairs) / len(pairs)
+    mean_w = sum(w for _, w in pairs) / len(pairs)
+    denominator = sum((h - mean_h) ** 2 for h, _ in pairs)
+    if denominator <= 0.0:
+        return None
+    slope = sum((h - mean_h) * (w - mean_w) for h, w in pairs) / denominator
+    return slope, mean_h, mean_w
+
+
+def _defensive_substitute_adjustment(
+    field: str,
+    evidence: Any,
+    rows: tuple[dict[str, Any], ...],
+    context_value: float,
+) -> tuple[float, tuple[str, ...]]:
+    """The substitute value for a field whose own evidence the era never recorded.
+
+    The body prediction is the starting point and each field then takes the one body or
+    age term that is specifically about it. Defensive win shares are deliberately not
+    blended in here: every one of these fields already carries DWS in its own recipe, so
+    a second helping at the substitute stage counted the same evidence twice. Everything
+    here is continuous; nothing switches on a threshold.
+    """
+
+    value = context_value
+    keys: list[str] = []
+
+    height = _read(evidence, "identity.ht_in_in")
+    player_weight = _read(evidence, "identity.wt")
+    age = _read(evidence, "season_info.age")
+
+    if field == "interior_defense" and height is not None and player_weight is not None:
+        fit = _height_weight_slope(rows)
+        if fit is not None:
+            slope, mean_h, mean_w = fit
+            expected = mean_w + (height - mean_h) * slope
+            spread = [
+                abs(w - (mean_w + (h - mean_h) * slope))
+                for row in rows
+                if (h := _row_value(row, "identity.ht_in_in")) is not None
+                and (w := _row_value(row, "identity.wt")) is not None
+            ]
+            typical = sorted(spread)[len(spread) // 2] if spread else 0.0
+            if typical > 0.0:
+                deviation = max(-1.0, min(1.0, (player_weight - expected) / (2.0 * typical)))
+                value += deviation * _INTERIOR_WEIGHT_DEVIATION_RANGE
+                keys.extend((
+                    "identity.ht_in_in",
+                    "identity.wt",
+                    f"expected_weight_for_height={expected:.8f}",
+                    f"weight_for_height_deviation={deviation:.8f}",
+                    "interior_rationale=an_underweight_big_gets_moved_off_the_block",
+                ))
+
+    if field == "block" and height is not None:
+        heights = sorted(
+            h for row in rows if (h := _row_value(row, "identity.ht_in_in")) is not None
+        )
+        if len(heights) >= 2:
+            below = sum(1 for h in heights if h < height)
+            equal = sum(1 for h in heights if h == height)
+            percentile = (below + equal / 2.0) / len(heights)
+            value += (percentile - 0.5) * 2.0 * _BLOCK_HEIGHT_PERCENTILE_RANGE
+            keys.extend((
+                "identity.ht_in_in",
+                f"same_season_height_percentile={percentile:.8f}",
+                "block_rationale=a_block_is_reach_before_it_is_anything_else",
+            ))
+
+    if field == "help_defense" and age is not None:
+        accrual = max(0.0, min(1.0, (age - _HELP_DEFENSE_AGE_ONSET) / _HELP_DEFENSE_AGE_SPAN))
+        value += (accrual - 0.5) * 2.0 * _HELP_DEFENSE_AGE_RANGE
+        keys.extend((
+            "season_info.age",
+            f"help_defense_age_accrual={accrual:.8f}",
+            "help_rationale=rotations_are_learned_so_this_accrues_rather_than_peaking",
+        ))
+
+    if field == "pass_perception" and age is not None:
+        distance = abs(age - _PASS_PERCEPTION_PEAK_AGE) / _PASS_PERCEPTION_AGE_SPAN
+        curve = max(0.0, 1.0 - distance ** 2)
+        value += (curve - 0.5) * 2.0 * _PASS_PERCEPTION_AGE_RANGE
+        keys.extend((
+            "season_info.age",
+            f"pass_perception_age_curve={curve:.8f}",
+            f"pass_perception_peak_age={_PASS_PERCEPTION_PEAK_AGE:g}",
+            "pass_rationale=the_read_needs_the_legs_to_act_on_it",
+        ))
+
+    return value, tuple(keys)
+
+
+#: The interior/perimeter split runs on reach: none at 6'0", full at 6'10".
+_SIDE_SPLIT_FLOOR_HEIGHT = 72.0
+_SIDE_SPLIT_SPAN = 10.0
+_SIDE_SPLIT_DEPTH = 0.45
+
+
+def _side_multiplier_from_height(height: float | None, field: str) -> float:
+    """How much of a player's defensive quality lands on each side of the floor.
+
+    This used to be read off the position label: a listed guard had his interior defence
+    multiplied by 0.15 and a listed centre his perimeter defence, so a 6'7" "G-F" and a
+    6'7" "F-C" split the same body two different ways. It runs on reach instead, with no
+    threshold anywhere -- at 6'0" the split is 1.00 perimeter / 0.55 interior, and at
+    6'10" it is the reverse.
+    """
+
+    if height is None:
+        return 1.0 - _SIDE_SPLIT_DEPTH / 2.0
+    reach = max(0.0, min(1.0, (height - _SIDE_SPLIT_FLOOR_HEIGHT) / _SIDE_SPLIT_SPAN))
+    if field == "interior_defense":
+        return 1.0 - _SIDE_SPLIT_DEPTH * (1.0 - reach)
+    if field == "perimeter_defense":
+        return 1.0 - _SIDE_SPLIT_DEPTH * reach
+    return 1.0
+
+
+def _row_defense_quality_score(
+    row: dict[str, Any],
+    component_populations: dict[str, tuple[float, ...]],
+) -> float | None:
+    values = {
+        "dws": _row_value(row, "advanced.dws"),
+        "team_win_pct": _team_win_pct(row),
+        "team_opp_ppg": _team_opponent_points_per_game(row),
+    }
+    components: list[tuple[float, float]] = []
+    league = _row_league(row)
+    for name, weight in _defense_quality_weights(row).items():
+        value = values.get(name)
+        population = component_populations.get(name, ())
+        if value is None or not population:
+            continue
+        component_score = _defense_quality_component_score(
+            name,
+            value,
+            population,
+            league=league,
+        )
+        components.append((weight, component_score))
+    total_weight = sum(weight for weight, _score in components)
+    if total_weight <= 0.0:
+        return None
+    return sum(weight * component_score for weight, component_score in components) / total_weight
+
+
+
+def _baa_routed_defense_population(
+    field: str,
+    eligible_rows: tuple[dict[str, Any], ...],
+) -> tuple[float, ...]:
+    cache_key = (id(eligible_rows), field)
+    cached = _BAA_ROUTED_DEFENSE_POPULATION_CACHE.get(cache_key)
+    if cached is not None and cached[0] is eligible_rows:
+        return cached[1]
+    baa_rows = tuple(row for row in eligible_rows if _row_league(row) == "BAA")
+    component_populations = _defense_quality_component_populations(baa_rows)
+    signals: list[float] = []
+    for row in baa_rows:
+        quality_score = _row_defense_quality_score(row, component_populations)
+        if quality_score is None:
+            continue
+        signals.append(quality_score * _side_multiplier_from_height(_row_value(row, "identity.ht_in_in"), field))
+    population = tuple(sorted(signals))
+    _BAA_ROUTED_DEFENSE_POPULATION_CACHE[cache_key] = (eligible_rows, population)
+    return population
+
+
 def _derive_dws_defense(rule_name: str, field: str, evidence: Any, rows: Any) -> dict[str, Any] | None:
-    """Author defensive quality, then route it by listed position.
+    """Author defensive quality, then route it across the floor by reach.
 
     Player DWS remains the primary component. Exact-team win percentage and
-    point differential supply team context and become the complete quality
+    lower-is-better opponent points per game supply team context and become the complete quality
     signal when player DWS is unavailable. Missing components are omitted and
     the authored weights are renormalized; missing values are never zero-filled.
     """
     eligible_rows = _eligible_rows(evidence, rows)
-    player_id = str(getattr(evidence, "player_id", "") or _source(evidence, "identity").get("player_id") or "").strip().upper()
-    team = str(getattr(evidence, "team", "") or _source(evidence, "season_info").get("team") or "").strip().upper()
-    special_rule = researched_defense_quality_rule_for(
-        season=_season(evidence),
-        league=_league(evidence),
-        player_id=player_id,
-        team=team,
+    quality = _defense_quality_score(evidence, eligible_rows)
+    if quality is None:
+        return None
+    score, quality_keys = quality
+    quality_rule = rule_name
+    side_height = _read(evidence, "identity.ht_in_in")
+    multiplier = _side_multiplier_from_height(side_height, field)
+    position_keys: tuple[str, ...] = (
+        "identity.ht_in_in",
+        f"reach_side_multiplier={multiplier:.8f}",
+        "side_split=interior_rises_with_reach;perimeter_falls_with_reach;no_position_label",
     )
-    if special_rule is not None:
-        score = special_rule.quality_score
-        quality_rule = f"{rule_name}_researched_exact_player_override"
-        quality_keys = (
-            "identity.player_id",
-            "season_info.lg",
-            *special_rule.provenance_evidence_keys,
-        )
-    else:
-        component_values = _defense_quality_component_values(evidence)
-        component_populations = _defense_quality_component_populations(eligible_rows)
-        components: list[tuple[str, float, float]] = []
-        quality_keys_list: list[str] = []
-        for name, weight in _DEFENSE_QUALITY_WEIGHTS.items():
-            value = component_values.get(name)
-            population = component_populations.get(name, ())
-            if value is None or not population:
-                continue
-            component_score = bisect.bisect_right(population, value) / len(population)
-            components.append((name, weight, component_score))
-            quality_keys_list.extend(_defense_quality_component_provenance(name, value, component_score))
-        total_weight = sum(weight for _name, weight, _component_score in components)
-        if total_weight <= 0.0:
-            return None
-        score = sum(weight * component_score for _name, weight, component_score in components) / total_weight
-        quality_rule = rule_name
-        quality_keys = (
-            *quality_keys_list,
-            "defense_quality_weights=dws:0.50,team_win_pct:0.25,team_point_diff:0.25",
-            f"available_weight={total_weight:.8f}",
-            "missing_components=omitted_and_available_weights_renormalized",
-            "team_population=unique_exact_team_within_same_season_same_league",
-        )
-    position = _listed_position_mix(evidence)
-    multiplier = 1.0
-    position_keys: tuple[str, ...] = ()
-    if position is not None:
-        mix, source = position
-        perimeter_role = sum(weight * _POSITION_ROLE[name] for name, weight in mix)
-        if perimeter_role < 0.5:
-            interior_multiplier = 1.0
-            perimeter_multiplier = 0.15 + 0.5 * perimeter_role
-        elif perimeter_role > 0.5:
-            interior_multiplier = 0.15 + 0.5 * (1.0 - perimeter_role)
-            perimeter_multiplier = 1.0
-        else:
-            interior_multiplier = perimeter_multiplier = 0.5
-        multiplier = interior_multiplier if field == "interior_defense" else perimeter_multiplier
-        position_keys = (
-            source,
-            "position_mix=" + ",".join(f"{name}:{weight:.6f}" for name, weight in mix),
-            f"perimeter_role={perimeter_role:.8f}",
-            f"position_side_multiplier={multiplier:.8f}",
-        )
+    if _league(evidence) == "BAA":
+        population = _baa_routed_defense_population(field, eligible_rows)
+        routed_score = score * multiplier
+        if len(population) >= 2 and population[-1] > population[0]:
+            minimum = population[0]
+            maximum = population[-1]
+            final_score = max(0.0, min(1.0, (routed_score - minimum) / (maximum - minimum)))
+            return {
+                "value": _legal_value(field, 25 + 74 * final_score),
+                "score": score,
+                "source_rule": quality_rule,
+                "evidence_keys": quality_keys + position_keys + (
+                    f"baa_routed_defense_score={routed_score:.8f}",
+                    f"baa_routed_defense_min={minimum:.8f}",
+                    f"baa_routed_defense_max={maximum:.8f}",
+                    f"baa_routed_defense_minmax_score={final_score:.8f}",
+                    "baa_final_mapping=minimum_routed_BAA_value:25,maximum_routed_BAA_value:99",
+                    "final_mapping=round(25+74*BAA_routed_minmax_score);clamp=25..99",
+                ),
+            }
     return {
-        "value": round(25 + score * 74 * multiplier),
+        "value": _legal_value(field, 25 + score * 74 * multiplier),
         "score": score,
         "source_rule": quality_rule,
-        "evidence_keys": quality_keys + position_keys,
+        "evidence_keys": quality_keys + position_keys + (
+            "final_mapping=round(25+74*defense_quality_score*reach_side_multiplier);clamp=25..99",
+        ),
     }
 
 
@@ -924,31 +1097,27 @@ def derive_tendency_hardfoul(evidence: Any, *, league_player_rows: Any = ()) -> 
     if games is None:
         return None
     era = player_era_context(evidence)
-    if era.season < 1960:
-        return {
-            "value": 100,
-            "source_rule": "derive_tendency_hardfoul_universal_pre_1960_maximum",
-            "evidence_keys": (
-                games[1],
-                *era.evidence_keys,
-                "season_boundary=season_ending_year<1960",
-                "HARDFOUL=100",
-                "scale_meaning=maximum_2K_propensity_not_literal_event_probability",
-            ),
-        }
-
-    if not 1970 <= era.season < 1990:
+    pre_1960 = era.season < 1960
+    if not pre_1960 and not 1970 <= era.season < 1990:
         return None
 
     result = _derive("derive_tendency_hardfoul", "t_hard_foul", evidence, league_player_rows)
     if result is None:
         return None
 
+    # Pre-1960 takes the same treatment as the 1970s and 80s: the era's physicality
+    # pins most players to the maximum, but the league's gentlest fifth keeps its own
+    # evidence. A flat 100 for every player alive gave 333 of 333 the same number and
+    # said nothing about any of them.
     score = result.get("score")
     if score is not None and float(score) <= _HARD_FOUL_LOW_CONTACT_EXCEPTION_MAX_SCORE:
         return {
             **result,
-            "source_rule": f"{result['source_rule']}_1970s_1980s_low_contact_exception",
+            "source_rule": (
+                "derive_tendency_hardfoul_pre_1960_low_contact_exception"
+                if pre_1960
+                else f"{result['source_rule']}_1970s_1980s_low_contact_exception"
+            ),
             "evidence_keys": tuple(result["evidence_keys"]) + (
                 *era.evidence_keys,
                 f"hard_foul_contact_score={float(score):.8f}",
@@ -960,7 +1129,11 @@ def derive_tendency_hardfoul(evidence: Any, *, league_player_rows: Any = ()) -> 
     return {
         **result,
         "value": 100,
-        "source_rule": "derive_tendency_hardfoul_1970s_1980s_most_players_maximum",
+        "source_rule": (
+            "derive_tendency_hardfoul_pre_1960_maximum"
+            if pre_1960
+            else "derive_tendency_hardfoul_1970s_1980s_most_players_maximum"
+        ),
         "evidence_keys": tuple(result["evidence_keys"]) + (
             *era.evidence_keys,
             f"player_evidence_hard_foul_value={base_value}",

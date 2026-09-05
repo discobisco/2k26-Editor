@@ -15,6 +15,724 @@
           }
         },
         {
+          "normalized_name": "ALLEYOOPTENDENCY",
+          "display_name": "AlleyOopTendency",
+          "versions": {
+            "2K27": {
+              "address": 355,
+              "hex": "0x163",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "ANTHROPOLOGISTBADGE",
+          "display_name": "ANTHROPOLOGISTBadge",
+          "versions": {
+            "2K27": {
+              "address": 447,
+              "bit_length": 1,
+              "bit_offset": 5,
+              "hex": "0x1BF",
+              "length": 1,
+              "readonly": true,
+              "startBit": 5,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "APPEARANCE",
+          "display_name": "Appearance",
+          "versions": {
+            "2K27": {
+              "address": 0,
+              "hex": "0x0",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "AUDIOSIGNATUREID",
+          "display_name": "AudioSignatureId",
+          "versions": {
+            "2K27": {
+              "address": 164,
+              "hex": "0xA4",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "BACKSTORY",
+          "display_name": "BackStory",
+          "versions": {
+            "2K27": {
+              "address": 381,
+              "enum": "STAFFDATA_BACKSTORY",
+              "hex": "0x17D",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "BENCHDEPTH",
+          "display_name": "BenchDepth",
+          "versions": {
+            "2K27": {
+              "address": 344,
+              "hex": "0x158",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "BENCHUTILIZATION",
+          "display_name": "BenchUtilization",
+          "versions": {
+            "2K27": {
+              "address": 336,
+              "hex": "0x150",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "BIG3ORBUSTBADGE",
+          "display_name": "BIG_3_OR_BUSTBadge",
+          "versions": {
+            "2K27": {
+              "address": 439,
+              "bit_length": 1,
+              "bit_offset": 2,
+              "hex": "0x1B7",
+              "length": 1,
+              "readonly": true,
+              "startBit": 2,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "BIGBUDGETBADGE",
+          "display_name": "BIG_BUDGETBadge",
+          "versions": {
+            "2K27": {
+              "address": 445,
+              "bit_length": 1,
+              "bit_offset": 7,
+              "hex": "0x1BD",
+              "length": 1,
+              "readonly": true,
+              "startBit": 7,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "BIGMANCOACHBADGE",
+          "display_name": "BIG_MAN_COACHBadge",
+          "versions": {
+            "2K27": {
+              "address": 430,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1AE",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "BLOCKBUSTERBADGE",
+          "display_name": "BLOCKBUSTERBadge",
+          "versions": {
+            "2K27": {
+              "address": 447,
+              "bit_length": 1,
+              "bit_offset": 4,
+              "hex": "0x1BF",
+              "length": 1,
+              "readonly": true,
+              "startBit": 4,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "BLOODHOUNDBADGE",
+          "display_name": "BLOODHOUNDBadge",
+          "versions": {
+            "2K27": {
+              "address": 425,
+              "bit_length": 1,
+              "bit_offset": 7,
+              "hex": "0x1A9",
+              "length": 1,
+              "readonly": true,
+              "startBit": 7,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "BRATPACKBADGE",
+          "display_name": "BRAT_PACKBadge",
+          "versions": {
+            "2K27": {
+              "address": 439,
+              "bit_length": 1,
+              "bit_offset": 0,
+              "hex": "0x1B7",
+              "length": 1,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "BULLYBADGE",
+          "display_name": "BULLYBadge",
+          "versions": {
+            "2K27": {
+              "address": 422,
+              "bit_length": 1,
+              "bit_offset": 7,
+              "hex": "0x1A6",
+              "length": 1,
+              "readonly": true,
+              "startBit": 7,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "BUSTABADGE",
+          "display_name": "BUSTABadge",
+          "versions": {
+            "2K27": {
+              "address": 448,
+              "bit_length": 1,
+              "bit_offset": 6,
+              "hex": "0x1C0",
+              "length": 1,
+              "readonly": true,
+              "startBit": 6,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "CALCULATORBADGE",
+          "display_name": "CALCULATORBadge",
+          "versions": {
+            "2K27": {
+              "address": 442,
+              "bit_length": 1,
+              "bit_offset": 3,
+              "hex": "0x1BA",
+              "length": 1,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "CAPITALISTBACKSTORYBADGE",
+          "display_name": "CAPITALIST_BACKSTORYBadge",
+          "versions": {
+            "2K27": {
+              "address": 442,
+              "bit_length": 1,
+              "bit_offset": 5,
+              "hex": "0x1BA",
+              "length": 1,
+              "readonly": true,
+              "startBit": 5,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "CAPITALISTEXCLUSIVEBADGE",
+          "display_name": "CAPITALIST_EXCLUSIVEBadge",
+          "versions": {
+            "2K27": {
+              "address": 442,
+              "bit_length": 1,
+              "bit_offset": 6,
+              "hex": "0x1BA",
+              "length": 1,
+              "readonly": true,
+              "startBit": 6,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "CARELESSBADGE",
+          "display_name": "CARELESSBadge",
+          "versions": {
+            "2K27": {
+              "address": 426,
+              "bit_length": 1,
+              "bit_offset": 5,
+              "hex": "0x1AA",
+              "length": 1,
+              "readonly": true,
+              "startBit": 5,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "CHATCONNOISSEURBADGE",
+          "display_name": "CHAT_CONNOISSEURBadge",
+          "versions": {
+            "2K27": {
+              "address": 449,
+              "bit_length": 1,
+              "bit_offset": 4,
+              "hex": "0x1C1",
+              "length": 1,
+              "readonly": true,
+              "startBit": 4,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "CLOSERBACKSTORYBADGE",
+          "display_name": "CLOSER_BACKSTORYBadge",
+          "versions": {
+            "2K27": {
+              "address": 443,
+              "bit_length": 1,
+              "bit_offset": 5,
+              "hex": "0x1BB",
+              "length": 1,
+              "readonly": true,
+              "startBit": 5,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "CLOSEREXCLUSIVEBADGE",
+          "display_name": "CLOSER_EXCLUSIVEBadge",
+          "versions": {
+            "2K27": {
+              "address": 443,
+              "bit_length": 1,
+              "bit_offset": 6,
+              "hex": "0x1BB",
+              "length": 1,
+              "readonly": true,
+              "startBit": 6,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "CLOUTBADGE",
+          "display_name": "CLOUTBadge",
+          "versions": {
+            "2K27": {
+              "address": 437,
+              "bit_length": 3,
+              "bit_offset": 4,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1B5",
+              "length": 3,
+              "readonly": true,
+              "startBit": 4,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "CLUTCHBADGE",
+          "display_name": "CLUTCHBadge",
+          "versions": {
+            "2K27": {
+              "address": 424,
+              "bit_length": 3,
+              "bit_offset": 3,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1A8",
+              "length": 3,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "COACHINGLEGENDBADGE",
+          "display_name": "COACHING_LEGENDBadge",
+          "versions": {
+            "2K27": {
+              "address": 423,
+              "bit_length": 3,
+              "bit_offset": 3,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1A7",
+              "length": 3,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "COACHINGSPECIALISTBADGE",
+          "display_name": "COACHING_SPECIALISTBadge",
+          "versions": {
+            "2K27": {
+              "address": 449,
+              "bit_length": 1,
+              "bit_offset": 0,
+              "hex": "0x1C1",
+              "length": 1,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "COASTALELITEBADGE",
+          "display_name": "COASTAL_ELITEBadge",
+          "versions": {
+            "2K27": {
+              "address": 445,
+              "bit_length": 1,
+              "bit_offset": 6,
+              "hex": "0x1BD",
+              "length": 1,
+              "readonly": true,
+              "startBit": 6,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "COLLABORATORBADGE",
+          "display_name": "COLLABORATORBadge",
+          "versions": {
+            "2K27": {
+              "address": 446,
+              "bit_length": 1,
+              "bit_offset": 6,
+              "hex": "0x1BE",
+              "length": 1,
+              "readonly": true,
+              "startBit": 6,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "COMPETITORBADGE",
+          "display_name": "COMPETITORBadge",
+          "versions": {
+            "2K27": {
+              "address": 425,
+              "bit_length": 3,
+              "bit_offset": 4,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1A9",
+              "length": 3,
+              "readonly": true,
+              "startBit": 4,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "CONNOISSEURBADGE",
+          "display_name": "CONNOISSEURBadge",
+          "versions": {
+            "2K27": {
+              "address": 438,
+              "bit_length": 1,
+              "bit_offset": 5,
+              "hex": "0x1B6",
+              "length": 1,
+              "readonly": true,
+              "startBit": 5,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "CRASHBOARD",
+          "display_name": "Crashboard",
+          "versions": {
+            "2K27": {
+              "address": 343,
+              "hex": "0x157",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "CUSTOMBACKSTORYBADGE",
+          "display_name": "CUSTOM_BACKSTORYBadge",
+          "versions": {
+            "2K27": {
+              "address": 443,
+              "bit_length": 1,
+              "bit_offset": 7,
+              "hex": "0x1BB",
+              "length": 1,
+              "readonly": true,
+              "startBit": 7,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "CUSTOMEXCLUSIVEBADGE",
+          "display_name": "CUSTOM_EXCLUSIVEBadge",
+          "versions": {
+            "2K27": {
+              "address": 444,
+              "bit_length": 1,
+              "bit_offset": 0,
+              "hex": "0x1BC",
+              "length": 1,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "DATAANALYSTBADGE",
+          "display_name": "DATA_ANALYSTBadge",
+          "versions": {
+            "2K27": {
+              "address": 447,
+              "bit_length": 1,
+              "bit_offset": 7,
+              "hex": "0x1BF",
+              "length": 1,
+              "readonly": true,
+              "startBit": 7,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "DATABROKERBADGE",
+          "display_name": "DATA_BROKERBadge",
+          "versions": {
+            "2K27": {
+              "address": 447,
+              "bit_length": 1,
+              "bit_offset": 6,
+              "hex": "0x1BF",
+              "length": 1,
+              "readonly": true,
+              "startBit": 6,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "DATELASTCHITCHATUSED",
+          "display_name": "DateLastChitChatUsed",
+          "versions": {
+            "2K27": {
+              "address": 176,
+              "hex": "0xB0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEDICATEDBADGE",
+          "display_name": "DEDICATEDBadge",
+          "versions": {
+            "2K27": {
+              "address": 426,
+              "bit_length": 3,
+              "bit_offset": 1,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1AA",
+              "length": 3,
+              "readonly": true,
+              "startBit": 1,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEEPBENCHBADGE",
+          "display_name": "DEEP_BENCHBadge",
+          "versions": {
+            "2K27": {
+              "address": 444,
+              "bit_length": 1,
+              "bit_offset": 5,
+              "hex": "0x1BC",
+              "length": 1,
+              "readonly": true,
+              "startBit": 5,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "DOMESTICSCOUTBADGE",
+          "display_name": "DOMESTIC_SCOUTBadge",
+          "versions": {
+            "2K27": {
+              "address": 431,
+              "bit_length": 3,
+              "bit_offset": 3,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1AF",
+              "length": 3,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "DOUBLETEAMTENDENCY",
+          "display_name": "DoubleTeamTendency",
+          "versions": {
+            "2K27": {
+              "address": 347,
+              "hex": "0x15B",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "DRIVETENDENCY",
+          "display_name": "DriveTendency",
+          "versions": {
+            "2K27": {
+              "address": 353,
+              "hex": "0x161",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "EARLYOFFENSE",
+          "display_name": "EarlyOffense",
+          "versions": {
+            "2K27": {
+              "address": 339,
+              "hex": "0x153",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "EAVESDROPPERBADGE",
+          "display_name": "EAVESDROPPERBadge",
+          "versions": {
+            "2K27": {
+              "address": 448,
+              "bit_length": 1,
+              "bit_offset": 0,
+              "hex": "0x1C0",
+              "length": 1,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ECONOMICALBADGE",
+          "display_name": "ECONOMICALBadge",
+          "versions": {
+            "2K27": {
+              "address": 422,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1A6",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "EXPERIMENTERBADGE",
+          "display_name": "EXPERIMENTERBadge",
+          "versions": {
+            "2K27": {
+              "address": 426,
+              "bit_length": 1,
+              "bit_offset": 6,
+              "hex": "0x1AA",
+              "length": 1,
+              "readonly": true,
+              "startBit": 6,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "EXPRESSIVENESS",
+          "display_name": "Expressiveness",
+          "versions": {
+            "2K27": {
+              "address": 332,
+              "bit_length": 3,
+              "bit_offset": 22,
+              "enum": "ROSTERDATA_EXPRESSIVENESS",
+              "hex": "0x14C",
+              "length": 3,
+              "readonly": true,
+              "startBit": 22,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "EYETESTBADGE",
+          "display_name": "EYE_TESTBadge",
+          "versions": {
+            "2K27": {
+              "address": 442,
+              "bit_length": 1,
+              "bit_offset": 4,
+              "hex": "0x1BA",
+              "length": 1,
+              "readonly": true,
+              "startBit": 4,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
           "normalized_name": "FACEID",
           "display_name": "Face ID",
           "versions": {
@@ -22,6 +740,67 @@
               "address": 274,
               "hex": "0x112",
               "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "FANPERCEPTION",
+          "display_name": "FanPerception",
+          "versions": {
+            "2K27": {
+              "address": 308,
+              "bit_length": 3,
+              "bit_offset": 24,
+              "hex": "0x134",
+              "length": 3,
+              "readonly": true,
+              "startBit": 24,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "FASTBREAK",
+          "display_name": "Fastbreak",
+          "versions": {
+            "2K27": {
+              "address": 342,
+              "hex": "0x156",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "FILMROOMBADGE",
+          "display_name": "FILM_ROOMBadge",
+          "versions": {
+            "2K27": {
+              "address": 448,
+              "bit_length": 1,
+              "bit_offset": 3,
+              "hex": "0x1C0",
+              "length": 1,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "FINANCIALADVISORBADGE",
+          "display_name": "FINANCIAL_ADVISORBadge",
+          "versions": {
+            "2K27": {
+              "address": 435,
+              "bit_length": 3,
+              "bit_offset": 3,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1B3",
+              "length": 3,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
             }
           }
         },
@@ -34,6 +813,356 @@
               "hex": "0x50",
               "length": 40,
               "type": "WString"
+            },
+            "2K27": {
+              "address": 80,
+              "array_count": 20,
+              "hex": "0x50",
+              "length": 20,
+              "readonly": true,
+              "type": "wstring"
+            }
+          }
+        },
+        {
+          "normalized_name": "FLOORGENERALBADGE",
+          "display_name": "FLOOR_GENERALBadge",
+          "versions": {
+            "2K27": {
+              "address": 444,
+              "bit_length": 1,
+              "bit_offset": 7,
+              "hex": "0x1BC",
+              "length": 1,
+              "readonly": true,
+              "startBit": 7,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "FOREIGNSCOUTBADGE",
+          "display_name": "FOREIGN_SCOUTBadge",
+          "versions": {
+            "2K27": {
+              "address": 432,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1B0",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "FORMERGMBADGE",
+          "display_name": "FORMER_GMBadge",
+          "versions": {
+            "2K27": {
+              "address": 420,
+              "bit_length": 1,
+              "bit_offset": 5,
+              "hex": "0x1A4",
+              "length": 1,
+              "readonly": true,
+              "startBit": 5,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "FORMERPLAYERBADGE",
+          "display_name": "FORMER_PLAYERBadge",
+          "versions": {
+            "2K27": {
+              "address": 423,
+              "bit_length": 1,
+              "bit_offset": 6,
+              "hex": "0x1A7",
+              "length": 1,
+              "readonly": true,
+              "startBit": 6,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "FORWARDEXPERTBADGE",
+          "display_name": "FORWARD_EXPERTBadge",
+          "versions": {
+            "2K27": {
+              "address": 448,
+              "bit_length": 1,
+              "bit_offset": 2,
+              "hex": "0x1C0",
+              "length": 1,
+              "readonly": true,
+              "startBit": 2,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "FRANCHISEHISTORY",
+          "display_name": "FranchiseHistory",
+          "versions": {
+            "2K27": {
+              "address": 308,
+              "bit_length": 3,
+              "bit_offset": 27,
+              "hex": "0x134",
+              "length": 3,
+              "readonly": true,
+              "startBit": 27,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "FRANCHISEMORALE",
+          "display_name": "FranchiseMorale",
+          "versions": {
+            "2K27": {
+              "address": 308,
+              "bit_length": 3,
+              "bit_offset": 15,
+              "hex": "0x134",
+              "length": 3,
+              "readonly": true,
+              "startBit": 15,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "FRANCHISEPROFIT",
+          "display_name": "FranchiseProfit",
+          "versions": {
+            "2K27": {
+              "address": 308,
+              "bit_length": 3,
+              "bit_offset": 18,
+              "hex": "0x134",
+              "length": 3,
+              "readonly": true,
+              "startBit": 18,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "FRANCHISESTAFFDATAINDEX",
+          "display_name": "FranchiseStaffDataIndex",
+          "versions": {
+            "2K27": {
+              "address": 332,
+              "bit_length": 16,
+              "bit_offset": 0,
+              "hex": "0x14C",
+              "length": 16,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "FRANCHISELEGACYBADGE",
+          "display_name": "FRANCHISE_LEGACYBadge",
+          "versions": {
+            "2K27": {
+              "address": 446,
+              "bit_length": 1,
+              "bit_offset": 4,
+              "hex": "0x1BE",
+              "length": 1,
+              "readonly": true,
+              "startBit": 4,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREEATTRIBUTEPOINTS",
+          "display_name": "FreeAttributePoints",
+          "versions": {
+            "2K27": {
+              "address": 380,
+              "hex": "0x17C",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "GAMBLERBADGE",
+          "display_name": "GAMBLERBadge",
+          "versions": {
+            "2K27": {
+              "address": 438,
+              "bit_length": 1,
+              "bit_offset": 6,
+              "hex": "0x1B6",
+              "length": 1,
+              "readonly": true,
+              "startBit": 6,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "GIFTOFGABBADGE",
+          "display_name": "GIFT_OF_GABBadge",
+          "versions": {
+            "2K27": {
+              "address": 444,
+              "bit_length": 1,
+              "bit_offset": 1,
+              "hex": "0x1BC",
+              "length": 1,
+              "readonly": true,
+              "startBit": 1,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "GOODRAPPORTBADGE",
+          "display_name": "GOOD_RAPPORTBadge",
+          "versions": {
+            "2K27": {
+              "address": 446,
+              "bit_length": 1,
+              "bit_offset": 5,
+              "hex": "0x1BE",
+              "length": 1,
+              "readonly": true,
+              "startBit": 5,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "GRAPHICID",
+          "display_name": "GraphicId",
+          "versions": {
+            "2K27": {
+              "address": 296,
+              "bit_length": 15,
+              "bit_offset": 16,
+              "hex": "0x128",
+              "length": 15,
+              "readonly": true,
+              "startBit": 16,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "GRITGRINDBADGE",
+          "display_name": "GRIT_GRINDBadge",
+          "versions": {
+            "2K27": {
+              "address": 445,
+              "bit_length": 1,
+              "bit_offset": 0,
+              "hex": "0x1BD",
+              "length": 1,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "GRIZZLEDBADGE",
+          "display_name": "GRIZZLEDBadge",
+          "versions": {
+            "2K27": {
+              "address": 439,
+              "bit_length": 1,
+              "bit_offset": 1,
+              "hex": "0x1B7",
+              "length": 1,
+              "readonly": true,
+              "startBit": 1,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "GUARDEXPERTBADGE",
+          "display_name": "GUARD_EXPERTBadge",
+          "versions": {
+            "2K27": {
+              "address": 448,
+              "bit_length": 1,
+              "bit_offset": 1,
+              "hex": "0x1C0",
+              "length": 1,
+              "readonly": true,
+              "startBit": 1,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "GUARDGURUBADGE",
+          "display_name": "GUARD_GURUBadge",
+          "versions": {
+            "2K27": {
+              "address": 429,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1AD",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "HARDPRACTICEBADGE",
+          "display_name": "HARD_PRACTICEBadge",
+          "versions": {
+            "2K27": {
+              "address": 445,
+              "bit_length": 1,
+              "bit_offset": 1,
+              "hex": "0x1BD",
+              "length": 1,
+              "readonly": true,
+              "startBit": 1,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "HEAD",
+          "display_name": "Head",
+          "versions": {
+            "2K27": {
+              "address": 8,
+              "hex": "0x8",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "HEADCONFIG",
+          "display_name": "HeadConfig",
+          "versions": {
+            "2K27": {
+              "address": 300,
+              "hex": "0x12C",
+              "readonly": true,
+              "type": "uint"
             }
           }
         },
@@ -54,6 +1183,195 @@
           }
         },
         {
+          "normalized_name": "HELPDEFENSE",
+          "display_name": "HelpDefense",
+          "versions": {
+            "2K27": {
+              "address": 357,
+              "hex": "0x165",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "HIGHOCTANEOFFBADGE",
+          "display_name": "HIGH_OCTANE_OFFBadge",
+          "versions": {
+            "2K27": {
+              "address": 444,
+              "bit_length": 1,
+              "bit_offset": 3,
+              "hex": "0x1BC",
+              "length": 1,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "HOMEGROWNBADGE",
+          "display_name": "HOME_GROWNBadge",
+          "versions": {
+            "2K27": {
+              "address": 445,
+              "bit_length": 1,
+              "bit_offset": 5,
+              "hex": "0x1BD",
+              "length": 1,
+              "readonly": true,
+              "startBit": 5,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "HOTSTREAKBADGE",
+          "display_name": "HOT_STREAKBadge",
+          "versions": {
+            "2K27": {
+              "address": 444,
+              "bit_length": 1,
+              "bit_offset": 4,
+              "hex": "0x1BC",
+              "length": 1,
+              "readonly": true,
+              "startBit": 4,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "INTENSETRAINERBADGE",
+          "display_name": "INTENSE_TRAINERBadge",
+          "versions": {
+            "2K27": {
+              "address": 445,
+              "bit_length": 1,
+              "bit_offset": 3,
+              "hex": "0x1BD",
+              "length": 1,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "INTROVERTBADGE",
+          "display_name": "INTROVERTBadge",
+          "versions": {
+            "2K27": {
+              "address": 422,
+              "bit_length": 1,
+              "bit_offset": 6,
+              "hex": "0x1A6",
+              "length": 1,
+              "readonly": true,
+              "startBit": 6,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ISGENERATED",
+          "display_name": "IsGenerated",
+          "versions": {
+            "2K27": {
+              "address": 384,
+              "bit_length": 1,
+              "bit_offset": 6,
+              "hex": "0x180",
+              "length": 1,
+              "readonly": true,
+              "startBit": 6,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ISHEAVY",
+          "display_name": "IsHeavy",
+          "versions": {
+            "2K27": {
+              "address": 324,
+              "bit_length": 1,
+              "bit_offset": 31,
+              "hex": "0x144",
+              "length": 1,
+              "readonly": true,
+              "startBit": 31,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ISNEWFA",
+          "display_name": "IsNewFA",
+          "versions": {
+            "2K27": {
+              "address": 384,
+              "bit_length": 1,
+              "bit_offset": 7,
+              "hex": "0x180",
+              "length": 1,
+              "readonly": true,
+              "startBit": 7,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ISSPECIAL",
+          "display_name": "IsSpecial",
+          "versions": {
+            "2K27": {
+              "address": 324,
+              "bit_length": 1,
+              "bit_offset": 30,
+              "hex": "0x144",
+              "length": 1,
+              "readonly": true,
+              "startBit": 30,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ISUSER",
+          "display_name": "IsUser",
+          "versions": {
+            "2K27": {
+              "address": 332,
+              "bit_length": 1,
+              "bit_offset": 30,
+              "hex": "0x14C",
+              "length": 1,
+              "readonly": true,
+              "startBit": 30,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "JOB",
+          "display_name": "Job",
+          "versions": {
+            "2K27": {
+              "address": 386,
+              "bit_length": 5,
+              "bit_offset": 0,
+              "enum": "STAFFDATA_JOB",
+              "hex": "0x182",
+              "length": 5,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
           "normalized_name": "LASTNAME",
           "display_name": "Last Name",
           "versions": {
@@ -62,6 +1380,829 @@
               "hex": "0x78",
               "length": 40,
               "type": "WString"
+            },
+            "2K27": {
+              "address": 120,
+              "array_count": 20,
+              "hex": "0x78",
+              "length": 20,
+              "readonly": true,
+              "type": "wstring"
+            }
+          }
+        },
+        {
+          "normalized_name": "LAZYBADGE",
+          "display_name": "LAZYBadge",
+          "versions": {
+            "2K27": {
+              "address": 426,
+              "bit_length": 1,
+              "bit_offset": 4,
+              "hex": "0x1AA",
+              "length": 1,
+              "readonly": true,
+              "startBit": 4,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "LINEUPFORMFACTOR",
+          "display_name": "LineupFormFactor",
+          "versions": {
+            "2K27": {
+              "address": 345,
+              "hex": "0x159",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOADMANAGEMENTBADGE",
+          "display_name": "LOAD_MANAGEMENTBadge",
+          "versions": {
+            "2K27": {
+              "address": 445,
+              "bit_length": 1,
+              "bit_offset": 4,
+              "hex": "0x1BD",
+              "length": 1,
+              "readonly": true,
+              "startBit": 4,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOOSELIPSBADGE",
+          "display_name": "LOOSE_LIPSBadge",
+          "versions": {
+            "2K27": {
+              "address": 420,
+              "bit_length": 1,
+              "bit_offset": 4,
+              "hex": "0x1A4",
+              "length": 1,
+              "readonly": true,
+              "startBit": 4,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOVEABLELOSERBADGE",
+          "display_name": "LOVEABLE_LOSERBadge",
+          "versions": {
+            "2K27": {
+              "address": 447,
+              "bit_length": 1,
+              "bit_offset": 2,
+              "hex": "0x1BF",
+              "length": 1,
+              "readonly": true,
+              "startBit": 2,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOWERBODYSPECIALISTBADGE",
+          "display_name": "LOWER_BODY_SPECIALISTBadge",
+          "versions": {
+            "2K27": {
+              "address": 428,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1AC",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOWPRIORITY1",
+          "display_name": "LowPriority1",
+          "versions": {
+            "2K27": {
+              "address": 316,
+              "bit_length": 4,
+              "bit_offset": 4,
+              "hex": "0x13C",
+              "length": 4,
+              "readonly": true,
+              "startBit": 4,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOWPRIORITY2",
+          "display_name": "LowPriority2",
+          "versions": {
+            "2K27": {
+              "address": 316,
+              "bit_length": 4,
+              "bit_offset": 8,
+              "hex": "0x13C",
+              "length": 4,
+              "readonly": true,
+              "startBit": 8,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOWPRIORITY3",
+          "display_name": "LowPriority3",
+          "versions": {
+            "2K27": {
+              "address": 316,
+              "bit_length": 4,
+              "bit_offset": 12,
+              "hex": "0x13C",
+              "length": 4,
+              "readonly": true,
+              "startBit": 12,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOYALTYOATHBADGE",
+          "display_name": "LOYALTY_OATHBadge",
+          "versions": {
+            "2K27": {
+              "address": 447,
+              "bit_length": 1,
+              "bit_offset": 0,
+              "hex": "0x1BF",
+              "length": 1,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "LYNCHPINPLAYERTYPE",
+          "display_name": "LynchpinPlayerType",
+          "versions": {
+            "2K27": {
+              "address": 320,
+              "bit_length": 4,
+              "bit_offset": 28,
+              "hex": "0x140",
+              "length": 4,
+              "readonly": true,
+              "startBit": 28,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "LYNCHPINPOSITION",
+          "display_name": "LynchpinPosition",
+          "versions": {
+            "2K27": {
+              "address": 320,
+              "bit_length": 4,
+              "bit_offset": 24,
+              "hex": "0x140",
+              "length": 4,
+              "readonly": true,
+              "startBit": 24,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "MARKETERBADGE",
+          "display_name": "MARKETERBadge",
+          "versions": {
+            "2K27": {
+              "address": 446,
+              "bit_length": 1,
+              "bit_offset": 0,
+              "hex": "0x1BE",
+              "length": 1,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "MBAANDASMILEBADGE",
+          "display_name": "MBA_AND_A_SMILEBadge",
+          "versions": {
+            "2K27": {
+              "address": 449,
+              "bit_length": 1,
+              "bit_offset": 2,
+              "hex": "0x1C1",
+              "length": 1,
+              "readonly": true,
+              "startBit": 2,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "MEDHEADBADGE",
+          "display_name": "MED_HEADBadge",
+          "versions": {
+            "2K27": {
+              "address": 427,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1AB",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "MENTORBADGE",
+          "display_name": "MENTORBadge",
+          "versions": {
+            "2K27": {
+              "address": 437,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1B5",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "MINDGAMESBADGE",
+          "display_name": "MIND_GAMESBadge",
+          "versions": {
+            "2K27": {
+              "address": 440,
+              "bit_length": 3,
+              "bit_offset": 3,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1B8",
+              "length": 3,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "MYTEAMAUCTIONABLE",
+          "display_name": "MyTeamAuctionable",
+          "versions": {
+            "2K27": {
+              "address": 332,
+              "bit_length": 1,
+              "bit_offset": 31,
+              "hex": "0x14C",
+              "length": 1,
+              "readonly": true,
+              "startBit": 31,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "MYTEAMCOLOR",
+          "display_name": "MyTeamColor",
+          "versions": {
+            "2K27": {
+              "address": 332,
+              "bit_length": 5,
+              "bit_offset": 17,
+              "hex": "0x14C",
+              "length": 5,
+              "readonly": true,
+              "startBit": 17,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "MYTEAMINCLUDE",
+          "display_name": "MyTeamInclude",
+          "versions": {
+            "2K27": {
+              "address": 332,
+              "bit_length": 1,
+              "bit_offset": 16,
+              "hex": "0x14C",
+              "length": 1,
+              "readonly": true,
+              "startBit": 16,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "MYTEAMTEAM",
+          "display_name": "MyTeamTeam",
+          "versions": {
+            "2K27": {
+              "address": 40,
+              "hex": "0x28",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "MYTEAMTHEME",
+          "display_name": "MyTeamTheme",
+          "versions": {
+            "2K27": {
+              "address": 172,
+              "hex": "0xAC",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NONEBADGE",
+          "display_name": "NONEBadge",
+          "versions": {
+            "2K27": {
+              "address": 420,
+              "bit_length": 1,
+              "bit_offset": 0,
+              "hex": "0x1A4",
+              "length": 1,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "NPCSIGNATUREID",
+          "display_name": "NPCSignatureId",
+          "versions": {
+            "2K27": {
+              "address": 180,
+              "hex": "0xB4",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "OFFBALLDEFAGGRESSIVENESS",
+          "display_name": "OffBallDefAggressiveness",
+          "versions": {
+            "2K27": {
+              "address": 340,
+              "hex": "0x154",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "ONBALLDEFAGGRESSIVENESS",
+          "display_name": "OnBallDefAggressiveness",
+          "versions": {
+            "2K27": {
+              "address": 341,
+              "hex": "0x155",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "OPPORTUNISTBADGE",
+          "display_name": "OPPORTUNISTBadge",
+          "versions": {
+            "2K27": {
+              "address": 438,
+              "bit_length": 1,
+              "bit_offset": 4,
+              "hex": "0x1B6",
+              "length": 1,
+              "readonly": true,
+              "startBit": 4,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ORIGINALBENCHUTILIZATION",
+          "display_name": "OriginalBenchUtilization",
+          "versions": {
+            "2K27": {
+              "address": 337,
+              "hex": "0x151",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "ORIGINALFANPERCEPTION",
+          "display_name": "OriginalFanPerception",
+          "versions": {
+            "2K27": {
+              "address": 312,
+              "bit_length": 3,
+              "bit_offset": 18,
+              "hex": "0x138",
+              "length": 3,
+              "readonly": true,
+              "startBit": 18,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ORIGINALFRANCHISEHISTORY",
+          "display_name": "OriginalFranchiseHistory",
+          "versions": {
+            "2K27": {
+              "address": 312,
+              "bit_length": 3,
+              "bit_offset": 21,
+              "hex": "0x138",
+              "length": 3,
+              "readonly": true,
+              "startBit": 21,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ORIGINALFRANCHISEMORALE",
+          "display_name": "OriginalFranchiseMorale",
+          "versions": {
+            "2K27": {
+              "address": 312,
+              "bit_length": 3,
+              "bit_offset": 9,
+              "hex": "0x138",
+              "length": 3,
+              "readonly": true,
+              "startBit": 9,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ORIGINALFRANCHISEPROFIT",
+          "display_name": "OriginalFranchiseProfit",
+          "versions": {
+            "2K27": {
+              "address": 312,
+              "bit_length": 3,
+              "bit_offset": 12,
+              "hex": "0x138",
+              "length": 3,
+              "readonly": true,
+              "startBit": 12,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ORIGINALTEAMSUCCESS",
+          "display_name": "OriginalTeamSuccess",
+          "versions": {
+            "2K27": {
+              "address": 312,
+              "bit_length": 3,
+              "bit_offset": 15,
+              "hex": "0x138",
+              "length": 3,
+              "readonly": true,
+              "startBit": 15,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "OURHOUSEBADGE",
+          "display_name": "OUR_HOUSEBadge",
+          "versions": {
+            "2K27": {
+              "address": 436,
+              "bit_length": 3,
+              "bit_offset": 3,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1B4",
+              "length": 3,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "PACKAGEDEALBADGE",
+          "display_name": "PACKAGE_DEALBadge",
+          "versions": {
+            "2K27": {
+              "address": 440,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1B8",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "PADDING0",
+          "display_name": "Padding0",
+          "versions": {
+            "2K27": {
+              "address": 290,
+              "bit_length": 7,
+              "bit_offset": 9,
+              "hex": "0x122",
+              "length": 7,
+              "readonly": true,
+              "startBit": 9,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "PADDING1",
+          "display_name": "Padding1",
+          "versions": {
+            "2K27": {
+              "address": 304,
+              "bit_length": 1,
+              "bit_offset": 31,
+              "hex": "0x130",
+              "length": 1,
+              "readonly": true,
+              "startBit": 31,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "PADDING2",
+          "display_name": "Padding2",
+          "versions": {
+            "2K27": {
+              "address": 308,
+              "bit_length": 2,
+              "bit_offset": 30,
+              "hex": "0x134",
+              "length": 2,
+              "readonly": true,
+              "startBit": 30,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "PASSIVEBADGE",
+          "display_name": "PASSIVEBadge",
+          "versions": {
+            "2K27": {
+              "address": 438,
+              "bit_length": 1,
+              "bit_offset": 7,
+              "hex": "0x1B6",
+              "length": 1,
+              "readonly": true,
+              "startBit": 7,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "PERIMETERDMASTERBADGE",
+          "display_name": "PERIMETER_D_MASTERBadge",
+          "versions": {
+            "2K27": {
+              "address": 431,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1AF",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "PHYSIOBADGE",
+          "display_name": "PHYSIOBadge",
+          "versions": {
+            "2K27": {
+              "address": 434,
+              "bit_length": 3,
+              "bit_offset": 3,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1B2",
+              "length": 3,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "PICKPOCKETBADGE",
+          "display_name": "PICK_POCKETBadge",
+          "versions": {
+            "2K27": {
+              "address": 447,
+              "bit_length": 1,
+              "bit_offset": 3,
+              "hex": "0x1BF",
+              "length": 1,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYBOOKID",
+          "display_name": "PlaybookID",
+          "versions": {
+            "2K27": {
+              "address": 290,
+              "bit_length": 9,
+              "bit_offset": 0,
+              "enum": "PLAYBOOK_ID",
+              "hex": "0x122",
+              "length": 9,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYERUNIQUEID",
+          "display_name": "PlayerUniqueId",
+          "versions": {
+            "2K27": {
+              "address": 168,
+              "hex": "0xA8",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYERBACKSTORYBADGE",
+          "display_name": "PLAYER_BACKSTORYBadge",
+          "versions": {
+            "2K27": {
+              "address": 443,
+              "bit_length": 1,
+              "bit_offset": 3,
+              "hex": "0x1BB",
+              "length": 1,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYEREXCLUSIVEBADGE",
+          "display_name": "PLAYER_EXCLUSIVEBadge",
+          "versions": {
+            "2K27": {
+              "address": 443,
+              "bit_length": 1,
+              "bit_offset": 4,
+              "hex": "0x1BB",
+              "length": 1,
+              "readonly": true,
+              "startBit": 4,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "POEDEFENSE",
+          "display_name": "POEDefense",
+          "versions": {
+            "2K27": {
+              "address": 324,
+              "bit_length": 5,
+              "bit_offset": 0,
+              "enum": "STAFFDATA_POES",
+              "hex": "0x144",
+              "length": 5,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "POEDEFENSE2",
+          "display_name": "POEDefense2",
+          "versions": {
+            "2K27": {
+              "address": 324,
+              "bit_length": 5,
+              "bit_offset": 5,
+              "enum": "STAFFDATA_POES",
+              "hex": "0x144",
+              "length": 5,
+              "readonly": true,
+              "startBit": 5,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "POEDEFENSE3",
+          "display_name": "POEDefense3",
+          "versions": {
+            "2K27": {
+              "address": 324,
+              "bit_length": 5,
+              "bit_offset": 10,
+              "enum": "STAFFDATA_POES",
+              "hex": "0x144",
+              "length": 5,
+              "readonly": true,
+              "startBit": 10,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "POEOFFENSE",
+          "display_name": "POEOffense",
+          "versions": {
+            "2K27": {
+              "address": 324,
+              "bit_length": 5,
+              "bit_offset": 15,
+              "enum": "STAFFDATA_POES",
+              "hex": "0x144",
+              "length": 5,
+              "readonly": true,
+              "startBit": 15,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "POEOFFENSE2",
+          "display_name": "POEOffense2",
+          "versions": {
+            "2K27": {
+              "address": 324,
+              "bit_length": 5,
+              "bit_offset": 20,
+              "enum": "STAFFDATA_POES",
+              "hex": "0x144",
+              "length": 5,
+              "readonly": true,
+              "startBit": 20,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "POEOFFENSE3",
+          "display_name": "POEOffense3",
+          "versions": {
+            "2K27": {
+              "address": 324,
+              "bit_length": 5,
+              "bit_offset": 25,
+              "enum": "STAFFDATA_POES",
+              "hex": "0x144",
+              "length": 5,
+              "readonly": true,
+              "startBit": 25,
+              "type": "bitfield"
             }
           }
         },
@@ -74,7 +2215,1438 @@
               "hex": "0x16a",
               "length": 1,
               "readonly": true,
-              "type": "ubyte"
+              "type": "ubyte",
+              "value_mapping": {
+                "0": "Head Coach",
+                "1": "Head Scout",
+                "10": "Wing Whisperer",
+                "11": "Big Man Coach",
+                "12": "Post D Coach",
+                "13": "Perimeter D Coach",
+                "14": "Domestic Scout",
+                "15": "Domestic Scout",
+                "19": "Foreign Scout",
+                "2": "Team Doctor",
+                "20": "Strength Trainer",
+                "21": "Stamina Trainer",
+                "22": "Sports Psych",
+                "23": "Sports Science",
+                "24": "Physio",
+                "25": "Sleep Doctor",
+                "3": "GM",
+                "4": "CFO",
+                "5": "Governor",
+                "6": "Assistant Head Coach",
+                "7": "Assistant GM",
+                "8": "Shot Doctor",
+                "9": "Guard Guru"
+              }
+            }
+          }
+        },
+        {
+          "normalized_name": "POSTUPTENDENCY",
+          "display_name": "PostUpTendency",
+          "versions": {
+            "2K27": {
+              "address": 354,
+              "hex": "0x162",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "POSTDMASTERBADGE",
+          "display_name": "POST_D_MASTERBadge",
+          "versions": {
+            "2K27": {
+              "address": 430,
+              "bit_length": 3,
+              "bit_offset": 3,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1AE",
+              "length": 3,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "PREFERENCEPLAYERAGE",
+          "display_name": "PreferencePlayerAge",
+          "versions": {
+            "2K27": {
+              "address": 338,
+              "hex": "0x152",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "PROMOTERBADGE",
+          "display_name": "PROMOTERBadge",
+          "versions": {
+            "2K27": {
+              "address": 422,
+              "bit_length": 3,
+              "bit_offset": 3,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1A6",
+              "length": 3,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "QUANTBACKSTORYBADGE",
+          "display_name": "QUANT_BACKSTORYBadge",
+          "versions": {
+            "2K27": {
+              "address": 442,
+              "bit_length": 1,
+              "bit_offset": 7,
+              "hex": "0x1BA",
+              "length": 1,
+              "readonly": true,
+              "startBit": 7,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "QUANTEXCLUSIVEBADGE",
+          "display_name": "QUANT_EXCLUSIVEBadge",
+          "versions": {
+            "2K27": {
+              "address": 443,
+              "bit_length": 1,
+              "bit_offset": 0,
+              "hex": "0x1BB",
+              "length": 1,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "RECRUITERBADGE",
+          "display_name": "RECRUITERBadge",
+          "versions": {
+            "2K27": {
+              "address": 421,
+              "bit_length": 3,
+              "bit_offset": 3,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1A5",
+              "length": 3,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "RECRUITINGBADGE",
+          "display_name": "RECRUITINGBadge",
+          "versions": {
+            "2K27": {
+              "address": 446,
+              "bit_length": 1,
+              "bit_offset": 7,
+              "hex": "0x1BE",
+              "length": 1,
+              "readonly": true,
+              "startBit": 7,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "REJUVENATORBADGE",
+          "display_name": "REJUVENATORBadge",
+          "versions": {
+            "2K27": {
+              "address": 425,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1A9",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "RELENTLESSBADGE",
+          "display_name": "RELENTLESSBadge",
+          "versions": {
+            "2K27": {
+              "address": 426,
+              "bit_length": 1,
+              "bit_offset": 7,
+              "hex": "0x1AA",
+              "length": 1,
+              "readonly": true,
+              "startBit": 7,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "REVOLVINGDOORBADGE",
+          "display_name": "REVOLVING_DOORBadge",
+          "versions": {
+            "2K27": {
+              "address": 446,
+              "bit_length": 1,
+              "bit_offset": 3,
+              "hex": "0x1BE",
+              "length": 1,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ROSTERQUALITY0",
+          "display_name": "RosterQuality0",
+          "versions": {
+            "2K27": {
+              "address": 320,
+              "bit_length": 4,
+              "bit_offset": 0,
+              "hex": "0x140",
+              "length": 4,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ROSTERQUALITY0SCOPE",
+          "display_name": "RosterQuality0Scope",
+          "versions": {
+            "2K27": {
+              "address": 320,
+              "bit_length": 4,
+              "bit_offset": 4,
+              "hex": "0x140",
+              "length": 4,
+              "readonly": true,
+              "startBit": 4,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ROSTERQUALITY1",
+          "display_name": "RosterQuality1",
+          "versions": {
+            "2K27": {
+              "address": 320,
+              "bit_length": 4,
+              "bit_offset": 8,
+              "hex": "0x140",
+              "length": 4,
+              "readonly": true,
+              "startBit": 8,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ROSTERQUALITY1SCOPE",
+          "display_name": "RosterQuality1Scope",
+          "versions": {
+            "2K27": {
+              "address": 320,
+              "bit_length": 4,
+              "bit_offset": 12,
+              "hex": "0x140",
+              "length": 4,
+              "readonly": true,
+              "startBit": 12,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ROSTERQUALITY2",
+          "display_name": "RosterQuality2",
+          "versions": {
+            "2K27": {
+              "address": 320,
+              "bit_length": 4,
+              "bit_offset": 16,
+              "hex": "0x140",
+              "length": 4,
+              "readonly": true,
+              "startBit": 16,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ROSTERQUALITY2SCOPE",
+          "display_name": "RosterQuality2Scope",
+          "versions": {
+            "2K27": {
+              "address": 320,
+              "bit_length": 4,
+              "bit_offset": 20,
+              "hex": "0x140",
+              "length": 4,
+              "readonly": true,
+              "startBit": 20,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "RUNPLAYTENDENCY",
+          "display_name": "RunPlayTendency",
+          "versions": {
+            "2K27": {
+              "address": 346,
+              "hex": "0x15A",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SCOUTBACKSTORYBADGE",
+          "display_name": "SCOUT_BACKSTORYBadge",
+          "versions": {
+            "2K27": {
+              "address": 443,
+              "bit_length": 1,
+              "bit_offset": 1,
+              "hex": "0x1BB",
+              "length": 1,
+              "readonly": true,
+              "startBit": 1,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "SCOUTEXCLUSIVEBADGE",
+          "display_name": "SCOUT_EXCLUSIVEBadge",
+          "versions": {
+            "2K27": {
+              "address": 443,
+              "bit_length": 1,
+              "bit_offset": 2,
+              "hex": "0x1BB",
+              "length": 1,
+              "readonly": true,
+              "startBit": 2,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS0",
+          "display_name": "SeasonStats[0]",
+          "versions": {
+            "2K27": {
+              "address": 184,
+              "array_count": 52,
+              "array_index": 0,
+              "hex": "0xB8",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS10",
+          "display_name": "SeasonStats[10]",
+          "versions": {
+            "2K27": {
+              "address": 204,
+              "array_count": 52,
+              "array_index": 10,
+              "hex": "0xCC",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS11",
+          "display_name": "SeasonStats[11]",
+          "versions": {
+            "2K27": {
+              "address": 206,
+              "array_count": 52,
+              "array_index": 11,
+              "hex": "0xCE",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS12",
+          "display_name": "SeasonStats[12]",
+          "versions": {
+            "2K27": {
+              "address": 208,
+              "array_count": 52,
+              "array_index": 12,
+              "hex": "0xD0",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS13",
+          "display_name": "SeasonStats[13]",
+          "versions": {
+            "2K27": {
+              "address": 210,
+              "array_count": 52,
+              "array_index": 13,
+              "hex": "0xD2",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS14",
+          "display_name": "SeasonStats[14]",
+          "versions": {
+            "2K27": {
+              "address": 212,
+              "array_count": 52,
+              "array_index": 14,
+              "hex": "0xD4",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS15",
+          "display_name": "SeasonStats[15]",
+          "versions": {
+            "2K27": {
+              "address": 214,
+              "array_count": 52,
+              "array_index": 15,
+              "hex": "0xD6",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS16",
+          "display_name": "SeasonStats[16]",
+          "versions": {
+            "2K27": {
+              "address": 216,
+              "array_count": 52,
+              "array_index": 16,
+              "hex": "0xD8",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS17",
+          "display_name": "SeasonStats[17]",
+          "versions": {
+            "2K27": {
+              "address": 218,
+              "array_count": 52,
+              "array_index": 17,
+              "hex": "0xDA",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS18",
+          "display_name": "SeasonStats[18]",
+          "versions": {
+            "2K27": {
+              "address": 220,
+              "array_count": 52,
+              "array_index": 18,
+              "hex": "0xDC",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS19",
+          "display_name": "SeasonStats[19]",
+          "versions": {
+            "2K27": {
+              "address": 222,
+              "array_count": 52,
+              "array_index": 19,
+              "hex": "0xDE",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS1",
+          "display_name": "SeasonStats[1]",
+          "versions": {
+            "2K27": {
+              "address": 186,
+              "array_count": 52,
+              "array_index": 1,
+              "hex": "0xBA",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS20",
+          "display_name": "SeasonStats[20]",
+          "versions": {
+            "2K27": {
+              "address": 224,
+              "array_count": 52,
+              "array_index": 20,
+              "hex": "0xE0",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS21",
+          "display_name": "SeasonStats[21]",
+          "versions": {
+            "2K27": {
+              "address": 226,
+              "array_count": 52,
+              "array_index": 21,
+              "hex": "0xE2",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS22",
+          "display_name": "SeasonStats[22]",
+          "versions": {
+            "2K27": {
+              "address": 228,
+              "array_count": 52,
+              "array_index": 22,
+              "hex": "0xE4",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS23",
+          "display_name": "SeasonStats[23]",
+          "versions": {
+            "2K27": {
+              "address": 230,
+              "array_count": 52,
+              "array_index": 23,
+              "hex": "0xE6",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS24",
+          "display_name": "SeasonStats[24]",
+          "versions": {
+            "2K27": {
+              "address": 232,
+              "array_count": 52,
+              "array_index": 24,
+              "hex": "0xE8",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS25",
+          "display_name": "SeasonStats[25]",
+          "versions": {
+            "2K27": {
+              "address": 234,
+              "array_count": 52,
+              "array_index": 25,
+              "hex": "0xEA",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS26",
+          "display_name": "SeasonStats[26]",
+          "versions": {
+            "2K27": {
+              "address": 236,
+              "array_count": 52,
+              "array_index": 26,
+              "hex": "0xEC",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS27",
+          "display_name": "SeasonStats[27]",
+          "versions": {
+            "2K27": {
+              "address": 238,
+              "array_count": 52,
+              "array_index": 27,
+              "hex": "0xEE",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS28",
+          "display_name": "SeasonStats[28]",
+          "versions": {
+            "2K27": {
+              "address": 240,
+              "array_count": 52,
+              "array_index": 28,
+              "hex": "0xF0",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS29",
+          "display_name": "SeasonStats[29]",
+          "versions": {
+            "2K27": {
+              "address": 242,
+              "array_count": 52,
+              "array_index": 29,
+              "hex": "0xF2",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS2",
+          "display_name": "SeasonStats[2]",
+          "versions": {
+            "2K27": {
+              "address": 188,
+              "array_count": 52,
+              "array_index": 2,
+              "hex": "0xBC",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS30",
+          "display_name": "SeasonStats[30]",
+          "versions": {
+            "2K27": {
+              "address": 244,
+              "array_count": 52,
+              "array_index": 30,
+              "hex": "0xF4",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS31",
+          "display_name": "SeasonStats[31]",
+          "versions": {
+            "2K27": {
+              "address": 246,
+              "array_count": 52,
+              "array_index": 31,
+              "hex": "0xF6",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS32",
+          "display_name": "SeasonStats[32]",
+          "versions": {
+            "2K27": {
+              "address": 248,
+              "array_count": 52,
+              "array_index": 32,
+              "hex": "0xF8",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS33",
+          "display_name": "SeasonStats[33]",
+          "versions": {
+            "2K27": {
+              "address": 250,
+              "array_count": 52,
+              "array_index": 33,
+              "hex": "0xFA",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS34",
+          "display_name": "SeasonStats[34]",
+          "versions": {
+            "2K27": {
+              "address": 252,
+              "array_count": 52,
+              "array_index": 34,
+              "hex": "0xFC",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS35",
+          "display_name": "SeasonStats[35]",
+          "versions": {
+            "2K27": {
+              "address": 254,
+              "array_count": 52,
+              "array_index": 35,
+              "hex": "0xFE",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS36",
+          "display_name": "SeasonStats[36]",
+          "versions": {
+            "2K27": {
+              "address": 256,
+              "array_count": 52,
+              "array_index": 36,
+              "hex": "0x100",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS37",
+          "display_name": "SeasonStats[37]",
+          "versions": {
+            "2K27": {
+              "address": 258,
+              "array_count": 52,
+              "array_index": 37,
+              "hex": "0x102",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS38",
+          "display_name": "SeasonStats[38]",
+          "versions": {
+            "2K27": {
+              "address": 260,
+              "array_count": 52,
+              "array_index": 38,
+              "hex": "0x104",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS39",
+          "display_name": "SeasonStats[39]",
+          "versions": {
+            "2K27": {
+              "address": 262,
+              "array_count": 52,
+              "array_index": 39,
+              "hex": "0x106",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS3",
+          "display_name": "SeasonStats[3]",
+          "versions": {
+            "2K27": {
+              "address": 190,
+              "array_count": 52,
+              "array_index": 3,
+              "hex": "0xBE",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS40",
+          "display_name": "SeasonStats[40]",
+          "versions": {
+            "2K27": {
+              "address": 264,
+              "array_count": 52,
+              "array_index": 40,
+              "hex": "0x108",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS41",
+          "display_name": "SeasonStats[41]",
+          "versions": {
+            "2K27": {
+              "address": 266,
+              "array_count": 52,
+              "array_index": 41,
+              "hex": "0x10A",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS42",
+          "display_name": "SeasonStats[42]",
+          "versions": {
+            "2K27": {
+              "address": 268,
+              "array_count": 52,
+              "array_index": 42,
+              "hex": "0x10C",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS43",
+          "display_name": "SeasonStats[43]",
+          "versions": {
+            "2K27": {
+              "address": 270,
+              "array_count": 52,
+              "array_index": 43,
+              "hex": "0x10E",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS44",
+          "display_name": "SeasonStats[44]",
+          "versions": {
+            "2K27": {
+              "address": 272,
+              "array_count": 52,
+              "array_index": 44,
+              "hex": "0x110",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS45",
+          "display_name": "SeasonStats[45]",
+          "versions": {
+            "2K27": {
+              "address": 274,
+              "array_count": 52,
+              "array_index": 45,
+              "hex": "0x112",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS46",
+          "display_name": "SeasonStats[46]",
+          "versions": {
+            "2K27": {
+              "address": 276,
+              "array_count": 52,
+              "array_index": 46,
+              "hex": "0x114",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS47",
+          "display_name": "SeasonStats[47]",
+          "versions": {
+            "2K27": {
+              "address": 278,
+              "array_count": 52,
+              "array_index": 47,
+              "hex": "0x116",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS48",
+          "display_name": "SeasonStats[48]",
+          "versions": {
+            "2K27": {
+              "address": 280,
+              "array_count": 52,
+              "array_index": 48,
+              "hex": "0x118",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS49",
+          "display_name": "SeasonStats[49]",
+          "versions": {
+            "2K27": {
+              "address": 282,
+              "array_count": 52,
+              "array_index": 49,
+              "hex": "0x11A",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS4",
+          "display_name": "SeasonStats[4]",
+          "versions": {
+            "2K27": {
+              "address": 192,
+              "array_count": 52,
+              "array_index": 4,
+              "hex": "0xC0",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS50",
+          "display_name": "SeasonStats[50]",
+          "versions": {
+            "2K27": {
+              "address": 284,
+              "array_count": 52,
+              "array_index": 50,
+              "hex": "0x11C",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS51",
+          "display_name": "SeasonStats[51]",
+          "versions": {
+            "2K27": {
+              "address": 286,
+              "array_count": 52,
+              "array_index": 51,
+              "hex": "0x11E",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS5",
+          "display_name": "SeasonStats[5]",
+          "versions": {
+            "2K27": {
+              "address": 194,
+              "array_count": 52,
+              "array_index": 5,
+              "hex": "0xC2",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS6",
+          "display_name": "SeasonStats[6]",
+          "versions": {
+            "2K27": {
+              "address": 196,
+              "array_count": 52,
+              "array_index": 6,
+              "hex": "0xC4",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS7",
+          "display_name": "SeasonStats[7]",
+          "versions": {
+            "2K27": {
+              "address": 198,
+              "array_count": 52,
+              "array_index": 7,
+              "hex": "0xC6",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS8",
+          "display_name": "SeasonStats[8]",
+          "versions": {
+            "2K27": {
+              "address": 200,
+              "array_count": 52,
+              "array_index": 8,
+              "hex": "0xC8",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEASONSTATS9",
+          "display_name": "SeasonStats[9]",
+          "versions": {
+            "2K27": {
+              "address": 202,
+              "array_count": 52,
+              "array_index": 9,
+              "hex": "0xCA",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SEOBADGE",
+          "display_name": "SEOBadge",
+          "versions": {
+            "2K27": {
+              "address": 448,
+              "bit_length": 1,
+              "bit_offset": 4,
+              "hex": "0x1C0",
+              "length": 1,
+              "readonly": true,
+              "startBit": 4,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHORTLEASHBADGE",
+          "display_name": "SHORT_LEASHBadge",
+          "versions": {
+            "2K27": {
+              "address": 439,
+              "bit_length": 3,
+              "bit_offset": 3,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1B7",
+              "length": 3,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHORTTIMERBADGE",
+          "display_name": "SHORT_TIMERBadge",
+          "versions": {
+            "2K27": {
+              "address": 425,
+              "bit_length": 1,
+              "bit_offset": 3,
+              "hex": "0x1A9",
+              "length": 1,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "CLOSESHOTTENDENCY",
+          "display_name": "ShotCloseTendency",
+          "versions": {
+            "2K27": {
+              "address": 350,
+              "hex": "0x15E",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOTINSIDETENDENCY",
+          "display_name": "ShotInsideTendency",
+          "versions": {
+            "2K27": {
+              "address": 349,
+              "hex": "0x15D",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOTMEDIUMTENDENCY",
+          "display_name": "ShotMediumTendency",
+          "versions": {
+            "2K27": {
+              "address": 351,
+              "hex": "0x15F",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOTTHREETENDENCY",
+          "display_name": "ShotThreeTendency",
+          "versions": {
+            "2K27": {
+              "address": 352,
+              "hex": "0x160",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "CONTESTBADGESHOT",
+          "display_name": "SHOT_CONTESTBadge",
+          "versions": {
+            "2K27": {
+              "address": 445,
+              "bit_length": 1,
+              "bit_offset": 2,
+              "hex": "0x1BD",
+              "length": 1,
+              "readonly": true,
+              "startBit": 2,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "DOCTOR2BADGESHOT",
+          "display_name": "SHOT_DOCTOR2Badge",
+          "versions": {
+            "2K27": {
+              "address": 444,
+              "bit_length": 1,
+              "bit_offset": 2,
+              "hex": "0x1BC",
+              "length": 1,
+              "readonly": true,
+              "startBit": 2,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "DOCTORBADGESHOT",
+          "display_name": "SHOT_DOCTORBadge",
+          "versions": {
+            "2K27": {
+              "address": 428,
+              "bit_length": 3,
+              "bit_offset": 3,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1AC",
+              "length": 3,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "SIMOFFOPTION0",
+          "display_name": "SimOffOption[0]",
+          "versions": {
+            "2K27": {
+              "address": 56,
+              "array_count": 3,
+              "array_index": 0,
+              "hex": "0x38",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "SIMOFFOPTION1",
+          "display_name": "SimOffOption[1]",
+          "versions": {
+            "2K27": {
+              "address": 64,
+              "array_count": 3,
+              "array_index": 1,
+              "hex": "0x40",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "SIMOFFOPTION2",
+          "display_name": "SimOffOption[2]",
+          "versions": {
+            "2K27": {
+              "address": 72,
+              "array_count": 3,
+              "array_index": 2,
+              "hex": "0x48",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "SINGLEMINDEDBADGE",
+          "display_name": "SINGLE_MINDEDBadge",
+          "versions": {
+            "2K27": {
+              "address": 437,
+              "bit_length": 1,
+              "bit_offset": 3,
+              "hex": "0x1B5",
+              "length": 1,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "SKINDATA",
+          "display_name": "SkinData",
+          "versions": {
+            "2K27": {
+              "address": 16,
+              "hex": "0x10",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "SLEEPDOCTORBADGE",
+          "display_name": "SLEEP_DOCTORBadge",
+          "versions": {
+            "2K27": {
+              "address": 435,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1B3",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "SLEUTHBADGE",
+          "display_name": "SLEUTHBadge",
+          "versions": {
+            "2K27": {
+              "address": 426,
+              "bit_length": 1,
+              "bit_offset": 0,
+              "hex": "0x1AA",
+              "length": 1,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "SNAKEBADGE",
+          "display_name": "SNAKEBadge",
+          "versions": {
+            "2K27": {
+              "address": 421,
+              "bit_length": 1,
+              "bit_offset": 6,
+              "hex": "0x1A5",
+              "length": 1,
+              "readonly": true,
+              "startBit": 6,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "SOFTTOUCHBADGE",
+          "display_name": "SOFT_TOUCHBadge",
+          "versions": {
+            "2K27": {
+              "address": 441,
+              "bit_length": 3,
+              "bit_offset": 3,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1B9",
+              "length": 3,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "SOUNDID",
+          "display_name": "SoundId",
+          "versions": {
+            "2K27": {
+              "address": 296,
+              "bit_length": 16,
+              "bit_offset": 0,
+              "hex": "0x128",
+              "length": 16,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "SPELUNKERBADGE",
+          "display_name": "SPELUNKERBadge",
+          "versions": {
+            "2K27": {
+              "address": 442,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1BA",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "SPONGEBADGE",
+          "display_name": "SPONGEBadge",
+          "versions": {
+            "2K27": {
+              "address": 436,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1B4",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "SPORTSPSYCHBADGE",
+          "display_name": "SPORTS_PSYCHBadge",
+          "versions": {
+            "2K27": {
+              "address": 433,
+              "bit_length": 3,
+              "bit_offset": 3,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1B1",
+              "length": 3,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "SPORTSSCIENCEBADGE",
+          "display_name": "SPORTS_SCIENCEBadge",
+          "versions": {
+            "2K27": {
+              "address": 434,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1B2",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
             }
           }
         },
@@ -467,6 +4039,526 @@
               "type": "bit"
             }
           }
+        },
+        {
+          "normalized_name": "STAFFSTATDATALISTOVERRIDE",
+          "display_name": "StaffStatDataListOverride",
+          "versions": {
+            "2K27": {
+              "address": 48,
+              "hex": "0x30",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAMINATRAINERBADGE",
+          "display_name": "STAMINA_TRAINERBadge",
+          "versions": {
+            "2K27": {
+              "address": 433,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1B1",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "STRENGTHINNUMSBADGE",
+          "display_name": "STRENGTH_IN_NUMSBadge",
+          "versions": {
+            "2K27": {
+              "address": 446,
+              "bit_length": 1,
+              "bit_offset": 2,
+              "hex": "0x1BE",
+              "length": 1,
+              "readonly": true,
+              "startBit": 2,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "STRENGTHTRAINERBADGE",
+          "display_name": "STRENGTH_TRAINERBadge",
+          "versions": {
+            "2K27": {
+              "address": 432,
+              "bit_length": 3,
+              "bit_offset": 3,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1B0",
+              "length": 3,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "TACTICIANBADGE",
+          "display_name": "TACTICIANBadge",
+          "versions": {
+            "2K27": {
+              "address": 423,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1A7",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "TARGETMARKET",
+          "display_name": "TargetMarket",
+          "versions": {
+            "2K27": {
+              "address": 382,
+              "bit_length": 2,
+              "bit_offset": 0,
+              "enum": "STAFFDATA_MARKET_SIZE",
+              "hex": "0x17E",
+              "length": 2,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEACHERBADGE",
+          "display_name": "TEACHERBadge",
+          "versions": {
+            "2K27": {
+              "address": 424,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1A8",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMSTATEPREFERENCEBUYING",
+          "display_name": "TeamStatePreference_Buying",
+          "versions": {
+            "2K27": {
+              "address": 377,
+              "hex": "0x179",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMSTATEPREFERENCEREBUILDING",
+          "display_name": "TeamStatePreference_Rebuilding",
+          "versions": {
+            "2K27": {
+              "address": 379,
+              "hex": "0x17B",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMSTATEPREFERENCESELLING",
+          "display_name": "TeamStatePreference_Selling",
+          "versions": {
+            "2K27": {
+              "address": 378,
+              "hex": "0x17A",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMSTATEPREFERENCESTEADY",
+          "display_name": "TeamStatePreference_Steady",
+          "versions": {
+            "2K27": {
+              "address": 376,
+              "hex": "0x178",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMSUCCESS",
+          "display_name": "TeamSuccess",
+          "versions": {
+            "2K27": {
+              "address": 308,
+              "bit_length": 3,
+              "bit_offset": 21,
+              "hex": "0x134",
+              "length": 3,
+              "readonly": true,
+              "startBit": 21,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMEFFORTBADGE",
+          "display_name": "TEAM_EFFORTBadge",
+          "versions": {
+            "2K27": {
+              "address": 446,
+              "bit_length": 1,
+              "bit_offset": 1,
+              "hex": "0x1BE",
+              "length": 1,
+              "readonly": true,
+              "startBit": 1,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEMPO",
+          "display_name": "Tempo",
+          "versions": {
+            "2K27": {
+              "address": 356,
+              "hex": "0x164",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "THEPROCESSBADGE",
+          "display_name": "THE_PROCESSBadge",
+          "versions": {
+            "2K27": {
+              "address": 448,
+              "bit_length": 1,
+              "bit_offset": 5,
+              "hex": "0x1C0",
+              "length": 1,
+              "readonly": true,
+              "startBit": 5,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "TIMEOUTSTOPRUNFREQUENCY",
+          "display_name": "TimeoutStopRunFrequency",
+          "versions": {
+            "2K27": {
+              "address": 386,
+              "bit_length": 3,
+              "bit_offset": 5,
+              "enum": "STAFFDATA_TIMEOUT_FREQUENCY",
+              "hex": "0x182",
+              "length": 3,
+              "readonly": true,
+              "startBit": 5,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "TOPPRIORITY1",
+          "display_name": "TopPriority1",
+          "versions": {
+            "2K27": {
+              "address": 312,
+              "bit_length": 4,
+              "bit_offset": 24,
+              "hex": "0x138",
+              "length": 4,
+              "readonly": true,
+              "startBit": 24,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "TOPPRIORITY2",
+          "display_name": "TopPriority2",
+          "versions": {
+            "2K27": {
+              "address": 312,
+              "bit_length": 4,
+              "bit_offset": 28,
+              "hex": "0x138",
+              "length": 4,
+              "readonly": true,
+              "startBit": 28,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "TOPPRIORITY3",
+          "display_name": "TopPriority3",
+          "versions": {
+            "2K27": {
+              "address": 316,
+              "bit_length": 4,
+              "bit_offset": 0,
+              "hex": "0x13C",
+              "length": 4,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "TOPFACILITIESBADGE",
+          "display_name": "TOP_FACILITIESBadge",
+          "versions": {
+            "2K27": {
+              "address": 449,
+              "bit_length": 1,
+              "bit_offset": 3,
+              "hex": "0x1C1",
+              "length": 1,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "TOPHEAVYBADGE",
+          "display_name": "TOP_HEAVYBadge",
+          "versions": {
+            "2K27": {
+              "address": 444,
+              "bit_length": 1,
+              "bit_offset": 6,
+              "hex": "0x1BC",
+              "length": 1,
+              "readonly": true,
+              "startBit": 6,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "TOUGHLOVEBADGE",
+          "display_name": "TOUGH_LOVEBadge",
+          "versions": {
+            "2K27": {
+              "address": 438,
+              "bit_length": 1,
+              "bit_offset": 3,
+              "hex": "0x1B6",
+              "length": 1,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "TRAININGSPECIALISTBADGE",
+          "display_name": "TRAINING_SPECIALISTBadge",
+          "versions": {
+            "2K27": {
+              "address": 449,
+              "bit_length": 1,
+              "bit_offset": 1,
+              "hex": "0x1C1",
+              "length": 1,
+              "readonly": true,
+              "startBit": 1,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "TRENDSETTERBADGE",
+          "display_name": "TRENDSETTERBadge",
+          "versions": {
+            "2K27": {
+              "address": 448,
+              "bit_length": 1,
+              "bit_offset": 7,
+              "hex": "0x1C0",
+              "length": 1,
+              "readonly": true,
+              "startBit": 7,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "UNDERDOGADVOCATEBADGE",
+          "display_name": "UNDERDOG_ADVOCATEBadge",
+          "versions": {
+            "2K27": {
+              "address": 438,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1B6",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "UNIQUEID",
+          "display_name": "UniqueId",
+          "versions": {
+            "2K27": {
+              "address": 288,
+              "hex": "0x120",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "UNIQUESIGNATUREID",
+          "display_name": "UniqueSignatureId",
+          "versions": {
+            "2K27": {
+              "address": 160,
+              "hex": "0xA0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "UPPERBODYSPECIALISTBADGE",
+          "display_name": "UPPER_BODY_SPECIALISTBadge",
+          "versions": {
+            "2K27": {
+              "address": 427,
+              "bit_length": 3,
+              "bit_offset": 3,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1AB",
+              "length": 3,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "WINGMANBADGE",
+          "display_name": "WINGMANBadge",
+          "versions": {
+            "2K27": {
+              "address": 421,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1A5",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "WINGWHISPERERBADGE",
+          "display_name": "WING_WHISPERERBadge",
+          "versions": {
+            "2K27": {
+              "address": 429,
+              "bit_length": 3,
+              "bit_offset": 3,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1AD",
+              "length": 3,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "WINNINGCULTUREBADGE",
+          "display_name": "WINNING_CULTUREBadge",
+          "versions": {
+            "2K27": {
+              "address": 447,
+              "bit_length": 1,
+              "bit_offset": 1,
+              "hex": "0x1BF",
+              "length": 1,
+              "readonly": true,
+              "startBit": 1,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "WORKETHICBADGE",
+          "display_name": "WORK_ETHICBadge",
+          "versions": {
+            "2K27": {
+              "address": 420,
+              "bit_length": 3,
+              "bit_offset": 1,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1A4",
+              "length": 3,
+              "readonly": true,
+              "startBit": 1,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ZENMASTERBADGE",
+          "display_name": "ZEN_MASTERBadge",
+          "versions": {
+            "2K27": {
+              "address": 441,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "enum": "PLAYERDATA_BADGE_LEVEL",
+              "hex": "0x1B9",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ZONEUSAGE",
+          "display_name": "ZoneUsage",
+          "versions": {
+            "2K27": {
+              "address": 348,
+              "hex": "0x15C",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
         }
       ],
       "Team": [
@@ -481,9 +4573,81 @@
               "type": "uint64"
             }
           }
+        },
+        {
+          "normalized_name": "CURRENTTEAMINTERNAL",
+          "display_name": "CurrentTeam_Internal",
+          "versions": {
+            "2K27": {
+              "address": 24,
+              "hex": "0x18",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "PREVIOUSTEAM",
+          "display_name": "PreviousTeam",
+          "versions": {
+            "2K27": {
+              "address": 32,
+              "hex": "0x20",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
         }
       ],
       "Contract": [
+        {
+          "normalized_name": "BANNEDFROMPOACHING",
+          "display_name": "BannedFromPoaching",
+          "versions": {
+            "2K27": {
+              "address": 385,
+              "bit_length": 1,
+              "bit_offset": 7,
+              "hex": "0x181",
+              "length": 1,
+              "readonly": true,
+              "startBit": 7,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ISPENDINGACQUIREDSTAFF",
+          "display_name": "IsPendingAcquiredStaff",
+          "versions": {
+            "2K27": {
+              "address": 296,
+              "bit_length": 1,
+              "bit_offset": 31,
+              "hex": "0x128",
+              "length": 1,
+              "readonly": true,
+              "startBit": 31,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "MUSTRETIREFLAG",
+          "display_name": "MustRetireFlag",
+          "versions": {
+            "2K27": {
+              "address": 385,
+              "bit_length": 1,
+              "bit_offset": 6,
+              "hex": "0x181",
+              "length": 1,
+              "readonly": true,
+              "startBit": 6,
+              "type": "bitfield"
+            }
+          }
+        },
         {
           "normalized_name": "SALARY",
           "display_name": "Salary",
@@ -500,6 +4664,532 @@
           }
         },
         {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE0",
+          "display_name": "ShouldAcceptMinimumWage[0]",
+          "versions": {
+            "2K27": {
+              "address": 388,
+              "array_count": 32,
+              "array_index": 0,
+              "hex": "0x184",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE10",
+          "display_name": "ShouldAcceptMinimumWage[10]",
+          "versions": {
+            "2K27": {
+              "address": 398,
+              "array_count": 32,
+              "array_index": 10,
+              "hex": "0x18E",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE11",
+          "display_name": "ShouldAcceptMinimumWage[11]",
+          "versions": {
+            "2K27": {
+              "address": 399,
+              "array_count": 32,
+              "array_index": 11,
+              "hex": "0x18F",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE12",
+          "display_name": "ShouldAcceptMinimumWage[12]",
+          "versions": {
+            "2K27": {
+              "address": 400,
+              "array_count": 32,
+              "array_index": 12,
+              "hex": "0x190",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE13",
+          "display_name": "ShouldAcceptMinimumWage[13]",
+          "versions": {
+            "2K27": {
+              "address": 401,
+              "array_count": 32,
+              "array_index": 13,
+              "hex": "0x191",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE14",
+          "display_name": "ShouldAcceptMinimumWage[14]",
+          "versions": {
+            "2K27": {
+              "address": 402,
+              "array_count": 32,
+              "array_index": 14,
+              "hex": "0x192",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE15",
+          "display_name": "ShouldAcceptMinimumWage[15]",
+          "versions": {
+            "2K27": {
+              "address": 403,
+              "array_count": 32,
+              "array_index": 15,
+              "hex": "0x193",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE16",
+          "display_name": "ShouldAcceptMinimumWage[16]",
+          "versions": {
+            "2K27": {
+              "address": 404,
+              "array_count": 32,
+              "array_index": 16,
+              "hex": "0x194",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE17",
+          "display_name": "ShouldAcceptMinimumWage[17]",
+          "versions": {
+            "2K27": {
+              "address": 405,
+              "array_count": 32,
+              "array_index": 17,
+              "hex": "0x195",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE18",
+          "display_name": "ShouldAcceptMinimumWage[18]",
+          "versions": {
+            "2K27": {
+              "address": 406,
+              "array_count": 32,
+              "array_index": 18,
+              "hex": "0x196",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE19",
+          "display_name": "ShouldAcceptMinimumWage[19]",
+          "versions": {
+            "2K27": {
+              "address": 407,
+              "array_count": 32,
+              "array_index": 19,
+              "hex": "0x197",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE1",
+          "display_name": "ShouldAcceptMinimumWage[1]",
+          "versions": {
+            "2K27": {
+              "address": 389,
+              "array_count": 32,
+              "array_index": 1,
+              "hex": "0x185",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE20",
+          "display_name": "ShouldAcceptMinimumWage[20]",
+          "versions": {
+            "2K27": {
+              "address": 408,
+              "array_count": 32,
+              "array_index": 20,
+              "hex": "0x198",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE21",
+          "display_name": "ShouldAcceptMinimumWage[21]",
+          "versions": {
+            "2K27": {
+              "address": 409,
+              "array_count": 32,
+              "array_index": 21,
+              "hex": "0x199",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE22",
+          "display_name": "ShouldAcceptMinimumWage[22]",
+          "versions": {
+            "2K27": {
+              "address": 410,
+              "array_count": 32,
+              "array_index": 22,
+              "hex": "0x19A",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE23",
+          "display_name": "ShouldAcceptMinimumWage[23]",
+          "versions": {
+            "2K27": {
+              "address": 411,
+              "array_count": 32,
+              "array_index": 23,
+              "hex": "0x19B",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE24",
+          "display_name": "ShouldAcceptMinimumWage[24]",
+          "versions": {
+            "2K27": {
+              "address": 412,
+              "array_count": 32,
+              "array_index": 24,
+              "hex": "0x19C",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE25",
+          "display_name": "ShouldAcceptMinimumWage[25]",
+          "versions": {
+            "2K27": {
+              "address": 413,
+              "array_count": 32,
+              "array_index": 25,
+              "hex": "0x19D",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE26",
+          "display_name": "ShouldAcceptMinimumWage[26]",
+          "versions": {
+            "2K27": {
+              "address": 414,
+              "array_count": 32,
+              "array_index": 26,
+              "hex": "0x19E",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE27",
+          "display_name": "ShouldAcceptMinimumWage[27]",
+          "versions": {
+            "2K27": {
+              "address": 415,
+              "array_count": 32,
+              "array_index": 27,
+              "hex": "0x19F",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE28",
+          "display_name": "ShouldAcceptMinimumWage[28]",
+          "versions": {
+            "2K27": {
+              "address": 416,
+              "array_count": 32,
+              "array_index": 28,
+              "hex": "0x1A0",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE29",
+          "display_name": "ShouldAcceptMinimumWage[29]",
+          "versions": {
+            "2K27": {
+              "address": 417,
+              "array_count": 32,
+              "array_index": 29,
+              "hex": "0x1A1",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE2",
+          "display_name": "ShouldAcceptMinimumWage[2]",
+          "versions": {
+            "2K27": {
+              "address": 390,
+              "array_count": 32,
+              "array_index": 2,
+              "hex": "0x186",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE30",
+          "display_name": "ShouldAcceptMinimumWage[30]",
+          "versions": {
+            "2K27": {
+              "address": 418,
+              "array_count": 32,
+              "array_index": 30,
+              "hex": "0x1A2",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE31",
+          "display_name": "ShouldAcceptMinimumWage[31]",
+          "versions": {
+            "2K27": {
+              "address": 419,
+              "array_count": 32,
+              "array_index": 31,
+              "hex": "0x1A3",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE3",
+          "display_name": "ShouldAcceptMinimumWage[3]",
+          "versions": {
+            "2K27": {
+              "address": 391,
+              "array_count": 32,
+              "array_index": 3,
+              "hex": "0x187",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE4",
+          "display_name": "ShouldAcceptMinimumWage[4]",
+          "versions": {
+            "2K27": {
+              "address": 392,
+              "array_count": 32,
+              "array_index": 4,
+              "hex": "0x188",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE5",
+          "display_name": "ShouldAcceptMinimumWage[5]",
+          "versions": {
+            "2K27": {
+              "address": 393,
+              "array_count": 32,
+              "array_index": 5,
+              "hex": "0x189",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE6",
+          "display_name": "ShouldAcceptMinimumWage[6]",
+          "versions": {
+            "2K27": {
+              "address": 394,
+              "array_count": 32,
+              "array_index": 6,
+              "hex": "0x18A",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE7",
+          "display_name": "ShouldAcceptMinimumWage[7]",
+          "versions": {
+            "2K27": {
+              "address": 395,
+              "array_count": 32,
+              "array_index": 7,
+              "hex": "0x18B",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE8",
+          "display_name": "ShouldAcceptMinimumWage[8]",
+          "versions": {
+            "2K27": {
+              "address": 396,
+              "array_count": 32,
+              "array_index": 8,
+              "hex": "0x18C",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOULDACCEPTMINIMUMWAGE9",
+          "display_name": "ShouldAcceptMinimumWage[9]",
+          "versions": {
+            "2K27": {
+              "address": 397,
+              "array_count": 32,
+              "array_index": 9,
+              "hex": "0x18D",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SIGNINGCOOLDOWNLEFT",
+          "display_name": "SigningCooldownLeft",
+          "versions": {
+            "2K27": {
+              "address": 316,
+              "bit_length": 6,
+              "bit_offset": 26,
+              "hex": "0x13C",
+              "length": 6,
+              "readonly": true,
+              "startBit": 26,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "STATUSPRIVATE",
+          "display_name": "Status_Private",
+          "versions": {
+            "2K27": {
+              "address": 383,
+              "bit_length": 2,
+              "bit_offset": 0,
+              "enum": "STAFFDATA_STATUS",
+              "hex": "0x17F",
+              "length": 2,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "TARGETJOB",
+          "display_name": "TargetJob",
+          "versions": {
+            "2K27": {
+              "address": 332,
+              "bit_length": 5,
+              "bit_offset": 25,
+              "enum": "STAFFDATA_JOB",
+              "hex": "0x14C",
+              "length": 5,
+              "readonly": true,
+              "startBit": 25,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "WAGE",
+          "display_name": "Wage",
+          "versions": {
+            "2K27": {
+              "address": 292,
+              "hex": "0x124",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "WAGEIMPORTANCE",
+          "display_name": "WageImportance",
+          "versions": {
+            "2K27": {
+              "address": 304,
+              "bit_length": 8,
+              "bit_offset": 0,
+              "hex": "0x130",
+              "length": 8,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
           "normalized_name": "YEARSLEFT",
           "display_name": "Years Left",
           "versions": {
@@ -511,6 +5201,64 @@
               "startBit": 4,
               "startbit": 4,
               "type": "bit"
+            },
+            "2K27": {
+              "address": 316,
+              "bit_length": 4,
+              "bit_offset": 16,
+              "hex": "0x13C",
+              "length": 4,
+              "readonly": true,
+              "startBit": 16,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "YEARSINLEAGUE",
+          "display_name": "YearsInLeague",
+          "versions": {
+            "2K27": {
+              "address": 308,
+              "bit_length": 8,
+              "bit_offset": 7,
+              "hex": "0x134",
+              "length": 8,
+              "readonly": true,
+              "startBit": 7,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "YEARSOFACQUIREDSTAFF",
+          "display_name": "YearsOfAcquiredStaff",
+          "versions": {
+            "2K27": {
+              "address": 316,
+              "bit_length": 6,
+              "bit_offset": 20,
+              "hex": "0x13C",
+              "length": 6,
+              "readonly": true,
+              "startBit": 20,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "YEARSWITHTEAM",
+          "display_name": "YearsWithTeam",
+          "versions": {
+            "2K27": {
+              "address": 308,
+              "bit_length": 7,
+              "bit_offset": 0,
+              "hex": "0x134",
+              "length": 7,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
             }
           }
         }
@@ -527,6 +5275,24 @@
               "hex": "0x157",
               "length": 1,
               "type": "ubyte"
+            },
+            "2K27": {
+              "address": 367,
+              "hex": "0x16F",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "BASKETBALLIQ",
+          "display_name": "BasketballIQ",
+          "versions": {
+            "2K27": {
+              "address": 360,
+              "hex": "0x168",
+              "readonly": true,
+              "type": "byte"
             }
           }
         },
@@ -539,6 +5305,12 @@
               "hex": "0x154",
               "length": 1,
               "type": "ubyte"
+            },
+            "2K27": {
+              "address": 364,
+              "hex": "0x16C",
+              "readonly": true,
+              "type": "byte"
             }
           }
         },
@@ -551,6 +5323,24 @@
               "hex": "0x156",
               "length": 1,
               "type": "ubyte"
+            },
+            "2K27": {
+              "address": 366,
+              "hex": "0x16E",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENSE",
+          "display_name": "Defense",
+          "versions": {
+            "2K27": {
+              "address": 363,
+              "hex": "0x16B",
+              "readonly": true,
+              "type": "byte"
             }
           }
         },
@@ -567,6 +5357,90 @@
           }
         },
         {
+          "normalized_name": "EMOTION",
+          "display_name": "Emotion",
+          "versions": {
+            "2K27": {
+              "address": 328,
+              "bit_length": 8,
+              "bit_offset": 24,
+              "hex": "0x148",
+              "length": 8,
+              "readonly": true,
+              "startBit": 24,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "GROWTHPOTENTIAL",
+          "display_name": "GrowthPotential",
+          "versions": {
+            "2K27": {
+              "address": 304,
+              "bit_length": 8,
+              "bit_offset": 8,
+              "hex": "0x130",
+              "length": 8,
+              "readonly": true,
+              "startBit": 8,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "INTENSITY",
+          "display_name": "Intensity",
+          "versions": {
+            "2K27": {
+              "address": 359,
+              "hex": "0x167",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "INVOLVEMENT",
+          "display_name": "Involvement",
+          "versions": {
+            "2K27": {
+              "address": 312,
+              "bit_length": 3,
+              "bit_offset": 0,
+              "hex": "0x138",
+              "length": 3,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "MOTIVATION",
+          "display_name": "Motivation",
+          "versions": {
+            "2K27": {
+              "address": 358,
+              "hex": "0x166",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "OFFENSE",
+          "display_name": "Offense",
+          "versions": {
+            "2K27": {
+              "address": 362,
+              "hex": "0x16A",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
           "normalized_name": "OFFENSIVECOACHING",
           "display_name": "Offensive Coaching",
           "versions": {
@@ -575,6 +5449,54 @@
               "hex": "0x152",
               "length": 1,
               "type": "ubyte"
+            }
+          }
+        },
+        {
+          "normalized_name": "ORIGINALINVOLVEMENT",
+          "display_name": "OriginalInvolvement",
+          "versions": {
+            "2K27": {
+              "address": 312,
+              "bit_length": 3,
+              "bit_offset": 6,
+              "hex": "0x138",
+              "length": 3,
+              "readonly": true,
+              "startBit": 6,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "ORIGINALPATIENCEIMPORTANCE",
+          "display_name": "OriginalPatienceImportance",
+          "versions": {
+            "2K27": {
+              "address": 312,
+              "bit_length": 3,
+              "bit_offset": 3,
+              "hex": "0x138",
+              "length": 3,
+              "readonly": true,
+              "startBit": 3,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "PATIENCEIMPORTANCE",
+          "display_name": "PatienceImportance",
+          "versions": {
+            "2K27": {
+              "address": 304,
+              "bit_length": 3,
+              "bit_offset": 28,
+              "hex": "0x130",
+              "length": 3,
+              "readonly": true,
+              "startBit": 28,
+              "type": "bitfield"
             }
           }
         },
@@ -803,11 +5725,197 @@
               "type": "combo"
             }
           }
+        },
+        {
+          "normalized_name": "TIGHTLIPPED",
+          "display_name": "TightLipped",
+          "versions": {
+            "2K27": {
+              "address": 304,
+              "bit_length": 4,
+              "bit_offset": 16,
+              "hex": "0x130",
+              "length": 4,
+              "readonly": true,
+              "startBit": 16,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "TRAINING",
+          "display_name": "Training",
+          "versions": {
+            "2K27": {
+              "address": 365,
+              "hex": "0x16D",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "WORKETHIC",
+          "display_name": "WorkEthic",
+          "versions": {
+            "2K27": {
+              "address": 361,
+              "hex": "0x169",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
         }
       ]
     },
     "Team Style": {
       "Team Style": [
+        {
+          "normalized_name": "ACTIVESYSTEM",
+          "display_name": "ActiveSystem",
+          "versions": {
+            "2K27": {
+              "address": 304,
+              "bit_length": 4,
+              "bit_offset": 24,
+              "enum": "STAFFDATA_SYSTEMS",
+              "hex": "0x130",
+              "length": 4,
+              "readonly": true,
+              "startBit": 24,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "FOCUSRATING",
+          "display_name": "FocusRating",
+          "versions": {
+            "2K27": {
+              "address": 328,
+              "bit_length": 8,
+              "bit_offset": 0,
+              "hex": "0x148",
+              "length": 8,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREELANCETYPE1",
+          "display_name": "FreelanceType1",
+          "versions": {
+            "2K27": {
+              "address": 382,
+              "bit_length": 6,
+              "bit_offset": 2,
+              "hex": "0x17E",
+              "length": 6,
+              "readonly": true,
+              "startBit": 2,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREELANCETYPE2",
+          "display_name": "FreelanceType2",
+          "versions": {
+            "2K27": {
+              "address": 383,
+              "bit_length": 6,
+              "bit_offset": 2,
+              "hex": "0x17F",
+              "length": 6,
+              "readonly": true,
+              "startBit": 2,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREELANCETYPE3",
+          "display_name": "FreelanceType3",
+          "versions": {
+            "2K27": {
+              "address": 384,
+              "bit_length": 6,
+              "bit_offset": 0,
+              "hex": "0x180",
+              "length": 6,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREELANCETYPE4",
+          "display_name": "FreelanceType4",
+          "versions": {
+            "2K27": {
+              "address": 385,
+              "bit_length": 6,
+              "bit_offset": 0,
+              "hex": "0x181",
+              "length": 6,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "LOCATIONRATING",
+          "display_name": "LocationRating",
+          "versions": {
+            "2K27": {
+              "address": 328,
+              "bit_length": 8,
+              "bit_offset": 16,
+              "hex": "0x148",
+              "length": 8,
+              "readonly": true,
+              "startBit": 16,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "POSITIONRATING",
+          "display_name": "PositionRating",
+          "versions": {
+            "2K27": {
+              "address": 328,
+              "bit_length": 8,
+              "bit_offset": 8,
+              "hex": "0x148",
+              "length": 8,
+              "readonly": true,
+              "startBit": 8,
+              "type": "bitfield"
+            }
+          }
+        },
+        {
+          "normalized_name": "PREFERREDSYSTEM",
+          "display_name": "PreferredSystem",
+          "versions": {
+            "2K27": {
+              "address": 304,
+              "bit_length": 4,
+              "bit_offset": 20,
+              "enum": "STAFFDATA_SYSTEMS",
+              "hex": "0x130",
+              "length": 4,
+              "readonly": true,
+              "startBit": 20,
+              "type": "bitfield"
+            }
+          }
+        },
         {
           "normalized_name": "STAFFSTYLEACTIVESYSTEM",
           "display_name": "Staff Style - ACTIVE_SYSTEM",
@@ -1107,6 +6215,18 @@
           }
         },
         {
+          "normalized_name": "PREFERENCESYSTEMPROFICIENCY",
+          "display_name": "PreferenceSystemProficiency",
+          "versions": {
+            "2K27": {
+              "address": 387,
+              "hex": "0x183",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
           "normalized_name": "7SECONDSPROFICIENCY",
           "display_name": "Seven Seconds Proficiency",
           "versions": {
@@ -1115,6 +6235,102 @@
               "hex": "0x15E",
               "length": 1,
               "type": "Integer"
+            }
+          }
+        },
+        {
+          "normalized_name": "SYSTEMBALANCED",
+          "display_name": "SystemBalanced",
+          "versions": {
+            "2K27": {
+              "address": 368,
+              "hex": "0x170",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SYSTEMDEFENSEFIRST",
+          "display_name": "SystemDefenseFirst",
+          "versions": {
+            "2K27": {
+              "address": 375,
+              "hex": "0x177",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SYSTEMGRITANDGRIND",
+          "display_name": "SystemGritAndGrind",
+          "versions": {
+            "2K27": {
+              "address": 369,
+              "hex": "0x171",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SYSTEMPACEANDSPACE",
+          "display_name": "SystemPaceAndSpace",
+          "versions": {
+            "2K27": {
+              "address": 370,
+              "hex": "0x172",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SYSTEMPERIMETER",
+          "display_name": "SystemPerimeter",
+          "versions": {
+            "2K27": {
+              "address": 371,
+              "hex": "0x173",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SYSTEMPOST",
+          "display_name": "SystemPost",
+          "versions": {
+            "2K27": {
+              "address": 372,
+              "hex": "0x174",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SYSTEMSEVENSECONDS",
+          "display_name": "SystemSevenSeconds",
+          "versions": {
+            "2K27": {
+              "address": 374,
+              "hex": "0x176",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SYSTEMTRIANGLE",
+          "display_name": "SystemTriangle",
+          "versions": {
+            "2K27": {
+              "address": 373,
+              "hex": "0x175",
+              "readonly": true,
+              "type": "byte"
             }
           }
         },

@@ -81,7 +81,12 @@ def _field_offset(payload: dict[str, Any]) -> int:
 
 
 def _type_key(payload: dict[str, Any]) -> str:
-    return str(payload.get("type") or "").strip().lower()
+    type_key = str(payload.get("type") or "").strip().lower()
+    if type_key:
+        return type_key
+    if "bit_length" in payload and ("bit_offset" in payload or "startBit" in payload):
+        return "bitfield"
+    return ""
 
 
 def _implemented_payload(payload: dict[str, Any]) -> bool:
@@ -107,9 +112,11 @@ def _implemented_payload(payload: dict[str, Any]) -> bool:
         "slider",
         "bit",
         "bitfield",
+        "vtable_int",
         "float",
         "string",
         "wstring",
+        "utf16le_vtable",
         "binary",
         "hex_bytes",
         "color",
@@ -204,7 +211,7 @@ def _write_bitfield(memory: Any, address: int, payload: dict[str, Any], value: A
 
 def _uses_bitfield_io(payload: dict[str, Any]) -> bool:
     type_key = _type_key(payload)
-    if type_key in {"bit", "bitfield"}:
+    if type_key in {"bit", "bitfield", "vtable_int"}:
         return True
     has_bit_offset = "bit_offset" in payload or "startBit" in payload
     return type_key in {"number", "integer", "int", "binary"} and has_bit_offset and offsets_mod._resolved_length_bits(payload) > 0
@@ -380,7 +387,7 @@ def _string_length(payload: dict[str, Any]) -> int:
 
 def _read_string(memory: Any, address: int, payload: dict[str, Any]) -> str:
     max_chars = _string_length(payload)
-    if _type_key(payload) == "wstring":
+    if _type_key(payload) in {"wstring", "utf16le_vtable"}:
         return memory.read_wstring(address, max_chars)
     return memory.read_ascii(address, max_chars)
 
@@ -388,7 +395,7 @@ def _read_string(memory: Any, address: int, payload: dict[str, Any]) -> str:
 def _write_string(memory: Any, address: int, payload: dict[str, Any], value: Any) -> None:
     max_chars = _string_length(payload)
     text = str(value)
-    if _type_key(payload) == "wstring":
+    if _type_key(payload) in {"wstring", "utf16le_vtable"}:
         memory.write_wstring_fixed(address, text, max_chars)
         return
     if _type_key(payload) == "string":
@@ -495,7 +502,7 @@ def _read_authored_value(memory: Any, address: int, payload: dict[str, Any]) -> 
         return int.from_bytes(memory.read_bytes(address, width), "little")
     if type_key == "float":
         return struct.unpack("<f", memory.read_bytes(address, 4))[0]
-    if type_key in {"string", "wstring"}:
+    if type_key in {"string", "wstring", "utf16le_vtable"}:
         return _read_string(memory, address, payload)
     if type_key == "ptr_string":
         return _read_ptr_string(memory, address, payload)
@@ -537,7 +544,7 @@ def _write_authored_value(memory: Any, address: int, payload: dict[str, Any], va
             memory.write_bytes(address, int(value).to_bytes(width, "little"))
     elif type_key == "float":
         memory.write_bytes(address, struct.pack("<f", float(value)))
-    elif type_key in {"string", "wstring"}:
+    elif type_key in {"string", "wstring", "utf16le_vtable"}:
         _write_string(memory, address, payload, value)
     elif type_key == "result_score":
         first, second = _parse_result_score(value)

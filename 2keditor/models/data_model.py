@@ -69,9 +69,11 @@ PLAYER_TEAM_FILTER_ALL = "All Players"
 PLAYER_TEAM_FILTER_BASE_TEAMS = "Teams 0-29"
 PLAYER_TEAM_FILTER_FREE_AGENTS = "Free Agents"
 PLAYER_TEAM_FILTER_DRAFT_CLASS = "Draft Class"
+PLAYER_TEAM_FILTER_FRANCHISE_PROSPECTS = "Franchise Prospects"
 PLAYER_POSITION_FILTER_ALL = "All Positions"
 PLAYER_PRIMARY_POSITIONS: tuple[str, ...] = ("PG", "SG", "SF", "PF", "C")
 _DRAFT_CLASS_BASE_KEY = "DraftClass"
+_FRANCHISE_PROSPECT_MEMBERSHIP_BASE_KEY = "FranchiseProspectMembership"
 _PLAYER_EDITOR_RESET_SECTIONS: tuple[str, ...] = ("Vitals", "Attributes", "Tendencies", "Badges")
 
 
@@ -85,7 +87,9 @@ def _plausible_record_name_part(value: object) -> bool:
 
 def _valid_record_list_label_part(value: object) -> bool:
     text = str(value or "").strip()
-    return bool(text) and any(char.isalpha() for char in text) and all(char.isalnum() or char in " .'-" for char in text)
+    return bool(text) and any(char.isalpha() or char == "#" for char in text) and all(
+        char.isalnum() or char in " .'-#" for char in text
+    )
 
 
 def _valid_record_list_label_values(values: list[Any]) -> bool:
@@ -395,6 +399,7 @@ class EditorDataModel:
             (PLAYER_TEAM_FILTER_BASE_TEAMS, PLAYER_TEAM_FILTER_BASE_TEAMS),
             (PLAYER_TEAM_FILTER_FREE_AGENTS, PLAYER_TEAM_FILTER_FREE_AGENTS),
             (PLAYER_TEAM_FILTER_DRAFT_CLASS, PLAYER_TEAM_FILTER_DRAFT_CLASS),
+            (PLAYER_TEAM_FILTER_FRANCHISE_PROSPECTS, PLAYER_TEAM_FILTER_FRANCHISE_PROSPECTS),
         )
         teams = tuple((team.display_label, int(team.index)) for team in self.loaded_items["Teams"].values())
         return (*fixed, *teams)
@@ -513,6 +518,9 @@ class EditorDataModel:
         primary_positions.update(
             self._player_primary_position_values(self._player_filter_items_by_key.get(PLAYER_TEAM_FILTER_DRAFT_CLASS, ()))
         )
+        primary_positions.update(
+            self._player_primary_position_values(self._player_filter_items_by_key.get(PLAYER_TEAM_FILTER_FRANCHISE_PROSPECTS, ()))
+        )
         self._player_primary_positions = primary_positions
         self._player_position_filter_ready = True
 
@@ -562,12 +570,16 @@ class EditorDataModel:
 
     def _build_free_agent_filter(self, players: tuple[RecordListItem, ...]) -> tuple[RecordListItem, ...]:
         free_agents: list[RecordListItem] = []
+        franchise_prospect_addresses = {
+            int(item.address)
+            for item in self._player_filter_items_by_key.get(PLAYER_TEAM_FILTER_FRANCHISE_PROSPECTS, ())
+        }
         self._player_team_pointer_cache.clear()
         source_values = self._player_filter_source_values(players)
         for player in players:
             current_team, is_active = source_values[int(player.index)]
             self._player_team_pointer_cache[int(player.index)] = current_team
-            if is_active and current_team == 0:
+            if is_active and current_team == 0 and int(player.address) not in franchise_prospect_addresses:
                 free_agents.append(player)
         result = tuple(free_agents)
         self._player_filter_items_by_key[PLAYER_TEAM_FILTER_FREE_AGENTS] = result
@@ -603,12 +615,17 @@ class EditorDataModel:
             draft_class = tuple(self._scan_records_from_base_key("Players", _DRAFT_CLASS_BASE_KEY))
         except Exception:
             draft_class = ()
+        try:
+            franchise_prospects = self._franchise_prospect_membership_items(players_by_address)
+        except Exception:
+            franchise_prospects = ()
 
         indexes: dict[str | int, tuple[RecordListItem, ...]] = {
             PLAYER_TEAM_FILTER_ALL: players,
             PLAYER_TEAM_FILTER_BASE_TEAMS: tuple(base_team_players.values()),
             PLAYER_TEAM_FILTER_FREE_AGENTS: (),
             PLAYER_TEAM_FILTER_DRAFT_CLASS: draft_class,
+            PLAYER_TEAM_FILTER_FRANCHISE_PROSPECTS: franchise_prospects,
         }
         indexes.update({team_index: tuple(items) for team_index, items in team_buckets.items()})
         self._player_filter_items_by_key = indexes
@@ -625,6 +642,33 @@ class EditorDataModel:
             self._build_free_agent_filter(players)
         self._data_version += 1
         return self.player_list_view(PLAYER_TEAM_FILTER_ALL)
+
+    def _franchise_prospect_membership_items(
+        self,
+        players_by_address: dict[int, RecordListItem],
+    ) -> tuple[RecordListItem, ...]:
+        entry = self._base_pointer_entry(_FRANCHISE_PROSPECT_MEMBERSHIP_BASE_KEY)
+        slot_count = int(entry.get("record_count") or 0)
+        slot_stride = int(entry.get("slot_stride") or 0)
+        pointer_offset = int(entry.get("player_pointer_offset") or 0)
+        if slot_count <= 0 or slot_stride <= 0 or pointer_offset < 0:
+            raise ValueError("invalid franchise prospect membership layout")
+        base = self._base_address_for_key(_FRANCHISE_PROSPECT_MEMBERSHIP_BASE_KEY)
+        memory = ReadOnlyMemoryBuffer.capture(
+            self.memory,
+            base,
+            (slot_count - 1) * slot_stride + pointer_offset + int(self.memory.pointer_size or 8),
+        )
+        items: list[RecordListItem] = []
+        seen_addresses: set[int] = set()
+        for slot in range(slot_count):
+            player_address = memory.read_u64(base + slot * slot_stride + pointer_offset)
+            player = players_by_address.get(player_address)
+            if player is None or player_address in seen_addresses:
+                continue
+            seen_addresses.add(player_address)
+            items.append(player)
+        return tuple(items)
 
     def prepare_player_list_view(
         self,
@@ -1361,7 +1405,7 @@ class EditorDataModel:
                         failed += 1
         return {"attempted": attempted, "succeeded": succeeded, "failed": failed}
 
-    def _player_editor_reset_value(self, entry: FieldEntry) -> int | str | None:
+    def _player_editor_reset_value(self, entry: FieldEntry) -> int | float | str | None:
         if entry.domain != "Players":
             return None
         normalized = str(entry.normalized_name).upper()
@@ -1371,6 +1415,26 @@ class EditorDataModel:
             return "Z"
         if normalized == "BIRTHYEAR":
             return 2006
+        if normalized == "HEIGHT":
+            return 60
+        if normalized == "WEIGHT":
+            return 100
+        if normalized == "WINGSPAN":
+            return 60
+        if normalized == "WINGSPANCM":
+            return 152.4
+        if normalized == "AGE":
+            return 18
+        if normalized in {"PLAYTYPE2", "PLAYTYPE3", "PLAYTYPE4"}:
+            return "None"
+        if normalized == "AVERAGEPERCENT":
+            return 34
+        if normalized in {"BUSTPERCENTAGE", "BOOMPERCENTAGE"}:
+            return 33
+        if normalized == "MAXIMUMPOTENTIAL":
+            return 40
+        if normalized == "MINIMUMPOTENTIAL":
+            return 41
         if entry.section == "Attributes":
             return 25
         if entry.section == "Tendencies":
@@ -1671,7 +1735,7 @@ class EditorDataModel:
             self._base_pointer_entry("TeamStatsEdit"),
             label="TeamStatsEdit",
             apply_final_offset_without_module_base=False,
-            follow_chain=False,
+            follow_chain=True,
         )
         return record_address(base=base, index=index, stride=self._stride_value("teamStatsEditSize"))
 

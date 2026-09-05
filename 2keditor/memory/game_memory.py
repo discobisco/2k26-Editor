@@ -7,6 +7,7 @@ from ctypes import wintypes
 
 MODULE_NAME = "NBA2K26.exe"
 HOOK_TARGETS: tuple[tuple[str, str], ...] = (
+    ("NBA 2K27", "NBA2K27.exe"),
     ("NBA 2K26", "NBA2K26.exe"),
     ("NBA 2K25", "NBA2K25.exe"),
     ("NBA 2K24", "NBA2K24.exe"),

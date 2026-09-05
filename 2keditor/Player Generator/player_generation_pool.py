@@ -423,7 +423,7 @@ def live_player_team_features(stats: Dict[str, str], team: Dict[str, Optional[fl
     }
 
 
-def live_vitals(stats: Dict[str, str]) -> Dict[str, Optional[float]]:
+def live_vitals(stats: Dict[str, str], season: Optional[int] = None) -> Dict[str, Optional[float]]:
     height_inches = as_float(stats.get("height_inches"))
     height_cm = as_float(stats.get("height_cm"))
     if height_inches is None and height_cm is not None:
@@ -451,9 +451,28 @@ def live_vitals(stats: Dict[str, str]) -> Dict[str, Optional[float]]:
         "weight_kg": None if weight_kg is None else round(float(weight_kg), 4),
         "wingspan_inches": None if wingspan_inches is None else round(float(wingspan_inches), 4),
         "wingspan_cm": None if wingspan_cm is None else round(float(wingspan_cm), 4),
-        "age": as_float(stats.get("age")),
+        "age": _normalized_age(stats, season),
         "years_pro": as_float(stats.get("years_pro")),
     }
+
+
+#: The AGE offset does not carry an age in a retail roster -- it carries the player's
+#: birth year, stored one below the true year (Devin Booker, born 1996, reads 1995).
+#: Editor-authored players carry a real age there instead, because the editor writes
+#: one. The pool therefore sees both units and normalizes to an age; the raw capture in
+#: ``pool_export_rows`` stays verbatim. See ``_AGE_AS_BIRTH_YEAR_THRESHOLD``.
+_AGE_AS_BIRTH_YEAR_THRESHOLD = 100.0
+_AGE_BIRTH_YEAR_BIAS = 1
+
+
+def _normalized_age(stats: dict[str, Any], season: Optional[int] = None) -> float | None:
+    """Return a player age in years, whichever unit the AGE field was written in."""
+    raw = as_float(stats.get("age"))
+    if raw is None or raw < _AGE_AS_BIRTH_YEAR_THRESHOLD:
+        return raw
+    if season is None:
+        return None
+    return float(season) - (float(raw) + _AGE_BIRTH_YEAR_BIAS)
 
 
 def _feature_columns_sql() -> str:
@@ -534,14 +553,23 @@ def _candidates_from_rows(
     attrs_by_index: dict[int, Dict[str, Any]],
     tends_by_index: dict[int, Dict[str, Any]],
     team_by_index: dict[int, Dict[str, Any]],
+    *,
+    season: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     candidates: List[Dict[str, Any]] = []
     for idx, stats in stats_by_index.items():
         positions = parse_positions(stats.get("primary_position"))
         if not positions:
             continue
+        attribute_row = attrs_by_index.get(idx, {})
+        # Snapshots captured before the floor-value guard existed still carry blank
+        # roster templates; keep them out of the derived pool on every rebuild.
+        if _is_floor_value_attribute_row(
+            attribute_row, tuple(key for key in attribute_row if key not in BASE_COLS)
+        ):
+            continue
         fields: Dict[str, float] = {}
-        for col, val in attrs_by_index.get(idx, {}).items():
+        for col, val in attribute_row.items():
             if col in BASE_COLS:
                 continue
             v = as_float(val)
@@ -561,7 +589,7 @@ def _candidates_from_rows(
             key: value for key, value in live_player_team_features(stats, team_all_features).items() if value is not None
         }
         features = {**live, **team_features, **player_team_features}
-        vitals = live_vitals(stats)
+        vitals = live_vitals(stats, season)
         play_types = _snapshot_play_types(stats)
         for pos in positions:
             candidates.append(
@@ -580,7 +608,18 @@ def _candidates_from_rows(
 
 def _snapshot_candidates(run_id: str) -> List[Dict[str, Any]]:
     stats_rows, attrs_rows, tends_rows, team_rows = _stored_snapshot_rows(run_id)
-    return _candidates_from_rows(run_id, stats_rows, attrs_rows, tends_rows, team_rows)
+    return _candidates_from_rows(
+        run_id, stats_rows, attrs_rows, tends_rows, team_rows, season=_snapshot_season(run_id)
+    )
+
+
+def _snapshot_season(run_id: str) -> Optional[int]:
+    """Season the snapshot was captured for; needed to read a birth year as an age."""
+    with sqlite3.connect(POOL_SQLITE) as connection:
+        row = connection.execute(
+            "SELECT season FROM pool_export_snapshots WHERE snapshot_id = ?", (run_id,)
+        ).fetchone()
+    return None if row is None or row[0] is None else int(row[0])
 
 
 _CANDIDATE_TABLE_SQL = (
@@ -744,12 +783,53 @@ def _raw_int(value: dict[str, Any] | None) -> int | None:
         return None
 
 
+#: Blank roster-slot templates carry every attribute at the rating floor. The Pool is a
+#: calibration source, so a block of floor values pulls every field-exact target it
+#: feeds -- eleven "A Z" slots were captured alongside the 329 real players in
+#: editor_capture_002 before this filter existed.
+#:
+#: Matching the label alone is not enough: retail rosters ship the same template under
+#: other names ("AD ABC" put four 5'4"/350lb centers into editor_capture_005), so the
+#: label is only a fast path and ``_is_floor_value_attribute_row`` is the real guard.
+_EMPTY_ROSTER_SLOT_LABELS = frozenset({"a z", "az", "ad abc", "adabc"})
+
+#: Every attribute of a template slot sits at the rating floor; only Potential varies
+#: (40-42 across the templates seen). A real fringe player is nowhere near this -- the
+#: weakest player in editor_capture_005 had 4 of 52 attributes at the floor.
+_FLOOR_ATTRIBUTE_RATING = 25.0
+_FLOOR_SIGNATURE_EXEMPT_FIELDS = frozenset({"Misc / Potential"})
+
+
+def _is_empty_roster_slot(player: Any) -> bool:
+    label = " ".join(str(getattr(player, "label", "") or "").split()).strip().lower()
+    return label in _EMPTY_ROSTER_SLOT_LABELS
+
+
+def _is_floor_value_attribute_row(attribute_row: dict[str, Any], attribute_field_names: tuple[str, ...]) -> bool:
+    """True when every gradeable attribute sits at the floor -- a blank roster template."""
+    graded = 0
+    for name in attribute_field_names:
+        if name in _FLOOR_SIGNATURE_EXEMPT_FIELDS:
+            continue
+        value = as_float(attribute_row.get(name))
+        if value is None:
+            continue
+        if value != _FLOOR_ATTRIBUTE_RATING:
+            return False
+        graded += 1
+    return graded > 0
+
+
 def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     loaded_teams = sorted(model.loaded_items.get("Teams", {}).values(), key=lambda item: int(item.index))
     active_teams = loaded_teams[:30]
     team_slots = {int(team.index): slot for slot, team in enumerate(active_teams)}
     players = sorted(
-        model.player_roster_slot_items_for_team_items(active_teams),
+        (
+            row
+            for row in model.player_roster_slot_items_for_team_items(active_teams)
+            if not _is_empty_roster_slot(row[0])
+        ),
         key=lambda row: (
             team_slots[int(row[1]["team_index"])],
             int(row[1]["team_slot"]),
@@ -899,6 +979,10 @@ def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None
         completed_units += 1
         emit_progress(f"Captured tendencies for {progress_slot}/{len(players)} loaded team-slot players...")
 
+    stats_rows, attribute_rows, tendency_rows = _drop_floor_value_slots(
+        stats_rows, attribute_rows, tendency_rows, attribute_field_names
+    )
+
     _validate_capture(
         stats_rows=stats_rows,
         attribute_rows=attribute_rows,
@@ -911,6 +995,28 @@ def capture_active_roster_pool_rows(model: Any, *, progress_callback: Any | None
         stat_detail_field_names=stat_detail_field_names,
     )
     return stats_rows, attribute_rows, tendency_rows, team_stat_rows
+
+
+def _drop_floor_value_slots(
+    stats_rows: list[dict[str, Any]],
+    attribute_rows: list[dict[str, Any]],
+    tendency_rows: list[dict[str, Any]],
+    attribute_field_names: tuple[str, ...],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Drop blank roster templates the label fast path did not catch.
+
+    Runs on the three per-player row lists together so they stay index-aligned for
+    ``_validate_capture``.
+    """
+    dropped = {
+        int(row["player_index"])
+        for row in attribute_rows
+        if _is_floor_value_attribute_row(row, attribute_field_names)
+    }
+    if not dropped:
+        return stats_rows, attribute_rows, tendency_rows
+    keep = lambda rows: [row for row in rows if int(row["player_index"]) not in dropped]
+    return keep(stats_rows), keep(attribute_rows), keep(tendency_rows)
 
 
 _REQUIRED_STAT_DETAIL_FIELDS = (
@@ -1075,7 +1181,9 @@ def add_current_roster_to_player_generation_pool(model: Any, *, season: int = 20
             "tendency_rows": len(tendency_rows),
             "team_stat_rows": len(team_stat_rows),
         }
-        candidates = _candidates_from_rows(snapshot_id, stats_by_index, attrs_by_index, tends_by_index, team_by_index)
+        candidates = _candidates_from_rows(
+            snapshot_id, stats_by_index, attrs_by_index, tends_by_index, team_by_index, season=int(season)
+        )
         if not candidates:
             raise PoolCaptureError("capture produced no position candidates; run rejected")
         added_play_type_rows = _write_run_candidates(connection, snapshot_id, candidates, run_counts)

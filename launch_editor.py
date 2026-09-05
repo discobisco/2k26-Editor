@@ -86,7 +86,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _relaunch_in_windows_python(project_root, args_list)
 
     sys.path.insert(0, str(project_root))
-    importlib.import_module(_PACKAGE_DIR)
+    importlib.import_module("nba2k_editor" if getattr(sys, "frozen", False) else _PACKAGE_DIR)
     from nba2k_editor.entrypoints.gui import main as gui_main
 
     gui_args = [

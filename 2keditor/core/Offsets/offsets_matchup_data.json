@@ -1,0 +1,58 @@
+{
+  "MatchupData": {
+    "Matchup Data": {
+      "Fields": [
+        {
+          "normalized_name": "FIRSTTEAMPOINTER",
+          "display_name": "First Team Pointer",
+          "versions": {
+            "2K27": {
+              "address": 0,
+              "hex": "0x0",
+              "pointer_target": "Team",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "MATCHUPPAYLOAD0X10UNRESOLVED",
+          "display_name": "Matchup Payload 0x10 (Unresolved)",
+          "versions": {
+            "2K27": {
+              "address": 16,
+              "hex": "0x10",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "MATCHUPPAYLOAD0X18UNRESOLVED",
+          "display_name": "Matchup Payload 0x18 (Unresolved)",
+          "versions": {
+            "2K27": {
+              "address": 24,
+              "hex": "0x18",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "SECONDTEAMPOINTER",
+          "display_name": "Second Team Pointer",
+          "versions": {
+            "2K27": {
+              "address": 8,
+              "hex": "0x8",
+              "pointer_target": "Team",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

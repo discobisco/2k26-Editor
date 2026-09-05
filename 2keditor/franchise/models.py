@@ -31,7 +31,6 @@ class FranchiseTeamOption:
 class FranchiseSetup:
     start_year: int
     keep_full_league_save: bool
-    llm_gm_team_indexes: tuple[int, ...]
     fantasy_draft: bool
     user_team_index: int = 0
     league_mode: str = LEAGUE_MODE_NBA
@@ -46,7 +45,6 @@ class FranchiseRecord:
     created_at: str
     updated_at: str
     franchise_id: str = ""
-    profile_directory: str = ""
 
 
 @dataclass(frozen=True)
@@ -83,25 +81,15 @@ class FantasyDraftStoredPick:
     source_slot: int
     source_slot_field: str
     picked_by: str
-    raw_llm_response: str = ""
-    rationale: str = ""
     created_at: str = ""
 
 
 @dataclass(frozen=True)
-class TeamRecommendation:
-
-    team_index: int
-    team_label: str
-    recommended_action: str
-    reasoning: str
-    owner_approval_required: bool
-    trade_with_user_team: bool
-    blocked_reason: str
-    raw_llm_response: str = ""
-    status: str = "pending"
-    created_at: str = ""
-    recommendation_id: int = 0
+class ManualDraftPick:
+    draft_year: int
+    round_number: int
+    original_team_index: int
+    current_team_index: int
 
 
 COLLEGE_PLAYER_ACTIVE = "active"

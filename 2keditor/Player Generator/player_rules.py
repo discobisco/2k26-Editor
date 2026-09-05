@@ -10,12 +10,14 @@ import player_rules_athleticism as athleticism
 import player_rules_defense as defense
 import player_rules_mental as mental
 import player_rules_offense as offense
+import player_rules_pre1952 as pre_1952_rules
 import player_rules_rebounding as rebounding
 from player_era_role import adjust_values as _apply_era_role_playstyle
 from player_evidence import PlayerEvidence
 
 
 POSITIONS: tuple[str, ...] = ("PG", "SG", "SF", "PF", "C")
+
 
 
 @dataclass(frozen=True)
@@ -296,6 +298,12 @@ PLAYER_RULE_SCHEME: dict[str, PlayerRuleSpec] = {
     field_key: PlayerRuleSpec(field_key=field_key, module=module, function=function)
     for field_key, (module, function) in _RULE_BINDINGS.items()
 }
+_NBL_BAA_CENTER_SCORING_FIELDS = frozenset({
+    "Attributes/CLOSESHOT",
+    "Attributes/DRIVINGLAYUP",
+    "Attributes/MIDRANGE",
+    "Attributes/IQSHOT",
+})
 _COMPARISON_POPULATION_CACHE: dict[
     tuple[int, int],
     tuple[object, tuple[dict[str, Any], ...]],
@@ -374,6 +382,76 @@ def derive_formula_rule_values(
 ) -> dict[str, RuleValue]:
     if not _has_required_games_played(evidence):
         return {}
+    positions = positions or select_positions_from_evidence(
+        evidence.play_by_play,
+        evidence.season_info.get("pos") or evidence.identity.get("pos"),
+    )
+    fallback_positions = (
+        tuple(positions.all_positions)
+        if not positions.position_weights and len(positions.all_positions) > 1
+        else ()
+    )
+    # Everything is generated once, from the player. The per-position pass below then
+    # re-runs only the tendencies, because only a tendency reads position: an attribute
+    # scored under each of a hyphenated player's listed positions returned the same
+    # number every time -- 16,912 field-instances, none of them different -- so merging
+    # them was picking the maximum of a list of identical values.
+    values = _derive_formula_rule_values_once(
+        evidence,
+        positions=positions,
+        league_player_rows=league_player_rows,
+        active_field_keys=active_field_keys,
+    )
+    if fallback_positions:
+        tendency_keys = {key for key in values if key.startswith("Tendencies/")}
+        if active_field_keys is not None:
+            tendency_keys &= set(active_field_keys)
+        if tendency_keys:
+            generated_by_position = tuple(
+                (
+                    position,
+                    _derive_formula_rule_values_once(
+                        _evidence_for_single_fallback_position(evidence, position),
+                        positions=PositionSelection(
+                            primary=position,
+                            secondary=None,
+                            all_positions=(position,),
+                            position_weights=((position, 1.0),),
+                        ),
+                        league_player_rows=league_player_rows,
+                        active_field_keys=tendency_keys,
+                    ),
+                )
+                for position in fallback_positions
+            )
+            merged = _higher_multi_position_fallback_values(generated_by_position)
+            # Tendencies only. The per-position pass returns whatever its rules produce,
+            # attributes included, and letting those back in would reinstate exactly the
+            # per-position scoring this removes.
+            values.update({
+                key: value for key, value in merged.items() if key.startswith("Tendencies/")
+            })
+    values = _apply_nbl_unrecorded_assist_calibration(evidence, league_player_rows, values)
+    # Last of the attribute passes, after the NBL projection and the unrecorded-assist
+    # calibration, both of which rewrite fields this one owns. For the 1947-51 fields
+    # the operator authored by hand, the authored rule is the answer rather than a
+    # starting point for a later pass to overwrite. Cross-field ceilings still apply.
+    values = pre_1952_rules.apply_pre_1952_ratings(
+        evidence,
+        values,
+        positions=positions,
+    )
+    return values
+
+
+
+def _derive_formula_rule_values_once(
+    evidence: PlayerEvidence,
+    *,
+    positions: PositionSelection,
+    league_player_rows: Any,
+    active_field_keys: set[str] | None,
+) -> dict[str, RuleValue]:
     # Drive from the editor's field list when it is supplied: a field is
     # generated only if the loaded game exposes it AND a rule is bound to it.
     # Otherwise (standalone/tests) fall back to every bound field.
@@ -398,81 +476,121 @@ def derive_formula_rule_values(
         if value is None:
             continue
         values[field_key] = value
+
     # Pre-shot-clock (<=1954) playstyle post-pass: push each archetype toward how
     # it was actually played in its era. No-op for every later season and when
     # PLAYERGEN_ERA_ROLE_PLAYSTYLE is disabled.
     values = _apply_era_role_playstyle(evidence, positions, values)
-    return _apply_shot_family_gate(values)
+    return values
 
 
-# ATD "Shot family vs subtypes": Shot Mid and Shot Three carry the total share for
-# their range, and the spot-up / off-screen / pull-up / stepback / contested /
-# directional values only choose the *route* once a shot of that range is taken. A
-# route cannot be taken more often than the range it belongs to exists, so a family
-# total of zero has to zero its whole family -- otherwise a player who took no
-# mid-range shots all season still carries a contested-mid or pull-up-mid branch and
-# the engine can select it.
-#
-# Deliberately not listed: SPINJUMPER and THREATTRIPLESHOT. Neither is named for a
-# range on the committee sheet (the game fields are "Spin Jumper Tendency" and
-# "Triple Threat Shoot"), and the sheet's triple-threat notes treat Shoot as its own
-# conditional stationary-catch branch rather than a member of a range family.
-_SHOT_FAMILY_GATES: dict[str, tuple[str, ...]] = {
-    "Tendencies/MIDSHOT": (
-        "Tendencies/MIDSPOTUPSHOT",
-        "Tendencies/MIDOFFSCREENSHOT",
-        "Tendencies/CONTESTEDJUMPERMID",
-        "Tendencies/CONTESTEDJUMPERMIDRANGE",
-        "Tendencies/STEPBACKJUMPERMID",
-        "Tendencies/STEPBACKJUMPERMIDRANGE",
-        "Tendencies/DRIVEPULLUPMID",
-        "Tendencies/DRIVEPULLUPMIDRANGE",
-        "Tendencies/LEFTMIDSHOT",
-        "Tendencies/MIDRIGHTSHOT",
-        "Tendencies/CENTERMIDSHOT",
-        "Tendencies/CENTERLEFTMIDSHOT",
-        "Tendencies/CENTERMIDRIGHTSHOT",
-    ),
-    "Tendencies/3POINTSHOT": (
-        "Tendencies/3POINTSPOTUPSHOT",
-        "Tendencies/3POINTOFFSCREENSHOT",
-        "Tendencies/CONTESTEDJUMPER3POINT",
-        "Tendencies/STEPBACKJUMPER3POINT",
-        "Tendencies/DRIVEPULLUP3POINT",
-        "Tendencies/TRANSITIONPULLUP3POINT",
-        "Tendencies/3POINTLEFTSHOT",
-        "Tendencies/3POINTRIGHTSHOT",
-        "Tendencies/3POINTCENTERSHOT",
-        "Tendencies/3POINTCENTERLEFTSHOT",
-        "Tendencies/3POINTCENTERRIGHTSHOT",
-    ),
-}
+def _evidence_for_single_fallback_position(evidence: PlayerEvidence, position: str) -> PlayerEvidence:
+    season_info = dict(evidence.season_info)
+    season_info["pos"] = position
+    identity = dict(evidence.identity)
+    identity["pos"] = position
+    source_context = dict(evidence.source_context)
+    for key in (
+        "player_season_info.pos",
+        "season_info.pos",
+        "player_info.pos",
+        "identity.pos",
+        "pos",
+    ):
+        source_context[key] = position
+    return replace(
+        evidence,
+        season_info=season_info,
+        identity=identity,
+        source_context=source_context,
+    )
 
 
-def _apply_shot_family_gate(values: dict[str, RuleValue]) -> dict[str, RuleValue]:
-    gated = dict(values)
-    for parent_key, child_keys in _SHOT_FAMILY_GATES.items():
-        parent = gated.get(parent_key)
-        # An absent parent is unresolved evidence, not a zero: only an explicit 0
-        # closes the family.
-        if parent is None or parent.value != 0:
+def _higher_multi_position_fallback_values(
+    generated_by_position: tuple[tuple[str, dict[str, RuleValue]], ...],
+) -> dict[str, RuleValue]:
+    field_keys = tuple(dict.fromkeys(
+        field_key
+        for _position, values in generated_by_position
+        for field_key in values
+    ))
+    combined: dict[str, RuleValue] = {}
+    positions_text = ",".join(position for position, _values in generated_by_position)
+    for field_key in field_keys:
+        candidates = tuple(
+            (position, value)
+            for position, values in generated_by_position
+            if (value := values.get(field_key)) is not None
+            and isinstance(value.value, (int, float))
+        )
+        if not candidates:
             continue
-        for child_key in child_keys:
-            child = gated.get(child_key)
-            if child is None or child.value == 0:
-                continue
-            gated[child_key] = replace(
-                child,
-                value=0,
-                source_rule=f"{child.source_rule}_shot_family_gate",
-                evidence_keys=child.evidence_keys
-                + (
-                    f"{parent_key}=0",
-                    "atd_rule=shot_family_total_gates_its_route_subtypes",
-                    f"ungated_{child_key.split('/')[-1].lower()}={child.value}",
+        winner_position, winner = max(candidates, key=lambda item: int(item[1].value))
+        combined[field_key] = replace(
+            winner,
+            source_rule=f"{winner.source_rule}_multi_position_higher_value_fallback",
+            evidence_keys=winner.evidence_keys + (
+                f"multi_position_fallback_positions={positions_text}",
+                "multi_position_fallback_policy=calculate_each_position_independently_and_use_higher_generated_value",
+                "multi_position_fallback_scope=Tendencies",
+                "multi_position_generated_values=" + ",".join(
+                    f"{position}:{int(value.value)}" for position, value in candidates
                 ),
-            )
-    return gated
+                f"multi_position_selected_position={winner_position}",
+                f"multi_position_selected_value={int(winner.value)}",
+            ),
+        )
+    return combined
+
+
+#: The NBL rim-scoring cap binds by reach: nothing at 6'2", in full from 6'8".
+_CENTER_CAP_FREE_HEIGHT = 74.0
+_CENTER_CAP_HEIGHT_SPAN = 6.0
+
+
+
+def _apply_nbl_unrecorded_assist_calibration(
+    evidence: PlayerEvidence,
+    league_player_rows: Any,
+    values: dict[str, RuleValue],
+) -> dict[str, RuleValue]:
+    if str(evidence.season_info.get("lg") or "").strip().upper() != "NBL":
+        return values
+    calibrated = dict(values)
+    offense = _RULE_MODULES["offense"]
+    # This used to skip any field a documented calling card had authored for this exact
+    # player. The star profiles were removed, so there is no per-player authored set to
+    # protect and every NBL player is calibrated the same way.
+    for field_key in (
+        "Attributes/BALLCONTROL",
+        "Attributes/PASSACCURACY",
+        "Attributes/PASSIQ",
+        "Attributes/PASSVISION",
+    ):
+        current = calibrated.get(field_key)
+        if current is None or current.source_rule.endswith("_researched_exact_player_override"):
+            continue
+        result = offense.nbl_baa_assist_calibrated_value(
+            field_key.split("/", 1)[1],
+            evidence,
+            league_player_rows,
+        )
+        if result is None:
+            continue
+        value, evidence_keys = result
+        calibrated[field_key] = replace(
+            current,
+            value=max(25, min(99, int(round(value)))),
+            source_rule=f"derive_attribute_{field_key.split('/', 1)[1].lower()}_nbl_unrecorded_assist_baa_centered",
+            evidence_keys=current.evidence_keys + evidence_keys + (
+                f"replaced_unrecorded_assist_rule={current.source_rule}",
+            ),
+        )
+    return calibrated
+
+
+
+
 
 
 def _clamp_rule_value(field_key: str, value: int) -> int:

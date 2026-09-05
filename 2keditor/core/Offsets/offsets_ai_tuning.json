@@ -1,0 +1,3075 @@
+{
+  "AITuning": {
+    "AI Block Tuning": {
+      "Opaque Structures": [
+        {
+          "normalized_name": "AIBLOCKTUNINGOPAQUESHAPE",
+          "display_name": "AI_BLOCK_TUNING (Opaque Shape)",
+          "versions": {
+            "2K27": {
+              "address": 142212,
+              "hex": "0x22B84",
+              "readonly": true,
+              "storage_shape": "unresolved_curve_and_array_subobjects",
+              "type": "opaque"
+            }
+          }
+        }
+      ]
+    },
+    "Body Up Defense": {
+      "Body Up Tuning": [
+        {
+          "normalized_name": "BODYUPDEFENDERDISENGAGEANGLEINDEGREES",
+          "display_name": "BodyupDefenderDisengageAngleInDegrees",
+          "versions": {
+            "2K27": {
+              "address": 127276,
+              "hex": "0x1F12C",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "disengage_angle",
+              "tuning_field_offset": 12,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPDEFENDERDISENGAGEMINANGLETORIMINDEGREES",
+          "display_name": "BodyupDefenderDisengageMinAngleToRimInDegrees",
+          "versions": {
+            "2K27": {
+              "address": 127280,
+              "hex": "0x1F130",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "disengage_min_angle_to_rim",
+              "tuning_field_offset": 16,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPDEFENDERNORMALRESOLUTIONABSOLUTEMINSLIDETIME",
+          "display_name": "BodyupDefenderNormalResolutionAbsoluteMinSlideTime",
+          "versions": {
+            "2K27": {
+              "address": 127632,
+              "hex": "0x1F290",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "bodyup_slide_abs_min",
+              "tuning_field_offset": 368,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPDEFENDERSLIDEMAXTIMEALLOWEDCLEARLOSSANDFUMBLE",
+          "display_name": "BodyupDefenderSlideMaxTimeAllowedClearLossAndFumble",
+          "versions": {
+            "2K27": {
+              "address": 127628,
+              "hex": "0x1F28C",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "bodyup_slide_max_loss",
+              "tuning_field_offset": 364,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPDEFENDERSLIDEMAXTIMEALLOWEDOFFENSEANDDEFENSEFOUL",
+          "display_name": "BodyupDefenderSlideMaxTimeAllowedOffenseAndDefenseFoul",
+          "versions": {
+            "2K27": {
+              "address": 127620,
+              "hex": "0x1F284",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "bodyup_slide_max_foul",
+              "tuning_field_offset": 356,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPDEFENDERSLIDEMINTIMEALLOWEDCLEARLOSSANDFUMBLE",
+          "display_name": "BodyupDefenderSlideMinTimeAllowedClearLossAndFumble",
+          "versions": {
+            "2K27": {
+              "address": 127624,
+              "hex": "0x1F288",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "bodyup_slide_min_loss",
+              "tuning_field_offset": 360,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPDEFENDERSLIDEMINTIMEALLOWEDOFFENSEANDDEFENSEFOUL",
+          "display_name": "BodyupDefenderSlideMinTimeAllowedOffenseAndDefenseFoul",
+          "versions": {
+            "2K27": {
+              "address": 127616,
+              "hex": "0x1F280",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "bodyup_slide_min_foul",
+              "tuning_field_offset": 352,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPENTRYDEFENDERSELECTIONMAXDISTANCEFOREXISTINGSELECTIONINFEET",
+          "display_name": "BodyupEntryDefenderSelectionMaxDistanceForExistingSelectionInFeet",
+          "versions": {
+            "2K27": {
+              "address": 127652,
+              "hex": "0x1F2A4",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "bodyup_entry_existing_max_distance",
+              "tuning_field_offset": 388,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPENTRYDEFENDERSELECTIONMAXDISTANCEFORTAKINGCHARGEINFEET",
+          "display_name": "BodyupEntryDefenderSelectionMaxDistanceForTakingChargeInFeet",
+          "versions": {
+            "2K27": {
+              "address": 127656,
+              "hex": "0x1F2A8",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "bodyup_entry_charge_max_distance",
+              "tuning_field_offset": 392,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPENTRYDEFENDERSELECTIONMAXDISTANCEFORVELOCITYPROJECTIONINFEET",
+          "display_name": "BodyupEntryDefenderSelectionMaxDistanceForVelocityProjectionInFeet",
+          "versions": {
+            "2K27": {
+              "address": 127644,
+              "hex": "0x1F29C",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "bodyup_entry_velocity_projection_max_distance",
+              "tuning_field_offset": 380,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPENTRYDEFENDERSELECTIONMAXDISTANCEINFEET",
+          "display_name": "BodyupEntryDefenderSelectionMaxDistanceInFeet",
+          "versions": {
+            "2K27": {
+              "address": 127640,
+              "hex": "0x1F298",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "bodyup_entry_max_distance",
+              "tuning_field_offset": 376,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPENTRYDEFENDERSELECTIONVELOCITYPROJECTIONTIMEINSECONDS",
+          "display_name": "BodyupEntryDefenderSelectionVelocityProjectionTimeInSeconds",
+          "versions": {
+            "2K27": {
+              "address": 127648,
+              "hex": "0x1F2A0",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "bodyup_entry_velocity_projection_time",
+              "tuning_field_offset": 384,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPENTRYFRAMESSHOVINGTOIGNORECOOLDOWN",
+          "display_name": "BodyupEntryFramesShovingToIgnoreCooldown",
+          "versions": {
+            "2K27": {
+              "address": 127712,
+              "hex": "0x1F2E0",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "bodyup_shove_ignore_cooldown_frames",
+              "tuning_field_offset": 448,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPENTRYMAXDEFMOVDIRDRBLINEDELTAFORDEFFASTCLOSEOUTINDEGREES",
+          "display_name": "BodyupEntryMaxDefMovDirDrbLineDeltaForDefFastCloseoutInDegrees",
+          "versions": {
+            "2K27": {
+              "address": 127304,
+              "hex": "0x1F148",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "fast_closeout_max_angle",
+              "tuning_field_offset": 40,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPENTRYMINEFFECTIVESPEEDFORDEFFASTCLOSEOUTINFEETPERSECOND",
+          "display_name": "BodyupEntryMinEffectiveSpeedForDefFastCloseoutInFeetPerSecond",
+          "versions": {
+            "2K27": {
+              "address": 127300,
+              "hex": "0x1F144",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "fast_closeout_min_speed",
+              "tuning_field_offset": 36,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPENTRYMINTIMEINNONBODYUPMOVETOALLOWCOOLDOWN",
+          "display_name": "BodyupEntryMinTimeInNonBodyupMoveToAllowCooldown",
+          "versions": {
+            "2K27": {
+              "address": 127716,
+              "hex": "0x1F2E4",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "bodyup_non_bodyup_cooldown_time",
+              "tuning_field_offset": 452,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPSPEEDMATCHMAXRATE",
+          "display_name": "BodyupSpeedMatchMaxRate",
+          "versions": {
+            "2K27": {
+              "address": 127272,
+              "hex": "0x1F128",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "speed_match_max_rate",
+              "tuning_field_offset": 8,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPSPEEDMATCHMINRATE",
+          "display_name": "BodyupSpeedMatchMinRate",
+          "versions": {
+            "2K27": {
+              "address": 127268,
+              "hex": "0x1F124",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "speed_match_min_rate",
+              "tuning_field_offset": 4,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPSPEEDMATCHTIMESAMPLE",
+          "display_name": "BodyupSpeedMatchTimeSample",
+          "versions": {
+            "2K27": {
+              "address": 127264,
+              "hex": "0x1F120",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "speed_match_time_sample",
+              "tuning_field_offset": 0,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPSTEALPROBABILITYMULTIPLIER",
+          "display_name": "BodyupStealProbabilityMultiplier",
+          "versions": {
+            "2K27": {
+              "address": 127728,
+              "hex": "0x1F2F0",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "bodyup_steal_probability_mult",
+              "tuning_field_offset": 464,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BODYUPWINRESOLUTIONSTEALSUCCESSEXTRAMULTIPLIER",
+          "display_name": "BodyupWinResolutionStealSuccessExtraMultiplier",
+          "versions": {
+            "2K27": {
+              "address": 127732,
+              "hex": "0x1F2F4",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "bodyup_win_steal_success_extra_mult",
+              "tuning_field_offset": 468,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "CROWDDEFENDERABSOLUTEMINSLIDETIME",
+          "display_name": "CrowdDefenderAbsoluteMinSlideTime",
+          "versions": {
+            "2K27": {
+              "address": 127596,
+              "hex": "0x1F26C",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "crowd_defender_abs_min_slide_time",
+              "tuning_field_offset": 332,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "CROWDENTRYDEFENDERSELECTIONMATCHUPFITDISCOUNT",
+          "display_name": "CrowdEntryDefenderSelectionMatchupFitDiscount",
+          "versions": {
+            "2K27": {
+              "address": 127708,
+              "hex": "0x1F2DC",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "crowd_matchup_fit_discount",
+              "tuning_field_offset": 444,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "CROWDENTRYDEFENDERSELECTIONMAXDISTANCEINFEET",
+          "display_name": "CrowdEntryDefenderSelectionMaxDistanceInFeet",
+          "versions": {
+            "2K27": {
+              "address": 127636,
+              "hex": "0x1F294",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "crowd_entry_max_distance",
+              "tuning_field_offset": 372,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "CROWDENTRYNONMATCHUPLETTHRUCONEMAXCTRLDIRTOOFFDELTAINDEGREES",
+          "display_name": "CrowdEntryNonMatchupLetThruConeMaxCtrlDirToOffDeltaInDegrees",
+          "versions": {
+            "2K27": {
+              "address": 127296,
+              "hex": "0x1F140",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "crowd_entry_non_matchup_angle",
+              "tuning_field_offset": 32,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "CROWDENTRYNONMATCHUPLETTHRUCONERADIUSINFEET",
+          "display_name": "CrowdEntryNonMatchupLetThruConeRadiusInFeet",
+          "versions": {
+            "2K27": {
+              "address": 127292,
+              "hex": "0x1F13C",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "crowd_entry_non_matchup_radius",
+              "tuning_field_offset": 28,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "CROWDFOULMAXDEFENDERCONTROLANGLEDIFFINDEGREES",
+          "display_name": "CrowdFoulMaxDefenderControlAngleDiffInDegrees",
+          "versions": {
+            "2K27": {
+              "address": 127400,
+              "hex": "0x1F1A8",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "crowd_foul_max_angle",
+              "tuning_field_offset": 136,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "CROWDMINDISTANCEFROMRIMFORLOSSESANDFOULSINFEET",
+          "display_name": "CrowdMinDistanceFromRimForLossesAndFoulsInFeet",
+          "versions": {
+            "2K27": {
+              "address": 127396,
+              "hex": "0x1F1A4",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "crowd_min_rim_distance",
+              "tuning_field_offset": 132,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERPUSHINGDRIBBLEROOBMINREQUIREDTIMEINSECONDS",
+          "display_name": "DefenderPushingDribblerOOBMinRequiredTimeInSeconds",
+          "versions": {
+            "2K27": {
+              "address": 127720,
+              "hex": "0x1F2E8",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "defender_oob_min_time",
+              "tuning_field_offset": 456,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERPUSHINGDRIBBLEROOBMMAXDEFENDERDISTANCEINFEET",
+          "display_name": "DefenderPushingDribblerOOBMMaxDefenderDistanceInFeet",
+          "versions": {
+            "2K27": {
+              "address": 127724,
+              "hex": "0x1F2EC",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "defender_oob_max_distance",
+              "tuning_field_offset": 460,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "ENTRYDEFENDERSELECTIONANGLEFITWEIGHT",
+          "display_name": "EntryDefenderSelectionAngleFitWeight",
+          "versions": {
+            "2K27": {
+              "address": 127668,
+              "hex": "0x1F2B4",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "entry_angle_fit_weight",
+              "tuning_field_offset": 404,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "ENTRYDEFENDERSELECTIONANGLEINDEGREESFORUNITSCORE",
+          "display_name": "EntryDefenderSelectionAngleInDegreesForUnitScore",
+          "versions": {
+            "2K27": {
+              "address": 127664,
+              "hex": "0x1F2B0",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "entry_angle_unit_score",
+              "tuning_field_offset": 400,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "ENTRYDEFENDERSELECTIONDISTANCEINFEETFORUNITSCORE",
+          "display_name": "EntryDefenderSelectionDistanceInFeetForUnitScore",
+          "versions": {
+            "2K27": {
+              "address": 127660,
+              "hex": "0x1F2AC",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "entry_distance_unit_score",
+              "tuning_field_offset": 396,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "ENTRYDEFENDERSELECTIONEXISTINGDEFENDERFITDISCOUNT",
+          "display_name": "EntryDefenderSelectionExistingDefenderFitDiscount",
+          "versions": {
+            "2K27": {
+              "address": 127704,
+              "hex": "0x1F2D8",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "entry_existing_fit_discount",
+              "tuning_field_offset": 440,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "PARKBODYUPSMAXPLAYERSPERTEAM",
+          "display_name": "ParkBodyupsMaxPlayersPerTeam",
+          "versions": {
+            "2K27": {
+              "address": 127288,
+              "hex": "0x1F138",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "park_max_players_per_team",
+              "tuning_field_offset": 24,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "STANDINGCATCHCOLLISIONMAXALLOWEDRIMDISTINFEET",
+          "display_name": "StandingCatchCollisionMaxAllowedRimDistInFeet",
+          "versions": {
+            "2K27": {
+              "address": 127404,
+              "hex": "0x1F1AC",
+              "readonly": true,
+              "tuning_category_key": "bodyup",
+              "tuning_field_key": "standing_catch_collision_rim_dist",
+              "tuning_field_offset": 140,
+              "tuning_row_offset": 127264,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        }
+      ]
+    },
+    "General Defense": {
+      "Defense Tuning": [
+        {
+          "normalized_name": "AHEADOFBALLDISTANCE",
+          "display_name": "AheadOfBallDistance",
+          "versions": {
+            "2K27": {
+              "address": 31400,
+              "hex": "0x7AA8",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "ahead_ball_distance",
+              "tuning_field_offset": 104,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "AHEADOFBALLMATCHUPDISTANCE",
+          "display_name": "AheadOfBallMatchupDistance",
+          "versions": {
+            "2K27": {
+              "address": 31404,
+              "hex": "0x7AAC",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "ahead_ball_matchup_distance",
+              "tuning_field_offset": 108,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "ANCHORDISTANCEWEIGHT",
+          "display_name": "AnchorDistanceWeight",
+          "versions": {
+            "2K27": {
+              "address": 31304,
+              "hex": "0x7A48",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "anchor_distance_weight",
+              "tuning_field_offset": 8,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "ANCHORDISTFROMHOOPNOHELP",
+          "display_name": "AnchorDistFromHoopNoHelp",
+          "versions": {
+            "2K27": {
+              "address": 31352,
+              "hex": "0x7A78",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "anchor_dist_hoop_no_help",
+              "tuning_field_offset": 56,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "ANCHORDISTFROMHOOPWITHHELP",
+          "display_name": "AnchorDistFromHoopWithHelp",
+          "versions": {
+            "2K27": {
+              "address": 31348,
+              "hex": "0x7A74",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "anchor_dist_hoop_help",
+              "tuning_field_offset": 52,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "ANCHORMATCHTOBALLTWEEN",
+          "display_name": "AnchorMatchToBallTween",
+          "versions": {
+            "2K27": {
+              "address": 31456,
+              "hex": "0x7AE0",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "anchor_match_to_ball_tween",
+              "tuning_field_offset": 160,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "ANCHORPOSITIONWEIGHT",
+          "display_name": "AnchorPositionWeight",
+          "versions": {
+            "2K27": {
+              "address": 31308,
+              "hex": "0x7A4C",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "anchor_position_weight",
+              "tuning_field_offset": 12,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "ANCHORSINKPROJECTION",
+          "display_name": "AnchorSinkProjection",
+          "versions": {
+            "2K27": {
+              "address": 31356,
+              "hex": "0x7A7C",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "anchor_sink_projection",
+              "tuning_field_offset": 60,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "ANCHORSTOPPEREXCHANGECOOLDOWN",
+          "display_name": "AnchorStopperExchangeCooldown",
+          "versions": {
+            "2K27": {
+              "address": 31300,
+              "hex": "0x7A44",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "anchor_stopper_exchange_cooldown",
+              "tuning_field_offset": 4,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "ANCHORTURBOSTANCEDISTANCE",
+          "display_name": "AnchorTurboStanceDistance",
+          "versions": {
+            "2K27": {
+              "address": 31332,
+              "hex": "0x7A64",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "anchor_turbo_stance_distance",
+              "tuning_field_offset": 36,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "BACKDRIFTCUSHION",
+          "display_name": "BackDriftCushion",
+          "versions": {
+            "2K27": {
+              "address": 31488,
+              "hex": "0x7B00",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "back_drift_cushion",
+              "tuning_field_offset": 192,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "BACKDRIFTTIME",
+          "display_name": "BackDriftTime",
+          "versions": {
+            "2K27": {
+              "address": 31484,
+              "hex": "0x7AFC",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "back_drift_time",
+              "tuning_field_offset": 188,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "CLOSEPOSITIONDIST",
+          "display_name": "ClosePositionDist",
+          "versions": {
+            "2K27": {
+              "address": 31476,
+              "hex": "0x7AF4",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "close_position_dist",
+              "tuning_field_offset": 180,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "CONTACTDEFENSEACTIVEDIST",
+          "display_name": "ContactDefenseActiveDist",
+          "versions": {
+            "2K27": {
+              "address": 31520,
+              "hex": "0x7B20",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "contact_defense_active_dist",
+              "tuning_field_offset": 224,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENSEMINOFFBALLCUSHION",
+          "display_name": "DefenseMinOffballCushion",
+          "versions": {
+            "2K27": {
+              "address": 31516,
+              "hex": "0x7B1C",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "defense_min_offball_cushion",
+              "tuning_field_offset": 220,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFPOSITIONDISTANCE",
+          "display_name": "DefPositionDistance",
+          "versions": {
+            "2K27": {
+              "address": 31472,
+              "hex": "0x7AF0",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "def_position_distance",
+              "tuning_field_offset": 176,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "DRIFTLOOKAHEADTIME",
+          "display_name": "DriftLookAheadTime",
+          "versions": {
+            "2K27": {
+              "address": 31460,
+              "hex": "0x7AE4",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "drift_lookahead_time",
+              "tuning_field_offset": 164,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "FARPOSITIONDIST",
+          "display_name": "FarPositionDist",
+          "versions": {
+            "2K27": {
+              "address": 31480,
+              "hex": "0x7AF8",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "far_position_dist",
+              "tuning_field_offset": 184,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "JAMTHECUTTERMINDRIVETHREAT",
+          "display_name": "JamTheCutterMinDriveThreat",
+          "versions": {
+            "2K27": {
+              "address": 31540,
+              "hex": "0x7B34",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "jam_cutter_min_drive_threat",
+              "tuning_field_offset": 244,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "JUMPTOBALLCUSHIONDISTANCE",
+          "display_name": "JumpToBallCushionDistance",
+          "versions": {
+            "2K27": {
+              "address": 31524,
+              "hex": "0x7B24",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "jump_to_ball_cushion_distance",
+              "tuning_field_offset": 228,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "JUMPTOBALLLANEDISTANCE",
+          "display_name": "JumpToBallLaneDistance",
+          "versions": {
+            "2K27": {
+              "address": 31528,
+              "hex": "0x7B28",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "jump_to_ball_lane_distance",
+              "tuning_field_offset": 232,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "JUMPTOBALLMAXTIME",
+          "display_name": "JumpToBallMaxTime",
+          "versions": {
+            "2K27": {
+              "address": 31536,
+              "hex": "0x7B30",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "jump_to_ball_max_time",
+              "tuning_field_offset": 240,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "JUMPTOBALLMINTIME",
+          "display_name": "JumpToBallMinTime",
+          "versions": {
+            "2K27": {
+              "address": 31532,
+              "hex": "0x7B2C",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "jump_to_ball_min_time",
+              "tuning_field_offset": 236,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "MAXBALLDISTFROMRIMFOROPENLANEINFEET",
+          "display_name": "MaxBallDistFromRimForOpenLaneInFeet",
+          "versions": {
+            "2K27": {
+              "address": 31448,
+              "hex": "0x7AD8",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "max_ball_dist_rim_open_lane",
+              "tuning_field_offset": 152,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "MAXBALLZFORZONE",
+          "display_name": "MaxBallZForZone",
+          "versions": {
+            "2K27": {
+              "address": 31396,
+              "hex": "0x7AA4",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "max_ball_z_for_zone",
+              "tuning_field_offset": 100,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "MINIMUMSWITCHTIME",
+          "display_name": "MinimumSwitchTime",
+          "versions": {
+            "2K27": {
+              "address": 31452,
+              "hex": "0x7ADC",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "minimum_switch_time",
+              "tuning_field_offset": 156,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "MINTHREATDISTANCE",
+          "display_name": "MinThreatDistance",
+          "versions": {
+            "2K27": {
+              "address": 31496,
+              "hex": "0x7B08",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "min_threat_distance",
+              "tuning_field_offset": 200,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "STARTBALLTURBODISTANCE",
+          "display_name": "StartBallTurboDistance",
+          "versions": {
+            "2K27": {
+              "address": 31508,
+              "hex": "0x7B14",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "start_ball_turbo_distance",
+              "tuning_field_offset": 212,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "STARTTURBODISTANCE",
+          "display_name": "StartTurboDistance",
+          "versions": {
+            "2K27": {
+              "address": 31464,
+              "hex": "0x7AE8",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "start_turbo_distance",
+              "tuning_field_offset": 168,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "STOPBALLTURBODISTANCE",
+          "display_name": "StopBallTurboDistance",
+          "versions": {
+            "2K27": {
+              "address": 31512,
+              "hex": "0x7B18",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "stop_ball_turbo_distance",
+              "tuning_field_offset": 216,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "STOPPERDISTANCEWEIGHT",
+          "display_name": "StopperDistanceWeight",
+          "versions": {
+            "2K27": {
+              "address": 31316,
+              "hex": "0x7A54",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "stopper_distance_weight",
+              "tuning_field_offset": 20,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "STOPPERGUARDWEIGHT",
+          "display_name": "StopperGuardWeight",
+          "versions": {
+            "2K27": {
+              "address": 31312,
+              "hex": "0x7A50",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "stopper_guard_weight",
+              "tuning_field_offset": 16,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "STOPPERPOSITIONWEIGHT",
+          "display_name": "StopperPositionWeight",
+          "versions": {
+            "2K27": {
+              "address": 31320,
+              "hex": "0x7A58",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "stopper_position_weight",
+              "tuning_field_offset": 24,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "STOPTURBODISTANCE",
+          "display_name": "StopTurboDistance",
+          "versions": {
+            "2K27": {
+              "address": 31468,
+              "hex": "0x7AEC",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "stop_turbo_distance",
+              "tuning_field_offset": 172,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TERMINATIONDISTSQ",
+          "display_name": "TerminationDistSq",
+          "versions": {
+            "2K27": {
+              "address": 31360,
+              "hex": "0x7A80",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "termination_dist_sq",
+              "tuning_field_offset": 64,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TERMINATIONFORCEDTIMER",
+          "display_name": "TerminationForcedTimer",
+          "versions": {
+            "2K27": {
+              "address": 31376,
+              "hex": "0x7A90",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "termination_forced_timer",
+              "tuning_field_offset": 80,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TERMINATIONFORCEDTIMERNOADVANTAGE",
+          "display_name": "TerminationForcedTimerNoAdvantage",
+          "versions": {
+            "2K27": {
+              "address": 31380,
+              "hex": "0x7A94",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "termination_forced_timer_no_advantage",
+              "tuning_field_offset": 84,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TERMINATIONMATCHUPDISTSQ",
+          "display_name": "TerminationMatchupDistSq",
+          "versions": {
+            "2K27": {
+              "address": 31364,
+              "hex": "0x7A84",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "termination_matchup_dist_sq",
+              "tuning_field_offset": 68,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TERMINATIONOOPDIST",
+          "display_name": "TerminationOopDist",
+          "versions": {
+            "2K27": {
+              "address": 31388,
+              "hex": "0x7A9C",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "termination_oop_dist",
+              "tuning_field_offset": 92,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TERMINATIONOOPZLOCATION",
+          "display_name": "TerminationOopZLocation",
+          "versions": {
+            "2K27": {
+              "address": 31392,
+              "hex": "0x7AA0",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "termination_oop_z_location",
+              "tuning_field_offset": 96,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TERMINATIONSTANDADJUST",
+          "display_name": "TerminationStandAdjust",
+          "versions": {
+            "2K27": {
+              "address": 31384,
+              "hex": "0x7A98",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "termination_stand_adjust",
+              "tuning_field_offset": 88,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TERMINATIONTIMER",
+          "display_name": "TerminationTimer",
+          "versions": {
+            "2K27": {
+              "address": 31368,
+              "hex": "0x7A88",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "termination_timer",
+              "tuning_field_offset": 72,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TERMINATIONTIMERRATIO",
+          "display_name": "TerminationTimerRatio",
+          "versions": {
+            "2K27": {
+              "address": 31372,
+              "hex": "0x7A8C",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "termination_timer_ratio",
+              "tuning_field_offset": 76,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "THREATLOCATIONRATIO",
+          "display_name": "ThreatLocationRatio",
+          "versions": {
+            "2K27": {
+              "address": 31492,
+              "hex": "0x7B04",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "threat_location_ratio",
+              "tuning_field_offset": 196,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TRANSITIONAHEADOFMATCHUPDISTANCE",
+          "display_name": "TransitionAheadOfMatchupDistance",
+          "versions": {
+            "2K27": {
+              "address": 31408,
+              "hex": "0x7AB0",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "transition_ahead_matchup_distance",
+              "tuning_field_offset": 112,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TRANSITIONIGNOREANCHORMATCHUPLANEDISTINFEET",
+          "display_name": "TransitionIgnoreAnchorMatchupLaneDistInFeet",
+          "versions": {
+            "2K27": {
+              "address": 31436,
+              "hex": "0x7ACC",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "transition_ignore_anchor_lane_dist",
+              "tuning_field_offset": 140,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TRANSITIONLOOKAHEADFOROPENLANE",
+          "display_name": "TransitionLookAheadForOpenLane",
+          "versions": {
+            "2K27": {
+              "address": 31440,
+              "hex": "0x7AD0",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "transition_lookahead_open_lane",
+              "tuning_field_offset": 144,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TRANSITIONMATCHUPBEHINDDISTANCE",
+          "display_name": "TransitionMatchupBehindDistance",
+          "versions": {
+            "2K27": {
+              "address": 31412,
+              "hex": "0x7AB4",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "transition_matchup_behind_distance",
+              "tuning_field_offset": 116,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TRANSITIONMATCHUPNEARRIMDISTANCE",
+          "display_name": "TransitionMatchupNearRimDistance",
+          "versions": {
+            "2K27": {
+              "address": 31416,
+              "hex": "0x7AB8",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "transition_matchup_near_rim_distance",
+              "tuning_field_offset": 120,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TRANSITIONMINHUMANSPEEDFORLANECHECKINFPS",
+          "display_name": "TransitionMinHumanSpeedForLaneCheckInFPS",
+          "versions": {
+            "2K27": {
+              "address": 31432,
+              "hex": "0x7AC8",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "transition_min_human_speed_lane_check",
+              "tuning_field_offset": 136,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TRANSITIONSKIPLANECHECKDISTINFEET",
+          "display_name": "TransitionSkipLaneCheckDistInFeet",
+          "versions": {
+            "2K27": {
+              "address": 31424,
+              "hex": "0x7AC0",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "transition_skip_lane_check_dist",
+              "tuning_field_offset": 128,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TURBOAWAYDISTANCE",
+          "display_name": "TurboAwayDistance",
+          "versions": {
+            "2K27": {
+              "address": 31340,
+              "hex": "0x7A6C",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "turbo_away_distance",
+              "tuning_field_offset": 44,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TURBOAWAYMATCHUPDISTANCE",
+          "display_name": "TurboAwayMatchupDistance",
+          "versions": {
+            "2K27": {
+              "address": 31344,
+              "hex": "0x7A70",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "turbo_away_matchup_distance",
+              "tuning_field_offset": 48,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TURBOBALLCHECKDISTANCE",
+          "display_name": "TurboBallCheckDistance",
+          "versions": {
+            "2K27": {
+              "address": 31504,
+              "hex": "0x7B10",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "turbo_ball_check_distance",
+              "tuning_field_offset": 208,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "TURBOMINDISTANCE",
+          "display_name": "TurboMinDistance",
+          "versions": {
+            "2K27": {
+              "address": 31336,
+              "hex": "0x7A68",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "turbo_min_distance",
+              "tuning_field_offset": 40,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "UPDATELOCKEDCOOLDOWN",
+          "display_name": "UpdateLockedCooldown",
+          "versions": {
+            "2K27": {
+              "address": 31324,
+              "hex": "0x7A5C",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "update_locked_cooldown",
+              "tuning_field_offset": 28,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        },
+        {
+          "normalized_name": "UPDATEUNLOCKEDCOOLDOWN",
+          "display_name": "UpdateUnlockedCooldown",
+          "versions": {
+            "2K27": {
+              "address": 31328,
+              "hex": "0x7A60",
+              "readonly": true,
+              "tuning_category_key": "defense",
+              "tuning_field_key": "update_unlocked_cooldown",
+              "tuning_field_offset": 32,
+              "tuning_row_offset": 31296,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "read_only_default"
+            }
+          }
+        }
+      ]
+    },
+    "Screen Defense": {
+      "Screen Tuning": [
+        {
+          "normalized_name": "SCREENTUNINGINDEX0A",
+          "display_name": "Screen Tuning - Index 0, A",
+          "versions": {
+            "2K27": {
+              "address": 135564,
+              "hex": "0x2118C",
+              "readonly": true,
+              "tuning_category_key": "screen",
+              "tuning_field_key": "0x27C",
+              "tuning_field_offset": 636,
+              "tuning_row_offset": 134928,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "SCREENTUNINGINDEX0B",
+          "display_name": "Screen Tuning - Index 0, B",
+          "versions": {
+            "2K27": {
+              "address": 135568,
+              "hex": "0x21190",
+              "readonly": true,
+              "tuning_category_key": "screen",
+              "tuning_field_key": "0x280",
+              "tuning_field_offset": 640,
+              "tuning_row_offset": 134928,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "SCREENTUNINGINDEX1A",
+          "display_name": "Screen Tuning - Index 1, A",
+          "versions": {
+            "2K27": {
+              "address": 135572,
+              "hex": "0x21194",
+              "readonly": true,
+              "tuning_category_key": "screen",
+              "tuning_field_key": "0x284",
+              "tuning_field_offset": 644,
+              "tuning_row_offset": 134928,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "SCREENTUNINGINDEX1B",
+          "display_name": "Screen Tuning - Index 1, B",
+          "versions": {
+            "2K27": {
+              "address": 135576,
+              "hex": "0x21198",
+              "readonly": true,
+              "tuning_category_key": "screen",
+              "tuning_field_key": "0x288",
+              "tuning_field_offset": 648,
+              "tuning_row_offset": 134928,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "SCREENTUNINGINDEX2A",
+          "display_name": "Screen Tuning - Index 2, A",
+          "versions": {
+            "2K27": {
+              "address": 135580,
+              "hex": "0x2119C",
+              "readonly": true,
+              "tuning_category_key": "screen",
+              "tuning_field_key": "0x28C",
+              "tuning_field_offset": 652,
+              "tuning_row_offset": 134928,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "SCREENTUNINGINDEX2B",
+          "display_name": "Screen Tuning - Index 2, B",
+          "versions": {
+            "2K27": {
+              "address": 135584,
+              "hex": "0x211A0",
+              "readonly": true,
+              "tuning_category_key": "screen",
+              "tuning_field_key": "0x290",
+              "tuning_field_offset": 656,
+              "tuning_row_offset": 134928,
+              "type": "float",
+              "validation_status": "confirmed_offsets",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        }
+      ]
+    },
+    "Shot Skill Boosts": {
+      "Shot & Perfect-Window Multipliers": [
+        {
+          "normalized_name": "BOOSTJUMPERSBASICSHOTCHANCEMULTIPLIER",
+          "display_name": "BoostJumpersBasic.ShotChanceMultiplier",
+          "versions": {
+            "2K27": {
+              "address": 8,
+              "hex": "0x8",
+              "readonly": true,
+              "tuning_category_key": "skillboost",
+              "tuning_field_key": "boost_jumpers_basic_chance_mult",
+              "tuning_field_offset": 8,
+              "tuning_row_offset": 0,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BOOSTJUMPERSBOOSTEDSHOTCHANCEMULTIPLIER",
+          "display_name": "BoostJumpersBoosted.ShotChanceMultiplier",
+          "versions": {
+            "2K27": {
+              "address": 12,
+              "hex": "0xC",
+              "readonly": true,
+              "tuning_category_key": "skillboost",
+              "tuning_field_key": "boost_jumpers_boosted_chance_mult",
+              "tuning_field_offset": 12,
+              "tuning_row_offset": 0,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BOOSTLAYUPSANDDUNKSBASICSHOTCHANCEMULTIPLIER",
+          "display_name": "BoostLayupsAndDunksBasic.ShotChanceMultiplier",
+          "versions": {
+            "2K27": {
+              "address": 424,
+              "hex": "0x1A8",
+              "readonly": true,
+              "tuning_category_key": "skillboost",
+              "tuning_field_key": "boost_layups_dunks_basic_chance_mult",
+              "tuning_field_offset": 424,
+              "tuning_row_offset": 0,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BOOSTLAYUPSANDDUNKSBOOSTEDSHOTCHANCEMULTIPLIER",
+          "display_name": "BoostLayupsAndDunksBoosted.ShotChanceMultiplier",
+          "versions": {
+            "2K27": {
+              "address": 436,
+              "hex": "0x1B4",
+              "readonly": true,
+              "tuning_category_key": "skillboost",
+              "tuning_field_key": "boost_layups_dunks_boosted_chance_mult",
+              "tuning_field_offset": 436,
+              "tuning_row_offset": 0,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BOOSTPOSTSHOTSBASICSHOTCHANCEMULTIPLIER",
+          "display_name": "BoostPostShotsBasic.ShotChanceMultiplier",
+          "versions": {
+            "2K27": {
+              "address": 24,
+              "hex": "0x18",
+              "readonly": true,
+              "tuning_category_key": "skillboost",
+              "tuning_field_key": "boost_post_shots_basic_chance_mult",
+              "tuning_field_offset": 24,
+              "tuning_row_offset": 0,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "BOOSTPOSTSHOTSBOOSTEDSHOTCHANCEMULTIPLIER",
+          "display_name": "BoostPostShotsBoosted.ShotChanceMultiplier",
+          "versions": {
+            "2K27": {
+              "address": 28,
+              "hex": "0x1C",
+              "readonly": true,
+              "tuning_category_key": "skillboost",
+              "tuning_field_key": "boost_post_shots_boosted_chance_mult",
+              "tuning_field_offset": 28,
+              "tuning_row_offset": 0,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "LARGERPERFECTWINDOWSBASICPERFECTSHOTWINDOWMULTIPLIER",
+          "display_name": "LargerPerfectWindowsBasic.PerfectShotWindowMultiplier",
+          "versions": {
+            "2K27": {
+              "address": 16,
+              "hex": "0x10",
+              "readonly": true,
+              "tuning_category_key": "skillboost",
+              "tuning_field_key": "larger_perfect_windows_basic_mult",
+              "tuning_field_offset": 16,
+              "tuning_row_offset": 0,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "LARGERPERFECTWINDOWSBOOSTEDPERFECTSHOTWINDOWMULTIPLIER",
+          "display_name": "LargerPerfectWindowsBoosted.PerfectShotWindowMultiplier",
+          "versions": {
+            "2K27": {
+              "address": 20,
+              "hex": "0x14",
+              "readonly": true,
+              "tuning_category_key": "skillboost",
+              "tuning_field_key": "larger_perfect_windows_boosted_mult",
+              "tuning_field_offset": 20,
+              "tuning_row_offset": 0,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOTCHANCEMULTIPLIERMAX",
+          "display_name": "ShotChanceMultiplierMax",
+          "versions": {
+            "2K27": {
+              "address": 4,
+              "hex": "0x4",
+              "readonly": true,
+              "tuning_category_key": "skillboost",
+              "tuning_field_key": "shot_chance_mult_max",
+              "tuning_field_offset": 4,
+              "tuning_row_offset": 0,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOTCHANCEMULTIPLIERMIN",
+          "display_name": "ShotChanceMultiplierMin",
+          "versions": {
+            "2K27": {
+              "address": 0,
+              "hex": "0x0",
+              "readonly": true,
+              "tuning_category_key": "skillboost",
+              "tuning_field_key": "shot_chance_mult_min",
+              "tuning_field_offset": 0,
+              "tuning_row_offset": 0,
+              "type": "float",
+              "validation_status": "confirmed_live",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        }
+      ]
+    },
+    "Takeover Meter Multipliers": {
+      "Assist Multiplier": [
+        {
+          "normalized_name": "ASSISTMULTIPLIER0",
+          "display_name": "AssistMultiplier[0]",
+          "versions": {
+            "2K27": {
+              "address": 110828,
+              "hex": "0x1B0EC",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "assist_1",
+              "tuning_field_offset": 0,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "ASSISTMULTIPLIER1",
+          "display_name": "AssistMultiplier[1]",
+          "versions": {
+            "2K27": {
+              "address": 110832,
+              "hex": "0x1B0F0",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "assist_2",
+              "tuning_field_offset": 4,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "ASSISTMULTIPLIER2",
+          "display_name": "AssistMultiplier[2]",
+          "versions": {
+            "2K27": {
+              "address": 110836,
+              "hex": "0x1B0F4",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "assist_3",
+              "tuning_field_offset": 8,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "ASSISTMULTIPLIER3",
+          "display_name": "AssistMultiplier[3]",
+          "versions": {
+            "2K27": {
+              "address": 110840,
+              "hex": "0x1B0F8",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "assist_4",
+              "tuning_field_offset": 12,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "ASSISTMULTIPLIER4",
+          "display_name": "AssistMultiplier[4]",
+          "versions": {
+            "2K27": {
+              "address": 110844,
+              "hex": "0x1B0FC",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "assist_5",
+              "tuning_field_offset": 16,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "ASSISTMULTIPLIER5",
+          "display_name": "AssistMultiplier[5]",
+          "versions": {
+            "2K27": {
+              "address": 110848,
+              "hex": "0x1B100",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "assist_6",
+              "tuning_field_offset": 20,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "ASSISTMULTIPLIER6",
+          "display_name": "AssistMultiplier[6]",
+          "versions": {
+            "2K27": {
+              "address": 110852,
+              "hex": "0x1B104",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "assist_7",
+              "tuning_field_offset": 24,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        }
+      ],
+      "Defender Blocked Shot Multiplier": [
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER0",
+          "display_name": "DefenderBlockedShotMultiplier[0]",
+          "versions": {
+            "2K27": {
+              "address": 110980,
+              "hex": "0x1B184",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_1",
+              "tuning_field_offset": 152,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER10",
+          "display_name": "DefenderBlockedShotMultiplier[10]",
+          "versions": {
+            "2K27": {
+              "address": 111020,
+              "hex": "0x1B1AC",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_11",
+              "tuning_field_offset": 192,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER11",
+          "display_name": "DefenderBlockedShotMultiplier[11]",
+          "versions": {
+            "2K27": {
+              "address": 111024,
+              "hex": "0x1B1B0",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_12",
+              "tuning_field_offset": 196,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER12",
+          "display_name": "DefenderBlockedShotMultiplier[12]",
+          "versions": {
+            "2K27": {
+              "address": 111028,
+              "hex": "0x1B1B4",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_13",
+              "tuning_field_offset": 200,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER13",
+          "display_name": "DefenderBlockedShotMultiplier[13]",
+          "versions": {
+            "2K27": {
+              "address": 111032,
+              "hex": "0x1B1B8",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_14",
+              "tuning_field_offset": 204,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER14",
+          "display_name": "DefenderBlockedShotMultiplier[14]",
+          "versions": {
+            "2K27": {
+              "address": 111036,
+              "hex": "0x1B1BC",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_15",
+              "tuning_field_offset": 208,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER15",
+          "display_name": "DefenderBlockedShotMultiplier[15]",
+          "versions": {
+            "2K27": {
+              "address": 111040,
+              "hex": "0x1B1C0",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_16",
+              "tuning_field_offset": 212,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER16",
+          "display_name": "DefenderBlockedShotMultiplier[16]",
+          "versions": {
+            "2K27": {
+              "address": 111044,
+              "hex": "0x1B1C4",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_17",
+              "tuning_field_offset": 216,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER17",
+          "display_name": "DefenderBlockedShotMultiplier[17]",
+          "versions": {
+            "2K27": {
+              "address": 111048,
+              "hex": "0x1B1C8",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_18",
+              "tuning_field_offset": 220,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER18",
+          "display_name": "DefenderBlockedShotMultiplier[18]",
+          "versions": {
+            "2K27": {
+              "address": 111052,
+              "hex": "0x1B1CC",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_19",
+              "tuning_field_offset": 224,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER19",
+          "display_name": "DefenderBlockedShotMultiplier[19]",
+          "versions": {
+            "2K27": {
+              "address": 111056,
+              "hex": "0x1B1D0",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_20",
+              "tuning_field_offset": 228,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER1",
+          "display_name": "DefenderBlockedShotMultiplier[1]",
+          "versions": {
+            "2K27": {
+              "address": 110984,
+              "hex": "0x1B188",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_2",
+              "tuning_field_offset": 156,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER20",
+          "display_name": "DefenderBlockedShotMultiplier[20]",
+          "versions": {
+            "2K27": {
+              "address": 111060,
+              "hex": "0x1B1D4",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_21",
+              "tuning_field_offset": 232,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER2",
+          "display_name": "DefenderBlockedShotMultiplier[2]",
+          "versions": {
+            "2K27": {
+              "address": 110988,
+              "hex": "0x1B18C",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_3",
+              "tuning_field_offset": 160,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER3",
+          "display_name": "DefenderBlockedShotMultiplier[3]",
+          "versions": {
+            "2K27": {
+              "address": 110992,
+              "hex": "0x1B190",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_4",
+              "tuning_field_offset": 164,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER4",
+          "display_name": "DefenderBlockedShotMultiplier[4]",
+          "versions": {
+            "2K27": {
+              "address": 110996,
+              "hex": "0x1B194",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_5",
+              "tuning_field_offset": 168,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER5",
+          "display_name": "DefenderBlockedShotMultiplier[5]",
+          "versions": {
+            "2K27": {
+              "address": 111000,
+              "hex": "0x1B198",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_6",
+              "tuning_field_offset": 172,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER6",
+          "display_name": "DefenderBlockedShotMultiplier[6]",
+          "versions": {
+            "2K27": {
+              "address": 111004,
+              "hex": "0x1B19C",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_7",
+              "tuning_field_offset": 176,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER7",
+          "display_name": "DefenderBlockedShotMultiplier[7]",
+          "versions": {
+            "2K27": {
+              "address": 111008,
+              "hex": "0x1B1A0",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_8",
+              "tuning_field_offset": 180,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER8",
+          "display_name": "DefenderBlockedShotMultiplier[8]",
+          "versions": {
+            "2K27": {
+              "address": 111012,
+              "hex": "0x1B1A4",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_9",
+              "tuning_field_offset": 184,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "DEFENDERBLOCKEDSHOTMULTIPLIER9",
+          "display_name": "DefenderBlockedShotMultiplier[9]",
+          "versions": {
+            "2K27": {
+              "address": 111016,
+              "hex": "0x1B1A8",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "blocked_shot_10",
+              "tuning_field_offset": 188,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        }
+      ],
+      "FG Made Multiplier": [
+        {
+          "normalized_name": "FGMADEMULTIPLIER0",
+          "display_name": "FGMadeMultiplier[0]",
+          "versions": {
+            "2K27": {
+              "address": 110952,
+              "hex": "0x1B168",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "fg_made_1",
+              "tuning_field_offset": 124,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "FGMADEMULTIPLIER1",
+          "display_name": "FGMadeMultiplier[1]",
+          "versions": {
+            "2K27": {
+              "address": 110956,
+              "hex": "0x1B16C",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "fg_made_2",
+              "tuning_field_offset": 128,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "FGMADEMULTIPLIER2",
+          "display_name": "FGMadeMultiplier[2]",
+          "versions": {
+            "2K27": {
+              "address": 110960,
+              "hex": "0x1B170",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "fg_made_3",
+              "tuning_field_offset": 132,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "FGMADEMULTIPLIER3",
+          "display_name": "FGMadeMultiplier[3]",
+          "versions": {
+            "2K27": {
+              "address": 110964,
+              "hex": "0x1B174",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "fg_made_4",
+              "tuning_field_offset": 136,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "FGMADEMULTIPLIER4",
+          "display_name": "FGMadeMultiplier[4]",
+          "versions": {
+            "2K27": {
+              "address": 110968,
+              "hex": "0x1B178",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "fg_made_5",
+              "tuning_field_offset": 140,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "FGMADEMULTIPLIER5",
+          "display_name": "FGMadeMultiplier[5]",
+          "versions": {
+            "2K27": {
+              "address": 110972,
+              "hex": "0x1B17C",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "fg_made_6",
+              "tuning_field_offset": 144,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "FGMADEMULTIPLIER6",
+          "display_name": "FGMadeMultiplier[6]",
+          "versions": {
+            "2K27": {
+              "address": 110976,
+              "hex": "0x1B180",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "fg_made_7",
+              "tuning_field_offset": 148,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        }
+      ],
+      "Free Throw Made Multiplier": [
+        {
+          "normalized_name": "FREETHROWMADEMULTIPLIER0",
+          "display_name": "FreeThrowMadeMultiplier[0]",
+          "versions": {
+            "2K27": {
+              "address": 110856,
+              "hex": "0x1B108",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "ft_made_1",
+              "tuning_field_offset": 28,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREETHROWMADEMULTIPLIER1",
+          "display_name": "FreeThrowMadeMultiplier[1]",
+          "versions": {
+            "2K27": {
+              "address": 110860,
+              "hex": "0x1B10C",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "ft_made_2",
+              "tuning_field_offset": 32,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREETHROWMADEMULTIPLIER2",
+          "display_name": "FreeThrowMadeMultiplier[2]",
+          "versions": {
+            "2K27": {
+              "address": 110864,
+              "hex": "0x1B110",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "ft_made_3",
+              "tuning_field_offset": 36,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREETHROWMADEMULTIPLIER3",
+          "display_name": "FreeThrowMadeMultiplier[3]",
+          "versions": {
+            "2K27": {
+              "address": 110868,
+              "hex": "0x1B114",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "ft_made_4",
+              "tuning_field_offset": 40,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREETHROWMADEMULTIPLIER4",
+          "display_name": "FreeThrowMadeMultiplier[4]",
+          "versions": {
+            "2K27": {
+              "address": 110872,
+              "hex": "0x1B118",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "ft_made_5",
+              "tuning_field_offset": 44,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREETHROWMADEMULTIPLIER5",
+          "display_name": "FreeThrowMadeMultiplier[5]",
+          "versions": {
+            "2K27": {
+              "address": 110876,
+              "hex": "0x1B11C",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "ft_made_6",
+              "tuning_field_offset": 48,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREETHROWMADEMULTIPLIER6",
+          "display_name": "FreeThrowMadeMultiplier[6]",
+          "versions": {
+            "2K27": {
+              "address": 110880,
+              "hex": "0x1B120",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "ft_made_7",
+              "tuning_field_offset": 52,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREETHROWMADEMULTIPLIER7",
+          "display_name": "FreeThrowMadeMultiplier[7]",
+          "versions": {
+            "2K27": {
+              "address": 110884,
+              "hex": "0x1B124",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "ft_made_8",
+              "tuning_field_offset": 56,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        }
+      ],
+      "Free Throw Missed Multiplier": [
+        {
+          "normalized_name": "FREETHROWMISSEDMULTIPLIER0",
+          "display_name": "FreeThrowMissedMultiplier[0]",
+          "versions": {
+            "2K27": {
+              "address": 110888,
+              "hex": "0x1B128",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "ft_missed_1",
+              "tuning_field_offset": 60,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREETHROWMISSEDMULTIPLIER1",
+          "display_name": "FreeThrowMissedMultiplier[1]",
+          "versions": {
+            "2K27": {
+              "address": 110892,
+              "hex": "0x1B12C",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "ft_missed_2",
+              "tuning_field_offset": 64,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREETHROWMISSEDMULTIPLIER2",
+          "display_name": "FreeThrowMissedMultiplier[2]",
+          "versions": {
+            "2K27": {
+              "address": 110896,
+              "hex": "0x1B130",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "ft_missed_3",
+              "tuning_field_offset": 68,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREETHROWMISSEDMULTIPLIER3",
+          "display_name": "FreeThrowMissedMultiplier[3]",
+          "versions": {
+            "2K27": {
+              "address": 110900,
+              "hex": "0x1B134",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "ft_missed_4",
+              "tuning_field_offset": 72,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "FREETHROWMISSEDMULTIPLIER4",
+          "display_name": "FreeThrowMissedMultiplier[4]",
+          "versions": {
+            "2K27": {
+              "address": 110904,
+              "hex": "0x1B138",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "ft_missed_5",
+              "tuning_field_offset": 76,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        }
+      ],
+      "Inside FG Made Multiplier": [
+        {
+          "normalized_name": "INSIDEFGMADEMULTIPLIER0",
+          "display_name": "InsideFGMadeMultiplier[0]",
+          "versions": {
+            "2K27": {
+              "address": 110908,
+              "hex": "0x1B13C",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "inside_fg_made_1",
+              "tuning_field_offset": 80,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "INSIDEFGMADEMULTIPLIER10",
+          "display_name": "InsideFGMadeMultiplier[10]",
+          "versions": {
+            "2K27": {
+              "address": 110948,
+              "hex": "0x1B164",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "inside_fg_made_11",
+              "tuning_field_offset": 120,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "INSIDEFGMADEMULTIPLIER1",
+          "display_name": "InsideFGMadeMultiplier[1]",
+          "versions": {
+            "2K27": {
+              "address": 110912,
+              "hex": "0x1B140",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "inside_fg_made_2",
+              "tuning_field_offset": 84,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "INSIDEFGMADEMULTIPLIER2",
+          "display_name": "InsideFGMadeMultiplier[2]",
+          "versions": {
+            "2K27": {
+              "address": 110916,
+              "hex": "0x1B144",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "inside_fg_made_3",
+              "tuning_field_offset": 88,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "INSIDEFGMADEMULTIPLIER3",
+          "display_name": "InsideFGMadeMultiplier[3]",
+          "versions": {
+            "2K27": {
+              "address": 110920,
+              "hex": "0x1B148",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "inside_fg_made_4",
+              "tuning_field_offset": 92,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "INSIDEFGMADEMULTIPLIER4",
+          "display_name": "InsideFGMadeMultiplier[4]",
+          "versions": {
+            "2K27": {
+              "address": 110924,
+              "hex": "0x1B14C",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "inside_fg_made_5",
+              "tuning_field_offset": 96,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "INSIDEFGMADEMULTIPLIER5",
+          "display_name": "InsideFGMadeMultiplier[5]",
+          "versions": {
+            "2K27": {
+              "address": 110928,
+              "hex": "0x1B150",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "inside_fg_made_6",
+              "tuning_field_offset": 100,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "INSIDEFGMADEMULTIPLIER6",
+          "display_name": "InsideFGMadeMultiplier[6]",
+          "versions": {
+            "2K27": {
+              "address": 110932,
+              "hex": "0x1B154",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "inside_fg_made_7",
+              "tuning_field_offset": 104,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "INSIDEFGMADEMULTIPLIER7",
+          "display_name": "InsideFGMadeMultiplier[7]",
+          "versions": {
+            "2K27": {
+              "address": 110936,
+              "hex": "0x1B158",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "inside_fg_made_8",
+              "tuning_field_offset": 108,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "INSIDEFGMADEMULTIPLIER8",
+          "display_name": "InsideFGMadeMultiplier[8]",
+          "versions": {
+            "2K27": {
+              "address": 110940,
+              "hex": "0x1B15C",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "inside_fg_made_9",
+              "tuning_field_offset": 112,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        },
+        {
+          "normalized_name": "INSIDEFGMADEMULTIPLIER9",
+          "display_name": "InsideFGMadeMultiplier[9]",
+          "versions": {
+            "2K27": {
+              "address": 110944,
+              "hex": "0x1B160",
+              "readonly": true,
+              "tuning_category_key": "takeover_event_mult",
+              "tuning_field_key": "inside_fg_made_10",
+              "tuning_field_offset": 116,
+              "tuning_row_offset": 110828,
+              "type": "float",
+              "validation_status": "best_effort_groups",
+              "write_policy": "confirm_each_write"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

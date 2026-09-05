@@ -4,15 +4,22 @@ import json
 import os
 import re
 import sqlite3
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Iterable
 
 from nba2k_editor.core import offsets as offsets_mod
 from nba2k_editor.models.schema import FieldEntry
 from player_evidence import PlayerEvidence, shotquality_contest_rows
+from pre_nba_sqlite import available_pre_nba_seasons, load_pre_nba_season_payload
+import player_pre1952_scale as pre_1952_scale
+import player_rules_athleticism as athleticism_rules
+import player_rules_mental as mental_rules
+import player_rules_pre1952 as pre_1952_rules
 from player_generation_models import (
     FREE_THROW_FIELD_KEY,
     FreeThrowExecutionArtifact,
@@ -47,6 +54,16 @@ _TEAM_STATS_PER_100_SHEET = "Team Stats Per 100 Pos"
 _TEAM_SUMMARY_SHEET = "Team Summaries"
 _OPPONENT_STATS_PER_GAME_SHEET = "Opponent Stats Per Game"
 _OPPONENT_STATS_PER_100_SHEET = "Opponent Stats Per 100 Poss"
+_NBL_BAA_CENTER_SCORING_FIELDS = frozenset({
+    "Attributes/CLOSESHOT",
+    "Attributes/DRIVINGLAYUP",
+    "Attributes/MIDRANGE",
+    "Attributes/IQSHOT",
+})
+_NBL_BAA_DEFENSE_REFERENCE_FIELDS = {
+    "Attributes/PERIMETERDEFENSE": "nbl_baa_perimeter_defense_reference_values",
+    "Attributes/DEFENSECONSISTENCY": "nbl_baa_defense_consistency_reference_values",
+}
 
 _PLAYER_EVIDENCE_SHEETS = (
     _BASE_PLAYER_SEASON_SHEET,
@@ -140,6 +157,12 @@ class SeasonPlayerContextIndex:
     comparison_rows: tuple[dict[str, Any], ...]
     evidence_by_key: dict[tuple[str, str], PlayerEvidence]
     field_index: dict[str, FieldEntry]
+    # Retained for constructor compatibility; rating comparisons follow the UI league
+    # selection, and "All leagues" supplies the mixed BAA/NBL population explicitly.
+    pooled_comparison_rows: tuple[dict[str, Any], ...] = ()
+
+    def rating_rows(self) -> tuple[dict[str, Any], ...]:
+        return self.comparison_rows
 
     def comparison_row_for(self, *, player_id: str, team: str) -> dict[str, Any]:
         key = _player_team_key(player_id, team)
@@ -235,6 +258,8 @@ def generate_player_proposal(
             "team": source_team,
             "team_abbrev": source_team,
             "team_name": _team_display_name(evidence),
+            "source_league": evidence.season_info.get("lg") or evidence.source_context.get("lg"),
+            "source_leagues": evidence.source_context.get("source_leagues"),
             "multi_team_stat_shares": evidence.source_context.get("multi_team_stat_shares"),
             "source": evidence.source_context.get("source"),
         },
@@ -293,12 +318,14 @@ def generate_player_proposal_from_index(
     *,
     player_id: str,
     team: str,
+    free_throw_artifact: FreeThrowExecutionArtifact | None = None,
 ) -> GeneratedPlayerProposal:
     evidence = context.evidence_for(player_id=player_id, team=team)
     return generate_player_proposal(
         evidence,
         field_index=context.field_index,
-        league_player_rows=context.comparison_rows,
+        league_player_rows=context.rating_rows(),
+        free_throw_artifact=free_throw_artifact,
     )
 
 
@@ -307,8 +334,14 @@ def generate_player_proposals_from_index(
     *,
     team_filter: str | None = None,
 ) -> GeneratedPlayerBatch:
+    free_throw_artifact = load_free_throw_execution_artifact()
     proposals = tuple(
-        generate_player_proposal_from_index(context, player_id=player_id, team=team)
+        generate_player_proposal_from_index(
+            context,
+            player_id=player_id,
+            team=team,
+            free_throw_artifact=free_throw_artifact,
+        )
         for player_id, team in context.player_keys(team_filter=team_filter)
     )
     return GeneratedPlayerBatch(season=context.season, proposals=proposals)
@@ -439,6 +472,8 @@ def _person_keys_for_seasons(database: Path, seasons: Iterable[int]) -> set[str]
 
 
 def _available_source_seasons(database: Path) -> tuple[int, ...]:
+    if database.name.lower() == "pre_nba.sqlite":
+        return available_pre_nba_seasons(database.parent)
     seasons: set[int] = set()
     try:
         table_name = _workbook_table_name(database, _BASE_PLAYER_SEASON_SHEET)
@@ -451,6 +486,17 @@ def _available_source_seasons(database: Path) -> tuple[int, ...]:
             value = _int_value(season)
             if value is not None:
                 seasons.add(value)
+    return tuple(sorted(seasons))
+
+
+def available_source_seasons(source_root: str | Path | None = None) -> tuple[int, ...]:
+    root = Path(source_root) if source_root is not None else _GENERATOR_DIR / "NBA Player Data"
+    resolved_root = root.expanduser().resolve()
+    master_database = ensure_workbook_sqlite_database(resolved_root)
+    seasons = set(_available_source_seasons(master_database))
+    pre_nba_database = resolved_root / "pre_nba.sqlite"
+    if pre_nba_database.is_file():
+        seasons.update(available_pre_nba_seasons(resolved_root))
     return tuple(sorted(seasons))
 
 
@@ -570,16 +616,32 @@ def season_context_index(
 ) -> SeasonPlayerContextIndex:
     resolved_season = validated_season(season)
     root = Path(source_root) if source_root is not None else _GENERATOR_DIR / "NBA Player Data"
+    resolved_root = root.expanduser().resolve()
+    offset_path = Path(offsets_path).expanduser().resolve() if offsets_path is not None else _DEFAULT_OFFSETS_PLAYERS_PATH.resolve()
+    selected = str(normalized_league(selected_league) or "")
+    if 1898 <= resolved_season <= 1946:
+        payload = load_pre_nba_season_payload(
+            resolved_root,
+            resolved_season,
+            selected_league=selected,
+        )
+        return SeasonPlayerContextIndex(
+            season=resolved_season,
+            source_database_path=payload.database_path,
+            selected_league=payload.selected_league,
+            comparison_rows=payload.comparison_rows,
+            evidence_by_key=dict(payload.evidence_by_key),
+            field_index=dict(_cached_authored_player_field_index(str(offset_path))),
+        )
     # ensure_workbook_sqlite_database checks the root, the database file and its
     # workbook metadata, so a missing or unusable source fails here rather than
     # part-way through a whole-season run.
-    database_path = ensure_workbook_sqlite_database(root.expanduser().resolve())
-    offset_path = Path(offsets_path).expanduser().resolve() if offsets_path is not None else _DEFAULT_OFFSETS_PLAYERS_PATH.resolve()
+    database_path = ensure_workbook_sqlite_database(resolved_root)
     return _cached_season_context_index(
         str(database_path),
         resolved_season,
         str(offset_path),
-        str(normalized_league(selected_league) or ""),
+        selected,
     )
 
 
@@ -676,19 +738,105 @@ def _cached_season_context_index(
                 include_bare=False,
             )
 
+
+    if _impute_sparse_fg_percent(database, season, player_sheet_rows[_PLAYER_PER_GAME_SHEET]):
+        per_game_prefix = _context_prefix(_PLAYER_PER_GAME_SHEET)
+        for key, per_game_row in player_sheet_rows[_PLAYER_PER_GAME_SHEET].items():
+            merged = rows_by_key.get(key)
+            if merged is not None:
+                _merge_sheet_row(merged, per_game_prefix, per_game_row, overwrite=True)
+
+    center_caps = _same_season_baa_center_scoring_caps(
+        season=season,
+        rows_by_key=rows_by_key,
+        identity_by_player_id=identity_by_player_id,
+        player_sheet_rows=player_sheet_rows,
+        team_sheet_rows=team_sheet_rows,
+        team_rosters=team_rosters,
+        shotquality_by_player_id=shotquality_by_player_id,
+    )
+    if center_caps:
+        for row in rows_by_key.values():
+            if _comparison_row_league(row) == "NBL":
+                row["nbl_baa_center_scoring_caps"] = center_caps
+
+    defense_reference = _same_season_baa_defense_reference(
+        season=season,
+        rows_by_key=rows_by_key,
+        identity_by_player_id=identity_by_player_id,
+        player_sheet_rows=player_sheet_rows,
+        team_sheet_rows=team_sheet_rows,
+        team_rosters=team_rosters,
+        shotquality_by_player_id=shotquality_by_player_id,
+    )
+    if defense_reference:
+        for row in rows_by_key.values():
+            if _comparison_row_league(row) == "NBL":
+                row.update(defense_reference)
+
+    baa_reference = _same_season_baa_mental_reference(rows_by_key.values())
+    overlap_intangibles = _nbl_baa_overlap_intangibles_reference_values(str(database))
+    if overlap_intangibles:
+        baa_reference[mental_rules.NBL_BAA_OVERLAP_INTANGIBLES_REFERENCE_KEY] = overlap_intangibles
+    if baa_reference:
+        for row in rows_by_key.values():
+            if _comparison_row_league(row) == "NBL":
+                row.update(baa_reference)
+
     normalized_league = str(selected_league or "").strip().upper()
     selected_keys = tuple(
         key
         for key in sorted(rows_by_key)
         if not normalized_league or _comparison_row_league(rows_by_key[key]) == normalized_league
     )
-    comparison_rows = tuple(
-        rows_by_key[key]
+    selected_rows_by_key = {
+        key: rows_by_key[key]
         for key in selected_keys
         if _comparison_row_has_positive_games(rows_by_key[key])
-    )
-    _impute_sparse_fg_percent(database, season, player_sheet_rows[_PLAYER_PER_GAME_SHEET])
+    }
 
+    # The UI league selection owns the comparison population.  "All leagues" reaches
+    # this point as an empty filter and therefore supplies the mixed BAA/NBL population.
+    if 0 < season <= pre_1952_scale.LAST_PRE_1952_SEASON:
+        population = pre_1952_scale.build_population_snapshot(selected_rows_by_key.values())
+        nbl_only = tuple(entry for entry in population if entry.get("league") == "NBL")
+        distributions, hustle_top_keys, field_base_values = _pre_1952_field_distributions(selected_rows_by_key)
+        speed_spread = distributions.get("Attributes/SPEED", ())
+        base_values_by_key = {
+            (
+                str(item.get("player_id") or "").strip().upper(),
+                str(item.get("team") or "").strip().upper(),
+            ): item.get("values", {})
+            for item in field_base_values
+        }
+        if speed_spread:
+            for entry in population:
+                key = (
+                    str(entry.get("player_id") or "").strip().upper(),
+                    str(entry.get("team") or "").strip().upper(),
+                )
+                values = base_values_by_key.get(key)
+                raw_speed = values.get("Attributes/SPEED") if isinstance(values, dict) else None
+                speed_rating = pre_1952_scale.stretch(
+                    raw_speed,
+                    speed_spread,
+                    low_anchor=speed_spread[0],
+                    high_anchor=speed_spread[-1],
+                )
+                if speed_rating is not None:
+                    entry[pre_1952_scale.SPEED_RATING_KEY] = speed_rating
+        for row in selected_rows_by_key.values():
+            row[pre_1952_scale.POOLED_POPULATION_KEY] = population
+            if nbl_only:
+                row[pre_1952_scale.NBL_TOTALS_KEY] = nbl_only
+            if distributions:
+                row[pre_1952_scale.FIELD_DISTRIBUTIONS_KEY] = distributions
+            if field_base_values:
+                row[pre_1952_scale.FIELD_BASE_VALUES_KEY] = field_base_values
+            if hustle_top_keys:
+                row[pre_1952_scale.HUSTLE_TOP_KEYS_KEY] = hustle_top_keys
+
+    comparison_rows = tuple(selected_rows_by_key[key] for key in selected_rows_by_key)
     evidence_by_key = _build_evidence_index(
         season=season,
         keys=selected_keys,
@@ -725,6 +873,307 @@ def _comparison_row_has_positive_games(row: dict[str, Any]) -> bool:
             games = _float(row.get(key))
             break
     return games is not None and games > 0.0
+
+
+def _same_season_baa_center_scoring_caps(
+    *,
+    season: int,
+    rows_by_key: dict[tuple[str, str], dict[str, Any]],
+    identity_by_player_id: dict[str, dict[str, Any]],
+    player_sheet_rows: dict[str, dict[tuple[str, str], dict[str, Any]]],
+    team_sheet_rows: dict[str, dict[str, dict[str, Any]]],
+    team_rosters: dict[str, list[dict[str, Any]]],
+    shotquality_by_player_id: dict[str, dict[str, Any]],
+) -> dict[str, int]:
+    baa_keys = tuple(
+        key
+        for key in sorted(rows_by_key)
+        if _comparison_row_league(rows_by_key[key]) == "BAA"
+        and _comparison_row_has_positive_games(rows_by_key[key])
+    )
+    if not baa_keys:
+        return {}
+    baa_rows = tuple(rows_by_key[key] for key in baa_keys)
+    evidence_by_key = _build_evidence_index(
+        season=season,
+        keys=baa_keys,
+        identity_by_player_id=identity_by_player_id,
+        player_sheet_rows=player_sheet_rows,
+        team_sheet_rows=team_sheet_rows,
+        team_rosters=team_rosters,
+        source_context_by_key=rows_by_key,
+        shotquality_by_player_id=shotquality_by_player_id,
+    )
+    caps: dict[str, int] = {}
+    for evidence in evidence_by_key.values():
+        # Built from the tall players, not the ones labelled "C". The cap is applied by
+        # reach, so the ceiling it carries has to be measured on the same players it will
+        # bind -- taking it from the league's listed centres meant a 6'2" centre helped
+        # set the ceiling a 6'10" forward would never be measured against.
+        height = evidence.identity.get("ht_in_in")
+        if not isinstance(height, (int, float)) or float(height) < _CENTER_CAP_SOURCE_HEIGHT:
+            continue
+        positions = select_positions_from_evidence(
+            evidence.play_by_play,
+            evidence.season_info.get("pos") or evidence.identity.get("pos"),
+        )
+        result = derive_player_rule_values(
+            evidence,
+            positions=positions,
+            league_player_rows=baa_rows,
+            active_field_keys=set(_NBL_BAA_CENTER_SCORING_FIELDS),
+        )
+        for field_key, value in result.values.items():
+            caps[field_key] = max(caps.get(field_key, 25), int(value.value))
+    if "Attributes/DRIVINGLAYUP" in caps:
+        caps["Attributes/DRIVINGLAYUP"] = 65
+    return caps if set(caps) == set(_NBL_BAA_CENTER_SCORING_FIELDS) else {}
+
+
+def _same_season_baa_defense_reference(
+    *,
+    season: int,
+    rows_by_key: dict[tuple[str, str], dict[str, Any]],
+    identity_by_player_id: dict[str, dict[str, Any]],
+    player_sheet_rows: dict[str, dict[tuple[str, str], dict[str, Any]]],
+    team_sheet_rows: dict[str, dict[str, dict[str, Any]]],
+    team_rosters: dict[str, list[dict[str, Any]]],
+    shotquality_by_player_id: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    baa_keys = tuple(
+        key
+        for key in sorted(rows_by_key)
+        if _comparison_row_league(rows_by_key[key]) == "BAA"
+        and _comparison_row_has_positive_games(rows_by_key[key])
+    )
+    if not baa_keys:
+        return {}
+    baa_rows = tuple(rows_by_key[key] for key in baa_keys)
+    evidence_by_key = _build_evidence_index(
+        season=season,
+        keys=baa_keys,
+        identity_by_player_id=identity_by_player_id,
+        player_sheet_rows=player_sheet_rows,
+        team_sheet_rows=team_sheet_rows,
+        team_rosters=team_rosters,
+        source_context_by_key=rows_by_key,
+        shotquality_by_player_id=shotquality_by_player_id,
+    )
+    values_by_reference: dict[str, list[int]] = {
+        reference_key: []
+        for reference_key in _NBL_BAA_DEFENSE_REFERENCE_FIELDS.values()
+    }
+    for evidence in evidence_by_key.values():
+        positions = select_positions_from_evidence(
+            evidence.play_by_play,
+            evidence.season_info.get("pos") or evidence.identity.get("pos"),
+        )
+        result = derive_player_rule_values(
+            evidence,
+            positions=positions,
+            league_player_rows=baa_rows,
+            active_field_keys=set(_NBL_BAA_DEFENSE_REFERENCE_FIELDS),
+        )
+        for field_key, reference_key in _NBL_BAA_DEFENSE_REFERENCE_FIELDS.items():
+            value = result.values.get(field_key)
+            if value is None or value.source_rule.endswith("_researched_exact_player_override"):
+                continue
+            values_by_reference[reference_key].append(int(value.value))
+    references: dict[str, Any] = {
+        reference_key: tuple(sorted(values))
+        for reference_key, values in values_by_reference.items()
+        if len(values) >= 2
+    }
+    return references
+
+
+def _pre_1952_field_distributions(
+    rows_by_key: dict[tuple[str, str], dict[str, Any]],
+) -> tuple[
+    dict[str, tuple[float, ...]],
+    tuple[tuple[str, str], ...],
+    tuple[dict[str, Any], ...],
+]:
+    """Build selected-population field spreads and the exact Hustle top 25."""
+
+    ordered_items = tuple(
+        (key, rows_by_key[key])
+        for key in sorted(rows_by_key)
+        if _comparison_row_has_positive_games(rows_by_key[key])
+    )
+    rows = tuple(row for _key, row in ordered_items)
+    if len(rows) < 2:
+        return {}, (), ()
+    collected: dict[str, list[float]] = {field_key: [] for field_key in pre_1952_scale_fields()}
+    hustle_ranked: list[tuple[float, tuple[str, str]]] = []
+    field_base_values: list[dict[str, Any]] = []
+    for key, row in ordered_items:
+        body = SimpleNamespace(
+            season=int(_row_context_number(
+                row,
+                "player_season_info.season",
+                "season_info.season",
+                "season",
+            ) or 0),
+            identity={
+                "ht_in_in": _row_context_number(row, "player_info.ht_in_in", "identity.ht_in_in"),
+                "wt": _row_context_number(row, "player_info.wt", "identity.wt"),
+            },
+            per_game={"g": _row_context_number(row, "player_per_game.g", "per_game.g")},
+            season_info={
+                "age": _row_context_number(row, "player_season_info.age", "season_info.age"),
+                "lg": _comparison_row_league(row),
+            },
+            source_profile={},
+        )
+        player_field_values: dict[str, float] = {}
+        vertical_score = athleticism_rules._row_vertical_value(row)
+        field_results = (
+            ("Attributes/VERTICAL", vertical_score),
+            (
+                "Attributes/SPEED",
+                athleticism_rules.derive_attribute_speed(body, None, rows),
+            ),
+        )
+        for field_key, result in field_results:
+            value = (
+                float(result["value"])
+                if isinstance(result, dict) and isinstance(result.get("value"), (int, float))
+                else float(result)
+                if isinstance(result, (int, float))
+                else None
+            )
+            if value is not None:
+                collected[field_key].append(value)
+                player_field_values[field_key] = value
+        if player_field_values:
+            field_base_values.append({
+                "player_id": str(key[0]).strip().upper(),
+                "team": str(key[1]).strip().upper(),
+                "values": player_field_values,
+            })
+        hustle = mental_rules.derive_attribute_hustle(row, league_player_rows=rows)
+        if hustle is not None and isinstance(hustle.get("value"), (int, float)):
+            value = float(hustle["value"])
+            identity = (str(key[0]).strip().upper(), str(key[1]).strip().upper())
+            collected["Attributes/HUSTLE"].append(value)
+            hustle_ranked.append((value, identity))
+
+    distributions = {
+        field_key: tuple(sorted(values))
+        for field_key, values in collected.items()
+        if len(values) >= 2
+    }
+    hustle_top_keys = tuple(
+        identity
+        for _value, identity in sorted(
+            hustle_ranked,
+            key=lambda item: (-item[0], item[1]),
+        )[:pre_1952_rules.HUSTLE_CEILING_PLAYERS]
+    )
+    return distributions, hustle_top_keys, tuple(field_base_values)
+
+
+def pre_1952_scale_fields() -> tuple[str, ...]:
+    """Fields whose season distribution the pre-1952 pass needs."""
+
+    return tuple(pre_1952_rules.RESTRETCHED_FIELDS) + ("Attributes/HUSTLE",)
+
+
+def _row_context_number(row: dict[str, Any], *keys: str) -> float | None:
+    for key in keys:
+        value = row.get(key)
+        if value is None:
+            section, _, leaf = key.partition(".")
+            nested = row.get(section)
+            value = nested.get(leaf) if isinstance(nested, dict) else None
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _same_season_baa_mental_reference(rows: Iterable[dict[str, Any]]) -> dict[str, tuple[int, ...]]:
+    baa_rows = tuple(
+        row
+        for row in rows
+        if _comparison_row_league(row) == "BAA" and _comparison_row_has_positive_games(row)
+    )
+    if not baa_rows:
+        return {}
+    hustle_values: list[int] = []
+    intangibles_values: list[int] = []
+    for row in baa_rows:
+        hustle = mental_rules.derive_attribute_hustle(row, league_player_rows=baa_rows)
+        intangibles = mental_rules.derive_attribute_intangibles(row, league_player_rows=baa_rows)
+        if hustle is not None:
+            hustle_values.append(int(hustle["value"]))
+        if intangibles is not None:
+            intangibles_values.append(int(intangibles["value"]))
+    if len(hustle_values) < 2 or len(intangibles_values) < 2:
+        return {}
+    return {
+        "nbl_baa_hustle_reference_values": tuple(sorted(hustle_values)),
+        "nbl_baa_intangibles_reference_values": tuple(sorted(intangibles_values)),
+    }
+
+
+@lru_cache(maxsize=1)
+def _nbl_baa_overlap_intangibles_reference_values(database_path: str) -> tuple[int, ...]:
+    """Return BAA WS-path ratings for exact IDs also recorded in the NBL, 1947-50."""
+
+    uri = f"file:{database_path}?mode=ro"
+    with sqlite3.connect(uri, uri=True) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            """
+            WITH overlap_ids AS (
+                SELECT player_id
+                FROM player_season_info
+                WHERE season BETWEEN 1947 AND 1950
+                  AND upper(lg) IN ('BAA', 'NBL')
+                  AND player_id IS NOT NULL
+                GROUP BY player_id
+                HAVING count(DISTINCT upper(lg)) = 2
+            )
+            SELECT season, player_id, team, ws
+            FROM advanced
+            WHERE season BETWEEN 1947 AND 1950
+              AND upper(lg) = 'BAA'
+              AND player_id IN (SELECT player_id FROM overlap_ids)
+              AND ws IS NOT NULL
+            ORDER BY season, player_id, team
+            """
+        ).fetchall()
+        maxima = {
+            int(row["season"]): float(row["top_ws"])
+            for row in connection.execute(
+                """
+                SELECT season, max(ws) AS top_ws
+                FROM advanced
+                WHERE season BETWEEN 1947 AND 1950
+                  AND upper(lg) = 'BAA'
+                  AND ws IS NOT NULL
+                GROUP BY season
+                """
+            )
+        }
+    by_player_season: dict[tuple[str, int], list[tuple[str, float]]] = {}
+    for row in rows:
+        key = (str(row["player_id"]), int(row["season"]))
+        by_player_season.setdefault(key, []).append((str(row["team"] or "").strip().upper(), float(row["ws"])))
+    ratings_by_player: dict[str, list[int]] = {}
+    for (player_id, season), entries in by_player_season.items():
+        aggregate = next((value for team, value in entries if team == "TOT" or team.endswith("TM")), None)
+        win_shares = aggregate if aggregate is not None else sum(value for _team, value in entries)
+        top = maxima.get(season, 0.0)
+        score = max(0.0, win_shares) / top if top > 0.0 else 0.0
+        rating = max(25, min(99, int(round(25.0 + 74.0 * score))))
+        ratings_by_player.setdefault(player_id, []).append(rating)
+    return tuple(sorted(int(round(sum(values) / len(values))) for values in ratings_by_player.values()))
 
 
 def _context_sheet_rows(database: Path, sheet: str, season: int) -> tuple[dict[str, Any], ...]:
@@ -956,16 +1405,8 @@ def _impute_sparse_fg_enabled() -> bool:
 
 
 @lru_cache(maxsize=None)
-def _sparse_fg_percent_baseline(database_path: str, season: int) -> tuple[tuple[str, float], ...]:
-    """League-season field-goal percentage by position family (G / F / C), attempt-weighted,
-    plus an ``_ALL`` overall entry.
-
-    Sourced from ``generated_pseudo_per_1947_1951`` because that is the only table carrying
-    both attempts and a position for the 1947-1949 seasons where one league (the NBL) recorded
-    makes but never attempts. Returns an empty tuple whenever the table (and therefore the
-    early-era context) is absent, which makes the imputation below a no-op for every modern
-    season.
-    """
+def _sparse_fg_percent_distribution(database_path: str, season: int) -> tuple[tuple[str, tuple[tuple[float, ...], float]], ...]:
+    """Return BAA FG% values ordered by league-wide PPG quantile."""
 
     try:
         uri = f"file:{database_path}?mode=ro"
@@ -978,77 +1419,157 @@ def _sparse_fg_percent_baseline(database_path: str, season: int) -> tuple[tuple[
                 return ()
             rows = connection.execute(
                 """
-                SELECT pos_family AS family, SUM(fg) AS fg, SUM(fga) AS fga
+                SELECT pts_pg, fg, fga
                 FROM generated_pseudo_per_1947_1951
-                WHERE season = ? AND fga IS NOT NULL AND fga > 0
-                GROUP BY pos_family
+                WHERE season = ?
+                  AND upper(lg) = 'BAA'
+                  AND fga IS NOT NULL
+                  AND fga > 0
+                  AND fg IS NOT NULL
                 """,
                 (int(season),),
             ).fetchall()
     except sqlite3.Error:
         return ()
 
-    baseline: dict[str, float] = {}
-    total_fg = 0.0
-    total_fga = 0.0
+    grouped: dict[str, list[tuple[float, float, float]]] = {}
     for row in rows:
-        family = str(row["family"] or "").strip().upper()[:1]
+        points = _float(row["pts_pg"])
         made = _float(row["fg"])
         attempted = _float(row["fga"])
-        if family not in {"G", "F", "C"} or not attempted:
+        if points is None or made is None or attempted is None or attempted <= 0.0:
             continue
-        baseline[family] = made / attempted
-        total_fg += made
-        total_fga += attempted
-    if total_fga > 0.0:
-        baseline["_ALL"] = total_fg / total_fga
-    return tuple(sorted(baseline.items()))
+        # One league-wide curve. Reconstructing the missing denominator from the BAA
+        # players who shared a position label made an NBL player's shooting percentage --
+        # and every shooting attribute built on it -- move by up to 20 points on the label
+        # alone. Scoring rate is the evidence; the label is not.
+        grouped.setdefault("", []).append((points, made, attempted))
+
+    distributions: dict[str, tuple[tuple[float, ...], float]] = {}
+    for family, values in grouped.items():
+        by_points: dict[float, list[tuple[float, float]]] = {}
+        for points, made, attempted in values:
+            by_points.setdefault(points, []).append((made, attempted))
+        ordered_points = tuple(sorted(by_points))
+        curve = tuple(
+            sum(made for made, _attempted in by_points[points])
+            / sum(attempted for _made, attempted in by_points[points])
+            for points in ordered_points
+        )
+        if len(curve) < 2:
+            continue
+        distributions[family] = (curve, abs(_share_correlation(ordered_points, curve)))
+    return tuple(sorted(distributions.items()))
 
 
-def _position_family(row: dict[str, Any]) -> str:
-    pos = str(row.get("pos") or row.get("player_per_game.pos") or "").strip().upper()
-    return pos[:1] if pos[:1] in {"G", "F", "C"} else ""
+def _linear_percentile(values: tuple[float, ...], percentile: float) -> float:
+    position = max(0.0, min(1.0, percentile)) * (len(values) - 1)
+    lower = int(position)
+    upper = min(len(values) - 1, lower + 1)
+    if lower == upper:
+        return values[lower]
+    fraction = position - lower
+    return values[lower] + fraction * (values[upper] - values[lower])
 
+
+def _midrank_percentile(value: float, population: tuple[float, ...]) -> float | None:
+    if len(population) < 2:
+        return None
+    left = bisect_left(population, value)
+    right = bisect_right(population, value)
+    midrank = (left + right - 1) / 2.0
+    return max(0.0, min(1.0, midrank / (len(population) - 1)))
+
+
+def _share_correlation(left: tuple[float, ...], right: tuple[float, ...]) -> float:
+    """Correlation of two series compared as min-max shares, so gaps count.
+
+    Replaces a rank correlation: ranking the curve treated a scoring leader far clear
+    of the pack the same as one a point ahead, which is exactly the spacing this
+    reliability is meant to measure.
+    """
+
+    if len(left) != len(right) or len(left) < 2:
+        return 0.0
+    def shares(values: tuple[float, ...]) -> tuple[float, ...]:
+        low, high = min(values), max(values)
+        span = high - low
+        return tuple(0.0 for _ in values) if span <= 0.0 else tuple((v - low) / span for v in values)
+    a = shares(left)
+    b = shares(right)
+    mean_a = sum(a) / len(a)
+    mean_b = sum(b) / len(b)
+    numerator = sum((x - mean_a) * (y - mean_b) for x, y in zip(a, b))
+    denominator = (
+        sum((x - mean_a) ** 2 for x in a) * sum((y - mean_b) ** 2 for y in b)
+    ) ** 0.5
+    return numerator / denominator if denominator > 0.0 else 0.0
 
 def _impute_sparse_fg_percent(
     database: Path,
     season: int,
     per_game_rows: dict[tuple[str, str], dict[str, Any]],
 ) -> int:
-    """TEST HOOK — substitute the league-season position FG% average for players whose
-    season recorded field-goal makes but not attempts (1947-1949 NBL).
-
-    Without this, every such player reaches the shooting rules with ``per_game.fg_percent``
-    (and every derived shot-quality signal) missing, so those rules collapse to role/size
-    defaults and roughly 40% of the 1947 pool ends up with near-identical shooting cards.
-    Here we fill ``fg_percent`` / ``e_fg_percent`` from the league-season average for the
-    player's position, and back out an implied ``fga_per_game`` from recorded makes so the
-    exposure-reliability weighting engages at a sensible confidence. The substitution is
-    marked on the row (``fg_percent_source``) and only touches the subject's own evidence —
-    the league comparison population is left untouched. Disable with PLAYERGEN_IMPUTE_SPARSE_FG=0.
-    """
+    """Map NBL positional PPG rank across same-year BAA positional FG% anchors."""
 
     if not _impute_sparse_fg_enabled():
         return 0
-    baseline = dict(_sparse_fg_percent_baseline(str(database), season))
-    if not baseline:
+    distributions = dict(_sparse_fg_percent_distribution(str(database), season))
+    if not distributions:
         return 0
-    overall = baseline.get("_ALL")
+
+    league_ppg = tuple(sorted(
+        points
+        for candidate in per_game_rows.values()
+        if str(candidate.get("lg") or "").strip().upper() == "NBL"
+        and (_float(candidate.get("g")) or 0.0) > 0.0
+        and (points := _float(candidate.get("pts_per_game"))) is not None
+    ))
+
     imputed = 0
     for row in per_game_rows.values():
-        if row.get("fg_percent") is not None:
+        if str(row.get("lg") or "").strip().upper() != "NBL" or row.get("fg_percent") is not None:
             continue
-        percent = baseline.get(_position_family(row), overall)
-        if percent is None or percent <= 0.0:
+        distribution = distributions.get("")
+        points = _float(row.get("pts_per_game"))
+        placement = _midrank_percentile(points, league_ppg) if points is not None else None
+        if distribution is None or placement is None:
             continue
+        curve, imputation_reliability = distribution
+        made_per_game = _float(row.get("fg_per_game"))
+        if made_per_game is not None and made_per_game <= 0.0:
+            # Nothing to impute. The imputation reconstructs an unrecorded denominator,
+            # but this player's numerator is recorded and it is zero: he made no field
+            # goal all season, so his percentage is zero whatever the attempts were.
+            # Filling it from the league curve handed a scoreless player an 11% floor
+            # and a mid-scale close shot.
+            row["fg_percent"] = 0.0
+            row["e_fg_percent"] = 0.0
+            row["fga_per_game"] = 0.0
+            row["fg_percent_source"] = "recorded_zero_made_field_goals"
+            row["fg_percent_imputed"] = False
+            row["fg_percent_imputation_reliability"] = 1.0
+            imputed += 1
+            continue
+        percent = _linear_percentile(curve, placement)
         row["fg_percent"] = round(percent, 4)
         row["e_fg_percent"] = round(percent, 4)  # no 3-point attempts in this era
         made_per_game = _float(row.get("fg_per_game"))
-        if made_per_game is not None and made_per_game >= 0.0:
+        if made_per_game is not None and made_per_game >= 0.0 and percent > 0.0:
             row["fga_per_game"] = round(made_per_game / percent, 2)
-        row["fg_percent_source"] = "imputed_league_season_position_mean"
+        row["fg_percent_imputed"] = True
+        row["fg_percent_source"] = "same_season_baa_ppg_quantile_fg_curve"
+        row["fg_percent_imputation_reliability"] = imputation_reliability
+        row["fg_percent_nbl_ppg_percentile"] = placement
+        row["fg_percent_baa_curve_count"] = len(curve)
+        row["fg_percent_baa_quantile_match"] = percent
         imputed += 1
     return imputed
+
+
+#: The NBL rim-scoring cap is measured on BAA players of 6'8" and up -- the reach at
+#: which the cap binds in full where it is applied.
+_CENTER_CAP_SOURCE_HEIGHT = 80.0
 
 
 def _multi_team_primary_teams(database: Path, season: int) -> dict[str, str]:
@@ -1208,6 +1729,7 @@ __all__ = [
     "GeneratedDraftClass",
     "DraftClassMode",
     "SeasonPlayerContextIndex",
+    "available_source_seasons",
     "authored_player_field_index",
     "generate_player_proposal",
     "generate_player_proposal_from_index",

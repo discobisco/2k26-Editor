@@ -7,9 +7,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Iterable
 
+#: Key the season context used to stamp BAA reference cards under. Nothing writes it
+#: since nbl_baa_projection was removed, so _baa_reference_values returns empty and
+#: the NBL assist calibration below self-disables on its len(...) < 2 guard.
+NBL_BAA_REFERENCE_CONTEXT_KEY = "nbl_same_season_baa_common_feature_references"
 from player_era_context import player_era_context
 from player_era_role import era_role_playstyle_enabled as _era_role_playstyle_on
-from player_rules_athleticism import derive_attribute_vertical
+from player_rules_athleticism import derive_attribute_vertical, derive_attribute_vertical_unadjusted
 
 
 _POPULATION_CACHE: dict[
@@ -28,6 +32,10 @@ _ROBUST_SUMMARY_CACHE: dict[
     tuple[int, str],
     tuple[object, tuple[float, float] | None],
 ] = {}
+_NBL_ASSIST_RAW_CACHE: dict[
+    tuple[int, str, str],
+    tuple[object, dict[tuple[str, str], float], tuple[float, ...]],
+] = {}
 
 
 @dataclass(frozen=True)
@@ -43,19 +51,28 @@ class _Recipe:
 # the 765 GP-valid complete Pool packages. Historical shooting execution uses
 # the immutable SQL Pool packages directly through the range lookup below.
 _ATTRIBUTE_CALIBRATION: dict[str, tuple[float, float]] = {
-    "BALLCONTROL": (52.0, 28.2),
+    # Stretched from the pool scale of 28.2 so the best handler in a season reaches
+    # 99. At 28.2 the whole league sat inside 27-76: the field ranked players fine
+    # but never used the top third of its own range, so the league's best ball
+    # handler read as merely above average.
+    "BALLCONTROL": (52.0, 70.0),
     "DRAWFOUL": (56.0, 25.9),
     "OFFENSIVECONSISTENCY": (57.0, 25.9),
     "PASSACCURACY": (53.0, 25.9),
     "PASSIQ": (54.0, 27.4),
     "PASSVISION": (47.0, 25.9),
-    "IQSHOT": (57.0, 25.9),
+    # Widened from 25.9 so the outright best shot selector in a season reaches 99.
+    # Feerick shot .401 in a league averaging .279 and topped out at 90.
+    "IQSHOT": (57.0, 34.0),
     "3POINT": (30.0, 20.8),
     "CLOSESHOT": (62.0, 23.7),
     "DRIVINGDUNK": (45.0, 18.5),
     "DRIVINGLAYUP": (58.0, 23.0),
     "MIDRANGE": (52.0, 16.3),
-    "POSTCONTROL": (49.0, 27.4),
+    # Raised from a centre of 49. Restoring the recipe chain fixed *who* rates highly
+    # on post control but left the field sitting low across the board, in an era
+    # where the post was where offence actually happened.
+    "POSTCONTROL": (58.0, 27.4),
     "POSTFADE": (45.0, 11.9),
     "POSTHOOK": (48.0, 22.2),
     "STANDINGDUNK": (37.0, 19.3),
@@ -201,7 +218,39 @@ def _season(source: Any) -> int:
         return 0
 
 
+#: A shooting percentage is undefined at zero attempts, but "took no shots" is an
+#: observation, not a gap. The repository's missing-is-not-zero rule protects leagues
+#: that never recorded attempts -- the 1947 NBL has no FGA column at all -- and must
+#: not be stretched to cover a player whose zero attempts are written in the box
+#: score. Ken Corley played three games, took no shots and scored no points; dropping
+#: his shooting terms as "unknown" left position alone to carry post control and put
+#: a centre who never scored near the top of the field.
+_ZERO_ATTEMPT_PERCENTAGES = {
+    "per_game.fg_percent": ("per_game.fga_per_game", "totals.fga"),
+    "per_game.ft_percent": ("per_game.fta_per_game", "totals.fta"),
+    "per_game.e_fg_percent": ("per_game.fga_per_game", "totals.fga"),
+    "advanced.ts_percent": ("per_game.fga_per_game", "totals.fga"),
+}
+
+
+def _recorded_zero_attempt_percentage(source: Any, path: str) -> bool:
+    """True when the attempts behind this percentage are recorded and equal zero."""
+
+    for attempts_path in _ZERO_ATTEMPT_PERCENTAGES.get(path, ()):
+        attempts = _raw_basic_value(source, attempts_path)
+        if attempts is not None:
+            return attempts == 0.0
+    return False
+
+
 def _basic_value(source: Any, path: str) -> float | None:
+    value = _raw_basic_value(source, path)
+    if value is None and path in _ZERO_ATTEMPT_PERCENTAGES and _recorded_zero_attempt_percentage(source, path):
+        return 0.0
+    return value
+
+
+def _raw_basic_value(source: Any, path: str) -> float | None:
     section, _, field = path.partition(".")
     if not field:
         return None
@@ -287,6 +336,45 @@ def _parse_positions(value: Any) -> dict[str, float]:
     return result
 
 
+def _baa_reference_values(evidence: Any, field_key: str) -> tuple[float, ...]:
+    """Every BAA reference value for this field, league-wide.
+
+    This used to take a position family and return only the BAA players carrying that
+    label, so an NBL player's target distribution was chosen by the letter beside his
+    name. There is no family argument any more.
+    """
+
+    context = getattr(evidence, "source_context", {})
+    references = context.get(NBL_BAA_REFERENCE_CONTEXT_KEY) if isinstance(context, Mapping) else None
+    if not isinstance(references, (tuple, list)):
+        return ()
+    values = []
+    for reference in references:
+        if not isinstance(reference, Mapping):
+            continue
+        targets = reference.get("targets")
+        value = targets.get(field_key) if isinstance(targets, Mapping) else None
+        if isinstance(value, (int, float)):
+            values.append(float(value))
+    return tuple(sorted(values))
+
+
+def _midrank(value: float, values: tuple[float, ...]) -> float | None:
+    if len(values) < 2:
+        return None
+    left = bisect.bisect_left(values, value)
+    right = bisect.bisect_right(values, value)
+    return ((left + right - 1) / 2.0) / (len(values) - 1)
+
+
+def _linear_quantile(values: tuple[float, ...], percentile: float) -> float:
+    position = max(0.0, min(1.0, percentile)) * (len(values) - 1)
+    lower = int(position)
+    upper = min(len(values) - 1, lower + 1)
+    fraction = position - lower
+    return values[lower] + fraction * (values[upper] - values[lower])
+
+
 def _role_value(source: Any, role: str) -> float | None:
     return _role_value_from_positions(_position_vector(source), role)
 
@@ -325,11 +413,96 @@ def _ratio(numerator: float | None, denominator: float | None) -> float | None:
     return numerator / denominator
 
 
+#: Driving dunks belong to the 6'6"-6'8" build: tall enough to finish above the rim
+#: off one foot, still quick and springy enough to get there off a live dribble. Both
+#: smaller guards and true seven-foot pivots fall away from it, so height enters this
+#: field as distance from a band rather than as "taller is better".
+_DUNK_HEIGHT_BAND = (78.0, 80.0)
+_DUNK_HEIGHT_FALLOFF_INCHES = 8.0
+#: Where the low side of the dunk curve reaches zero: six foot.
+_DUNK_ZERO_HEIGHT = 72.0
+#: The tall side declines toward this rather than to zero.
+_DUNK_TALL_FLOOR = 0.45
+#: Where standing dunk reaches its full ceiling: 6'10".
+_STANDING_DUNK_FULL_HEIGHT = 82.0
+
+
+#: Dunking off a live dribble is a young, light-framed act. Height sets the band, and
+#: mass carried above what the frame implies plus years past the athletic peak both
+#: take a player out of it -- Ed Sadowski at 6'5", 240lb and 31 topped this field on
+#: height alone.
+_DUNK_EXPECTED_WEIGHT_INTERCEPT = 140.0
+_DUNK_EXPECTED_WEIGHT_PER_INCH = 4.2
+_DUNK_WEIGHT_TOLERANCE = 80.0
+_DUNK_PEAK_AGE = 26.0
+_DUNK_AGE_DECAY_PER_YEAR = 0.04
+_DUNK_MIN_AGE_SHARE = 0.55
+
+
+def _dunk_height_fit(height: float | None) -> float | None:
+    if height is None:
+        return None
+    low, high = _DUNK_HEIGHT_BAND
+    if low <= height <= high:
+        return 1.0
+    if height < low:
+        # Reaches zero exactly at six foot, so a player that size carries no dunk
+        # evidence at all rather than being cut off by a rule.
+        return max(0.0, (height - _DUNK_ZERO_HEIGHT) / (low - _DUNK_ZERO_HEIGHT))
+    # The tall side declines but never vanishes. A seven-footer dunks; he just does it
+    # off two feet in traffic rather than off a live dribble, which is what this field
+    # is asking about.
+    return max(_DUNK_TALL_FLOOR, 1.0 - (height - high) / _DUNK_HEIGHT_FALLOFF_INCHES)
+
+
+def _dunk_athletic_fit(source: Any) -> float | None:
+    height = _basic_value(source, "identity.ht_in_in")
+    fit = _dunk_height_fit(height)
+    if fit is None:
+        return None
+    weight = _basic_value(source, "identity.wt")
+    if weight is not None and height is not None:
+        expected = _DUNK_EXPECTED_WEIGHT_INTERCEPT + _DUNK_EXPECTED_WEIGHT_PER_INCH * (height - 60.0)
+        excess = max(0.0, weight - expected)
+        fit *= max(0.4, 1.0 - excess / _DUNK_WEIGHT_TOLERANCE)
+    age = _basic_value(source, "season_info.age")
+    if age is not None:
+        fit *= max(_DUNK_MIN_AGE_SHARE, 1.0 - _DUNK_AGE_DECAY_PER_YEAR * max(0.0, age - _DUNK_PEAK_AGE))
+    return fit
+
+
+#: Reading a defence is learned. Pass IQ carries an experience term that Pass Vision
+#: does not, which is what lets the two fields cross: a veteran distributor can out-
+#: think a quicker one who sees more.
+_PASSING_EXPERIENCE_ONSET = 21.0
+_PASSING_EXPERIENCE_SPAN = 12.0
+
+
 def _derived_value(source: Any, name: str) -> float | None:
+    if name == "passing_experience":
+        age = _basic_value(source, "season_info.age")
+        if age is None:
+            return None
+        return max(0.0, min(1.0, (age - _PASSING_EXPERIENCE_ONSET) / _PASSING_EXPERIENCE_SPAN))
+    if name == "turnover_rate_per_36":
+        per_36 = _basic_value(source, "per_36.tov_per_36_min")
+        if per_36 is not None:
+            return per_36
+        per_game = _basic_value(source, "per_game.tov_per_game")
+        minutes = _basic_value(source, "per_game.mp_per_game")
+        if per_game is None or minutes is None or minutes <= 0.0:
+            return None
+        return per_game * 36.0 / minutes
+    if name == "dunk_height_fit":
+        return _dunk_athletic_fit(source)
     if name == "attempt_share":
         return _ratio(_basic_value(source, "totals.fga"), _team_total(source, "fga"))
     if name == "scoring_share":
         return _ratio(_basic_value(source, "totals.pts"), _team_total(source, "pts"))
+    if name == "team_win_pct":
+        wins = _basic_value(source, "team_summary.w")
+        losses = _basic_value(source, "team_summary.l")
+        return _ratio(wins, (wins or 0.0) + (losses or 0.0))
     if name == "assist_share":
         if not _recorded_assists_available(source):
             return None
@@ -349,7 +522,10 @@ def _derived_value(source: Any, name: str) -> float | None:
         value = _ratio(_basic_value(source, "totals.fta"), _basic_value(source, "totals.fga"))
         if value is not None:
             return value
-        return _basic_value(source, "per_game.fta_per_game")
+        return _ratio(
+            _basic_value(source, "per_game.fta_per_game"),
+            _basic_value(source, "per_game.fga_per_game"),
+        )
     if name == "three_attempt_rate":
         value = _basic_value(source, "advanced.x3p_ar")
         if value is not None:
@@ -405,6 +581,16 @@ def _value(source: Any, key: str) -> float | None:
 
 
 def _population(evidence: Any, rows: Iterable[dict[str, Any]]) -> tuple[dict[str, Any], ...]:
+    """Every same-season player in the selected scope.
+
+    The scope is the comparison, deliberately. Selecting "All leagues" means ranking
+    these players against each other, so an NBL player is compared to the full pull
+    wherever the signal exists in both leagues; selecting one league compares him only
+    to that league. A player's card therefore depends on the scope he was generated
+    under, which is the intent -- comparing a 1947 NBL guard only to other NBL guards
+    is what inflated them against their BAA counterparts in the first place.
+    """
+
     season = _season(evidence)
     cache_key = (id(rows), season)
     cached = _POPULATION_CACHE.get(cache_key)
@@ -634,6 +820,11 @@ def _exposure_reliability(source: Any, key: str) -> tuple[float, str] | None:
     if exposure is None or exposure < 0.0:
         return None
     reliability = exposure / (exposure + prior) if prior > 0.0 else 1.0
+    if clean in {"per_game.fg_percent", "per_game.e_fg_percent"} and bool(_basic_value(source, "per_game.fg_percent_imputed")):
+        imputed = _basic_value(source, "per_game.fg_percent_imputation_reliability")
+        if imputed is not None:
+            reliability *= max(0.0, min(1.0, imputed))
+            basis += f";imputed_fg_reliability={imputed:.8f}"
     return reliability, f"exposure_reliability[{clean}]={reliability:.8f};basis={basis};exposure={exposure:.6f};prior={prior:.6f}"
 
 
@@ -664,13 +855,29 @@ def _recipe_score(
     if total_weight <= 0.0:
         return None
     score = sum(value_z * weight for value_z, weight, _key in components) / total_weight
+    # Renormalising onto whatever signals happened to resolve treats a partial recipe
+    # as if it were complete. Ken Corley played three games, took no shots and had no
+    # recorded position, so both shooting terms of the post-control recipe dropped out
+    # and role.post carried 82% of a field it contributes 45% to -- a centre who never
+    # scored came out at 97. Shrink the score toward the population mean in proportion
+    # to how much of the recipe's declared weight actually resolved, so a rule running
+    # on a fraction of its evidence produces a correspondingly unremarkable value.
+    declared_weight = sum(abs(weight) for _key, weight in recipe.signals)
+    completeness = total_weight / declared_weight if declared_weight > 0.0 else 1.0
+    completeness_keys: tuple[str, ...] = ()
+    if completeness < 1.0:
+        score *= completeness
+        completeness_keys = (
+            f"recipe_evidence_completeness={completeness:.6f}",
+            "partial_recipe_policy=shrink_toward_population_mean_by_resolved_weight_share",
+        )
     evidence_keys = (*tuple(
         dict.fromkeys(
             source_path
             for _value_z, _weight, key in components
             for source_path in _provenance_sources(key.lstrip("!"))
         )
-    ), *tuple(dict.fromkeys(reliability_evidence)))
+    ), *tuple(dict.fromkeys(reliability_evidence)), *completeness_keys)
     return score, evidence_keys
 
 
@@ -692,6 +899,11 @@ def _recipe_rank_score(
         percentile = bisect.bisect_right(population_values, current) / len(population_values)
         weight = abs(signed_weight)
         directed_percentile = percentile if signed_weight >= 0.0 else 1.0 - percentile
+        reliability = _exposure_reliability(evidence, key)
+        if reliability is not None:
+            factor, reliability_key = reliability
+            directed_percentile = 0.5 + (directed_percentile - 0.5) * factor
+            rank_evidence.append(reliability_key)
         components.append((directed_percentile, weight, key))
         direction = "positive" if signed_weight >= 0.0 else "inverse"
         rank_evidence.append(
@@ -712,6 +924,144 @@ def _recipe_rank_score(
     return score, (*evidence_keys, *rank_evidence)
 
 
+def _unrecorded_assist_raw_value(
+    field: str,
+    source: dict[str, Any],
+    population: tuple[dict[str, Any], ...],
+) -> float | None:
+    # Scored once. This used to re-score the player under each of his listed position
+    # families and keep the highest, so a "G-F" outscored a "G" on the strength of the
+    # second letter. The recipe no longer reads position, so every branch returned the
+    # same number and the maximum was over a list of identical values.
+    recipe = next(recipe for recipe in _ATTR_RECIPES[field] if recipe.name.startswith("unrecorded_assist_era_"))
+    center, scale = _ATTRIBUTE_CALIBRATION[field]
+    scored = _recipe_score(source, population, recipe)
+    if scored is None:
+        return None
+    return float(max(25, min(99, int(round(center + scored[0] * scale)))))
+
+
+#: Matches nbl_baa_projection._TEAM_SUCCESS_BLEND_WEIGHT. The passing fields kept
+#: this blend while the projection owned them; it moves with them.
+_NBL_TEAM_SUCCESS_BLEND_WEIGHT = 0.40
+
+
+def _nbl_team_win_pct(source: Any) -> float | None:
+    wins = _value(source, "team_summary.w")
+    losses = _value(source, "team_summary.l")
+    if wins is None or losses is None or wins < 0.0 or losses < 0.0 or wins + losses <= 0.0:
+        return None
+    return wins / (wins + losses)
+
+
+def _nbl_team_win_percentile(evidence: Any, population: tuple[dict[str, Any], ...]) -> float | None:
+    """Where this player's team sits among same-season NBL teams, by record."""
+
+    current = _nbl_team_win_pct(evidence)
+    if current is None:
+        return None
+    by_team: dict[str, float] = {}
+    for ordinal, row in enumerate(population):
+        team = str(
+            row.get("player_season_info.team") or row.get("team") or f"__ROW_{ordinal}"
+        ).strip().upper()
+        value = _nbl_team_win_pct(row)
+        if value is not None:
+            by_team.setdefault(team, value)
+    ordered = tuple(sorted(by_team.values()))
+    if len(ordered) < 2:
+        return None
+    return _midrank(current, ordered)
+
+
+def nbl_baa_assist_calibrated_value(
+    field: str,
+    evidence: Any,
+    league_player_rows: Any,
+) -> tuple[float, tuple[str, ...]] | None:
+    if _league(evidence) != "NBL" or _recorded_assists_available(evidence):
+        return None
+    # Same-season NBL only. _population filters by season but not league, so under
+    # the "All leagues" scope it also carries the BAA rows and every z-score below
+    # would shift with the selected league -- the same player generating different
+    # ratings depending on a UI filter. project_nbl_fields already scopes its own
+    # source rows this way; this keeps the direct NBL recipes scope-invariant too.
+    population = tuple(
+        row for row in _population(evidence, league_player_rows) if _league(row) == "NBL"
+    )
+    # League-wide on both sides. This mapped an NBL player's rank among his own listed
+    # position onto the BAA distribution for that same position, so the label picked both
+    # his peer group and his target -- a "G" and a "C" with identical box scores landed in
+    # different places for no reason the evidence supports.
+    reference_values = _baa_reference_values(evidence, f"Attributes/{field}")
+    player_id = str(getattr(evidence, "player_id", "") or "").strip().upper()
+    team = str(getattr(evidence, "team", "") or "").strip().upper()
+    cache_key = (id(population), field)
+    cached = _NBL_ASSIST_RAW_CACHE.get(cache_key)
+    if cached is not None and cached[0] is population:
+        raw_by_key, ordered_raw = cached[1], cached[2]
+    else:
+        raw_by_key: dict[tuple[str, str], float] = {}
+        for row in population:
+            if _league(row) != "NBL":
+                continue
+            raw = _unrecorded_assist_raw_value(field, row, population)
+            if raw is None:
+                continue
+            row_player_id = str(row.get("player_season_info.player_id") or row.get("player_id") or "").strip().upper()
+            row_team = str(row.get("player_season_info.team") or row.get("team") or "").strip().upper()
+            raw_by_key[(row_player_id, row_team)] = raw
+        ordered_raw = tuple(sorted(raw_by_key.values()))
+        _NBL_ASSIST_RAW_CACHE[cache_key] = (population, raw_by_key, ordered_raw)
+    current_raw = raw_by_key.get((player_id, team))
+    if current_raw is None or len(ordered_raw) < 2 or len(reference_values) < 2:
+        return None
+    percentile = _midrank(current_raw, ordered_raw)
+    if percentile is None:
+        return None
+    individual = _linear_quantile(reference_values, percentile)
+
+    # The projection blended these same passing fields 40% with team success, and
+    # taking them out of the projection took the blend with them: NBL team attribute
+    # means stopped tracking team record and Detroit, 4-40, was no longer the floor.
+    # A season's worth of unrecorded assists is thin individual evidence, and how much
+    # a team won is real evidence about the players on it, so the blend is restored
+    # here against the same league-wide BAA reference distribution.
+    team_percentile = _nbl_team_win_percentile(evidence, population)
+    if team_percentile is None:
+        return individual, (
+            "nbl_unrecorded_assist_scope=league_wide;no_position_family",
+            f"nbl_unrecorded_assist_raw_median={statistics.median(ordered_raw):.8f}",
+            f"baa_recorded_assist_target_median={statistics.median(reference_values):.8f}",
+            f"baa_recorded_assist_reference_count={len(reference_values)}",
+            f"nbl_unrecorded_assist_raw_percentile={percentile:.8f}",
+            "team_success_blend=unavailable_no_same_season_nbl_team_record",
+            "mapping=BAA_recorded_assist_quantile(NBL_unrecorded_assist_raw_percentile)",
+        )
+    team_value = _linear_quantile(reference_values, team_percentile)
+    value = (
+        (1.0 - _NBL_TEAM_SUCCESS_BLEND_WEIGHT) * individual
+        + _NBL_TEAM_SUCCESS_BLEND_WEIGHT * team_value
+    )
+    return value, (
+        "nbl_unrecorded_assist_scope=league_wide;no_position_family",
+        f"nbl_unrecorded_assist_raw_median={statistics.median(ordered_raw):.8f}",
+        f"baa_recorded_assist_target_median={statistics.median(reference_values):.8f}",
+        f"baa_recorded_assist_reference_count={len(reference_values)}",
+        f"nbl_unrecorded_assist_raw_percentile={percentile:.8f}",
+        "team_summary.w",
+        "team_summary.l",
+        f"individual_value={individual:.8f}",
+        f"same_season_nbl_team_win_percentile={team_percentile:.8f}",
+        f"team_success_reference_value={team_value:.8f}",
+        "team_success_reference=league_wide_BAA_recorded_assist_distribution",
+        f"team_success_blend_weight={_NBL_TEAM_SUCCESS_BLEND_WEIGHT:.2f}",
+        "mapping=round("
+        f"{1.0 - _NBL_TEAM_SUCCESS_BLEND_WEIGHT:.2f}*BAA_recorded_assist_quantile(NBL_raw_percentile)+"
+        f"{_NBL_TEAM_SUCCESS_BLEND_WEIGHT:.2f}*BAA_recorded_assist_quantile(NBL_team_win_percentile))",
+    )
+
+
 def _provenance_sources(key: str) -> tuple[str, ...]:
     if key.startswith("role."):
         return (
@@ -727,10 +1077,20 @@ def _provenance_sources(key: str) -> tuple[str, ...]:
     derived_sources = {
         "derived.attempt_share": ("totals.fga", "team_stats_per_game.fga_per_game", "team_stats_per_game.g"),
         "derived.scoring_share": ("totals.pts", "team_stats_per_game.pts_per_game", "team_stats_per_game.g"),
+        "derived.team_win_pct": ("team_summary.w", "team_summary.l"),
         "derived.assist_share": ("totals.ast", "team_stats_per_game.ast_per_game", "team_stats_per_game.g"),
         "derived.assist_decision_efficiency": ("per_game.ast_per_game", "per_game.tov_per_game"),
-        "derived.foul_pressure": ("advanced.f_tr", "totals.fta", "totals.fga", "per_game.fta_per_game"),
+        "derived.foul_pressure": (
+            "advanced.f_tr",
+            "totals.fta",
+            "totals.fga",
+            "per_game.fta_per_game",
+            "per_game.fga_per_game",
+        ),
         "derived.three_attempt_rate": ("advanced.x3p_ar", "totals.x3pa", "totals.fga"),
+        "derived.passing_experience": ("season_info.age",),
+        "derived.turnover_rate_per_36": ("per_36.tov_per_36_min", "per_game.tov_per_game", "per_game.mp_per_game"),
+        "derived.dunk_height_fit": ("identity.ht_in_in", "identity.wt", "season_info.age"),
         "derived.rim_attempt_rate": ("shooting.percent_fga_from_x0_3_range",),
         "derived.short_attempt_rate": ("shooting.percent_fga_from_x0_3_range", "shooting.percent_fga_from_x3_10_range"),
         "derived.three_to_ten_attempt_rate": ("shooting.percent_fga_from_x3_10_range",),
@@ -759,7 +1119,7 @@ def _resolved(
     rounded = max(low, min(high, int(round(value))))
     provenance = (
         *evidence_keys,
-        "population=same-season,same-league,GP>0",
+        "population=same-season,selected-scope,GP>0",
         "pool_calibration=field-exact target distribution;765 GP-valid packages;identity=(run_id,player_index)",
         f"recipe={recipe.name}",
     )
@@ -786,11 +1146,42 @@ def _derive(
     population = _population(evidence, league_player_rows)
     calibration = _TENDENCY_CALIBRATION[field] if tendency else _ATTRIBUTE_CALIBRATION[field]
     for recipe in recipes:
+        if recipe.name.startswith("nbl_") and _league(evidence) != "NBL":
+            continue
+        if (
+            field in {"BALLCONTROL", "PASSACCURACY", "PASSIQ", "PASSVISION"}
+            and not _recorded_assists_available(evidence)
+            and not recipe.name.startswith("unrecorded_assist_era_")
+        ):
+            continue
+        # OFFENSIVECONSISTENCY is offensive win shares min-maxed across the league's real
+        # range, not a rank. Going 1, 2, 3 down the order throws away the size of the
+        # gaps: the distance between the league's best offensive player and the second
+        # best is evidence, and a rank reports it as one step -- the same step it reports
+        # between the 40th and the 41st. The league's highest OWS is the only 99 and its
+        # lowest is the only 25.
         if field == "OFFENSIVECONSISTENCY" and not tendency:
-            ranked = _recipe_rank_score(evidence, population, recipe)
-            if ranked is None:
+            own_league = _league(evidence)
+            league_ows = sorted(
+                value
+                for row in population
+                if _league(row) == own_league and (value := _value(row, "advanced.ows")) is not None
+            )
+            own_ows = _value(evidence, "advanced.ows")
+            if own_ows is None or len(league_ows) < 2:
                 continue
-            score, evidence_keys = ranked
+            low, high = league_ows[0], league_ows[-1]
+            if high - low <= 0.0:
+                continue
+            score = (own_ows - low) / (high - low)
+            evidence_keys = (
+                "advanced.ows",
+                f"ows={own_ows:.8f}",
+                f"same_league_min_ows={low:.8f}",
+                f"same_league_max_ows={high:.8f}",
+                f"ows_magnitude_score={score:.8f}",
+                "rank_source=ows_minmax_not_rank",
+            )
             resolved_source_rule = (
                 f"{source_rule}_field_specific_context_substitute"
                 if recipe.unavailable
@@ -798,11 +1189,12 @@ def _derive(
             )
             provenance = (
                 *evidence_keys,
-                "population=same-season,same-league,GP>0",
+                "population=same-season,selected-scope,GP>0",
                 f"recipe={recipe.name}",
-                f"rank_score={score:.8f}",
-                "mapping=round(25+74*same_season_same_league_rank_score)",
+                f"ows_magnitude_mapping=round(25+74*(ows-min)/(max-min))",
             )
+            value = 25.0 + 74.0 * score
+            provenance += ("mapping=round(25+74*same_season_same_league_rank_score)",)
             if recipe.unavailable:
                 provenance += (
                     f"unavailable_direct_source={recipe.unavailable}",
@@ -810,7 +1202,7 @@ def _derive(
                     f"validity={recipe.why_valid}",
                 )
             return {
-                "value": max(25, min(99, int(round(25.0 + 74.0 * score)))),
+                "value": max(25, min(99, int(round(value)))),
                 "source_rule": resolved_source_rule,
                 "evidence_keys": provenance,
             }
@@ -829,17 +1221,92 @@ def _derive(
         # caps regardless of the calibration band.
         absolute_evidence: tuple[str, ...] = ()
         if not tendency:
-            value, absolute_evidence = _absolute_attribute_adjustment(field, evidence, value)
+            value, absolute_evidence = _absolute_attribute_adjustment(field, evidence, value, population)
         resolved_source_rule = (
             f"{source_rule}_field_specific_context_substitute"
             if recipe.unavailable
             else source_rule
         )
+
         return _resolved(resolved_source_rule, value, (*evidence_keys, *absolute_evidence), recipe, tendency=tendency)
     return None
 
 
-def _absolute_attribute_adjustment(field: str, evidence: Any, relative_value: float) -> tuple[float, tuple[str, ...]]:
+#: A ceiling should only bind when there is evidence behind it. With little exposure
+#: the ceiling relaxes upward toward the attribute maximum rather than collapsing to
+#: the calibration centre, which is what a shrink-toward-centre does to a *cap* and
+#: which flattened whole fields onto one value. A recorded zero is the exception: no
+#: made shot is unambiguous however few the attempts, so it binds at full strength.
+def _execution_reliability(percentage: float | None, exposure: float | None, prior: float) -> float:
+    if percentage is not None and percentage <= 0.0:
+        return 1.0
+    if exposure is None or exposure <= 0.0:
+        return 0.0
+    return exposure / (exposure + prior)
+
+
+
+#: Fields where recorded shooting is an upper bound rather than one term in a blend.
+#: DRAWFOUL and IQSHOT stay blended: drawing contact and choosing shots are not the
+#: same claim as making them.
+# DRIVINGLAYUP and POSTFADE are deliberately absent. A layup is the one shot every
+# player can make, and a fade is a touch shot -- neither should fall off a cliff from
+# 48 to 25 because a bench player's season shows no made field goal. They keep the
+# blend, which moves them down smoothly instead.
+
+
+_POST_BODY_CACHE: dict[int, tuple[object, tuple[float, ...]]] = {}
+
+
+def _standing_dunk_height_fit(source: Any) -> float | None:
+    """Standing dunk rises with reach; it does not peak and fall away.
+
+    The driving-dunk bell is about getting up off a live dribble, which is a 6'6"-6'8"
+    act. Dunking from a standstill is pure reach, so the curve only shares the short
+    end: zero at six foot, climbing to full by 6'10" and staying there. Using the
+    driving bell here put a 7'1" player on 58.
+    """
+
+    height = _basic_value(source, "identity.ht_in_in")
+    if height is None:
+        return None
+    return max(0.0, min(1.0, (height - _DUNK_ZERO_HEIGHT) / (_STANDING_DUNK_FULL_HEIGHT - _DUNK_ZERO_HEIGHT)))
+
+
+def _attribute_bounds(value: float) -> int:
+    return max(25, min(99, int(round(value))))
+
+
+def _post_body_score(source: Any) -> float | None:
+    height = _basic_value(source, "identity.ht_in_in")
+    weight = _basic_value(source, "identity.wt")
+    if height is None or weight is None:
+        return None
+    # Height leads: reach is what wins the position. Mass holds it once it is won.
+    return 0.65 * height + 0.35 * (weight / 3.0)
+
+
+def _post_body_percentile(evidence: Any, population: tuple[dict[str, Any], ...]) -> float | None:
+    current = _post_body_score(evidence)
+    if current is None:
+        return None
+    cache_key = id(population)
+    cached = _POST_BODY_CACHE.get(cache_key)
+    if cached is not None and cached[0] is population:
+        ordered = cached[1]
+    else:
+        ordered = tuple(sorted(
+            score for row in population if (score := _post_body_score(row)) is not None
+        ))
+        _POST_BODY_CACHE[cache_key] = (population, ordered)
+    if len(ordered) < 2:
+        return None
+    left = bisect.bisect_left(ordered, current)
+    right = bisect.bisect_right(ordered, current)
+    return ((left + right - 1.0) / 2.0) / (len(ordered) - 1.0)
+
+
+def _absolute_attribute_adjustment(field: str, evidence: Any, relative_value: float, population: tuple[dict[str, Any], ...] = ()) -> tuple[float, tuple[str, ...]]:
     """Keep same-league rank extremes tied to an absolute basketball scale."""
     if field in {"BALLCONTROL", "PASSACCURACY", "PASSIQ", "PASSVISION"}:
         if not _recorded_assists_available(evidence):
@@ -900,16 +1367,24 @@ def _absolute_attribute_adjustment(field: str, evidence: Any, relative_value: fl
             "POSTHOOK": 130.0,
             "STANDINGDUNK": 100.0,
         }[field]
-        reliability = fga / (fga + 100.0) if fga is not None else 0.0
+        reliability = _execution_reliability(fg_percent, fga, 100.0)
         absolute_value = 25.0 + slope * fg_percent
         anchor = f"25+{slope:.0f}*FG%({fg_percent:.6f})"
     elif field == "POSTFADE" and (ft_percent is not None or fg_percent is not None):
-        touch = ft_percent if ft_percent is not None else fg_percent
-        assert touch is not None
+        # A turnaround fade needs both the touch to shoot it and the ability to make a
+        # field goal. Anchoring on free-throw touch alone rescued players who never
+        # made a field goal all season -- they shot well from the line and came out
+        # near 50. The geometric mean requires both: zero on either side is zero.
+        if ft_percent is not None and fg_percent is not None:
+            touch = (max(0.0, ft_percent) * max(0.0, fg_percent)) ** 0.5
+            anchor = f"25+55*sqrt(FT%({ft_percent:.6f})*FG%({fg_percent:.6f}))"
+        else:
+            touch = ft_percent if ft_percent is not None else fg_percent
+            assert touch is not None
+            anchor = f"25+55*{'FT%' if ft_percent is not None else 'FG%'}({touch:.6f})"
         exposure = fta if ft_percent is not None else fga
-        reliability = exposure / (exposure + 40.0) if exposure is not None else 0.0
+        reliability = _execution_reliability(touch, exposure, 40.0)
         absolute_value = 25.0 + 55.0 * touch
-        anchor = f"25+55*{'FT%' if ft_percent is not None else 'FG%'}({touch:.6f})"
 
     if absolute_value is None:
         return relative_value, ()
@@ -924,31 +1399,37 @@ def _absolute_attribute_adjustment(field: str, evidence: Any, relative_value: fl
 
 _ATTR_RECIPES: dict[str, tuple[_Recipe, ...]] = {
     "BALLCONTROL": (
-        _Recipe("tracked_handle_security", (("!derived.lost_ball_per_game", 0.40), ("!advanced.tov_percent", 0.30), ("derived.unassisted_two_rate", 0.20), ("role.creator", 0.10))),
-        _Recipe("recorded_handle_security", (("!advanced.tov_percent", 0.40), ("role.creator", 0.35), ("per_game.ft_percent", 0.25)), "lost-ball tracking and self-created-shot splits", "turnover restraint, continuous guard/wing participation, and weak free-throw touch", "AST is excluded; the remaining sources describe handle security and applicable on-ball responsibility"),
-        _Recipe("unrecorded_assist_era_handle", (("role.creator", 0.55), ("derived.attempt_share", 0.25), ("per_game.ft_percent", 0.20)), "assists, lost-ball events, and player turnovers", "continuous primary/secondary creator-position participation plus observed shooting responsibility and touch", "the 1946-47 NBL research identifies guards as ball advancers; scoring responsibility distinguishes handling load without inventing AST zeroes"),
+        _Recipe("tracked_handle_security", (("!derived.lost_ball_per_game", 0.40), ("!advanced.tov_percent", 0.30), ("derived.unassisted_two_rate", 0.20))),
+        _Recipe("recorded_handle_security", (("!advanced.tov_percent", 0.40), ("per_game.ft_percent", 0.25)), "lost-ball tracking and self-created-shot splits", "turnover restraint, continuous guard/wing participation, and weak free-throw touch", "AST is excluded; the remaining sources describe handle security and applicable on-ball responsibility"),
+        _Recipe("unrecorded_assist_era_handle", (("derived.attempt_share", 0.25), ("per_game.ft_percent", 0.20)), "assists, lost-ball events, and player turnovers", "continuous primary/secondary creator-position participation plus observed shooting responsibility and touch", "the 1946-47 NBL research identifies guards as ball advancers; scoring responsibility distinguishes handling load without inventing AST zeroes"),
     ),
     "DRAWFOUL": (
         _Recipe("tracked_foul_creation", (("derived.shooting_foul_drawn_per_game", 0.50), ("derived.and1_per_game", 0.20), ("derived.foul_pressure", 0.30))),
         _Recipe("recorded_free_throw_pressure", (("derived.foul_pressure", 0.55), ("per_game.fta_per_game", 0.45)), "shooting-foul-drawn and and-one events", "recorded FTA/FGA pressure and FTA volume", "both are direct outcomes of forcing shooting fouls rather than shooting efficiency"),
     ),
+    # NBL players have no win shares, so this resolves to nothing for them and the
+    # field is filled by the same-season BAA common-feature projection, which owns
+    # every key in nbl_baa_projection.PROJECTED_FIELD_KEYS. A second NBL-only recipe
+    # here produced a competing owner for the same field and, because it mapped a
+    # within-NBL rank onto the BAA distribution, put ten NBL players at exactly 99
+    # against the BAA's four. One field, one owner.
     "OFFENSIVECONSISTENCY": (
         _Recipe("ows_only", (("advanced.ows", 1.0),)),
     ),
     "PASSACCURACY": (
         _Recipe("tracked_pass_completion_proxy", (("derived.assist_points_per_game", 0.35), ("!derived.bad_pass_per_game", 0.35), ("derived.assist_decision_efficiency", 0.30))),
-        _Recipe("recorded_assist_accuracy", (("per_game.ast_per_game", 0.45), ("derived.assist_share", 0.30), ("advanced.tov_percent", -0.25)), "pass completion, placement, and bad-pass event tracking", "recorded assist outcomes and turnover restraint", "AST is used only for passing execution; low AST/G and low team-assist responsibility remain low"),
-        _Recipe("unrecorded_assist_era_accuracy", (("role.creator", 0.55), ("per_game.ft_percent", 0.30), ("derived.attempt_share", 0.15)), "assists and passing-error outcomes", "continuous ball-advancer position, shooting touch, and observed offensive responsibility", "research supports guard ball advancement; the weak touch/load terms avoid assigning modern-elite passing from position alone"),
+        _Recipe("recorded_pass_security", (("!derived.turnover_rate_per_36", 0.45), ("advanced.tov_percent", -0.20), ("per_game.ast_per_game", 0.20), ("derived.assist_share", 0.15)), "pass completion, placement, and bad-pass event tracking", "turnover restraint per 36 minutes with recorded assist outcomes in support", "accuracy is about passes that arrive, so it is led by how rarely the ball is given away rather than by how often an assist was credited"),
+        _Recipe("unrecorded_assist_era_accuracy", (("per_game.ft_percent", 0.30), ("derived.attempt_share", 0.15)), "assists and passing-error outcomes", "continuous ball-advancer position, shooting touch, and observed offensive responsibility", "research supports guard ball advancement; the weak touch/load terms avoid assigning modern-elite passing from position alone"),
     ),
     "PASSIQ": (
         _Recipe("tracked_pass_decisions", (("advanced.ast_percent", 0.35), ("derived.assist_decision_efficiency", 0.35), ("!derived.bad_pass_per_game", 0.30))),
-        _Recipe("recorded_assist_decisions", (("derived.assist_share", 0.40), ("per_game.ast_per_game", 0.35), ("advanced.tov_percent", -0.25)), "potential assists, passing decisions, and bad-pass events", "recorded team-assist responsibility, AST/G, and turnover restraint", "the output remains passing-specific and cannot be raised by generic win shares or efficiency"),
-        _Recipe("unrecorded_assist_era_pass_iq", (("role.creator", 0.60), ("derived.attempt_share", 0.20), ("per_game.ft_percent", 0.20)), "assists, player turnovers, and pass-decision events", "continuous researched ball-advancer role with weak responsibility/touch support", "no unrecorded zero is used and the target calibration keeps ordinary early guards below modern elite levels"),
+        _Recipe("recorded_assist_decisions", (("derived.assist_share", 0.35), ("per_game.ast_per_game", 0.30), ("advanced.tov_percent", -0.20), ("derived.passing_experience", 0.15)), "potential assists, passing decisions, and bad-pass events", "recorded team-assist responsibility, AST/G, and turnover restraint", "the output remains passing-specific and cannot be raised by generic win shares or efficiency"),
+        _Recipe("unrecorded_assist_era_pass_iq", (("derived.passing_experience", 0.30), ("derived.attempt_share", 0.15), ("per_game.ft_percent", 0.10)), "assists, player turnovers, and pass-decision events", "continuous researched ball-advancer role with weak responsibility/touch support", "no unrecorded zero is used and the target calibration keeps ordinary early guards below modern elite levels"),
     ),
     "PASSVISION": (
         _Recipe("tracked_creation_vision", (("derived.assist_points_per_game", 0.45), ("advanced.ast_percent", 0.35), ("!derived.bad_pass_per_game", 0.20))),
-        _Recipe("recorded_creation_vision", (("derived.assist_share", 0.50), ("per_game.ast_per_game", 0.35), ("role.creator", 0.15)), "potential assists, pass targets, and points generated by assists", "observed assist responsibility and continuous creator-position participation", "the substitute measures seeing and completing scoring passes, not speed or athleticism"),
-        _Recipe("unrecorded_assist_era_vision", (("role.creator", 0.65), ("derived.attempt_share", 0.20), ("per_game.ft_percent", 0.15)), "assists and chance-creation tracking", "continuous researched ball-advancer role with weak offensive responsibility/touch support", "position is not a hard archetype gate and cannot by itself reach elite output"),
+        _Recipe("recorded_creation_vision", (("derived.assist_share", 0.50), ("per_game.ast_per_game", 0.35)), "potential assists, pass targets, and points generated by assists", "observed assist responsibility and continuous creator-position participation", "the substitute measures seeing and completing scoring passes, not speed or athleticism"),
+        _Recipe("unrecorded_assist_era_vision", (("derived.attempt_share", 0.20), ("per_game.ft_percent", 0.15)), "assists and chance-creation tracking", "continuous researched ball-advancer role with weak offensive responsibility/touch support", "position is not a hard archetype gate and cannot by itself reach elite output"),
     ),
     "IQSHOT": (
         _Recipe("tracked_shot_selection", (("advanced.ts_percent", 0.40), ("per_game.e_fg_percent", 0.25), ("!derived.blocked_attempt_rate", 0.20), ("!advanced.tov_percent", 0.15))),
@@ -956,67 +1437,71 @@ _ATTR_RECIPES: dict[str, tuple[_Recipe, ...]] = {
     ),
     "CLOSESHOT": (
         _Recipe("location_close_execution", (("shooting.fg_percent_from_x0_3_range", 0.65), ("shooting.fg_percent_from_x3_10_range", 0.35))),
-        _Recipe("historical_close_execution", (("per_game.fg_percent", 0.55), ("advanced.ts_percent", 0.25), ("role.interior", 0.20)), "0-3 and 3-10 foot make results", "overall make efficiency with continuous interior-position context", "field-goal execution is observed; position only allocates the otherwise unrecorded historical result toward close play"),
+        _Recipe("historical_close_execution", (("per_game.fg_percent", 0.40), ("advanced.ts_percent", 0.15)), "0-3 and 3-10 foot make results", "overall make efficiency with continuous interior-position context", "field-goal execution is observed; interior position carries more of the unrecorded close result and the guard term keeps perimeter players off the top of a shot they rarely took"),
     ),
     "DRIVINGDUNK": (
         _Recipe("tracked_driving_finish", (("shooting.fg_percent_from_x0_3_range", 0.45), ("derived.and1_per_game", 0.20), ("!derived.blocked_attempt_rate", 0.20), ("derived.dunk_rate", 0.15))),
-        _Recipe("historical_driving_finish", (("per_game.fg_percent", 0.40), ("advanced.f_tr", 0.25), ("role.interior", 0.20), ("identity.ht_in_in", 0.15)), "driving-dunk make, block, and and-one events", "recorded finishing efficiency, foul pressure, and continuous body/position context", "dunk execution requires finishing outcomes plus reach; body context never replaces observed efficiency"),
+        _Recipe("historical_driving_finish", (("derived.dunk_height_fit", 0.50), ("per_game.fg_percent", 0.30), ("advanced.f_tr", 0.20)), "driving-dunk make, block, and and-one events", "recorded finishing efficiency, foul pressure, and continuous body/position context", "dunk execution requires finishing outcomes plus reach; body context never replaces observed efficiency"),
     ),
     "DRIVINGLAYUP": (
         _Recipe("tracked_driving_layup_finish", (("shooting.fg_percent_from_x0_3_range", 0.55), ("!derived.blocked_attempt_rate", 0.20), ("derived.and1_per_game", 0.15), ("derived.foul_pressure", 0.10))),
-        _Recipe("historical_driving_layup_finish", (("per_game.fg_percent", 0.45), ("per_game.ft_percent", 0.20), ("derived.foul_pressure", 0.20), ("role.guard", 0.15)), "driving-layup make, block, and and-one events", "recorded finishing efficiency, touch, foul pressure, and continuous perimeter participation", "the substitute remains finishing-oriented and does not use attempt share as execution"),
+        _Recipe("historical_driving_layup_finish", (("per_game.fg_percent", 0.35), ("per_game.ft_percent", 0.15), ("derived.foul_pressure", 0.15)), "driving-layup make, block, and and-one events", "recorded finishing efficiency, touch, foul pressure, and continuous perimeter participation", "the substitute remains finishing-oriented and does not use attempt share as execution"),
     ),
     "MIDRANGE": (
         _Recipe("location_midrange_execution", (("shooting.fg_percent_from_x10_16_range", 0.55 / 0.90), ("shooting.fg_percent_from_x16_3p_range", 0.35 / 0.90))),
-        _Recipe("historical_midrange_touch", (("per_game.ft_percent", 0.45), ("per_game.fg_percent", 0.35), ("role.wing", 0.20)), "10-16 and 16-foot-to-line make results", "free-throw touch, observed field-goal execution, and continuous perimeter/wing context", "free-throw accuracy is a stationary touch substitute, not an attempt-frequency or scoring-share signal"),
+        _Recipe("historical_midrange_touch", (("per_game.ft_percent", 0.40), ("per_game.fg_percent", 0.25)), "10-16 and 16-foot-to-line make results", "free-throw touch, observed field-goal execution, and continuous perimeter/wing context", "free-throw accuracy is a stationary touch substitute; the negative big term keeps pivots off a shot the era did not ask them to take, and Joe Fulks holds his midrange through his documented calling card rather than through position"),
     ),
+    # Scoring volume is deliberately absent. Ranking POSTCONTROL on points made the
+    # league's leading perimeter scorer a post hub -- Joe Fulks, the era's signature
+    # jump shooter, reached 88 on height plus PPG alone. Post control is measured by
+    # where the shots came from and how they were finished, not by how many there were.
     "POSTCONTROL": (
-        _Recipe("tracked_post_security", (("!derived.lost_ball_per_game", 0.35), ("!advanced.tov_percent", 0.30), ("derived.unassisted_two_rate", 0.15), ("role.post", 0.20))),
-        _Recipe("historical_post_security", (("role.post", 0.45), ("per_game.fg_percent", 0.30), ("per_game.ft_percent", 0.15), ("identity.wt", 0.10)), "post touches, post turnovers, and move-success events", "continuous post-position/body participation with recorded scoring control and touch", "AST is excluded; size supplies context while scoring execution prevents a fixed big-man override"),
-        _Recipe("unrecorded_assist_era_post_security", (("role.post", 0.55), ("per_game.fg_percent", 0.30), ("identity.wt", 0.15)), "post events, assists, and player turnovers", "continuous researched frontcourt role, body leverage, and observed scoring execution", "no missing assist value is converted to zero"),
+        _Recipe("tracked_post_security", (("!derived.lost_ball_per_game", 0.35), ("!advanced.tov_percent", 0.30), ("derived.unassisted_two_rate", 0.15))),
+        _Recipe("historical_post_security", (("per_game.fg_percent", 0.30), ("per_game.ft_percent", 0.15), ("identity.wt", 0.10)), "post touches, post turnovers, and move-success events", "continuous post-position/body participation with recorded scoring control and touch", "AST is excluded; size supplies context while scoring execution prevents a fixed big-man override"),
+        _Recipe("unrecorded_assist_era_post_security", (("per_game.fg_percent", 0.30), ("identity.wt", 0.15)), "post events, assists, and player turnovers", "continuous researched frontcourt role, body leverage, and observed scoring execution", "no missing assist value is converted to zero"),
     ),
     "POSTFADE": (
-        _Recipe("location_post_fade_execution", (("shooting.fg_percent_from_x10_16_range", 0.45), ("shooting.fg_percent_from_x3_10_range", 0.30), ("per_game.ft_percent", 0.15), ("role.post", 0.10))),
-        _Recipe("historical_post_fade_touch", (("per_game.ft_percent", 0.40), ("per_game.fg_percent", 0.30), ("role.post", 0.20), ("identity.ht_in_in", 0.10)), "post-fade make results", "shooting touch and continuous post/body context", "fade execution needs touch; post context only distinguishes the missing historical shot type"),
+        _Recipe("location_post_fade_execution", (("shooting.fg_percent_from_x10_16_range", 0.45), ("shooting.fg_percent_from_x3_10_range", 0.30), ("per_game.ft_percent", 0.15))),
+        _Recipe("historical_post_fade_touch", (("per_game.ft_percent", 0.35), ("per_game.fg_percent", 0.20)), "post-fade make results", "shooting touch and continuous wing context", "the turnaround fade is a wing and swingman shot rather than a pivot shot, so wing role carries it and the negative big term moves centres down; Joe Fulks holds his through his documented calling card"),
     ),
     "POSTHOOK": (
-        _Recipe("location_post_hook_execution", (("shooting.fg_percent_from_x3_10_range", 0.45), ("shooting.fg_percent_from_x0_3_range", 0.30), ("role.post", 0.15), ("identity.ht_in_in", 0.10))),
-        _Recipe("historical_post_hook_finish", (("per_game.fg_percent", 0.45), ("role.post", 0.30), ("identity.ht_in_in", 0.15), ("per_game.ft_percent", 0.10)), "post-hook make results", "observed finishing with continuous post/reach context", "hook range and reach differ from fade touch, keeping the two post skills semantically separate"),
+        _Recipe("location_post_hook_execution", (("shooting.fg_percent_from_x3_10_range", 0.45), ("shooting.fg_percent_from_x0_3_range", 0.30), ("identity.ht_in_in", 0.10))),
+        _Recipe("historical_post_hook_finish", (("per_game.fg_percent", 0.35), ("identity.ht_in_in", 0.15)), "post-hook make results", "observed finishing with continuous post/reach context", "hook range and reach differ from fade touch; post role carries more of the result and the guard term keeps backcourt players off a frontcourt shot"),
     ),
 }
 
 
 _TENDENCY_RECIPES: dict[str, tuple[_Recipe, ...]] = {
-    "TRIPLETHREATIDLE": (_Recipe("triple_threat_hold", (("derived.attempt_share", 0.45), ("role.wing", 0.30), ("role.post", 0.25)), "triple-threat state events", "observed shooting responsibility and continuous wing/post participation", "triple-threat states occur before perimeter or post scoring decisions"),),
-    "TRIPLETHREATJAB": (_Recipe("triple_threat_jab", (("derived.mid_attempt_rate", 0.40), ("derived.attempt_share", 0.35), ("role.wing", 0.25)), "jab-step events", "midrange attempt location, shooting responsibility, and wing participation", "jab steps are shot-creation behavior, not make efficiency"), _Recipe("historical_triple_threat_jab", (("derived.attempt_share", 0.55), ("role.wing", 0.45)), "jab-step and location events", "shooting responsibility and continuous wing participation", "the substitute varies with observed role and never becomes an execution rating")),
-    "TRIPLETHREATPUMPFake": (_Recipe("triple_threat_pump", (("derived.short_attempt_rate", 0.35), ("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.25), ("role.post", 0.10)), "pump-fake events", "short-shot frequency, foul pressure, and shooting responsibility", "pump fakes are attempt/behavior signals"), _Recipe("historical_triple_threat_pump", (("derived.foul_pressure", 0.45), ("derived.attempt_share", 0.35), ("role.post", 0.20)), "pump-fake and location events", "recorded foul pressure and offensive responsibility", "the substitute is behavior-oriented rather than efficiency-oriented")),
-    "TRIPLETHREATSHOT": (_Recipe("triple_threat_shoot", (("derived.mid_attempt_rate", 0.35), ("derived.three_attempt_rate", 0.30), ("derived.attempt_share", 0.35)), "triple-threat shot events", "recorded jump-shot location and shooting responsibility", "all inputs describe attempt selection"), _Recipe("historical_triple_threat_shoot", (("derived.attempt_share", 0.70), ("role.wing", 0.30)), "triple-threat and shot-location events", "shooting responsibility and continuous perimeter participation", "the substitute does not use make efficiency")),
-    "SETUPDRIBBLE": (_Recipe("no_setup_dribble", (("!role.creator", 0.55), ("role.post", 0.25), ("!derived.unassisted_two_rate", 0.20)), "setup-dribble events", "inverse creation responsibility and assisted/post role", "players who do not self-create are more likely to attack without extended setup"), _Recipe("historical_no_setup_dribble", (("!role.creator", 0.65), ("role.post", 0.35)), "setup-dribble and assisted-shot events", "continuous position responsibility", "this is a role tendency, not a hard archetype gate")),
-    "SETUPWITHHESITATION": (_Recipe("setup_hesitation", (("role.creator", 0.35), ("derived.unassisted_two_rate", 0.30), ("derived.lost_ball_per_game", 0.20), ("derived.foul_pressure", 0.15)), "hesitation events", "self-creation, live-dribble exposure, and drive pressure", "AST is excluded and all inputs identify on-ball setup behavior"), _Recipe("historical_setup_hesitation", (("role.creator", 0.55), ("derived.foul_pressure", 0.25), ("derived.attempt_share", 0.20)), "hesitation and self-created-shot events", "continuous creator role, drive pressure, and observed shooting responsibility", "no AST signal authors this move tendency")),
-    "SETUPWITHSIZEUP": (_Recipe("setup_sizeup", (("role.creator", 0.40), ("derived.unassisted_two_rate", 0.30), ("derived.lost_ball_per_game", 0.20), ("derived.foul_pressure", 0.10)), "size-up events", "on-ball creation, self-created attempts, and live-dribble exposure", "AST is excluded; turnover exposure is behavior rather than execution"), _Recipe("historical_setup_sizeup", (("role.creator", 0.60), ("derived.foul_pressure", 0.20), ("derived.attempt_share", 0.20)), "size-up and self-created-shot events", "continuous creator role, drive pressure, and observed responsibility", "no AST signal or fixed guard template is used")),
-    "DRIVE": (_Recipe("drive_frequency", (("derived.rim_attempt_rate", 0.35), ("derived.foul_pressure", 0.25), ("derived.unassisted_two_rate", 0.20), ("derived.attempt_share", 0.20)), "drive events", "rim attempts, foul pressure, self-creation, and attempt responsibility", "each input measures drive selection or opportunity, never finishing efficiency"), _Recipe("historical_drive_frequency", (("derived.foul_pressure", 0.35), ("derived.attempt_share", 0.35), ("role.creator", 0.30)), "drive, rim-location, and assisted-shot events", "foul pressure, attempt responsibility, and continuous creator role", "the all-era substitute remains frequency/behavior evidence")),
-    "DRIVINGCROSSOVER": (_Recipe("driving_crossover", (("role.creator", 0.30), ("derived.unassisted_two_rate", 0.30), ("derived.lost_ball_per_game", 0.20), ("derived.foul_pressure", 0.20)), "crossover events", "self-creation, live-dribble exposure, and drive pressure", "AST is excluded and the sources describe applicable on-ball behavior"), _Recipe("historical_driving_crossover", (("role.creator", 0.55), ("derived.foul_pressure", 0.25), ("derived.attempt_share", 0.20)), "crossover and self-created-shot events", "continuous creator role, drive pressure, and offensive responsibility", "the substitute avoids AST and fixed move ratings")),
-    "DRIVINGDOUBLECROSSOVER": (_Recipe("driving_double_crossover", (("role.creator", 0.35), ("derived.unassisted_two_rate", 0.30), ("derived.lost_ball_per_game", 0.20), ("derived.foul_pressure", 0.15)), "double-crossover events", "extended live-dribble creation and drive pressure", "lost-ball exposure differentiates a longer move from a basic crossover"), _Recipe("historical_driving_double_crossover", (("role.creator", 0.60), ("derived.foul_pressure", 0.20), ("derived.attempt_share", 0.20)), "double-crossover and live-dribble events", "continuous creator role, drive pressure, and observed responsibility", "AST is excluded and the lower field-exact calibration keeps this rarer move distinct")),
-    "DRIVINGSPIN": (_Recipe("driving_spin", (("derived.short_attempt_rate", 0.30), ("derived.foul_pressure", 0.25), ("derived.unassisted_two_rate", 0.25), ("role.creator", 0.20)), "spin-move events", "short-area self-creation and drive pressure", "spin usage is a behavior signal"), _Recipe("historical_driving_spin", (("derived.foul_pressure", 0.35), ("derived.attempt_share", 0.30), ("role.creator", 0.20), ("role.post", 0.15)), "spin-move and location events", "drive pressure and continuous perimeter/post creation", "both perimeter and post players can spin without a hard position gate")),
-    "DRIVINGHALFSPIN": (_Recipe("driving_half_spin", (("role.creator", 0.30), ("derived.short_attempt_rate", 0.25), ("derived.unassisted_two_rate", 0.25), ("derived.lost_ball_per_game", 0.20)), "half-spin events", "live-dribble self-creation and short-area activity", "the field-exact calibration separates it from full-spin frequency"), _Recipe("historical_driving_half_spin", (("role.creator", 0.45), ("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.25)), "half-spin and live-dribble events", "creator responsibility and drive pressure", "no generic constant is used")),
-    "DRIVINGSTEPBACK": (_Recipe("driving_stepback", (("derived.mid_attempt_rate", 0.30), ("derived.three_attempt_rate", 0.20), ("derived.unassisted_two_rate", 0.25), ("role.creator", 0.25)), "driving-stepback events", "pull-up location and self-creation", "stepbacks are attempt behavior, not shot efficiency"), _Recipe("historical_driving_stepback", (("derived.attempt_share", 0.35), ("role.creator", 0.35), ("per_game.ft_percent", 0.30)), "stepback and pull-up events", "creator responsibility, shooting load, and weak touch context", "touch only distinguishes plausible pull-up behavior when locations are absent")),
-    "DRIVINGBEHINDTHEBACK": (_Recipe("driving_behind_back", (("role.creator", 0.35), ("derived.unassisted_two_rate", 0.25), ("derived.foul_pressure", 0.20), ("derived.lost_ball_per_game", 0.20)), "behind-the-back events", "extended creator possession, drive pressure, and self-created attempts", "AST is excluded; live-dribble exposure is field-specific behavior evidence"), _Recipe("historical_driving_behind_back", (("role.creator", 0.60), ("derived.foul_pressure", 0.20), ("derived.attempt_share", 0.20)), "behind-the-back and live-dribble events", "continuous creator role, drive pressure, and offensive responsibility", "the substitute excludes AST and named-player templates")),
-    "DRIVINGDRIBBLEHESITATION": (_Recipe("driving_hesitation", (("role.creator", 0.30), ("derived.unassisted_two_rate", 0.25), ("derived.foul_pressure", 0.25), ("derived.lost_ball_per_game", 0.20)), "driving-hesitation events", "self-created drive pressure and live-dribble exposure", "AST is excluded and all inputs describe on-ball behavior"), _Recipe("historical_driving_hesitation", (("role.creator", 0.50), ("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.20)), "driving-hesitation and self-created-shot events", "continuous creator responsibility and foul pressure", "no AST signal authors the tendency")),
-    "DRIVINGINANDOUT": (_Recipe("driving_in_out", (("role.creator", 0.30), ("derived.unassisted_two_rate", 0.30), ("derived.foul_pressure", 0.20), ("derived.lost_ball_per_game", 0.20)), "in-and-out events", "live-dribble self-creation and drive pressure", "the input family is behavior-specific"), _Recipe("historical_driving_in_out", (("role.creator", 0.55), ("derived.foul_pressure", 0.25), ("derived.attempt_share", 0.20)), "in-and-out and self-created-shot events", "continuous creator role, drive pressure, and offensive responsibility", "AST is excluded and no move constant is inserted")),
-    "NODRIVINGDRIBBLEMOVE": (_Recipe("no_driving_move", (("!role.creator", 0.35), ("!derived.unassisted_two_rate", 0.30), ("!derived.foul_pressure", 0.20), ("role.post", 0.15)), "no-move drive events", "inverse self-creation and drive pressure with post role", "this is the semantic inverse of move-based creation"), _Recipe("historical_no_driving_move", (("!role.creator", 0.55), ("!derived.attempt_share", 0.25), ("role.post", 0.20)), "drive-move and assisted-shot events", "inverse creator responsibility and continuous post role", "the field remains coupled coherently to the other driving tendencies")),
-    "ATTACKSTRONGONDRIVE": (_Recipe("attack_strong_drive", (("derived.foul_pressure", 0.35), ("derived.rim_attempt_rate", 0.30), ("derived.attempt_share", 0.20), ("identity.wt", 0.15)), "strong-drive events", "rim pressure, foul creation, responsibility, and body leverage", "inputs measure physical drive behavior, not finishing skill"), _Recipe("historical_attack_strong_drive", (("derived.foul_pressure", 0.45), ("derived.attempt_share", 0.30), ("identity.wt", 0.25)), "strong-drive and rim events", "foul pressure, responsibility, and body leverage", "the substitute is continuous across positions")),
-    "OFFSCREENDRIVE": (_Recipe("off_screen_drive", (("derived.rim_attempt_rate", 0.30), ("derived.attempt_share", 0.25), ("derived.unassisted_two_rate", -0.20), ("role.wing", 0.25)), "off-screen drive events", "rim frequency, scoring responsibility, assisted context, and wing participation", "off-screen actions differ from primary isolation creation"), _Recipe("historical_off_screen_drive", (("derived.attempt_share", 0.45), ("role.wing", 0.35), ("role.creator", -0.20)), "off-screen and assisted-shot events", "wing scoring responsibility with reduced primary-creator weight", "the substitute remains role/behavior evidence")),
-    "SPOTUPDRIVE": (_Recipe("spot_up_drive", (("derived.rim_attempt_rate", 0.30), ("derived.foul_pressure", 0.25), ("derived.unassisted_two_rate", -0.20), ("role.wing", 0.25)), "spot-up drive events", "rim/foul pressure from a non-primary-creation wing context", "spot-up drives are behavior frequency"), _Recipe("historical_spot_up_drive", (("derived.foul_pressure", 0.35), ("derived.attempt_share", 0.35), ("role.wing", 0.30)), "spot-up and assisted-shot events", "drive pressure and wing scoring responsibility", "no execution percentage is mapped directly")),
-    "ALLEYOOOPASS": (_Recipe("alley_oop_pass_behavior", (("role.creator", 0.40), ("!derived.bad_pass_per_game", 0.25), ("derived.foul_pressure", 0.20), ("role.big", -0.15)), "alley-oop pass events", "continuous passer role, pass security, and rim-pressure context", "AST is excluded; the low-frequency field calibration prevents role alone from creating elite output"), _Recipe("historical_alley_oop_pass", (("role.creator", 0.70), ("derived.foul_pressure", 0.30)), "alley-oop and pass-target events", "continuous researched ball-advancer role and rim pressure", "AST is excluded and the output remains uncertain where pass events are absent")),
-    "DISHTOOPENMAN": (_Recipe("dish_open_man_behavior", (("role.creator", 0.45), ("!derived.bad_pass_per_game", 0.35), ("!advanced.tov_percent", 0.20)), "pass-target openness events", "continuous passer role and pass/possession security", "AST is excluded; the sources concern willingness and decision behavior"), _Recipe("historical_dish_open_man", (("role.creator", 0.70), ("per_game.ft_percent", 0.20), ("derived.foul_pressure", 0.10)), "open-target pass events", "continuous ball-advancer role with weak touch/pressure context", "no missing or low AST value is transformed into elite output")),
-    "FLASHYPASS": (_Recipe("flashy_pass_behavior", (("role.creator", 0.45), ("derived.bad_pass_per_game", 0.30), ("derived.lost_ball_per_game", 0.15), ("derived.foul_pressure", 0.10)), "flashy-pass events", "continuous creator role and higher-risk live-ball exposure", "AST is excluded; bad-pass exposure differentiates flair frequency from accuracy"), _Recipe("historical_flashy_pass", (("role.creator", 0.75), ("derived.foul_pressure", 0.25)), "flashy-pass and pass-event tracking", "continuous researched ball-advancer role and live-ball pressure", "the low calibration and no named-player template keep ordinary passers low")),
-    "POSTUP": (_Recipe("post_up_frequency", (("role.post", 0.40), ("derived.short_attempt_rate", 0.30), ("derived.attempt_share", 0.20), ("identity.wt", 0.10)), "post-up events", "continuous post position/body context and short-shot responsibility", "all terms describe post opportunity and frequency"), _Recipe("historical_post_up_frequency", (("role.post", 0.50), ("derived.attempt_share", 0.30), ("identity.wt", 0.20)), "post-up and shot-location events", "continuous post role, responsibility, and body leverage", "the substitute is not a fixed big-man band")),
-    "POSTBACKDOWN": (_Recipe("post_backdown", (("role.post", 0.35), ("identity.wt", 0.25), ("derived.short_attempt_rate", 0.20), ("derived.attempt_share", 0.20)), "backdown events", "post role, leverage, short attempts, and responsibility", "the tendency is behavior/frequency"), _Recipe("historical_post_backdown", (("role.post", 0.50), ("identity.wt", 0.30), ("derived.attempt_share", 0.20)), "backdown and post-touch events", "continuous post role and leverage", "no hard size threshold is used")),
-    "POSTAGGRESSIVEBACKDOWN": (_Recipe("post_aggressive_backdown", (("identity.wt", 0.30), ("derived.foul_pressure", 0.25), ("role.post", 0.25), ("derived.short_attempt_rate", 0.20)), "aggressive-backdown events", "leverage, foul pressure, and post frequency", "the terms distinguish forceful behavior from ordinary backdowns"), _Recipe("historical_post_aggressive_backdown", (("identity.wt", 0.35), ("derived.foul_pressure", 0.30), ("role.post", 0.35)), "aggressive-backdown and post-touch events", "continuous leverage, foul pressure, and post role", "no arbitrary weight gate is used")),
-    "POSTFACEUP": (_Recipe("post_face_up", (("role.wing", 0.25), ("role.post", 0.25), ("derived.mid_attempt_rate", 0.30), ("per_game.ft_percent", 0.20)), "post-face-up events", "hybrid wing/post role and midrange attempt behavior", "face-up play differs from backdown play through perimeter touch/location"), _Recipe("historical_post_face_up", (("role.wing", 0.30), ("role.post", 0.30), ("per_game.ft_percent", 0.25), ("derived.attempt_share", 0.15)), "face-up and midrange events", "hybrid role, touch, and responsibility", "the substitute remains continuous across secondary positions")),
-    "POSTSPIN": (_Recipe("post_spin", (("role.post", 0.30), ("derived.short_attempt_rate", 0.25), ("derived.foul_pressure", 0.25), ("derived.unassisted_two_rate", 0.20)), "post-spin events", "post self-creation and short-area pressure", "all terms identify move frequency"), _Recipe("historical_post_spin", (("role.post", 0.45), ("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.25)), "post-spin and post-touch events", "post role, foul pressure, and responsibility", "the low target calibration preserves move rarity")),
-    "POSTDRIVE": (_Recipe("post_drive", (("role.post", 0.25), ("derived.foul_pressure", 0.30), ("derived.rim_attempt_rate", 0.25), ("derived.unassisted_two_rate", 0.20)), "post-drive events", "post role with rim/foul self-creation", "the tendency is separated from post-spin and face-up execution"), _Recipe("historical_post_drive", (("role.post", 0.35), ("derived.foul_pressure", 0.35), ("derived.attempt_share", 0.30)), "post-drive and rim events", "post role, drive pressure, and responsibility", "no finishing percentage is used as frequency")),
-    "POSTHOPSHOT": (_Recipe("post_hop_shot", (("role.post", 0.25), ("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.25), ("per_game.ft_percent", 0.15)), "post-hop-shot events", "post self-created midrange attempt behavior", "field-exact low-frequency calibration keeps the move rare"), _Recipe("historical_post_hop_shot", (("role.post", 0.40), ("per_game.ft_percent", 0.30), ("derived.attempt_share", 0.30)), "post-hop and midrange events", "post role, touch, and offensive responsibility", "the substitute does not infer make execution")),
+    "TRIPLETHREATIDLE": (_Recipe("triple_threat_hold", (("derived.attempt_share", 0.45), ("role.wing", 0.10), ("role.post", 0.10),), "triple-threat state events", "observed shooting responsibility and continuous wing/post participation", "triple-threat states occur before perimeter or post scoring decisions"),),
+    "TRIPLETHREATJAB": (_Recipe("triple_threat_jab", (("derived.mid_attempt_rate", 0.40), ("derived.attempt_share", 0.35), ("role.wing", 0.10),), "jab-step events", "midrange attempt location, shooting responsibility, and wing participation", "jab steps are shot-creation behavior, not make efficiency"), _Recipe("historical_triple_threat_jab", (("derived.attempt_share", 0.55), ("role.wing", 0.10),), "jab-step and location events", "shooting responsibility and continuous wing participation", "the substitute varies with observed role and never becomes an execution rating")),
+    "TRIPLETHREATPUMPFake": (_Recipe("triple_threat_pump", (("derived.short_attempt_rate", 0.35), ("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.25), ("role.post", 0.10),), "pump-fake events", "short-shot frequency, foul pressure, and shooting responsibility", "pump fakes are attempt/behavior signals"), _Recipe("historical_triple_threat_pump", (("derived.foul_pressure", 0.45), ("derived.attempt_share", 0.35), ("role.post", 0.10),), "pump-fake and location events", "recorded foul pressure and offensive responsibility", "the substitute is behavior-oriented rather than efficiency-oriented")),
+    "TRIPLETHREATSHOT": (_Recipe("triple_threat_shoot", (("derived.mid_attempt_rate", 0.35), ("derived.three_attempt_rate", 0.30), ("derived.attempt_share", 0.35)), "triple-threat shot events", "recorded jump-shot location and shooting responsibility", "all inputs describe attempt selection"), _Recipe("historical_triple_threat_shoot", (("derived.attempt_share", 0.70), ("role.wing", 0.10),), "triple-threat and shot-location events", "shooting responsibility and continuous perimeter participation", "the substitute does not use make efficiency")),
+    "SETUPDRIBBLE": (_Recipe("no_setup_dribble", (("!derived.unassisted_two_rate", 0.20), ("!role.creator", 0.10), ("role.post", 0.10),), "setup-dribble events", "inverse creation responsibility and assisted/post role", "players who do not self-create are more likely to attack without extended setup"), _Recipe("historical_no_setup_dribble", (("!derived.attempt_share", 1.0), ("!role.creator", 0.10), ("role.post", 0.10),), "setup-dribble and assisted-shot events", "inverse shot responsibility", "a player with little of his team's shot load catches and goes rather than working for his own shot; position is not an input")),
+    "SETUPWITHHESITATION": (_Recipe("setup_hesitation", (("derived.unassisted_two_rate", 0.30), ("derived.lost_ball_per_game", 0.20), ("derived.foul_pressure", 0.15), ("role.creator", 0.10),), "hesitation events", "self-creation, live-dribble exposure, and drive pressure", "AST is excluded and all inputs identify on-ball setup behavior"), _Recipe("historical_setup_hesitation", (("derived.foul_pressure", 0.25), ("derived.attempt_share", 0.20), ("role.creator", 0.10),), "hesitation and self-created-shot events", "continuous creator role, drive pressure, and observed shooting responsibility", "no AST signal authors this move tendency")),
+    "SETUPWITHSIZEUP": (_Recipe("setup_sizeup", (("derived.unassisted_two_rate", 0.30), ("derived.lost_ball_per_game", 0.20), ("derived.foul_pressure", 0.10), ("role.creator", 0.10),), "size-up events", "on-ball creation, self-created attempts, and live-dribble exposure", "AST is excluded; turnover exposure is behavior rather than execution"), _Recipe("historical_setup_sizeup", (("derived.foul_pressure", 0.20), ("derived.attempt_share", 0.20), ("role.creator", 0.10),), "size-up and self-created-shot events", "continuous creator role, drive pressure, and observed responsibility", "no AST signal or fixed guard template is used")),
+    "DRIVE": (_Recipe("drive_frequency", (("derived.rim_attempt_rate", 0.35), ("derived.foul_pressure", 0.25), ("derived.unassisted_two_rate", 0.20), ("derived.attempt_share", 0.20)), "drive events", "rim attempts, foul pressure, self-creation, and attempt responsibility", "each input measures drive selection or opportunity, never finishing efficiency"), _Recipe("historical_drive_frequency", (("derived.foul_pressure", 0.25), ("derived.attempt_share", 0.20), ("role.creator", 0.10), ("role.post", 0.10),), "drive, rim-location, and assisted-shot events", "foul pressure and shooting responsibility allocated through continuous creator-versus-post role", "post scoring and post-drawn fouls cannot become perimeter Drive without on-ball creator participation")),
+    "DRIVINGCROSSOVER": (_Recipe("driving_crossover", (("derived.unassisted_two_rate", 0.30), ("derived.lost_ball_per_game", 0.20), ("derived.foul_pressure", 0.20), ("role.creator", 0.10),), "crossover events", "self-creation, live-dribble exposure, and drive pressure", "AST is excluded and the sources describe applicable on-ball behavior"), _Recipe("historical_driving_crossover", (("derived.foul_pressure", 0.25), ("derived.attempt_share", 0.20), ("role.creator", 0.10),), "crossover and self-created-shot events", "continuous creator role, drive pressure, and offensive responsibility", "the substitute avoids AST and fixed move ratings")),
+    "DRIVINGDOUBLECROSSOVER": (_Recipe("driving_double_crossover", (("derived.unassisted_two_rate", 0.30), ("derived.lost_ball_per_game", 0.20), ("derived.foul_pressure", 0.15), ("role.creator", 0.10),), "double-crossover events", "extended live-dribble creation and drive pressure", "lost-ball exposure differentiates a longer move from a basic crossover"), _Recipe("historical_driving_double_crossover", (("derived.foul_pressure", 0.20), ("derived.attempt_share", 0.20), ("role.creator", 0.10),), "double-crossover and live-dribble events", "continuous creator role, drive pressure, and observed responsibility", "AST is excluded and the lower field-exact calibration keeps this rarer move distinct")),
+    "DRIVINGSPIN": (_Recipe("driving_spin", (("derived.short_attempt_rate", 0.30), ("derived.foul_pressure", 0.25), ("derived.unassisted_two_rate", 0.25), ("role.creator", 0.10),), "spin-move events", "short-area self-creation and drive pressure", "spin usage is a behavior signal"), _Recipe("historical_driving_spin", (("derived.foul_pressure", 0.35), ("derived.attempt_share", 0.30), ("role.creator", 0.10), ("role.post", 0.10),), "spin-move and location events", "drive pressure and continuous perimeter/post creation", "both perimeter and post players can spin without a hard position gate")),
+    "DRIVINGHALFSPIN": (_Recipe("driving_half_spin", (("derived.short_attempt_rate", 0.25), ("derived.unassisted_two_rate", 0.25), ("derived.lost_ball_per_game", 0.20), ("role.creator", 0.10),), "half-spin events", "live-dribble self-creation and short-area activity", "the field-exact calibration separates it from full-spin frequency"), _Recipe("historical_driving_half_spin", (("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.25), ("role.creator", 0.10),), "half-spin and live-dribble events", "creator responsibility and drive pressure", "no generic constant is used")),
+    "DRIVINGSTEPBACK": (_Recipe("driving_stepback", (("derived.mid_attempt_rate", 0.30), ("derived.three_attempt_rate", 0.20), ("derived.unassisted_two_rate", 0.25), ("role.creator", 0.10),), "driving-stepback events", "pull-up location and self-creation", "stepbacks are attempt behavior, not shot efficiency"), _Recipe("historical_driving_stepback", (("derived.attempt_share", 0.35), ("per_game.ft_percent", 0.30), ("role.creator", 0.10),), "stepback and pull-up events", "creator responsibility, shooting load, and weak touch context", "touch only distinguishes plausible pull-up behavior when locations are absent")),
+    "DRIVINGBEHINDTHEBACK": (_Recipe("driving_behind_back", (("derived.unassisted_two_rate", 0.25), ("derived.foul_pressure", 0.20), ("derived.lost_ball_per_game", 0.20), ("role.creator", 0.10),), "behind-the-back events", "extended creator possession, drive pressure, and self-created attempts", "AST is excluded; live-dribble exposure is field-specific behavior evidence"), _Recipe("historical_driving_behind_back", (("derived.foul_pressure", 0.20), ("derived.attempt_share", 0.20), ("role.creator", 0.10),), "behind-the-back and live-dribble events", "continuous creator role, drive pressure, and offensive responsibility", "the substitute excludes AST and named-player templates")),
+    "DRIVINGDRIBBLEHESITATION": (_Recipe("driving_hesitation", (("derived.unassisted_two_rate", 0.25), ("derived.foul_pressure", 0.25), ("derived.lost_ball_per_game", 0.20), ("role.creator", 0.10),), "driving-hesitation events", "self-created drive pressure and live-dribble exposure", "AST is excluded and all inputs describe on-ball behavior"), _Recipe("historical_driving_hesitation", (("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.20), ("role.creator", 0.10),), "driving-hesitation and self-created-shot events", "continuous creator responsibility and foul pressure", "no AST signal authors the tendency")),
+    "DRIVINGINANDOUT": (_Recipe("driving_in_out", (("derived.unassisted_two_rate", 0.30), ("derived.foul_pressure", 0.20), ("derived.lost_ball_per_game", 0.20), ("role.creator", 0.10),), "in-and-out events", "live-dribble self-creation and drive pressure", "the input family is behavior-specific"), _Recipe("historical_driving_in_out", (("derived.foul_pressure", 0.25), ("derived.attempt_share", 0.20), ("role.creator", 0.10),), "in-and-out and self-created-shot events", "continuous creator role, drive pressure, and offensive responsibility", "AST is excluded and no move constant is inserted")),
+    "NODRIVINGDRIBBLEMOVE": (_Recipe("no_driving_move", (("!derived.unassisted_two_rate", 0.30), ("!derived.foul_pressure", 0.20), ("!role.creator", 0.10), ("role.post", 0.10),), "no-move drive events", "inverse self-creation and drive pressure with post role", "this is the semantic inverse of move-based creation"), _Recipe("historical_no_driving_move", (("!derived.attempt_share", 0.25), ("!role.creator", 0.10), ("role.post", 0.10),), "drive-move and assisted-shot events", "inverse creator responsibility and continuous post role", "the field remains coupled coherently to the other driving tendencies")),
+    "ATTACKSTRONGONDRIVE": (_Recipe("attack_strong_drive", (("derived.foul_pressure", 0.35), ("derived.rim_attempt_rate", 0.30), ("derived.attempt_share", 0.20), ("identity.wt", 0.15)), "strong-drive events", "rim pressure, foul creation, responsibility, and body leverage", "inputs measure physical drive behavior, not finishing skill"), _Recipe("historical_attack_strong_drive", (("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.15), ("identity.wt", 0.15), ("role.creator", 0.10), ("role.post", 0.10),), "strong-drive and rim events", "foul pressure and leverage conditioned by continuous creator-versus-post role", "weight and post-drawn fouls cannot identify a strong drive without on-ball creator participation")),
+    "OFFSCREENDRIVE": (_Recipe("off_screen_drive", (("derived.rim_attempt_rate", 0.30), ("derived.attempt_share", 0.25), ("derived.unassisted_two_rate", -0.20), ("role.wing", 0.10),), "off-screen drive events", "rim frequency, scoring responsibility, assisted context, and wing participation", "off-screen actions differ from primary isolation creation"), _Recipe("historical_off_screen_drive", (("derived.attempt_share", 0.45), ("role.wing", 0.10), ("role.creator", 0.10),), "off-screen and assisted-shot events", "wing scoring responsibility with reduced primary-creator weight", "the substitute remains role/behavior evidence")),
+    "SPOTUPDRIVE": (_Recipe("spot_up_drive", (("derived.rim_attempt_rate", 0.30), ("derived.foul_pressure", 0.25), ("derived.unassisted_two_rate", -0.20), ("role.wing", 0.10),), "spot-up drive events", "rim/foul pressure from a non-primary-creation wing context", "spot-up drives are behavior frequency"), _Recipe("historical_spot_up_drive", (("derived.foul_pressure", 0.25), ("derived.attempt_share", 0.20), ("role.wing", 0.10), ("role.post", 0.10),), "spot-up and assisted-shot events", "drive pressure and scoring responsibility allocated through continuous wing-versus-post role", "post scoring cannot become a spot-up perimeter drive without wing participation")),
+    "ALLEYOOOPASS": (_Recipe("alley_oop_pass_behavior", (("!derived.bad_pass_per_game", 0.25), ("derived.foul_pressure", 0.20), ("role.creator", 0.10), ("role.big", 0.10),), "alley-oop pass events", "continuous passer role, pass security, and rim-pressure context", "AST is excluded; the low-frequency field calibration prevents role alone from creating elite output"), _Recipe("historical_alley_oop_pass", (("derived.foul_pressure", 0.30), ("role.creator", 0.10),), "alley-oop and pass-target events", "continuous researched ball-advancer role and rim pressure", "AST is excluded and the output remains uncertain where pass events are absent")),
+    "DISHTOOPENMAN": (_Recipe("dish_open_man_behavior", (("!derived.bad_pass_per_game", 0.35), ("!advanced.tov_percent", 0.20), ("role.creator", 0.10),), "pass-target openness events", "continuous passer role and pass/possession security", "AST is excluded; the sources concern willingness and decision behavior"), _Recipe("historical_dish_open_man", (("per_game.ft_percent", 0.20), ("derived.foul_pressure", 0.10), ("role.creator", 0.10),), "open-target pass events", "continuous ball-advancer role with weak touch/pressure context", "no missing or low AST value is transformed into elite output")),
+    "FLASHYPASS": (_Recipe("flashy_pass_behavior", (("derived.bad_pass_per_game", 0.30), ("derived.lost_ball_per_game", 0.15), ("derived.foul_pressure", 0.10), ("role.creator", 0.10),), "flashy-pass events", "continuous creator role and higher-risk live-ball exposure", "AST is excluded; bad-pass exposure differentiates flair frequency from accuracy"), _Recipe("historical_flashy_pass", (("derived.foul_pressure", 0.25), ("role.creator", 0.10),), "flashy-pass and pass-event tracking", "continuous researched ball-advancer role and live-ball pressure", "the low calibration and no named-player template keep ordinary passers low")),
+    "POSTUP": (_Recipe("post_up_frequency", (("derived.short_attempt_rate", 0.30), ("derived.attempt_share", 0.20), ("identity.wt", 0.10), ("role.post", 0.10),), "post-up events", "continuous post position/body context and short-shot responsibility", "all terms describe post opportunity and frequency"), _Recipe("historical_post_up_frequency", (("derived.attempt_share", 0.30), ("identity.wt", 0.20), ("role.post", 0.10),), "post-up and shot-location events", "continuous post role, responsibility, and body leverage", "the substitute is not a fixed big-man band")),
+    "POSTBACKDOWN": (_Recipe("post_backdown", (("identity.wt", 0.25), ("derived.short_attempt_rate", 0.20), ("derived.attempt_share", 0.20), ("role.post", 0.10),), "backdown events", "post role, leverage, short attempts, and responsibility", "the tendency is behavior/frequency"), _Recipe("historical_post_backdown", (("identity.wt", 0.30), ("derived.attempt_share", 0.20), ("role.post", 0.10),), "backdown and post-touch events", "continuous post role and leverage", "no hard size threshold is used")),
+    "POSTAGGRESSIVEBACKDOWN": (_Recipe("post_aggressive_backdown", (("identity.wt", 0.30), ("derived.foul_pressure", 0.25), ("derived.short_attempt_rate", 0.20), ("role.post", 0.10),), "aggressive-backdown events", "leverage, foul pressure, and post frequency", "the terms distinguish forceful behavior from ordinary backdowns"), _Recipe("historical_post_aggressive_backdown", (("identity.wt", 0.35), ("derived.foul_pressure", 0.30), ("role.post", 0.10),), "aggressive-backdown and post-touch events", "continuous leverage, foul pressure, and post role", "no arbitrary weight gate is used")),
+    "POSTFACEUP": (_Recipe("post_face_up", (("derived.mid_attempt_rate", 0.30), ("per_game.ft_percent", 0.20), ("role.wing", 0.10), ("role.post", 0.10),), "post-face-up events", "hybrid wing/post role and midrange attempt behavior", "face-up play differs from backdown play through perimeter touch/location"), _Recipe("historical_post_face_up", (("per_game.ft_percent", 0.25), ("derived.attempt_share", 0.15), ("role.wing", 0.10), ("role.post", 0.10),), "face-up and midrange events", "hybrid role, touch, and responsibility", "the substitute remains continuous across secondary positions")),
+    "POSTSPIN": (_Recipe("post_spin", (("derived.short_attempt_rate", 0.25), ("derived.foul_pressure", 0.25), ("derived.unassisted_two_rate", 0.20), ("role.post", 0.10),), "post-spin events", "post self-creation and short-area pressure", "all terms identify move frequency"), _Recipe("historical_post_spin", (("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.25), ("role.post", 0.10),), "post-spin and post-touch events", "post role, foul pressure, and responsibility", "the low target calibration preserves move rarity")),
+    "POSTDRIVE": (_Recipe("post_drive", (("derived.foul_pressure", 0.30), ("derived.rim_attempt_rate", 0.25), ("derived.unassisted_two_rate", 0.20), ("role.post", 0.10),), "post-drive events", "post role with rim/foul self-creation", "the tendency is separated from post-spin and face-up execution"), _Recipe("historical_post_drive", (("derived.foul_pressure", 0.35), ("derived.attempt_share", 0.30), ("role.post", 0.10),), "post-drive and rim events", "post role, drive pressure, and responsibility", "no finishing percentage is used as frequency")),
+    "POSTHOPSHOT": (_Recipe("post_hop_shot", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.25), ("per_game.ft_percent", 0.15), ("role.post", 0.10),), "post-hop-shot events", "post self-created midrange attempt behavior", "field-exact low-frequency calibration keeps the move rare"), _Recipe("historical_post_hop_shot", (("per_game.ft_percent", 0.30), ("derived.attempt_share", 0.30), ("role.post", 0.10),), "post-hop and midrange events", "post role, touch, and offensive responsibility", "the substitute does not infer make execution")),
 }
 
 _TENDENCY_CALIBRATION.update(
@@ -1077,56 +1562,56 @@ _TENDENCY_CALIBRATION.update(
 
 _TENDENCY_RECIPES.update(
     {
-        "POSTHOPSTEP": (_Recipe("post_hop_step_alias", (("role.post", 0.35), ("derived.short_attempt_rate", 0.30), ("derived.foul_pressure", 0.20), ("identity.wt", 0.15)), "post-hop-step events and a captured field-exact target", "post/drop-step context plus the captured Post Drop Step output distribution", "this live alias has no separate Pool label; source behavior is kept distinct from the hop-shot tendency"),),
+        "POSTHOPSTEP": (_Recipe("post_hop_step_alias", (("derived.short_attempt_rate", 0.30), ("derived.foul_pressure", 0.20), ("identity.wt", 0.15), ("role.post", 0.10),), "post-hop-step events and a captured field-exact target", "post/drop-step context plus the captured Post Drop Step output distribution", "this live alias has no separate Pool label; source behavior is kept distinct from the hop-shot tendency"),),
         "3POINTCENTERLEFTSHOT": (_Recipe("center_left_three_location", (("derived.three_attempt_rate", 0.65), ("shooting.percent_corner_3s_of_3pa", -0.35)), "left-center three location events", "non-corner three-attempt share", "the source separates center from corner mass but not left from right; laterality remains uncertain"),),
         "3POINTCENTERRIGHTSHOT": (_Recipe("center_right_three_location", (("derived.three_attempt_rate", 0.65), ("shooting.percent_corner_3s_of_3pa", -0.35)), "right-center three location events", "non-corner three-attempt share", "the source separates center from corner mass but not left from right; laterality remains uncertain"),),
         "3POINTCENTERSHOT": (_Recipe("center_three_location", (("derived.three_attempt_rate", 0.60), ("shooting.percent_corner_3s_of_3pa", -0.40)), "center three location events", "recorded non-corner three-attempt share", "center mass is the complement of recorded corner share"),),
         "3POINTLEFTSHOT": (_Recipe("left_corner_three_location", (("derived.three_attempt_rate", 0.55), ("shooting.percent_corner_3s_of_3pa", 0.45)), "left-corner three events", "recorded corner share and total three-attempt rate", "public data has no left/right split; corner frequency is direct and laterality remains uncertain"),),
         "3POINTRIGHTSHOT": (_Recipe("right_corner_three_location", (("derived.three_attempt_rate", 0.55), ("shooting.percent_corner_3s_of_3pa", 0.45)), "right-corner three events", "recorded corner share and total three-attempt rate", "public data has no left/right split; corner frequency is direct and laterality remains uncertain"),),
 
-        "ALLEYOOP": (_Recipe("alley_oop_finish", (("derived.dunk_rate", 0.45), ("role.interior", 0.30), ("derived.rim_attempt_rate", 0.25)), "alley-oop finish events", "dunk frequency, rim location, and interior role", "the target is finish selection, not dunk execution"), _Recipe("historical_alley_oop_finish", (("role.interior", 0.55), ("derived.attempt_share", 0.25), ("identity.ht_in_in", 0.20)), "alley-oop, dunk, and rim events", "continuous interior/reach context and offensive responsibility", "the low field calibration prevents a fixed big-man tendency")),
-        "BASKETUNDERSHOT": (_Recipe("under_basket_attempt", (("derived.rim_attempt_rate", 0.55), ("role.interior", 0.35), ("derived.attempt_share", 0.10)), "under-basket events", "recorded rim frequency and continuous interior participation", "the source is location/frequency evidence"), _Recipe("historical_under_basket_attempt", (("role.interior", 0.55), ("derived.attempt_share", 0.30), ("identity.ht_in_in", 0.15)), "under-basket and rim-location events", "continuous interior/reach context and attempt responsibility", "no hard height or position gate is used")),
-        "CENTERLEFTMIDSHOT": (_Recipe("center_left_mid_location", (("derived.mid_attempt_rate", 0.75), ("role.wing", 0.25)), "left-center midrange events", "recorded midrange share and wing participation", "public data has no left/right split; lateral uncertainty is explicit"), _Recipe("historical_center_left_mid", (("derived.attempt_share", 0.55), ("role.wing", 0.45)), "midrange and directional events", "shooting responsibility and continuous wing role", "the output remains a tendency")),
-        "CENTERMIDRIGHTSHOT": (_Recipe("center_right_mid_location", (("derived.mid_attempt_rate", 0.75), ("role.wing", 0.25)), "right-center midrange events", "recorded midrange share and wing participation", "public data has no left/right split; lateral uncertainty is explicit"), _Recipe("historical_center_right_mid", (("derived.attempt_share", 0.55), ("role.wing", 0.45)), "midrange and directional events", "shooting responsibility and continuous wing role", "the output remains a tendency")),
-        "CENTERMIDSHOT": (_Recipe("center_mid_location", (("derived.mid_attempt_rate", 0.75), ("role.wing", 0.25)), "center-mid events", "recorded midrange share and wing participation", "the source captures range though not exact court coordinates"), _Recipe("historical_center_mid", (("derived.attempt_share", 0.55), ("role.wing", 0.45)), "midrange location events", "shooting responsibility and continuous wing role", "no make percentage authors frequency")),
-        "LEFTMIDSHOT": (_Recipe("left_mid_location", (("derived.mid_attempt_rate", 0.75), ("role.wing", 0.25)), "left-mid events", "recorded midrange share and wing participation", "public data has no laterality split"), _Recipe("historical_left_mid", (("derived.attempt_share", 0.55), ("role.wing", 0.45)), "midrange and directional events", "shooting responsibility and continuous wing role", "laterality remains uncertain")),
+        "ALLEYOOP": (_Recipe("alley_oop_finish", (("derived.dunk_rate", 0.45), ("derived.rim_attempt_rate", 0.25), ("role.interior", 0.10),), "alley-oop finish events", "dunk frequency, rim location, and interior role", "the target is finish selection, not dunk execution"), _Recipe("historical_alley_oop_finish", (("derived.attempt_share", 0.25), ("identity.ht_in_in", 0.20), ("role.interior", 0.10),), "alley-oop, dunk, and rim events", "continuous interior/reach context and offensive responsibility", "the low field calibration prevents a fixed big-man tendency")),
+        "BASKETUNDERSHOT": (_Recipe("under_basket_attempt", (("derived.rim_attempt_rate", 0.55), ("derived.attempt_share", 0.10), ("role.interior", 0.10),), "under-basket events", "recorded rim frequency and continuous interior participation", "the source is location/frequency evidence"), _Recipe("historical_under_basket_attempt", (("derived.attempt_share", 0.30), ("identity.ht_in_in", 0.15), ("role.interior", 0.10),), "under-basket and rim-location events", "continuous interior/reach context and attempt responsibility", "no hard height or position gate is used")),
+        "CENTERLEFTMIDSHOT": (_Recipe("center_left_mid_location", (("derived.mid_attempt_rate", 0.75), ("role.wing", 0.10),), "left-center midrange events", "recorded midrange share and wing participation", "public data has no left/right split; lateral uncertainty is explicit"), _Recipe("historical_center_left_mid", (("derived.attempt_share", 0.55), ("role.wing", 0.10),), "midrange and directional events", "shooting responsibility and continuous wing role", "the output remains a tendency")),
+        "CENTERMIDRIGHTSHOT": (_Recipe("center_right_mid_location", (("derived.mid_attempt_rate", 0.75), ("role.wing", 0.10),), "right-center midrange events", "recorded midrange share and wing participation", "public data has no left/right split; lateral uncertainty is explicit"), _Recipe("historical_center_right_mid", (("derived.attempt_share", 0.55), ("role.wing", 0.10),), "midrange and directional events", "shooting responsibility and continuous wing role", "the output remains a tendency")),
+        "CENTERMIDSHOT": (_Recipe("center_mid_location", (("derived.mid_attempt_rate", 0.75), ("role.wing", 0.10),), "center-mid events", "recorded midrange share and wing participation", "the source captures range though not exact court coordinates"), _Recipe("historical_center_mid", (("derived.attempt_share", 0.55), ("role.wing", 0.10),), "midrange location events", "shooting responsibility and continuous wing role", "no make percentage authors frequency")),
+        "LEFTMIDSHOT": (_Recipe("left_mid_location", (("derived.mid_attempt_rate", 0.75), ("role.wing", 0.10),), "left-mid events", "recorded midrange share and wing participation", "public data has no laterality split"), _Recipe("historical_left_mid", (("derived.attempt_share", 0.55), ("role.wing", 0.10),), "midrange and directional events", "shooting responsibility and continuous wing role", "laterality remains uncertain")),
 
-        "MIDRIGHTSHOT": (_Recipe("right_mid_location", (("derived.mid_attempt_rate", 0.75), ("role.wing", 0.25)), "right-mid events", "recorded midrange share and wing participation", "public data has no laterality split"), _Recipe("historical_right_mid", (("derived.attempt_share", 0.55), ("role.wing", 0.45)), "midrange and directional events", "shooting responsibility and continuous wing role", "laterality remains uncertain")),
+        "MIDRIGHTSHOT": (_Recipe("right_mid_location", (("derived.mid_attempt_rate", 0.75), ("role.wing", 0.10),), "right-mid events", "recorded midrange share and wing participation", "public data has no laterality split"), _Recipe("historical_right_mid", (("derived.attempt_share", 0.55), ("role.wing", 0.10),), "midrange and directional events", "shooting responsibility and continuous wing role", "laterality remains uncertain")),
 
-        "CLOSELEFTSHOT": (_Recipe("left_close_location", (("derived.short_attempt_rate", 0.75), ("role.interior", 0.25)), "left-close events", "recorded short-shot share and interior participation", "public data has no left/right split"), _Recipe("historical_left_close", (("derived.attempt_share", 0.50), ("role.interior", 0.50)), "close-location events", "shooting responsibility and continuous interior role", "laterality remains uncertain")),
-        "CLOSEMIDDLESHOT": (_Recipe("middle_close_location", (("derived.rim_attempt_rate", 0.65), ("role.interior", 0.35)), "middle-close events", "recorded rim share and interior participation", "central rim opportunity is the closest available location evidence"), _Recipe("historical_middle_close", (("role.interior", 0.55), ("derived.attempt_share", 0.45)), "close-location events", "continuous interior role and shooting responsibility", "no efficiency value authors frequency")),
-        "CLOSERIGHTSHOT": (_Recipe("right_close_location", (("derived.short_attempt_rate", 0.75), ("role.interior", 0.25)), "right-close events", "recorded short-shot share and interior participation", "public data has no left/right split"), _Recipe("historical_right_close", (("derived.attempt_share", 0.50), ("role.interior", 0.50)), "close-location events", "shooting responsibility and continuous interior role", "laterality remains uncertain")),
-        "CONTESTEDJUMPER3POINT": (_Recipe("contested_three", (("derived.three_attempt_rate", 0.35), ("shooting.percent_assisted_x3p_fg", -0.25), ("role.creator", 0.25), ("derived.attempt_share", 0.15)), "contested-three events", "three volume, self-created context, and shooting responsibility", "self-created high-volume threes are the narrowest season-level contested-shot substitute"),),
-        "CONTESTEDJUMPERMID": (_Recipe("contested_midrange_frequency", (("derived.mid_attempt_rate", 0.40), ("derived.unassisted_two_rate", 0.30), ("role.creator", 0.20), ("derived.attempt_share", 0.10)), "contested midrange events", "recorded midrange mass plus self-created shot context and offensive responsibility", "the approved field-specific substitute estimates difficult self-created midrange attempts without using make efficiency"), _Recipe("historical_contested_midrange_frequency", (("role.creator", 0.40), ("derived.attempt_share", 0.35), ("derived.foul_pressure", 0.25)), "contested-shot and assisted-location events", "creator responsibility, shot load, and live-contact pressure", "these all-era signals estimate difficult self-created attempts; FT% does not author the action")),
-        "CONTESTEDJUMPERMIDRANGE": (_Recipe("contested_midrange_frequency", (("derived.mid_attempt_rate", 0.40), ("derived.unassisted_two_rate", 0.30), ("role.creator", 0.20), ("derived.attempt_share", 0.10)), "contested midrange events", "recorded midrange mass plus self-created shot context and offensive responsibility", "this storage alias uses the same field-specific action rule and Pool scale as CONTESTEDJUMPERMID"), _Recipe("historical_contested_midrange_frequency", (("role.creator", 0.40), ("derived.attempt_share", 0.35), ("derived.foul_pressure", 0.25)), "contested-shot and assisted-location events", "creator responsibility, shot load, and live-contact pressure", "the aliases remain identical and FT% does not author the action")),
-        "DRIVEPULLUP3POINT": (_Recipe("drive_pullup_three", (("derived.three_attempt_rate", 0.30), ("shooting.percent_assisted_x3p_fg", -0.30), ("role.creator", 0.25), ("derived.foul_pressure", 0.15)), "pull-up-three events", "unassisted three context and live-dribble creator pressure", "the substitute separates pull-ups from spot-ups"),),
-        "DRIVEPULLUPMID": (_Recipe("drive_pullup_midrange_frequency", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.35), ("role.creator", 0.20), ("derived.foul_pressure", 0.10)), "drive-pull-up midrange events", "self-created midrange mass, creator role, and drive pressure", "the approved action substitute separates pull-ups from assisted spot-up and off-screen attempts"), _Recipe("historical_drive_pullup_midrange_frequency", (("role.creator", 0.45), ("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.25)), "drive-pull-up and self-created location events", "creator responsibility and live-contact pressure", "the all-era rule estimates live-dribble frequency without using shooting efficiency")),
-        "DRIVEPULLUPMIDRANGE": (_Recipe("drive_pullup_midrange_frequency", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.35), ("role.creator", 0.20), ("derived.foul_pressure", 0.10)), "drive-pull-up midrange events", "self-created midrange mass, creator role, and drive pressure", "this storage alias uses the same action rule and Pool scale as DRIVEPULLUPMID"), _Recipe("historical_drive_pullup_midrange_frequency", (("role.creator", 0.45), ("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.25)), "drive-pull-up and self-created location events", "creator responsibility and live-contact pressure", "the aliases remain identical and no make percentage authors frequency")),
-        "DRIVINGDUNK": (_Recipe("driving_dunk_frequency", (("derived.dunk_rate", 0.50), ("derived.rim_attempt_rate", 0.25), ("derived.foul_pressure", 0.15), ("role.creator", 0.10)), "driving-dunk attempt events", "dunk/rim frequency and drive pressure", "makes count as observed action frequency here, never execution"), _Recipe("historical_driving_dunk_frequency", (("derived.foul_pressure", 0.35), ("role.interior", 0.30), ("derived.attempt_share", 0.20), ("identity.ht_in_in", 0.15)), "driving-dunk and rim events", "drive pressure, continuous role/reach, and attempt responsibility", "no fixed athlete template is used")),
-        "DRIVINGLAYUP": (_Recipe("driving_layup_frequency", (("derived.rim_attempt_rate", 0.45), ("derived.foul_pressure", 0.25), ("derived.dunk_rate", -0.15), ("role.creator", 0.15)), "driving-layup events", "rim pressure excluding dunk share plus creator role", "the sources describe action selection"), _Recipe("historical_driving_layup_frequency", (("derived.foul_pressure", 0.40), ("role.creator", 0.30), ("derived.attempt_share", 0.30)), "driving-layup and rim events", "drive pressure and offensive responsibility", "no make efficiency authors frequency")),
-        "EUROSTEPLAYUP": (_Recipe("euro_step_frequency", (("derived.rim_attempt_rate", 0.25), ("derived.foul_pressure", 0.30), ("derived.unassisted_two_rate", 0.25), ("role.creator", 0.20)), "Euro-step events", "self-created rim/foul pressure", "the field-exact low-frequency calibration distinguishes the move"), _Recipe("historical_euro_step", (("derived.foul_pressure", 0.40), ("role.creator", 0.35), ("derived.attempt_share", 0.25)), "Euro-step and drive events", "drive pressure and creator responsibility", "no constant move package is inserted")),
-        "FLASHYDUNK": (_Recipe("flashy_dunk_frequency", (("derived.dunk_rate", 0.45), ("role.creator", 0.20), ("identity.ht_in_in", 0.20), ("derived.foul_pressure", 0.15)), "flashy-dunk events", "dunk frequency with live-drive/reach context", "the target is behavior frequency"), _Recipe("historical_flashy_dunk", (("role.interior", 0.35), ("role.creator", 0.25), ("identity.ht_in_in", 0.20), ("derived.attempt_share", 0.20)), "flashy-dunk and dunk events", "continuous reach/role and responsibility", "the low calibration prevents body context from creating a fixed high value")),
-        "FLOATER": (_Recipe("floater_frequency", (("derived.three_to_ten_attempt_rate", 0.55), ("role.guard", 0.25), ("derived.unassisted_two_rate", 0.20)), "floater events", "3-10 foot attempt share and self-created guard context", "3-10 feet is valid for floaters, not layup moves"), _Recipe("historical_floater", (("role.guard", 0.40), ("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.30)), "floater and 3-10 foot events", "continuous guard drive pressure and responsibility", "the substitute stays distinct from layup execution")),
-        "FROMPOSTSHOT": (_Recipe("shoot_from_post", (("role.post", 0.35), ("derived.short_attempt_rate", 0.25), ("derived.mid_attempt_rate", 0.25), ("derived.attempt_share", 0.15)), "post-shot events", "post role and recorded short/mid attempt mass", "the target is post shot selection"), _Recipe("historical_shoot_from_post", (("role.post", 0.50), ("derived.attempt_share", 0.30), ("identity.wt", 0.20)), "post-shot and location events", "continuous post role, responsibility, and leverage", "no efficiency score authors the tendency")),
-        "HOPPOSTSHOT": (_Recipe("hop_post_shot", (("role.post", 0.30), ("derived.mid_attempt_rate", 0.30), ("derived.unassisted_two_rate", 0.25), ("per_game.ft_percent", 0.15)), "post-hop-shot events", "self-created post/midrange behavior", "the exact low-frequency target keeps the move rare"), _Recipe("historical_hop_post_shot", (("role.post", 0.45), ("per_game.ft_percent", 0.30), ("derived.attempt_share", 0.25)), "post-hop and location events", "post role, touch, and responsibility", "no generic constant is used")),
-        "HOPSTEPLAYUP": (_Recipe("hop_step_layup", (("derived.rim_attempt_rate", 0.25), ("derived.foul_pressure", 0.30), ("derived.unassisted_two_rate", 0.25), ("role.creator", 0.20)), "hop-step layup events", "self-created rim/foul pressure", "3-10 foot attempts are deliberately excluded"), _Recipe("historical_hop_step_layup", (("derived.foul_pressure", 0.40), ("role.creator", 0.35), ("derived.attempt_share", 0.25)), "hop-step and drive events", "drive pressure and creator responsibility", "the field remains a behavior tendency")),
-        "POSTDROPSTEP": (_Recipe("post_drop_step", (("role.post", 0.35), ("derived.short_attempt_rate", 0.30), ("identity.wt", 0.20), ("derived.foul_pressure", 0.15)), "drop-step events", "post role, short frequency, leverage, and foul pressure", "all inputs describe move opportunity"), _Recipe("historical_post_drop_step", (("role.post", 0.45), ("identity.wt", 0.30), ("derived.attempt_share", 0.25)), "drop-step and post-touch events", "continuous post role, leverage, and responsibility", "no hard big-man gate is used")),
-        "POSTFADELEFT": (_Recipe("post_fade_left", (("role.post", 0.30), ("derived.mid_attempt_rate", 0.35), ("per_game.ft_percent", 0.20), ("derived.unassisted_two_rate", 0.15)), "left post-fade events", "post self-created midrange touch", "public data has no left/right split; laterality remains uncertain"), _Recipe("historical_post_fade_left", (("role.post", 0.40), ("per_game.ft_percent", 0.35), ("derived.attempt_share", 0.25)), "post-fade and directional events", "post role, touch, and responsibility", "laterality is not fabricated")),
-        "POSTFADERIGHT": (_Recipe("post_fade_right", (("role.post", 0.30), ("derived.mid_attempt_rate", 0.35), ("per_game.ft_percent", 0.20), ("derived.unassisted_two_rate", 0.15)), "right post-fade events", "post self-created midrange touch", "public data has no left/right split; laterality remains uncertain"), _Recipe("historical_post_fade_right", (("role.post", 0.40), ("per_game.ft_percent", 0.35), ("derived.attempt_share", 0.25)), "post-fade and directional events", "post role, touch, and responsibility", "laterality is not fabricated")),
-        "POSTHOOKLEFT": (_Recipe("post_hook_left", (("role.post", 0.35), ("derived.three_to_ten_attempt_rate", 0.35), ("identity.ht_in_in", 0.15), ("derived.unassisted_two_rate", 0.15)), "left post-hook events", "post short-area self-creation and reach", "public data has no left/right split"), _Recipe("historical_post_hook_left", (("role.post", 0.45), ("identity.ht_in_in", 0.25), ("derived.attempt_share", 0.30)), "post-hook and directional events", "post role, reach, and responsibility", "laterality remains uncertain")),
-        "POSTHOOKRIGHT": (_Recipe("post_hook_right", (("role.post", 0.35), ("derived.three_to_ten_attempt_rate", 0.35), ("identity.ht_in_in", 0.15), ("derived.unassisted_two_rate", 0.15)), "right post-hook events", "post short-area self-creation and reach", "public data has no left/right split"), _Recipe("historical_post_hook_right", (("role.post", 0.45), ("identity.ht_in_in", 0.25), ("derived.attempt_share", 0.30)), "post-hook and directional events", "post role, reach, and responsibility", "laterality remains uncertain")),
-        "POSTSHIMMYSHOT": (_Recipe("post_shimmy", (("role.post", 0.30), ("derived.mid_attempt_rate", 0.30), ("derived.unassisted_two_rate", 0.25), ("per_game.ft_percent", 0.15)), "post-shimmy events", "post self-created midrange touch", "the low target calibration distinguishes this rare move"), _Recipe("historical_post_shimmy", (("role.post", 0.45), ("per_game.ft_percent", 0.30), ("derived.attempt_share", 0.25)), "post-shimmy and location events", "post role, touch, and responsibility", "no fixed post package is used")),
-        "POSTSTEPBACKSHOT": (_Recipe("post_stepback", (("role.post", 0.25), ("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.25), ("role.wing", 0.15)), "post-stepback events", "hybrid post/wing self-created midrange behavior", "the field-exact low target keeps the move rare"), _Recipe("historical_post_stepback", (("role.post", 0.35), ("role.wing", 0.25), ("per_game.ft_percent", 0.20), ("derived.attempt_share", 0.20)), "post-stepback and location events", "hybrid role, touch, and responsibility", "no generic move constant is used")),
-        "POSTUPANDUNDER": (_Recipe("post_up_and_under", (("role.post", 0.30), ("derived.short_attempt_rate", 0.30), ("derived.foul_pressure", 0.20), ("derived.unassisted_two_rate", 0.20)), "up-and-under events", "post short-area self-creation and foul pressure", "the inputs identify move frequency"), _Recipe("historical_post_up_and_under", (("role.post", 0.45), ("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.25)), "up-and-under and post-touch events", "post role, foul pressure, and responsibility", "no execution output is reused")),
-        "SPINJUMPER": (_Recipe("spin_jumper", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.30), ("role.creator", 0.20), ("derived.foul_pressure", 0.15)), "spin-jumper events", "self-created midrange and live-drive pressure", "the tendency remains distinct from driving spin"), _Recipe("historical_spin_jumper", (("role.creator", 0.35), ("per_game.ft_percent", 0.30), ("derived.attempt_share", 0.35)), "spin-jumper and pull-up events", "creator role, touch, and responsibility", "no fixed move package is inserted")),
-        "SPINLAYUP": (_Recipe("spin_layup", (("derived.rim_attempt_rate", 0.25), ("derived.foul_pressure", 0.30), ("derived.unassisted_two_rate", 0.25), ("role.creator", 0.20)), "spin-layup events", "self-created rim/foul pressure", "3-10 foot location is deliberately excluded"), _Recipe("historical_spin_layup", (("derived.foul_pressure", 0.40), ("role.creator", 0.35), ("derived.attempt_share", 0.25)), "spin-layup and drive events", "drive pressure and creator responsibility", "no make efficiency authors frequency")),
-        "STANDINGDUNK": (_Recipe("standing_dunk_frequency", (("derived.rim_attempt_rate", 0.30), ("role.interior", 0.30), ("identity.ht_in_in", 0.25), ("identity.wt", 0.15)), "literal stationary-dunk attempts", "under-rim opportunity plus continuous interior and leverage context", "broad or moving dunk totals are deliberately excluded; this approved substitute estimates stationary opportunity only"), _Recipe("historical_standing_dunk_frequency", (("role.interior", 0.40), ("identity.ht_in_in", 0.30), ("identity.wt", 0.20), ("derived.attempt_share", 0.10)), "stationary-dunk and exact rim-location events", "continuous interior/reach/leverage context and offensive responsibility", "the historical rule stays separate from moving-dunk evidence and remains subject to era dunk suppression")),
-        "STEPBACKJUMPER3POINT": (_Recipe("stepback_three", (("derived.three_attempt_rate", 0.30), ("shooting.percent_assisted_x3p_fg", -0.30), ("role.creator", 0.25), ("derived.attempt_share", 0.15)), "stepback-three events", "self-created three frequency and creator responsibility", "the field-exact low target keeps the move rare"),),
-        "STEPBACKJUMPERMID": (_Recipe("stepback_mid_alias", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.35), ("role.creator", 0.20), ("derived.attempt_share", 0.10)), "stepback-mid events and a captured field-exact alias", "self-created midrange behavior and the captured Stepback Jumper Mid-Range distribution", "the active alias has no separate Pool label"),),
-        "STEPBACKJUMPERMIDRANGE": (_Recipe("stepback_midrange", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.35), ("role.creator", 0.20), ("derived.attempt_share", 0.10)), "stepback-midrange events", "self-created midrange and creator responsibility", "the target is attempt behavior"),),
-        "STEPTHROUGH": (_Recipe("step_through", (("derived.short_attempt_rate", 0.30), ("derived.foul_pressure", 0.30), ("derived.unassisted_two_rate", 0.20), ("role.post", 0.20)), "step-through events", "short-area self-creation, foul pressure, and post participation", "the field is authored once from its exact action context"), _Recipe("historical_step_through", (("derived.foul_pressure", 0.35), ("role.post", 0.30), ("role.creator", 0.20), ("derived.attempt_share", 0.15)), "step-through and short-location events", "drive/post pressure and responsibility", "no shared shot-family output is redistributed")),
-        "TRANSITIONPULLUP3POINT": (_Recipe("transition_pullup_three", (("derived.three_attempt_rate", 0.35), ("shooting.percent_assisted_x3p_fg", -0.20), ("role.creator", 0.25), ("derived.scoring_share", 0.20)), "transition-pull-up-three events", "self-created three volume and transition-capable creator load", "the low field-exact target preserves rarity"),),
-        "USEGLASS": (_Recipe("use_glass", (("derived.three_to_ten_attempt_rate", 0.50), ("derived.rim_attempt_rate", 0.25), ("role.interior", 0.15), ("role.guard", 0.10)), "bank-shot events", "3-10 foot and rim attempt context", "3-10 feet is permitted for glass use and is not reused for layup moves"), _Recipe("historical_use_glass", (("role.interior", 0.40), ("role.guard", 0.25), ("derived.attempt_share", 0.20), ("per_game.ft_percent", 0.15)), "bank-shot and 3-10 foot events", "continuous close-shot role and weak touch/responsibility context", "the target remains a behavior tendency")),
+        "CLOSELEFTSHOT": (_Recipe("left_close_location", (("derived.short_attempt_rate", 0.75), ("role.interior", 0.10),), "left-close events", "recorded short-shot share and interior participation", "public data has no left/right split"), _Recipe("historical_left_close", (("derived.attempt_share", 0.50), ("role.interior", 0.10),), "close-location events", "shooting responsibility and continuous interior role", "laterality remains uncertain")),
+        "CLOSEMIDDLESHOT": (_Recipe("middle_close_location", (("derived.rim_attempt_rate", 0.65), ("role.interior", 0.10),), "middle-close events", "recorded rim share and interior participation", "central rim opportunity is the closest available location evidence"), _Recipe("historical_middle_close", (("derived.attempt_share", 0.45), ("role.interior", 0.10),), "close-location events", "continuous interior role and shooting responsibility", "no efficiency value authors frequency")),
+        "CLOSERIGHTSHOT": (_Recipe("right_close_location", (("derived.short_attempt_rate", 0.75), ("role.interior", 0.10),), "right-close events", "recorded short-shot share and interior participation", "public data has no left/right split"), _Recipe("historical_right_close", (("derived.attempt_share", 0.50), ("role.interior", 0.10),), "close-location events", "shooting responsibility and continuous interior role", "laterality remains uncertain")),
+        "CONTESTEDJUMPER3POINT": (_Recipe("contested_three", (("derived.three_attempt_rate", 0.35), ("shooting.percent_assisted_x3p_fg", -0.25), ("derived.attempt_share", 0.15), ("role.creator", 0.10),), "contested-three events", "three volume, self-created context, and shooting responsibility", "self-created high-volume threes are the narrowest season-level contested-shot substitute"),),
+        "CONTESTEDJUMPERMID": (_Recipe("contested_midrange_frequency", (("derived.mid_attempt_rate", 0.40), ("derived.unassisted_two_rate", 0.30), ("derived.attempt_share", 0.10), ("role.creator", 0.10),), "contested midrange events", "recorded midrange mass plus self-created shot context and offensive responsibility", "the approved field-specific substitute estimates difficult self-created midrange attempts without using make efficiency"), _Recipe("historical_contested_midrange_frequency", (("derived.attempt_share", 0.35), ("derived.foul_pressure", 0.25), ("role.creator", 0.10),), "contested-shot and assisted-location events", "creator responsibility, shot load, and live-contact pressure", "these all-era signals estimate difficult self-created attempts; FT% does not author the action")),
+        "CONTESTEDJUMPERMIDRANGE": (_Recipe("contested_midrange_frequency", (("derived.mid_attempt_rate", 0.40), ("derived.unassisted_two_rate", 0.30), ("derived.attempt_share", 0.10), ("role.creator", 0.10),), "contested midrange events", "recorded midrange mass plus self-created shot context and offensive responsibility", "this storage alias uses the same field-specific action rule and Pool scale as CONTESTEDJUMPERMID"), _Recipe("historical_contested_midrange_frequency", (("derived.attempt_share", 0.35), ("derived.foul_pressure", 0.25), ("role.creator", 0.10),), "contested-shot and assisted-location events", "creator responsibility, shot load, and live-contact pressure", "the aliases remain identical and FT% does not author the action")),
+        "DRIVEPULLUP3POINT": (_Recipe("drive_pullup_three", (("derived.three_attempt_rate", 0.30), ("shooting.percent_assisted_x3p_fg", -0.30), ("derived.foul_pressure", 0.15), ("role.creator", 0.10),), "pull-up-three events", "unassisted three context and live-dribble creator pressure", "the substitute separates pull-ups from spot-ups"),),
+        "DRIVEPULLUPMID": (_Recipe("drive_pullup_midrange_frequency", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.35), ("derived.foul_pressure", 0.10), ("role.creator", 0.10),), "drive-pull-up midrange events", "self-created midrange mass, creator role, and drive pressure", "the approved action substitute separates pull-ups from assisted spot-up and off-screen attempts"), _Recipe("historical_drive_pullup_midrange_frequency", (("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.25), ("role.creator", 0.10),), "drive-pull-up and self-created location events", "creator responsibility and live-contact pressure", "the all-era rule estimates live-dribble frequency without using shooting efficiency")),
+        "DRIVEPULLUPMIDRANGE": (_Recipe("drive_pullup_midrange_frequency", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.35), ("derived.foul_pressure", 0.10), ("role.creator", 0.10),), "drive-pull-up midrange events", "self-created midrange mass, creator role, and drive pressure", "this storage alias uses the same action rule and Pool scale as DRIVEPULLUPMID"), _Recipe("historical_drive_pullup_midrange_frequency", (("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.25), ("role.creator", 0.10),), "drive-pull-up and self-created location events", "creator responsibility and live-contact pressure", "the aliases remain identical and no make percentage authors frequency")),
+        "DRIVINGDUNK": (_Recipe("driving_dunk_frequency", (("derived.dunk_rate", 0.50), ("derived.rim_attempt_rate", 0.25), ("derived.foul_pressure", 0.15), ("role.creator", 0.10),), "driving-dunk attempt events", "dunk/rim frequency and drive pressure", "makes count as observed action frequency here, never execution"), _Recipe("historical_driving_dunk_frequency", (("derived.foul_pressure", 0.35), ("derived.attempt_share", 0.20), ("identity.ht_in_in", 0.15), ("role.interior", 0.10),), "driving-dunk and rim events", "drive pressure, continuous role/reach, and attempt responsibility", "no fixed athlete template is used")),
+        "DRIVINGLAYUP": (_Recipe("driving_layup_frequency", (("derived.rim_attempt_rate", 0.45), ("derived.foul_pressure", 0.25), ("derived.dunk_rate", -0.15), ("role.creator", 0.10),), "driving-layup events", "rim pressure excluding dunk share plus creator role", "the sources describe action selection"), _Recipe("historical_driving_layup_frequency", (("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.20), ("role.creator", 0.10), ("role.post", 0.10),), "driving-layup and rim events", "foul pressure and shooting responsibility allocated through continuous creator-versus-post role", "post finishes cannot become driving-layup frequency without on-ball creator participation")),
+        "EUROSTEPLAYUP": (_Recipe("euro_step_frequency", (("derived.rim_attempt_rate", 0.25), ("derived.foul_pressure", 0.30), ("derived.unassisted_two_rate", 0.25), ("role.creator", 0.10),), "Euro-step events", "self-created rim/foul pressure", "the field-exact low-frequency calibration distinguishes the move"), _Recipe("historical_euro_step", (("derived.foul_pressure", 0.40), ("derived.attempt_share", 0.25), ("role.creator", 0.10),), "Euro-step and drive events", "drive pressure and creator responsibility", "no constant move package is inserted")),
+        "FLASHYDUNK": (_Recipe("flashy_dunk_frequency", (("derived.dunk_rate", 0.45), ("identity.ht_in_in", 0.20), ("derived.foul_pressure", 0.15), ("role.creator", 0.10),), "flashy-dunk events", "dunk frequency with live-drive/reach context", "the target is behavior frequency"), _Recipe("historical_flashy_dunk", (("identity.ht_in_in", 0.20), ("derived.attempt_share", 0.20), ("role.interior", 0.10), ("role.creator", 0.10),), "flashy-dunk and dunk events", "continuous reach/role and responsibility", "the low calibration prevents body context from creating a fixed high value")),
+        "FLOATER": (_Recipe("floater_frequency", (("derived.three_to_ten_attempt_rate", 0.55), ("derived.unassisted_two_rate", 0.20), ("role.guard", 0.10),), "floater events", "3-10 foot attempt share and self-created guard context", "3-10 feet is valid for floaters, not layup moves"), _Recipe("historical_floater", (("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.30), ("role.guard", 0.10),), "floater and 3-10 foot events", "continuous guard drive pressure and responsibility", "the substitute stays distinct from layup execution")),
+        "FROMPOSTSHOT": (_Recipe("shoot_from_post", (("derived.short_attempt_rate", 0.25), ("derived.mid_attempt_rate", 0.25), ("derived.attempt_share", 0.15), ("role.post", 0.10),), "post-shot events", "post role and recorded short/mid attempt mass", "the target is post shot selection"), _Recipe("historical_shoot_from_post", (("derived.attempt_share", 0.30), ("identity.wt", 0.20), ("role.post", 0.10),), "post-shot and location events", "continuous post role, responsibility, and leverage", "no efficiency score authors the tendency")),
+        "HOPPOSTSHOT": (_Recipe("hop_post_shot", (("derived.mid_attempt_rate", 0.30), ("derived.unassisted_two_rate", 0.25), ("per_game.ft_percent", 0.15), ("role.post", 0.10),), "post-hop-shot events", "self-created post/midrange behavior", "the exact low-frequency target keeps the move rare"), _Recipe("historical_hop_post_shot", (("per_game.ft_percent", 0.30), ("derived.attempt_share", 0.25), ("role.post", 0.10),), "post-hop and location events", "post role, touch, and responsibility", "no generic constant is used")),
+        "HOPSTEPLAYUP": (_Recipe("hop_step_layup", (("derived.rim_attempt_rate", 0.25), ("derived.foul_pressure", 0.30), ("derived.unassisted_two_rate", 0.25), ("role.creator", 0.10),), "hop-step layup events", "self-created rim/foul pressure", "3-10 foot attempts are deliberately excluded"), _Recipe("historical_hop_step_layup", (("derived.foul_pressure", 0.40), ("derived.attempt_share", 0.25), ("role.creator", 0.10),), "hop-step and drive events", "drive pressure and creator responsibility", "the field remains a behavior tendency")),
+        "POSTDROPSTEP": (_Recipe("post_drop_step", (("derived.short_attempt_rate", 0.30), ("identity.wt", 0.20), ("derived.foul_pressure", 0.15), ("role.post", 0.10),), "drop-step events", "post role, short frequency, leverage, and foul pressure", "all inputs describe move opportunity"), _Recipe("historical_post_drop_step", (("identity.wt", 0.30), ("derived.attempt_share", 0.25), ("role.post", 0.10),), "drop-step and post-touch events", "continuous post role, leverage, and responsibility", "no hard big-man gate is used")),
+        "POSTFADELEFT": (_Recipe("post_fade_left", (("derived.mid_attempt_rate", 0.35), ("per_game.ft_percent", 0.20), ("derived.unassisted_two_rate", 0.15), ("role.post", 0.10),), "left post-fade events", "post self-created midrange touch", "public data has no left/right split; laterality remains uncertain"), _Recipe("historical_post_fade_left", (("per_game.ft_percent", 0.35), ("derived.attempt_share", 0.25), ("role.post", 0.10),), "post-fade and directional events", "post role, touch, and responsibility", "laterality is not fabricated")),
+        "POSTFADERIGHT": (_Recipe("post_fade_right", (("derived.mid_attempt_rate", 0.35), ("per_game.ft_percent", 0.20), ("derived.unassisted_two_rate", 0.15), ("role.post", 0.10),), "right post-fade events", "post self-created midrange touch", "public data has no left/right split; laterality remains uncertain"), _Recipe("historical_post_fade_right", (("per_game.ft_percent", 0.35), ("derived.attempt_share", 0.25), ("role.post", 0.10),), "post-fade and directional events", "post role, touch, and responsibility", "laterality is not fabricated")),
+        "POSTHOOKLEFT": (_Recipe("post_hook_left", (("derived.three_to_ten_attempt_rate", 0.35), ("identity.ht_in_in", 0.15), ("derived.unassisted_two_rate", 0.15), ("role.post", 0.10),), "left post-hook events", "post short-area self-creation and reach", "public data has no left/right split"), _Recipe("historical_post_hook_left", (("identity.ht_in_in", 0.25), ("derived.attempt_share", 0.30), ("role.post", 0.10),), "post-hook and directional events", "post role, reach, and responsibility", "laterality remains uncertain")),
+        "POSTHOOKRIGHT": (_Recipe("post_hook_right", (("derived.three_to_ten_attempt_rate", 0.35), ("identity.ht_in_in", 0.15), ("derived.unassisted_two_rate", 0.15), ("role.post", 0.10),), "right post-hook events", "post short-area self-creation and reach", "public data has no left/right split"), _Recipe("historical_post_hook_right", (("identity.ht_in_in", 0.25), ("derived.attempt_share", 0.30), ("role.post", 0.10),), "post-hook and directional events", "post role, reach, and responsibility", "laterality remains uncertain")),
+        "POSTSHIMMYSHOT": (_Recipe("post_shimmy", (("derived.mid_attempt_rate", 0.30), ("derived.unassisted_two_rate", 0.25), ("per_game.ft_percent", 0.15), ("role.post", 0.10),), "post-shimmy events", "post self-created midrange touch", "the low target calibration distinguishes this rare move"), _Recipe("historical_post_shimmy", (("per_game.ft_percent", 0.30), ("derived.attempt_share", 0.25), ("role.post", 0.10),), "post-shimmy and location events", "post role, touch, and responsibility", "no fixed post package is used")),
+        "POSTSTEPBACKSHOT": (_Recipe("post_stepback", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.25), ("role.post", 0.10), ("role.wing", 0.10),), "post-stepback events", "hybrid post/wing self-created midrange behavior", "the field-exact low target keeps the move rare"), _Recipe("historical_post_stepback", (("per_game.ft_percent", 0.20), ("derived.attempt_share", 0.20), ("role.post", 0.10), ("role.wing", 0.10),), "post-stepback and location events", "hybrid role, touch, and responsibility", "no generic move constant is used")),
+        "POSTUPANDUNDER": (_Recipe("post_up_and_under", (("derived.short_attempt_rate", 0.30), ("derived.foul_pressure", 0.20), ("derived.unassisted_two_rate", 0.20), ("role.post", 0.10),), "up-and-under events", "post short-area self-creation and foul pressure", "the inputs identify move frequency"), _Recipe("historical_post_up_and_under", (("derived.foul_pressure", 0.30), ("derived.attempt_share", 0.25), ("role.post", 0.10),), "up-and-under and post-touch events", "post role, foul pressure, and responsibility", "no execution output is reused")),
+        "SPINJUMPER": (_Recipe("spin_jumper", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.30), ("derived.foul_pressure", 0.15), ("role.creator", 0.10),), "spin-jumper events", "self-created midrange and live-drive pressure", "the tendency remains distinct from driving spin"), _Recipe("historical_spin_jumper", (("per_game.ft_percent", 0.30), ("derived.attempt_share", 0.35), ("role.creator", 0.10),), "spin-jumper and pull-up events", "creator role, touch, and responsibility", "no fixed move package is inserted")),
+        "SPINLAYUP": (_Recipe("spin_layup", (("derived.rim_attempt_rate", 0.25), ("derived.foul_pressure", 0.30), ("derived.unassisted_two_rate", 0.25), ("role.creator", 0.10),), "spin-layup events", "self-created rim/foul pressure", "3-10 foot location is deliberately excluded"), _Recipe("historical_spin_layup", (("derived.foul_pressure", 0.40), ("derived.attempt_share", 0.25), ("role.creator", 0.10),), "spin-layup and drive events", "drive pressure and creator responsibility", "no make efficiency authors frequency")),
+        "STANDINGDUNK": (_Recipe("standing_dunk_frequency", (("derived.rim_attempt_rate", 0.30), ("identity.ht_in_in", 0.25), ("identity.wt", 0.15), ("role.interior", 0.10),), "literal stationary-dunk attempts", "under-rim opportunity plus continuous interior and leverage context", "broad or moving dunk totals are deliberately excluded; this approved substitute estimates stationary opportunity only"), _Recipe("historical_standing_dunk_frequency", (("identity.ht_in_in", 0.30), ("identity.wt", 0.20), ("derived.attempt_share", 0.10), ("role.interior", 0.10),), "stationary-dunk and exact rim-location events", "continuous interior/reach/leverage context and offensive responsibility", "the historical rule stays separate from moving-dunk evidence and remains subject to era dunk suppression")),
+        "STEPBACKJUMPER3POINT": (_Recipe("stepback_three", (("derived.three_attempt_rate", 0.30), ("shooting.percent_assisted_x3p_fg", -0.30), ("derived.attempt_share", 0.15), ("role.creator", 0.10),), "stepback-three events", "self-created three frequency and creator responsibility", "the field-exact low target keeps the move rare"),),
+        "STEPBACKJUMPERMID": (_Recipe("stepback_mid_alias", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.35), ("derived.attempt_share", 0.10), ("role.creator", 0.10),), "stepback-mid events and a captured field-exact alias", "self-created midrange behavior and the captured Stepback Jumper Mid-Range distribution", "the active alias has no separate Pool label"),),
+        "STEPBACKJUMPERMIDRANGE": (_Recipe("stepback_midrange", (("derived.mid_attempt_rate", 0.35), ("derived.unassisted_two_rate", 0.35), ("derived.attempt_share", 0.10), ("role.creator", 0.10),), "stepback-midrange events", "self-created midrange and creator responsibility", "the target is attempt behavior"),),
+        "STEPTHROUGH": (_Recipe("step_through", (("derived.short_attempt_rate", 0.30), ("derived.foul_pressure", 0.30), ("derived.unassisted_two_rate", 0.20), ("role.post", 0.10),), "step-through events", "short-area self-creation, foul pressure, and post participation", "the field is authored once from its exact action context"), _Recipe("historical_step_through", (("derived.foul_pressure", 0.35), ("derived.attempt_share", 0.15), ("role.post", 0.10), ("role.creator", 0.10),), "step-through and short-location events", "drive/post pressure and responsibility", "no shared shot-family output is redistributed")),
+        "TRANSITIONPULLUP3POINT": (_Recipe("transition_pullup_three", (("derived.three_attempt_rate", 0.35), ("shooting.percent_assisted_x3p_fg", -0.20), ("derived.scoring_share", 0.20), ("role.creator", 0.10),), "transition-pull-up-three events", "self-created three volume and transition-capable creator load", "the low field-exact target preserves rarity"),),
+        "USEGLASS": (_Recipe("use_glass", (("derived.three_to_ten_attempt_rate", 0.50), ("derived.rim_attempt_rate", 0.25), ("role.interior", 0.10), ("role.guard", 0.10),), "bank-shot events", "3-10 foot and rim attempt context", "3-10 feet is permitted for glass use and is not reused for layup moves"), _Recipe("historical_use_glass", (("derived.attempt_share", 0.20), ("per_game.ft_percent", 0.15), ("role.interior", 0.10), ("role.guard", 0.10),), "bank-shot and 3-10 foot events", "continuous close-shot role and weak touch/responsibility context", "the target remains a behavior tendency")),
     }
 )
 
@@ -1135,9 +1620,10 @@ _SHOT_EXECUTION_FIELDS = {
     "IQSHOT",
     "CLOSESHOT",
     "DRIVINGDUNK",
-    "DRIVINGLAYUP",
     "MIDRANGE",
-    "POSTFADE",
+    # POSTCONTROL is deliberately absent: it is holding position and working the
+    # block, which a player can do without ever scoring. The shots taken from there
+    # -- POSTFADE, POSTHOOK -- are execution and do belong here.
     "POSTHOOK",
     "STANDINGDUNK",
 }
@@ -1145,19 +1631,6 @@ _SHOT_EXECUTION_FIELDS = {
 def _attribute(field: str, evidence: Any, league_player_rows: Any) -> dict[str, Any] | None:
     if _gp(evidence) is None:
         return None
-    attempts = _estimated_total(evidence, "fga")
-    if field in _SHOT_EXECUTION_FIELDS and attempts is not None and attempts <= 0.0:
-        return {
-            "value": 25,
-            "source_rule": f"derive_attribute_{field.lower()}_zero_recorded_execution",
-            "evidence_keys": (
-                "totals.fga",
-                "recorded_FGA=0",
-                "unavailable_direct_source=field-specific made/attempt execution",
-                "substitute_source=zero recorded field-goal attempts",
-                "validity=attribute is demonstrated execution; no attempts resolve to the legal attribute floor rather than role or body context",
-            ),
-        }
     return _derive(f"derive_attribute_{field.lower()}", field, evidence, league_player_rows, _ATTR_RECIPES[field])
 
 
@@ -1297,13 +1770,15 @@ def derive_attribute_midrange(evidence: Any, *, league_player_rows: Any = ()) ->
     if _gp(evidence) is None:
         return None
     attempts = _estimated_total(evidence, "fga")
-    if attempts is not None and attempts <= 0.0:
+    made = _estimated_total(evidence, "fg")
+    if made is not None and made <= 0.0:
         return {
             "value": 25,
-            "source_rule": "derive_attribute_midrange_zero_recorded_execution",
+            "source_rule": "derive_attribute_midrange_no_recorded_makes",
             "evidence_keys": (
+                "totals.fg",
                 "totals.fga",
-                "recorded_FGA=0",
+                f"recorded_FG=0;recorded_FGA={attempts:.6g}" if attempts is not None else "recorded_FG=0",
                 "MIDRANGE=25",
             ),
         }
@@ -1330,9 +1805,13 @@ def derive_attribute_midrange(evidence: Any, *, league_player_rows: Any = ()) ->
             # the perimeter set shot *was* the jumper -- and the team's primary
             # scorer took (and made) more of them. Modulate the FT%-touch target
             # by role and scoring load before the response-map inversion.
-            post = _role_value(evidence, "post") or 0.0
-            interior = _role_value(evidence, "interior") or 0.0
-            pivot = max(0.0, min(1.0, 0.5 * post + 0.5 * interior))
+            # Read off height, not the position label. Who played with his back to the
+            # basket pre-clock was a question of size, and size is recorded: the term runs
+            # from nothing at 6'0" to full at 6'10" instead of switching on "post" and
+            # "interior" role weights that a hyphenated NBL position could swing by 20
+            # points of MIDRANGE on its own.
+            height = _basic_value(evidence, "identity.ht_in_in")
+            pivot = 0.0 if height is None else max(0.0, min(1.0, (height - 72.0) / 10.0))
             attempt_share = _derived_value(evidence, "attempt_share")
             load = max(0.0, min(1.0, (attempt_share or 0.0) / 0.22))
             factor = max(0.45, min(1.15, 1.0 - 0.42 * pivot + 0.18 * load - 0.10))
@@ -1340,17 +1819,17 @@ def derive_attribute_midrange(evidence: Any, *, league_player_rows: Any = ()) ->
             rating = midrange_rating_for_make_probability(target, context="spot_up")
             return {
                 "value": rating,
-                "source_rule": "derive_attribute_midrange_pre_shot_clock_role_touch_spot_up_response_map",
+                "source_rule": "derive_attribute_midrange_pre_shot_clock_height_touch_spot_up_response_map",
                 "evidence_keys": (
                     "per_game.ft_percent",
-                    "season_info.pos",
+                    "identity.ht_in_in",
                     "derived.attempt_share",
                     *era.evidence_keys,
                     f"historical_ft_percent={ft_percent:.8f}",
                     f"base_open_spot_up_make_probability=0.5*FT%={base_target:.8f}",
-                    f"pivot_role_weight={pivot:.6f}",
+                    f"back_to_basket_height_weight={pivot:.6f}",
                     f"scoring_load_weight={load:.6f}",
-                    f"role_touch_factor=1-0.42*pivot+0.18*load-0.10={factor:.6f}",
+                    f"touch_factor=1-0.42*height_share+0.18*load-0.10={factor:.6f}",
                     f"target_open_spot_up_make_probability={target:.8f}",
                     "mapping=inverse_piecewise_linear_open_spot_up_response",
                     "ft_percent_does_not_author_action_tendencies=true",
@@ -1396,7 +1875,12 @@ def derive_attribute_standingdunk(evidence: Any, *, league_player_rows: Any = ()
     if height_in is None or weight_lb is None:
         return None
 
-    vertical_result = derive_attribute_vertical(evidence, league_player_rows=league_player_rows)
+    # The raw leaping model, not the published VERTICAL rating. That rating is
+    # height-adjusted -- it answers how well a player leaps for his size, so it falls
+    # as height rises -- while a standing dunk is standing reach plus inches jumped and
+    # has to rise with reach. Reading the adjusted rating here made standing dunk fall
+    # as players got taller.
+    vertical_result = derive_attribute_vertical_unadjusted(evidence, league_player_rows=league_player_rows)
     if vertical_result is None:
         return None
     vertical = int(vertical_result["value"])
@@ -1446,6 +1930,11 @@ def derive_attribute_standingdunk(evidence: Any, *, league_player_rows: Any = ()
         )
 
     stored = max(25, min(99, round(value)))
+    # Same body ceiling the driving dunk uses. This rule builds from reach and
+    # spring and never reached the shared anchor, so a 5'11" player kept a 27.
+    fit = _standing_dunk_height_fit(evidence)
+    if fit is not None:
+        stored = min(stored, _attribute_bounds(25.0 + 74.0 * fit))
     return {
         "value": stored,
         "source_rule": "derive_attribute_standingdunk_reach_clearance_with_rim_finish_ceiling",
@@ -1559,8 +2048,8 @@ def derive_tendency_closeshot(evidence: Any, *, league_player_rows: Any = ()) ->
         evidence,
         league_player_rows,
         (
-            _Recipe("recorded_short_attempt_location", (("derived.short_attempt_rate", 0.80), ("role.interior", 0.20))),
-            _Recipe("historical_close_attempt_role", (("derived.attempt_share", 0.45), ("role.interior", 0.40), ("derived.foul_pressure", 0.15)), "0-10 foot attempt location", "shooting responsibility, continuous interior participation, and foul pressure", "the sources describe close-shot opportunity/frequency rather than execution"),
+            _Recipe("recorded_short_attempt_location", (("derived.short_attempt_rate", 0.80), ("role.interior", 0.10),)),
+            _Recipe("historical_close_attempt_role", (("derived.attempt_share", 0.45), ("derived.foul_pressure", 0.15), ("role.interior", 0.10),), "0-10 foot attempt location", "shooting responsibility, continuous interior participation, and foul pressure", "the sources describe close-shot opportunity/frequency rather than execution"),
         ),
         tendency=True,
     )
@@ -1573,8 +2062,8 @@ def derive_tendency_midshot(evidence: Any, *, league_player_rows: Any = ()) -> d
         evidence,
         league_player_rows,
         (
-            _Recipe("recorded_midrange_attempt_location", (("derived.mid_attempt_rate", 0.80), ("role.wing", 0.20))),
-            _Recipe("historical_midrange_attempt_role", (("derived.attempt_share", 0.45 / 0.85), ("role.wing", 0.40 / 0.85)), "10-foot-to-line attempt location", "shooting responsibility and continuous perimeter/wing participation", "attempt share and role author frequency; free-throw percentage is execution evidence and is excluded"),
+            _Recipe("recorded_midrange_attempt_location", (("derived.mid_attempt_rate", 0.80), ("role.wing", 0.10),)),
+            _Recipe("historical_midrange_attempt", (("derived.attempt_share", 1.0),), "10-foot-to-line attempt location", "shooting responsibility", "attempt share authors frequency; free-throw percentage is execution evidence and is excluded, and position is not an input"),
         ),
         tendency=True,
     )
@@ -1741,14 +2230,14 @@ _OFFBALL_ACTION_ANCHORS: dict[str, tuple[int, int]] = {
 _OFFSCREEN_ACTION_RECIPES = (
     _Recipe(
         "off_screen_shot_action",
-        (("shooting.percent_assisted_x2p_fg", 0.20), ("shooting.percent_assisted_x3p_fg", 0.20), ("shooting.percent_corner_3s_of_3pa", -0.15), ("derived.scoring_share", 0.25), ("role.wing", 0.20)),
+        (("shooting.percent_assisted_x2p_fg", 0.20), ("shooting.percent_assisted_x3p_fg", 0.20), ("shooting.percent_corner_3s_of_3pa", -0.15), ("derived.scoring_share", 0.25), ("role.wing", 0.10),),
         "off-screen movement-shot events",
         "assisted-shot dependence, non-corner movement context, scoring responsibility, and wing role",
         "range frequency is deliberately excluded because MID versus 3PT is selected before the off-screen action trigger",
     ),
     _Recipe(
         "historical_off_screen_shot_action",
-        (("role.wing", 0.40), ("derived.scoring_share", 0.35), ("derived.attempt_share", 0.15), ("role.creator", -0.10)),
+        (("derived.scoring_share", 0.35), ("derived.attempt_share", 0.15), ("role.wing", 0.10), ("role.creator", 0.10),),
         "off-screen movement-shot events",
         "continuous wing role and scoring responsibility with reduced primary-ballhandler dependence",
         "historical box scores lack screen-route events; the substitute never uses make percentage or shot range",
@@ -1757,14 +2246,14 @@ _OFFSCREEN_ACTION_RECIPES = (
 _SPOTUP_ACTION_RECIPES = (
     _Recipe(
         "spot_up_shot_action",
-        (("shooting.percent_assisted_x2p_fg", 0.25), ("shooting.percent_assisted_x3p_fg", 0.25), ("shooting.percent_corner_3s_of_3pa", 0.25), ("role.creator", -0.15), ("role.wing", 0.10)),
+        (("shooting.percent_assisted_x2p_fg", 0.25), ("shooting.percent_assisted_x3p_fg", 0.25), ("shooting.percent_corner_3s_of_3pa", 0.25), ("role.creator", 0.10), ("role.wing", 0.10),),
         "stationary spot-up shot events",
         "assisted-shot dependence, corner stationary context, reduced primary creation, and wing role",
         "range frequency is deliberately excluded because MID versus 3PT is selected before the spot-up action trigger",
     ),
     _Recipe(
         "historical_spot_up_shot_action",
-        (("role.wing", 0.40), ("role.creator", -0.30), ("derived.scoring_share", -0.20), ("derived.attempt_share", 0.10)),
+        (("derived.scoring_share", -0.20), ("derived.attempt_share", 0.10), ("role.wing", 0.10), ("role.creator", 0.10),),
         "stationary spot-up shot events",
         "off-ball wing role with reduced creation and movement-scorer load",
         "historical box scores lack stationary catch-and-shoot events; the substitute never uses make percentage or shot range",
