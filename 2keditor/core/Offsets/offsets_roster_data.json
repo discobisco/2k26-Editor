@@ -1,0 +1,2309 @@
+{
+  "RosterData": {
+    "Accessories": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFACCESSORYDATAS",
+          "display_name": "NumberOfAccessoryDatas",
+          "versions": {
+            "2K27": {
+              "address": 1312,
+              "hex": "0x520",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFPLAYERACCESSORIES",
+          "display_name": "NumberOfPlayerAccessories",
+          "versions": {
+            "2K27": {
+              "address": 880,
+              "hex": "0x370",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFPLAYERACCESSORYMANAGERS",
+          "display_name": "NumberOfPlayerAccessoryManagers",
+          "versions": {
+            "2K27": {
+              "address": 896,
+              "hex": "0x380",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Manager": [
+        {
+          "normalized_name": "PLAYERACCESSORYMANAGERDATA",
+          "display_name": "PlayerAccessoryManagerData",
+          "versions": {
+            "2K27": {
+              "address": 904,
+              "hex": "0x388",
+              "pointer_target": "PLAYERACCESSORYMANAGERDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "ACCESSORYDATA",
+          "display_name": "AccessoryData",
+          "versions": {
+            "2K27": {
+              "address": 1320,
+              "hex": "0x528",
+              "pointer_target": "ACCESSORYDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYERACCESSORYDATA",
+          "display_name": "PlayerAccessoryData",
+          "versions": {
+            "2K27": {
+              "address": 888,
+              "hex": "0x378",
+              "pointer_target": "PLAYERACCESSORYDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Animation": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFANIMATIONDATAS",
+          "display_name": "NumberOfAnimationDatas",
+          "versions": {
+            "2K27": {
+              "address": 944,
+              "hex": "0x3B0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "ANIMATIONDATA",
+          "display_name": "AnimationData",
+          "versions": {
+            "2K27": {
+              "address": 952,
+              "hex": "0x3B8",
+              "pointer_target": "ANIMATIONDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Attributes": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFATTRIBUTERANGES",
+          "display_name": "NumberOfAttributeRanges",
+          "versions": {
+            "2K27": {
+              "address": 1184,
+              "hex": "0x4A0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "ATTRIBUTERANGEDATA",
+          "display_name": "AttributeRangeData",
+          "versions": {
+            "2K27": {
+              "address": 1192,
+              "hex": "0x4A8",
+              "pointer_target": "ATTRIBUTERANGEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Badges": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFBADGEITEMS",
+          "display_name": "NumberOfBadgeItems",
+          "versions": {
+            "2K27": {
+              "address": 848,
+              "hex": "0x350",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "BADGEITEMDATA",
+          "display_name": "BadgeItemData",
+          "versions": {
+            "2K27": {
+              "address": 856,
+              "hex": "0x358",
+              "pointer_target": "BADGEITEMDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Blacktop": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFBLACKTOPDATAS",
+          "display_name": "NumberOfBlacktopDatas",
+          "versions": {
+            "2K27": {
+              "address": 1040,
+              "hex": "0x410",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFBLACKTOPMANAGERS",
+          "display_name": "NumberOfBlacktopManagers",
+          "versions": {
+            "2K27": {
+              "address": 1056,
+              "hex": "0x420",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Manager": [
+        {
+          "normalized_name": "BLACKTOPMANAGERDATA",
+          "display_name": "BlacktopManagerData",
+          "versions": {
+            "2K27": {
+              "address": 1064,
+              "hex": "0x428",
+              "pointer_target": "BLACKTOPMANAGERDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "BLACKTOPDATA",
+          "display_name": "BlacktopData",
+          "versions": {
+            "2K27": {
+              "address": 1048,
+              "hex": "0x418",
+              "pointer_target": "BLACKTOPDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Boosts": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFPLAYERBOOSTMANAGERS",
+          "display_name": "NumberOfPlayerBoostManagers",
+          "versions": {
+            "2K27": {
+              "address": 928,
+              "hex": "0x3A0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFPLAYERBOOSTS",
+          "display_name": "NumberOfPlayerBoosts",
+          "versions": {
+            "2K27": {
+              "address": 912,
+              "hex": "0x390",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Manager": [
+        {
+          "normalized_name": "PLAYERBOOSTMANAGERDATA",
+          "display_name": "PlayerBoostManagerData",
+          "versions": {
+            "2K27": {
+              "address": 936,
+              "hex": "0x3A8",
+              "pointer_target": "PLAYERBOOSTMANAGERDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "PLAYERBOOSTDATA",
+          "display_name": "PlayerBoostData",
+          "versions": {
+            "2K27": {
+              "address": 920,
+              "hex": "0x398",
+              "pointer_target": "PLAYERBOOSTDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Cities": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFCITIES",
+          "display_name": "NumberOfCities",
+          "versions": {
+            "2K27": {
+              "address": 1152,
+              "hex": "0x480",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "CITYDATA",
+          "display_name": "CityData",
+          "versions": {
+            "2K27": {
+              "address": 1160,
+              "hex": "0x488",
+              "pointer_target": "CITYDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Colleges": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFCOLLEGES",
+          "display_name": "NumberOfColleges",
+          "versions": {
+            "2K27": {
+              "address": 144,
+              "hex": "0x90",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "COLLEGEDATA",
+          "display_name": "CollegeData",
+          "versions": {
+            "2K27": {
+              "address": 152,
+              "hex": "0x98",
+              "pointer_target": "COLLEGEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Courts": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFCOURTFLOORS",
+          "display_name": "NumberOfCourtFloors",
+          "versions": {
+            "2K27": {
+              "address": 112,
+              "hex": "0x70",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "COURTFLOORDATA",
+          "display_name": "CourtFloorData",
+          "versions": {
+            "2K27": {
+              "address": 120,
+              "hex": "0x78",
+              "pointer_target": "COURTFLOORDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Draft": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFDRAFTDATAS",
+          "display_name": "NumberOfDraftDatas",
+          "versions": {
+            "2K27": {
+              "address": 752,
+              "hex": "0x2F0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFHISTORICDRAFTDATAS",
+          "display_name": "NumberOfHistoricDraftDatas",
+          "versions": {
+            "2K27": {
+              "address": 768,
+              "hex": "0x300",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "DRAFTDATA",
+          "display_name": "DraftData",
+          "versions": {
+            "2K27": {
+              "address": 760,
+              "hex": "0x2F8",
+              "pointer_target": "DRAFTDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "HISTORICDRAFTDATA",
+          "display_name": "HistoricDraftData",
+          "versions": {
+            "2K27": {
+              "address": 776,
+              "hex": "0x308",
+              "pointer_target": "HISTORICDRAFTDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Evolution": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFEVOLUTIONDATAS",
+          "display_name": "NumberOfEvolutionDatas",
+          "versions": {
+            "2K27": {
+              "address": 864,
+              "hex": "0x360",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "EVOLUTIONDATA",
+          "display_name": "EvolutionData",
+          "versions": {
+            "2K27": {
+              "address": 872,
+              "hex": "0x368",
+              "pointer_target": "EVOLUTIONDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Finance": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFDEADCAPDATAS",
+          "display_name": "NumberOfDeadCapDatas",
+          "versions": {
+            "2K27": {
+              "address": 1072,
+              "hex": "0x430",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFDEADCAPMANAGERS",
+          "display_name": "NumberOfDeadCapManagers",
+          "versions": {
+            "2K27": {
+              "address": 1088,
+              "hex": "0x440",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Manager": [
+        {
+          "normalized_name": "DEADCAPMANAGERDATA",
+          "display_name": "DeadCapManagerData",
+          "versions": {
+            "2K27": {
+              "address": 1096,
+              "hex": "0x448",
+              "pointer_target": "DEADCAPMANAGERDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "DEADCAPDATA",
+          "display_name": "DeadCapData",
+          "versions": {
+            "2K27": {
+              "address": 1080,
+              "hex": "0x438",
+              "pointer_target": "DEADCAPDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "History": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFHALLOFFAMEITEMS",
+          "display_name": "NumberOfHallOfFameItems",
+          "versions": {
+            "2K27": {
+              "address": 816,
+              "hex": "0x330",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFHALLOFFAMEMANAGERS",
+          "display_name": "NumberOfHallOfFameManagers",
+          "versions": {
+            "2K27": {
+              "address": 800,
+              "hex": "0x320",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFHISTORICALLSTARDATAS",
+          "display_name": "NumberOfHistoricAllStarDatas",
+          "versions": {
+            "2K27": {
+              "address": 1136,
+              "hex": "0x470",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFLEAGUEHISTORYITEMS",
+          "display_name": "NumberOfLeagueHistoryItems",
+          "versions": {
+            "2K27": {
+              "address": 736,
+              "hex": "0x2E0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFLEAGUEHISTORYMANAGERS",
+          "display_name": "NumberOfLeagueHistoryManagers",
+          "versions": {
+            "2K27": {
+              "address": 720,
+              "hex": "0x2D0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFTEAMHISTORYDATAS",
+          "display_name": "NumberOfTeamHistoryDatas",
+          "versions": {
+            "2K27": {
+              "address": 1296,
+              "hex": "0x510",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Manager": [
+        {
+          "normalized_name": "HALLOFFAMEMANAGERDATA",
+          "display_name": "HallOfFameManagerData",
+          "versions": {
+            "2K27": {
+              "address": 808,
+              "hex": "0x328",
+              "pointer_target": "HALLOFFAMEMANAGERDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "LEAGUEHISTORYMANAGERDATA",
+          "display_name": "LeagueHistoryManagerData",
+          "versions": {
+            "2K27": {
+              "address": 728,
+              "hex": "0x2D8",
+              "pointer_target": "LEAGUEHISTORYMANAGERDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "HALLOFFAMEDATA",
+          "display_name": "HallOfFameData",
+          "versions": {
+            "2K27": {
+              "address": 824,
+              "hex": "0x338",
+              "pointer_target": "HALLOFFAMEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "HISTORICALLSTARDATA",
+          "display_name": "HistoricAllStarData",
+          "versions": {
+            "2K27": {
+              "address": 1144,
+              "hex": "0x478",
+              "pointer_target": "HISTORICALLSTARDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "LEAGUEHISTORYDATA",
+          "display_name": "LeagueHistoryData",
+          "versions": {
+            "2K27": {
+              "address": 744,
+              "hex": "0x2E8",
+              "pointer_target": "LEAGUEHISTORYDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMHISTORYDATA",
+          "display_name": "TeamHistoryData",
+          "versions": {
+            "2K27": {
+              "address": 1304,
+              "hex": "0x518",
+              "pointer_target": "TEAMHISTORYDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Indexes": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFINDEXES",
+          "display_name": "NumberOfIndexes",
+          "versions": {
+            "2K27": {
+              "address": 1200,
+              "hex": "0x4B0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFINDEXSTORAGEDATA",
+          "display_name": "NumberOfIndexStorageData",
+          "versions": {
+            "2K27": {
+              "address": 1328,
+              "hex": "0x530",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "ROSTERINDEXDATA",
+          "display_name": "RosterIndexData",
+          "versions": {
+            "2K27": {
+              "address": 1208,
+              "hex": "0x4B8",
+              "pointer_target": "ROSTERINDEXDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ],
+      "Storage": [
+        {
+          "normalized_name": "INDEXSTORAGEDATA",
+          "display_name": "IndexStorageData",
+          "versions": {
+            "2K27": {
+              "address": 1336,
+              "hex": "0x538",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        }
+      ]
+    },
+    "Jerseys": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFRETIREDJERSEYDATAS",
+          "display_name": "NumberOfRetiredJerseyDatas",
+          "versions": {
+            "2K27": {
+              "address": 1104,
+              "hex": "0x450",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFRETIREDJERSEYMANAGERDATAS",
+          "display_name": "NumberOfRetiredJerseyManagerDatas",
+          "versions": {
+            "2K27": {
+              "address": 1120,
+              "hex": "0x460",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Manager": [
+        {
+          "normalized_name": "RETIREDJERSEYMANAGERDATA",
+          "display_name": "RetiredJerseyManagerData",
+          "versions": {
+            "2K27": {
+              "address": 1128,
+              "hex": "0x468",
+              "pointer_target": "RETIREDJERSEYMANAGERDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "RETIREDJERSEYDATA",
+          "display_name": "RetiredJerseyData",
+          "versions": {
+            "2K27": {
+              "address": 1112,
+              "hex": "0x458",
+              "pointer_target": "RETIREDJERSEYDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Matchups": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFMATCHUPS",
+          "display_name": "NumberOfMatchups",
+          "versions": {
+            "2K27": {
+              "address": 784,
+              "hex": "0x310",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "MATCHUPDATA",
+          "display_name": "MatchupData",
+          "versions": {
+            "2K27": {
+              "address": 792,
+              "hex": "0x318",
+              "pointer_target": "MATCHUPDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Names": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFCITYNAMES",
+          "display_name": "NumberOfCityNames",
+          "versions": {
+            "2K27": {
+              "address": 608,
+              "hex": "0x260",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFFIRSTNAMES",
+          "display_name": "NumberOfFirstNames",
+          "versions": {
+            "2K27": {
+              "address": 576,
+              "hex": "0x240",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFLASTNAMES",
+          "display_name": "NumberOfLastNames",
+          "versions": {
+            "2K27": {
+              "address": 592,
+              "hex": "0x250",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFTEAMMASCOTNAMES",
+          "display_name": "NumberOfTeamMascotNames",
+          "versions": {
+            "2K27": {
+              "address": 624,
+              "hex": "0x270",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "CITYNAMEDATA",
+          "display_name": "CityNameData",
+          "versions": {
+            "2K27": {
+              "address": 616,
+              "hex": "0x268",
+              "pointer_target": "NAMEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "FIRSTNAMEDATA",
+          "display_name": "FirstNameData",
+          "versions": {
+            "2K27": {
+              "address": 584,
+              "hex": "0x248",
+              "pointer_target": "NAMEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "LASTNAMEDATA",
+          "display_name": "LastNameData",
+          "versions": {
+            "2K27": {
+              "address": 600,
+              "hex": "0x258",
+              "pointer_target": "NAMEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMMASCOTNAMEDATA",
+          "display_name": "TeamMascotNameData",
+          "versions": {
+            "2K27": {
+              "address": 632,
+              "hex": "0x278",
+              "pointer_target": "NAMEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Online Teamups": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFONLINETEAMUPS",
+          "display_name": "NumberOfOnlineTeamups",
+          "versions": {
+            "2K27": {
+              "address": 832,
+              "hex": "0x340",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "ONLINETEAMUPDATA",
+          "display_name": "OnlineTeamupData",
+          "versions": {
+            "2K27": {
+              "address": 840,
+              "hex": "0x348",
+              "pointer_target": "ONLINETEAMUPDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Playbooks": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFPLAYBOOKS",
+          "display_name": "NumberOfPlaybooks",
+          "versions": {
+            "2K27": {
+              "address": 432,
+              "hex": "0x1B0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "PLAYBOOKDATA",
+          "display_name": "PlaybookData",
+          "versions": {
+            "2K27": {
+              "address": 440,
+              "hex": "0x1B8",
+              "pointer_target": "PLAYBOOKDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Players": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFFREEAGENTSOBJECTS",
+          "display_name": "NumberOfFreeAgentsObjects",
+          "versions": {
+            "2K27": {
+              "address": 80,
+              "hex": "0x50",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFGENERATIONALPLAYERTEMPLATE",
+          "display_name": "NumberOfGenerationalPlayerTemplate",
+          "versions": {
+            "2K27": {
+              "address": 48,
+              "hex": "0x30",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFPLAYERCAREERPRESETS",
+          "display_name": "NumberOfPlayerCareerPresets",
+          "versions": {
+            "2K27": {
+              "address": 64,
+              "hex": "0x40",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFPLAYERS",
+          "display_name": "NumberOfPlayers",
+          "versions": {
+            "2K27": {
+              "address": 16,
+              "hex": "0x10",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFPLAYERTEMPLATES",
+          "display_name": "NumberOfPlayerTemplates",
+          "versions": {
+            "2K27": {
+              "address": 32,
+              "hex": "0x20",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "FREEAGENTDATA",
+          "display_name": "FreeAgentData",
+          "versions": {
+            "2K27": {
+              "address": 88,
+              "hex": "0x58",
+              "pointer_target": "FREEAGENTDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "GENERATIONALPLAYERTEMPLATEDATA",
+          "display_name": "GenerationalPlayerTemplateData",
+          "versions": {
+            "2K27": {
+              "address": 56,
+              "hex": "0x38",
+              "pointer_target": "PLAYERTEMPLATEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYERCAREERPRESETDATA",
+          "display_name": "PlayerCareerPresetData",
+          "versions": {
+            "2K27": {
+              "address": 72,
+              "hex": "0x48",
+              "pointer_target": "PLAYERCAREERPRESETDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYERDATA",
+          "display_name": "PlayerData",
+          "versions": {
+            "2K27": {
+              "address": 24,
+              "hex": "0x18",
+              "pointer_target": "PLAYERDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYERTEMPLATEDATA",
+          "display_name": "PlayerTemplateData",
+          "versions": {
+            "2K27": {
+              "address": 40,
+              "hex": "0x28",
+              "pointer_target": "PLAYERTEMPLATEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Records": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFRECORDS",
+          "display_name": "NumberOfRecords",
+          "versions": {
+            "2K27": {
+              "address": 704,
+              "hex": "0x2C0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "RECORDDATA",
+          "display_name": "RecordData",
+          "versions": {
+            "2K27": {
+              "address": 712,
+              "hex": "0x2C8",
+              "pointer_target": "RECORDDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Roster": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFROSTERINFOS",
+          "display_name": "NumberOfRosterInfos",
+          "versions": {
+            "2K27": {
+              "address": 0,
+              "hex": "0x0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "ROSTERINFODATA",
+          "display_name": "RosterInfoData",
+          "versions": {
+            "2K27": {
+              "address": 8,
+              "hex": "0x8",
+              "pointer_target": "ROSTERINFODATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Schedule": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFSCHEDULEDGLEAGUEALLONCEGAMES",
+          "display_name": "NumberOfScheduledGLEAGUEAllOnceGames",
+          "versions": {
+            "2K27": {
+              "address": 336,
+              "hex": "0x150",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSCHEDULEDGLEAGUEALLTWICEGAMES",
+          "display_name": "NumberOfScheduledGLEAGUEAllTwiceGames",
+          "versions": {
+            "2K27": {
+              "address": 320,
+              "hex": "0x140",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSCHEDULEDGLEAGUECONFGAMES",
+          "display_name": "NumberOfScheduledGLEAGUEConfGames",
+          "versions": {
+            "2K27": {
+              "address": 352,
+              "hex": "0x160",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSCHEDULEDGLEAGUEGAMES",
+          "display_name": "NumberOfScheduledGLEAGUEGames",
+          "versions": {
+            "2K27": {
+              "address": 304,
+              "hex": "0x130",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSCHEDULEDNBAALLONCEGAMES",
+          "display_name": "NumberOfScheduledNBAAllOnceGames",
+          "versions": {
+            "2K27": {
+              "address": 192,
+              "hex": "0xC0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSCHEDULEDNBAALLTWICEGAMES",
+          "display_name": "NumberOfScheduledNBAAllTwiceGames",
+          "versions": {
+            "2K27": {
+              "address": 176,
+              "hex": "0xB0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSCHEDULEDNBACONFGAMES",
+          "display_name": "NumberOfScheduledNBAConfGames",
+          "versions": {
+            "2K27": {
+              "address": 208,
+              "hex": "0xD0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSCHEDULEDNBAGAMES",
+          "display_name": "NumberOfScheduledNBAGames",
+          "versions": {
+            "2K27": {
+              "address": 160,
+              "hex": "0xA0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSCHEDULEDNBAISTGAMES",
+          "display_name": "NumberOfScheduledNBAISTGames",
+          "versions": {
+            "2K27": {
+              "address": 224,
+              "hex": "0xE0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSCHEDULEDPRESEASONGAMES",
+          "display_name": "NumberOfScheduledPreseasonGames",
+          "versions": {
+            "2K27": {
+              "address": 368,
+              "hex": "0x170",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSCHEDULEDWNBAALLONCEGAMES",
+          "display_name": "NumberOfScheduledWNBAAllOnceGames",
+          "versions": {
+            "2K27": {
+              "address": 272,
+              "hex": "0x110",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSCHEDULEDWNBAALLTWICEGAMES",
+          "display_name": "NumberOfScheduledWNBAAllTwiceGames",
+          "versions": {
+            "2K27": {
+              "address": 256,
+              "hex": "0x100",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSCHEDULEDWNBACONFGAMES",
+          "display_name": "NumberOfScheduledWNBAConfGames",
+          "versions": {
+            "2K27": {
+              "address": 288,
+              "hex": "0x120",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSCHEDULEDWNBAGAMES",
+          "display_name": "NumberOfScheduledWNBAGames",
+          "versions": {
+            "2K27": {
+              "address": 240,
+              "hex": "0xF0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "GLEAGUEALLONCESCHEDULEDATA",
+          "display_name": "GLEAGUEAllOnceScheduleData",
+          "versions": {
+            "2K27": {
+              "address": 344,
+              "hex": "0x158",
+              "pointer_target": "SCHEDULEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "GLEAGUEALLTWICESCHEDULEDATA",
+          "display_name": "GLEAGUEAllTwiceScheduleData",
+          "versions": {
+            "2K27": {
+              "address": 328,
+              "hex": "0x148",
+              "pointer_target": "SCHEDULEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "GLEAGUECONFSCHEDULEDATA",
+          "display_name": "GLEAGUEConfScheduleData",
+          "versions": {
+            "2K27": {
+              "address": 360,
+              "hex": "0x168",
+              "pointer_target": "SCHEDULEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "GLEAGUESCHEDULEDATA",
+          "display_name": "GLEAGUEScheduleData",
+          "versions": {
+            "2K27": {
+              "address": 312,
+              "hex": "0x138",
+              "pointer_target": "SCHEDULEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "NBAALLONCESCHEDULEDATA",
+          "display_name": "NBAAllOnceScheduleData",
+          "versions": {
+            "2K27": {
+              "address": 200,
+              "hex": "0xC8",
+              "pointer_target": "SCHEDULEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "NBAALLTWICESCHEDULEDATA",
+          "display_name": "NBAAllTwiceScheduleData",
+          "versions": {
+            "2K27": {
+              "address": 184,
+              "hex": "0xB8",
+              "pointer_target": "SCHEDULEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "NBACONFSCHEDULEDATA",
+          "display_name": "NBAConfScheduleData",
+          "versions": {
+            "2K27": {
+              "address": 216,
+              "hex": "0xD8",
+              "pointer_target": "SCHEDULEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "NBAISTSCHEDULEDATA",
+          "display_name": "NBAISTScheduleData",
+          "versions": {
+            "2K27": {
+              "address": 232,
+              "hex": "0xE8",
+              "pointer_target": "SCHEDULEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "NBASCHEDULEDATA",
+          "display_name": "NBAScheduleData",
+          "versions": {
+            "2K27": {
+              "address": 168,
+              "hex": "0xA8",
+              "pointer_target": "SCHEDULEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "PRESEASONSCHEDULEDATA",
+          "display_name": "PreseasonScheduleData",
+          "versions": {
+            "2K27": {
+              "address": 376,
+              "hex": "0x178",
+              "pointer_target": "SCHEDULEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "WNBAALLONCESCHEDULEDATA",
+          "display_name": "WNBAAllOnceScheduleData",
+          "versions": {
+            "2K27": {
+              "address": 280,
+              "hex": "0x118",
+              "pointer_target": "SCHEDULEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "WNBAALLTWICESCHEDULEDATA",
+          "display_name": "WNBAAllTwiceScheduleData",
+          "versions": {
+            "2K27": {
+              "address": 264,
+              "hex": "0x108",
+              "pointer_target": "SCHEDULEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "WNBACONFSCHEDULEDATA",
+          "display_name": "WNBAConfScheduleData",
+          "versions": {
+            "2K27": {
+              "address": 296,
+              "hex": "0x128",
+              "pointer_target": "SCHEDULEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "WNBASCHEDULEDATA",
+          "display_name": "WNBAScheduleData",
+          "versions": {
+            "2K27": {
+              "address": 248,
+              "hex": "0xF8",
+              "pointer_target": "SCHEDULEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Shoes": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFSHOEOVERRIDES",
+          "display_name": "NumberOfShoeOverrides",
+          "versions": {
+            "2K27": {
+              "address": 1216,
+              "hex": "0x4C0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSHOESTYLES",
+          "display_name": "NumberOfShoeStyles",
+          "versions": {
+            "2K27": {
+              "address": 1168,
+              "hex": "0x490",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "SHOEOVERRIDEDATA",
+          "display_name": "ShoeOverrideData",
+          "versions": {
+            "2K27": {
+              "address": 1224,
+              "hex": "0x4C8",
+              "pointer_target": "SHOEOVERRIDEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOESTYLEDATA",
+          "display_name": "ShoeStyleData",
+          "versions": {
+            "2K27": {
+              "address": 1176,
+              "hex": "0x498",
+              "pointer_target": "SHOESTYLEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Stadiums": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFSTADIUMS",
+          "display_name": "NumberOfStadiums",
+          "versions": {
+            "2K27": {
+              "address": 96,
+              "hex": "0x60",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "STADIUMDATA",
+          "display_name": "StadiumData",
+          "versions": {
+            "2K27": {
+              "address": 104,
+              "hex": "0x68",
+              "pointer_target": "STADIUMDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Staff Vitals": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFSTAFF",
+          "display_name": "NumberOfStaff",
+          "versions": {
+            "2K27": {
+              "address": 384,
+              "hex": "0x180",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "STAFFDATA",
+          "display_name": "StaffData",
+          "versions": {
+            "2K27": {
+              "address": 392,
+              "hex": "0x188",
+              "pointer_target": "STAFFDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Stats": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFPLAYERSHOTCHARTMANAGERS",
+          "display_name": "NumberOfPlayerShotChartManagers",
+          "versions": {
+            "2K27": {
+              "address": 480,
+              "hex": "0x1E0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFPLAYERSHOTCHARTS",
+          "display_name": "NumberOfPlayerShotCharts",
+          "versions": {
+            "2K27": {
+              "address": 496,
+              "hex": "0x1F0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFPLAYERSTATMANAGERS",
+          "display_name": "NumberOfPlayerStatManagers",
+          "versions": {
+            "2K27": {
+              "address": 448,
+              "hex": "0x1C0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFPLAYERSTATS",
+          "display_name": "NumberOfPlayerStats",
+          "versions": {
+            "2K27": {
+              "address": 464,
+              "hex": "0x1D0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSTAFFSTATMANAGERS",
+          "display_name": "NumberOfStaffStatManagers",
+          "versions": {
+            "2K27": {
+              "address": 400,
+              "hex": "0x190",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSTAFFSTATS",
+          "display_name": "NumberOfStaffStats",
+          "versions": {
+            "2K27": {
+              "address": 416,
+              "hex": "0x1A0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFTEAMSHOTCHARTMANAGERS",
+          "display_name": "NumberOfTeamShotChartManagers",
+          "versions": {
+            "2K27": {
+              "address": 544,
+              "hex": "0x220",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFTEAMSHOTCHARTS",
+          "display_name": "NumberOfTeamShotCharts",
+          "versions": {
+            "2K27": {
+              "address": 560,
+              "hex": "0x230",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFTEAMSTATMANAGERS",
+          "display_name": "NumberOfTeamStatManagers",
+          "versions": {
+            "2K27": {
+              "address": 512,
+              "hex": "0x200",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFTEAMSTATS",
+          "display_name": "NumberOfTeamStats",
+          "versions": {
+            "2K27": {
+              "address": 528,
+              "hex": "0x210",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Manager": [
+        {
+          "normalized_name": "PLAYERSHOTCHARTMANAGERDATA",
+          "display_name": "PlayerShotChartManagerData",
+          "versions": {
+            "2K27": {
+              "address": 488,
+              "hex": "0x1E8",
+              "pointer_target": "SHOTCHARTMANAGERDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYERSTATMANAGERDATA",
+          "display_name": "PlayerStatManagerData",
+          "versions": {
+            "2K27": {
+              "address": 456,
+              "hex": "0x1C8",
+              "pointer_target": "PLAYERSTATMANAGERDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFSTATMANAGERDATA",
+          "display_name": "StaffStatManagerData",
+          "versions": {
+            "2K27": {
+              "address": 408,
+              "hex": "0x198",
+              "pointer_target": "STAFFSTATMANAGERDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMSHOTCHARTMANAGERDATA",
+          "display_name": "TeamShotChartManagerData",
+          "versions": {
+            "2K27": {
+              "address": 552,
+              "hex": "0x228",
+              "pointer_target": "SHOTCHARTMANAGERDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMSTATMANAGERDATA",
+          "display_name": "TeamStatManagerData",
+          "versions": {
+            "2K27": {
+              "address": 520,
+              "hex": "0x208",
+              "pointer_target": "TEAMSTATMANAGERDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "PLAYERSHOTCHARTDATA",
+          "display_name": "PlayerShotChartData",
+          "versions": {
+            "2K27": {
+              "address": 504,
+              "hex": "0x1F8",
+              "pointer_target": "SHOTCHARTDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYERSTATDATA",
+          "display_name": "PlayerStatData",
+          "versions": {
+            "2K27": {
+              "address": 472,
+              "hex": "0x1D8",
+              "pointer_target": "PLAYERSTATDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "STAFFSTATDATA",
+          "display_name": "StaffStatData",
+          "versions": {
+            "2K27": {
+              "address": 424,
+              "hex": "0x1A8",
+              "pointer_target": "STAFFSTATDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMSHOTCHARTDATA",
+          "display_name": "TeamShotChartData",
+          "versions": {
+            "2K27": {
+              "address": 568,
+              "hex": "0x238",
+              "pointer_target": "SHOTCHARTDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMSTATDATA",
+          "display_name": "TeamStatData",
+          "versions": {
+            "2K27": {
+              "address": 536,
+              "hex": "0x218",
+              "pointer_target": "TEAMSTATDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Teams": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFSPECIALTEAMS",
+          "display_name": "NumberOfSpecialTeams",
+          "versions": {
+            "2K27": {
+              "address": 688,
+              "hex": "0x2B0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFTEAMS",
+          "display_name": "NumberOfTeams",
+          "versions": {
+            "2K27": {
+              "address": 128,
+              "hex": "0x80",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "SPECIALTEAMDATA",
+          "display_name": "SpecialTeamData",
+          "versions": {
+            "2K27": {
+              "address": 696,
+              "hex": "0x2B8",
+              "pointer_target": "SPECIALTEAMDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "TEAMDATA",
+          "display_name": "TeamData",
+          "versions": {
+            "2K27": {
+              "address": 136,
+              "hex": "0x88",
+              "pointer_target": "TEAMDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Trades": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFTRADEEXCEPTIONMANAGERS",
+          "display_name": "NumberOfTradeExceptionManagers",
+          "versions": {
+            "2K27": {
+              "address": 1248,
+              "hex": "0x4E0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFTRADEEXCEPTIONS",
+          "display_name": "NumberOfTradeExceptions",
+          "versions": {
+            "2K27": {
+              "address": 1232,
+              "hex": "0x4D0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Manager": [
+        {
+          "normalized_name": "TRADEEXCEPTIONMANAGERDATA",
+          "display_name": "TradeExceptionManagerData",
+          "versions": {
+            "2K27": {
+              "address": 1256,
+              "hex": "0x4E8",
+              "pointer_target": "TRADEEXCEPTIONMANAGERDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "TRADEEXCEPTIONDATA",
+          "display_name": "TradeExceptionData",
+          "versions": {
+            "2K27": {
+              "address": 1240,
+              "hex": "0x4D8",
+              "pointer_target": "TRADEEXCEPTIONDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Uniforms": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFCUSTOMUNIFORMS",
+          "display_name": "NumberOfCustomUniforms",
+          "versions": {
+            "2K27": {
+              "address": 640,
+              "hex": "0x280",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFUNIFORMS",
+          "display_name": "NumberOfUniforms",
+          "versions": {
+            "2K27": {
+              "address": 656,
+              "hex": "0x290",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "CUSTOMUNIFORMDATA",
+          "display_name": "CustomUniformData",
+          "versions": {
+            "2K27": {
+              "address": 648,
+              "hex": "0x288",
+              "pointer_target": "CUSTOMUNIFORMDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "UNIFORMDATA",
+          "display_name": "UniformData",
+          "versions": {
+            "2K27": {
+              "address": 664,
+              "hex": "0x298",
+              "pointer_target": "UNIFORMDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    },
+    "Vitals": {
+      "Count": [
+        {
+          "normalized_name": "NUMBEROFAPPEARANCES",
+          "display_name": "NumberOfAppearances",
+          "versions": {
+            "2K27": {
+              "address": 960,
+              "hex": "0x3C0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFBASETATTOODATAS",
+          "display_name": "NumberOfBaseTattooDatas",
+          "versions": {
+            "2K27": {
+              "address": 1008,
+              "hex": "0x3F0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFBASETATTOOMANAGERS",
+          "display_name": "NumberOfBaseTattooManagers",
+          "versions": {
+            "2K27": {
+              "address": 1024,
+              "hex": "0x400",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFHEADS",
+          "display_name": "NumberOfHeads",
+          "versions": {
+            "2K27": {
+              "address": 672,
+              "hex": "0x2A0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSCANNEDMORPHDATAS",
+          "display_name": "NumberOfScannedMorphDatas",
+          "versions": {
+            "2K27": {
+              "address": 1264,
+              "hex": "0x4F0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSCANNEDMORPHMANAGERS",
+          "display_name": "NumberOfScannedMorphManagers",
+          "versions": {
+            "2K27": {
+              "address": 1280,
+              "hex": "0x500",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSKINDATAS",
+          "display_name": "NumberOfSkinDatas",
+          "versions": {
+            "2K27": {
+              "address": 976,
+              "hex": "0x3D0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "NUMBEROFSKINMANAGERS",
+          "display_name": "NumberOfSkinManagers",
+          "versions": {
+            "2K27": {
+              "address": 992,
+              "hex": "0x3E0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ],
+      "Manager": [
+        {
+          "normalized_name": "BASETATTOOMANAGERDATA",
+          "display_name": "BaseTattooManagerData",
+          "versions": {
+            "2K27": {
+              "address": 1032,
+              "hex": "0x408",
+              "pointer_target": "BASETATTOOMANAGERDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "SCANNEDMORPHMANAGERDATA",
+          "display_name": "ScannedMorphManagerData",
+          "versions": {
+            "2K27": {
+              "address": 1288,
+              "hex": "0x508",
+              "pointer_target": "SCANNEDMORPHMANAGERDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "SKINMANAGERDATA",
+          "display_name": "SkinManagerData",
+          "versions": {
+            "2K27": {
+              "address": 1000,
+              "hex": "0x3E8",
+              "pointer_target": "SKINMANAGERDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ],
+      "Pointer": [
+        {
+          "normalized_name": "APPEARANCEDATA",
+          "display_name": "AppearanceData",
+          "versions": {
+            "2K27": {
+              "address": 968,
+              "hex": "0x3C8",
+              "pointer_target": "APPEARANCEDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "BASETATTOODATA",
+          "display_name": "BaseTattooData",
+          "versions": {
+            "2K27": {
+              "address": 1016,
+              "hex": "0x3F8",
+              "pointer_target": "BASETATTOODATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "HEADDATA",
+          "display_name": "HeadData",
+          "versions": {
+            "2K27": {
+              "address": 680,
+              "hex": "0x2A8",
+              "pointer_target": "HEADDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "SCANNEDMORPHDATA",
+          "display_name": "ScannedMorphData",
+          "versions": {
+            "2K27": {
+              "address": 1272,
+              "hex": "0x4F8",
+              "pointer_target": "SCANNEDMORPHDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "SKINDATA",
+          "display_name": "SkinData",
+          "versions": {
+            "2K27": {
+              "address": 984,
+              "hex": "0x3D8",
+              "pointer_target": "SKINDATA",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

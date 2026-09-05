@@ -1,28 +1,18 @@
-"""Same-season, cross-league scale for the pre-1952 fallback ratings.
+"""Selected-population scale helpers for the pre-1952 fallback ratings.
 
-Seasons 1947-51 record almost nothing: no steals, no blocks, no turnovers, no split
-rebounds, no shot locations. The ratings for those years are therefore built from the
-handful of things the era *did* record -- body, win shares, and the box score -- and the
-question every one of them has to answer is "compared to whom".
+Seasons 1947-51 record body, basic box scores, and -- outside the NBL -- win shares.
+The UI league selection owns the comparison population: a specific league stays inside
+that league, while ``All leagues`` supplies the mixed same-season population.
 
-The answer is the whole season, both leagues. A player is scaled against every other
-player in his season regardless of which league he played in, and regardless of the
-league the operator happened to select in the generator. Scaling inside one league is
-what let the 1947 NBL and the 1947 BAA each produce their own 99, so the two leagues'
-cards could not be read against each other at all.
-
-A weighted blend of several 25-99 components cannot reach either end -- a player would
-have to be the extreme of every component at once -- which is why SPEED topped out with
-a single 99 and STEAL spanned 28 to 81. So the composite is built in unscaled score
-space and only the *composite* is stretched onto 25-99. The extremes are then real
-players rather than an unreachable ideal.
+Requested composites are built in 0-1 magnitude space and then mapped to the legal
+25-99 Attribute range. Exact ``(player_id, team)`` identity is retained for operations
+whose tie-breaking or within-height ordering must address a player rather than a label.
 """
 from __future__ import annotations
 
 from typing import Any, Iterable, Mapping, Sequence
 
-#: Key under which the season's pooled population snapshot is stamped onto every
-#: pre-1952 comparison row, and so onto each player's ``source_context``.
+#: Key under which the UI-selected same-season population snapshot is stamped.
 POOLED_POPULATION_KEY = "pre_1952_pooled_same_season_population"
 
 #: Key under which the NBL-only season totals are stamped, for the NBL intangibles
@@ -32,6 +22,18 @@ NBL_TOTALS_KEY = "pre_1952_nbl_same_season_totals"
 #: Key under which the season's spread of already-generated field values is stamped,
 #: for the fields that keep their existing shape and only need their range opened up.
 FIELD_DISTRIBUTIONS_KEY = "pre_1952_same_season_field_distributions"
+
+#: Exact pre-fallback owner values keyed by ``(player_id, team)``. This prevents an
+#: intervening sparse-era projection from changing the value being stretched.
+FIELD_BASE_VALUES_KEY = "pre_1952_same_season_field_base_values"
+
+#: Final selected-population Speed rating attached to each compact population row so
+#: Agility and Steal can enforce their cross-field contracts from the same value.
+SPEED_RATING_KEY = "pre_1952_speed_rating"
+
+#: Exact ``(player_id, team)`` identities selected as the Hustle top 25.  Values alone
+#: cannot resolve a tie at the cutoff without accidentally assigning more than 25 99s.
+HUSTLE_TOP_KEYS_KEY = "pre_1952_hustle_top_25_exact_keys"
 
 #: The last season covered by these fallbacks.
 LAST_PRE_1952_SEASON = 1951
@@ -152,7 +154,7 @@ def _stamped(evidence: Any, key: str) -> Any:
 
 
 def pooled_population(evidence: Any) -> tuple[dict[str, float | str], ...]:
-    """The season's players, both leagues, as stamped by the generator."""
+    """The UI-selected same-season players stamped by the generator."""
 
     pooled = _stamped(evidence, POOLED_POPULATION_KEY)
     return tuple(pooled) if isinstance(pooled, (list, tuple)) else ()
@@ -178,6 +180,46 @@ def field_distributions(evidence: Any) -> dict[str, tuple[float, ...]]:
     }
 
 
+def field_base_values(evidence: Any) -> dict[tuple[str, str], dict[str, float]]:
+    """Return exact owner values used to build the selected-population spreads."""
+
+    stamped = _stamped(evidence, FIELD_BASE_VALUES_KEY)
+    if not isinstance(stamped, (list, tuple)):
+        return {}
+    resolved: dict[tuple[str, str], dict[str, float]] = {}
+    for item in stamped:
+        if not isinstance(item, Mapping):
+            continue
+        key = (
+            str(item.get("player_id") or "").strip().upper(),
+            str(item.get("team") or "").strip().upper(),
+        )
+        raw_values = item.get("values")
+        if not all(key) or not isinstance(raw_values, Mapping):
+            continue
+        values: dict[str, float] = {}
+        for field_key, raw_value in raw_values.items():
+            value = _number(raw_value)
+            if value is not None:
+                values[str(field_key)] = value
+        resolved[key] = values
+    return resolved
+
+
+def hustle_top_keys(evidence: Any) -> tuple[tuple[str, str], ...]:
+    """Return the exact identities selected for the pre-1952 Hustle ceiling."""
+
+    stamped = _stamped(evidence, HUSTLE_TOP_KEYS_KEY)
+    if not isinstance(stamped, (list, tuple)):
+        return ()
+    keys: list[tuple[str, str]] = []
+    for item in stamped:
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            continue
+        keys.append((str(item[0]).strip().upper(), str(item[1]).strip().upper()))
+    return tuple(keys)
+
+
 def build_population_snapshot(rows: Iterable[Mapping[str, Any]]) -> tuple[dict[str, float | str], ...]:
     """Compact projection of a season's rows: only the signals these rules read.
 
@@ -194,6 +236,7 @@ def build_population_snapshot(rows: Iterable[Mapping[str, Any]]) -> tuple[dict[s
             # Upper-cased here because the evidence side upper-cases too; the two were
             # compared raw and every rebound lookup missed silently.
             "player_id": str(row.get("player_id") or "").strip().upper(),
+            "team": str(row.get("team") or row.get("player_season_info.team") or "").strip().upper(),
             "league": str(row.get("player_season_info.lg") or row.get("lg") or "").strip().upper(),
         }
         for name in _ROW_PATHS:
@@ -313,6 +356,7 @@ def share(
     *,
     invert: bool = False,
     low_anchor: float | None = None,
+    high_anchor: float | None = None,
 ) -> float | None:
     """Where a value sits between its population's anchors, on 0-1.
 
@@ -325,7 +369,7 @@ def share(
         return None
     anchor_low, anchor_high = population_anchors(values)
     minimum = anchor_low if low_anchor is None else low_anchor
-    maximum = anchor_high
+    maximum = anchor_high if high_anchor is None else high_anchor
     span = maximum - minimum
     if span <= 0.0:
         return None
@@ -347,11 +391,8 @@ def composite_share(components: Sequence[tuple[float | None, float]]) -> float |
     return sum(value * weight for value, weight in present) / total
 
 
-#: The NBL recorded no win shares at all -- 0 of 172 players in 1947, 0 of 156 in 1948,
-#: 1 of 129 in 1949 -- while the BAA and the early NBA record them for everyone. Points
-#: per game is the production the NBL did record for every player, so it carries the
-#: win-share term for those players. It is ranked in the same pooled season as the win
-#: shares it stands in for, so an NBL player and a BAA player still land on one scale.
+#: Explicit offense-only substitute used by Post Control, Post Hook, and Post Fade when
+#: OWS was not recorded. Defensive fields never consume this signal as a DWS substitute.
 WIN_SHARE_SUBSTITUTE = "points_per_game"
 
 
@@ -361,11 +402,13 @@ def win_share_share(
     side: str,
     *,
     from_row: bool = False,
+    fallback_to_points: bool = False,
 ) -> tuple[float | None, str]:
-    """The player's win-share rank, or his scoring rank where none was kept.
+    """The player's win-share magnitude share.
 
     ``side`` is "ows" or "dws". Returns the 0-1 share and the name of the signal that
-    produced it, so the rule can say in its provenance which one a player was rated on.
+    produced it.  Points per game is used only when the calling offense rule explicitly
+    authorizes that fallback; missing DWS never silently becomes scoring.
     """
 
     read = (lambda name: _number(entry_or_evidence.get(name))) if from_row else (
@@ -373,28 +416,47 @@ def win_share_share(
     )
     recorded = read(side)
     if recorded is not None:
-        rank_share = share(recorded, values_of(population, side))
+        values = values_of(population, side)
+        rank_share = share(
+            recorded,
+            values,
+            low_anchor=values[0] if values else None,
+            high_anchor=values[-1] if values else None,
+        )
         if rank_share is not None:
             return rank_share, side
+    if not fallback_to_points:
+        return None, ""
     substitute = read(WIN_SHARE_SUBSTITUTE)
-    rank_share = share(substitute, values_of(population, WIN_SHARE_SUBSTITUTE))
+    values = values_of(population, WIN_SHARE_SUBSTITUTE)
+    rank_share = share(
+        substitute,
+        values,
+        low_anchor=values[0] if values else None,
+        high_anchor=values[-1] if values else None,
+    )
     return rank_share, WIN_SHARE_SUBSTITUTE if rank_share is not None else ""
 
 
 __all__ = [
     "ATTRIBUTE_CEILING",
     "ATTRIBUTE_FLOOR",
+    "FIELD_BASE_VALUES_KEY",
     "FIELD_DISTRIBUTIONS_KEY",
+    "HUSTLE_TOP_KEYS_KEY",
     "LAST_PRE_1952_SEASON",
     "NBL_TOTALS_KEY",
     "POOLED_POPULATION_KEY",
+    "SPEED_RATING_KEY",
     "WIN_SHARE_SUBSTITUTE",
     "applies",
     "population_anchors",
     "build_population_snapshot",
     "composite_share",
     "evidence_signal",
+    "field_base_values",
     "field_distributions",
+    "hustle_top_keys",
     "nbl_totals",
     "pooled_population",
     "row_signal",

@@ -471,13 +471,6 @@ _VERTICAL_NEUTRAL_HEIGHT = 78.0
 _VERTICAL_HEIGHT_PENALTY_PER_INCH = 1.0
 
 
-def _speed_height_ceiling(height: float | None) -> float:
-    if height is None:
-        return 99.0
-    span = _SPEED_FLOOR_HEIGHT - _SPEED_FREE_HEIGHT
-    excess = max(0.0, min(1.0, (height - _SPEED_FREE_HEIGHT) / span))
-    return 25.0 + 74.0 * ((1.0 - excess) ** _SPEED_CEILING_EXPONENT)
-
 
 def _speed_age_share(age: float | None) -> float:
     if age is None:
@@ -511,17 +504,15 @@ def derive_attribute_speed(evidence: Any, _field_index: Any = None, league_playe
     body_value = 0.5 * height_rating + 0.5 * weight_rating
     age = _age(evidence)
     age_share = _speed_age_share(age)
-    ceiling = _speed_height_ceiling(height)
     return {
-        "value": _attribute(min(body_value * age_share, ceiling)),
-        "source_rule": "derive_attribute_speed_body_height_ceiling_age_curve",
+        "value": _attribute(body_value * age_share),
+        "source_rule": "derive_attribute_speed_body_age_curve",
         "evidence_keys": (
             "per_game.g",
             f"games_played={games:.6g}",
             height_source,
             f"height_inches={height:.6g}",
             f"body_value={body_value:.4f}",
-            f"speed_height_ceiling={ceiling:.4f}",
             ("season_info.age" if age is not None else "age=missing"),
             f"speed_age_share={age_share:.6f}",
             "speed_contract=6ft6_and_under_may_reach_99; 7ft9_cannot_clear_the_floor; age_bell_curve_peaks_at_24",
@@ -607,11 +598,6 @@ def derive_attribute_agility(evidence: Any, _field_index: Any = None, league_pla
 _SPEED_WITH_BALL_MAX_SHARE = 0.97
 
 
-def speed_with_ball_ceiling(speed: float) -> float:
-    """Highest speed-with-ball a player of this speed may be given."""
-
-    return _SPEED_WITH_BALL_MAX_SHARE * speed
-
 
 def derive_attribute_speedwithball(evidence: Any, _field_index: Any = None, league_player_rows: Iterable[dict[str, Any]] = (), _positions: Any = None) -> RuleOutput:
     result = _derive_athletic_field("speed_with_ball", evidence, league_player_rows)
@@ -624,29 +610,13 @@ def derive_attribute_speedwithball(evidence: Any, _field_index: Any = None, leag
     speed = derive_attribute_speed(evidence, _field_index, league_player_rows, _positions)
     if speed is None or not isinstance(speed.get("value"), (int, float)):
         return result
-    ceiling = _SPEED_WITH_BALL_MAX_SHARE * float(speed["value"])
-    if float(result["value"]) <= ceiling:
-        return {
-            **result,
-            "evidence_keys": tuple(result["evidence_keys"]) + (
-                f"speed_attribute={int(speed['value'])}",
-                f"speed_with_ball_ceiling={ceiling:.4f}",
-                "speed_with_ball_contract=never_above_the_player_own_speed",
-            ),
-        }
     return {
         **result,
-        "value": _attribute(ceiling),
-        "source_rule": f"{result['source_rule']}_speed_ceiling",
         "evidence_keys": tuple(result["evidence_keys"]) + (
             f"speed_attribute={int(speed['value'])}",
-            f"speed_with_ball_ceiling={ceiling:.4f}",
-            f"uncapped_speed_with_ball={int(result['value'])}",
-            f"mapping=min(body_model_speed_with_ball,{_SPEED_WITH_BALL_MAX_SHARE:g}*speed)",
-            "speed_with_ball_contract=never_above_the_player_own_speed",
+            "speed_with_ball_contract=body_model_only; no ceiling against the player's own speed",
         ),
     }
-
 
 def derive_attribute_strength(evidence: Any, _field_index: Any = None, league_player_rows: Iterable[dict[str, Any]] = (), _positions: Any = None) -> RuleOutput:
     games = _games_played(evidence)
@@ -665,13 +635,9 @@ def derive_attribute_strength(evidence: Any, _field_index: Any = None, league_pl
     identity = getattr(evidence, "identity", {})
     height_source = "identity.ht_in_in" if _dict_number(identity, "ht_in_in", "height_inches") is not None else "source_profile.height_inches"
     weight_source = "identity.wt" if _dict_number(identity, "wt", "weight_pounds") is not None else "source_profile.weight_pounds"
-    # A player cannot out-muscle someone with five inches on him, so height sets the
-    # ceiling his mass is measured against. Compactness alone let a heavy short player
-    # outrank every big in the league.
-    strength_ceiling = 25.0 + 74.0 * max(0.0, min(1.0, (height - _STRENGTH_FLOOR_HEIGHT) / (_STRENGTH_CEILING_HEIGHT - _STRENGTH_FLOOR_HEIGHT)))
     return {
-        "value": _attribute(min(rating, strength_ceiling)),
-        "source_rule": "derive_attribute_strength_body_compactness_height_ceiling",
+        "value": _attribute(rating),
+        "source_rule": "derive_attribute_strength_body_compactness",
         "evidence_keys": (
             "per_game.g",
             f"games_played={games:.6g}",
@@ -679,9 +645,7 @@ def derive_attribute_strength(evidence: Any, _field_index: Any = None, league_pl
             f"height_inches={height:.6g}",
             weight_source,
             f"weight_pounds={weight:.6g}",
-            f"strength_height_ceiling={strength_ceiling:.4f}",
             f"uncapped_compactness_rating={rating:.4f}",
-            "strength_contract=mass_led_but_never_above_the_ceiling_height_allows",
             f"body_compactness_weight_per_height={compactness:.6g}",
             f"population.same_season_same_league_gp_body_rows={population_count}",
             f"population.min_body_compactness={minimum:.6g}",
@@ -715,7 +679,7 @@ def _row_vertical_value(row: dict[str, Any]) -> float | None:
     value = (
         model.intercept
         + model.height_residual * (height - expected_height)
-        + model.weight_residual_per_ten * (weight - expected_weight)
+        + model.weight_residual_per_ten * ((weight - expected_weight) / 10.0)
     )
     age = _number(_row_value(row, "season_info", "player_season_info.age"))
     if age is not None:

@@ -693,13 +693,6 @@ _BASE_TEAM_COUNT = 30
 
 def plan_generated_team_rosters(generated_players: Iterable[Any]) -> GeneratedPlayerTeamRosterPlan:
     generated_tuple = tuple(generated_players)
-    seasons = {
-        int(season)
-        for generated in generated_tuple
-        if (season := getattr(generated, "season", None)) is not None
-    }
-    if seasons == {1947}:
-        return _plan_authored_1947_team_rosters(generated_tuple)
 
     entries: list[GeneratedPlayerTeamRosterEntry] = []
     issues: list[GeneratedPlayerTeamImportIssue] = []
@@ -744,65 +737,6 @@ def plan_generated_team_rosters(generated_players: Iterable[Any]) -> GeneratedPl
         free_agent_count=0,
     )
 
-
-def _plan_authored_1947_team_rosters(
-    generated_players: tuple[Any, ...],
-) -> GeneratedPlayerTeamRosterPlan:
-    from opening_rosters_1947 import (
-        AUTHORED_OPENING_ROSTER_BY_PLAYER_ID_1947,
-        AUTHORED_OPENING_ROSTERS_1947,
-    )
-
-    entries: list[GeneratedPlayerTeamRosterEntry] = []
-    for generated in generated_players:
-        player_id = str(getattr(generated, "player_id", "") or "").strip()
-        authored = AUTHORED_OPENING_ROSTER_BY_PLAYER_ID_1947.get(player_id)
-        if authored is None:
-            entries.append(
-                GeneratedPlayerTeamRosterEntry(
-                    generated_player=generated,
-                    generated_player_label=_generated_player_label(generated),
-                    generated_team_key="FREEAGENTS",
-                    generated_team_label="Free Agents",
-                    team_source="not on the authored 1946-47 opening-day team rosters",
-                    destination_kind="free_agent",
-                )
-            )
-            continue
-        team, member = authored
-        entries.append(
-            GeneratedPlayerTeamRosterEntry(
-                generated_player=generated,
-                generated_player_label=member.name,
-                generated_team_key=_identity(team.team_name),
-                generated_team_label=team.team_name,
-                team_source=(
-                    f"authored 1946-47 opening roster "
-                    f"({team.league} {team.confidence}; {member.status})"
-                ),
-            )
-        )
-
-    issues = tuple(
-        GeneratedPlayerTeamImportIssue(
-            generated_player_label=member.name,
-            generated_team_key=_identity(team.team_name),
-            generated_team_label=team.team_name,
-            reason="authored opening-roster member has no PlayerGen source record",
-            blocking=False,
-        )
-        for team in AUTHORED_OPENING_ROSTERS_1947
-        for member in team.members
-        if member.player_id is None
-    )
-    return GeneratedPlayerTeamRosterPlan(
-        entries=tuple(entries),
-        issues=issues,
-        generated_count=len(entries),
-        source_generated_count=len(generated_players),
-        authored_count=sum(len(team.members) for team in AUTHORED_OPENING_ROSTERS_1947),
-        free_agent_count=sum(entry.destination_kind == "free_agent" for entry in entries),
-    )
 
 
 def plan_generated_players_by_team(
@@ -1134,45 +1068,10 @@ def _generated_team_plan_identity(generated: Any) -> _GeneratedTeamPlanIdentity:
             default_profile,
         )
 
-    from baa_nba_transactions import resolve_baa_nba_transaction_team
-
-    resolution = resolve_baa_nba_transaction_team(
-        season=int(getattr(generated, "season", 0) or 0),
-        player_name=_generated_player_label(generated),
-        source_league=source_league,
-        source_leagues=source_leagues,
-    )
-    if not resolution.covered:
-        return _GeneratedTeamPlanIdentity(default_key, default_label, "generator source team", default_profile)
-    if resolution.ambiguous:
-        return _GeneratedTeamPlanIdentity(
-            default_key,
-            default_label,
-            "BAA/NBA transactions",
-            default_profile,
-            exclude_reason="BAA/NBA transaction player name is ambiguous",
-        )
-    if not resolution.matched:
-        return _GeneratedTeamPlanIdentity(
-            default_key,
-            default_label,
-            "generator source team (no exact BAA/NBA transaction match)",
-            default_profile,
-        )
-    event = resolution.event
-    event_label = (
-        f"{event.event_type} {event.event_date.isoformat()}"
-        if event is not None
-        else "final transaction"
-    )
-    team_label = str(resolution.team_name or "").strip()
-    team_key = _identity(team_label)
-    return _GeneratedTeamPlanIdentity(
-        team_key,
-        team_label,
-        f"BAA/NBA transactions: {event_label}",
-        _GeneratedTeamMatchProfile(city_keys=(), name_keys=(), full_keys=(team_key,)),
-    )
+    # BAA/NBA transaction files were removed, so there is nothing to resolve a
+    # mid-season move against. Every player keeps the team the generator sourced
+    # him from, which is what the uncovered-player branch always did.
+    return _GeneratedTeamPlanIdentity(default_key, default_label, "generator source team", default_profile)
 
 
 def _generated_team_match_profile(generated: Any) -> _GeneratedTeamMatchProfile:

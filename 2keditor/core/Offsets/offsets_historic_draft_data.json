@@ -1,0 +1,46 @@
+{
+  "HistoricDraftData": {
+    "Historic Draft Data": {
+      "Fields": [
+        {
+          "normalized_name": "DRAFTYEAR",
+          "display_name": "Draft Year",
+          "versions": {
+            "2K27": {
+              "address": 8,
+              "hex": "0x8",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "PICKTEAMPOINTER",
+          "display_name": "Pick Team Pointer",
+          "versions": {
+            "2K27": {
+              "address": 0,
+              "hex": "0x0",
+              "pointer_target": "Team",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "RESERVEDPADDING",
+          "display_name": "Reserved Padding",
+          "versions": {
+            "2K27": {
+              "address": 10,
+              "hex": "0xa",
+              "length": 6,
+              "readonly": true,
+              "type": "hex_bytes"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

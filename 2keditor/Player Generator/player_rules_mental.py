@@ -819,7 +819,7 @@ def _derive_nbl_adjusted_attribute(
             return None
         mapped_value = max(25, min(99, int(round(_linear_percentile(reference_values, percentile)))))
         unique_league_maximum = composite == composite_population[-1] and _identity_key(evidence) == winner
-        value = 99 if unique_league_maximum else min(98, mapped_value)
+        value = mapped_value
         mapping_keys = (
             f"same_season_nbl_composite_percentile={percentile:.8f}",
             f"unique_99_winner={winner[0]}:{winner[1]}",
@@ -958,7 +958,7 @@ def derive_attribute_intangibles(
         else ("", "")
     )
     unique_league_maximum = top_win_shares > 0.0 and win_shares == top_win_shares and _identity_key(evidence) == winner
-    value = 99 if unique_league_maximum else min(98, mapped_value)
+    value = mapped_value
     return {
         "value": value,
         "score": magnitude_score,

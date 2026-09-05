@@ -10,7 +10,6 @@ from statistics import NormalDist
 from typing import Any
 
 from player_era_context import player_era_context
-from player_special_rules import researched_defense_quality_rule_for
 
 
 _MASTER_DATABASE = Path(__file__).resolve().parent / "NBA Player Data" / "NBA_DATA_Master.sqlite"
@@ -929,17 +928,6 @@ def _row_defense_quality_score(
     return sum(weight * component_score for weight, component_score in components) / total_weight
 
 
-def _row_has_researched_defense_override(row: dict[str, Any]) -> bool:
-    player_id = str(row.get("player_id") or row.get("player_season_info.player_id") or "").strip().upper()
-    team = str(row.get("team") or row.get("player_season_info.team") or "").strip().upper()
-    season = _row_season(row) or 0
-    return researched_defense_quality_rule_for(
-        season=season,
-        league=_row_league(row),
-        player_id=player_id,
-        team=team,
-    ) is not None
-
 
 def _baa_routed_defense_population(
     field: str,
@@ -953,8 +941,6 @@ def _baa_routed_defense_population(
     component_populations = _defense_quality_component_populations(baa_rows)
     signals: list[float] = []
     for row in baa_rows:
-        if _row_has_researched_defense_override(row):
-            continue
         quality_score = _row_defense_quality_score(row, component_populations)
         if quality_score is None:
             continue
@@ -973,44 +959,19 @@ def _derive_dws_defense(rule_name: str, field: str, evidence: Any, rows: Any) ->
     the authored weights are renormalized; missing values are never zero-filled.
     """
     eligible_rows = _eligible_rows(evidence, rows)
-    player_id = str(getattr(evidence, "player_id", "") or _source(evidence, "identity").get("player_id") or "").strip().upper()
-    team = str(getattr(evidence, "team", "") or _source(evidence, "season_info").get("team") or "").strip().upper()
-    special_rule = researched_defense_quality_rule_for(
-        season=_season(evidence),
-        league=_league(evidence),
-        player_id=player_id,
-        team=team,
-    )
-    if special_rule is not None:
-        # The rule authors each side of the floor separately -- Mikan is 99 inside and 36
-        # on the perimeter -- so read the researched value for this field rather than
-        # rebuilding it from a single quality score.
-        authored = special_rule.expected_values_by_field.get(
-            f"Attributes/{_FIELD_ATTRIBUTE_NAMES.get(field, '')}"
-        )
-        score = (authored - 25.0) / 74.0 if authored is not None else special_rule.quality_score
-        quality_rule = f"{rule_name}_researched_exact_player_override"
-        quality_keys = (
-            "identity.player_id",
-            "season_info.lg",
-            *special_rule.provenance_evidence_keys,
-        )
-    else:
-        quality = _defense_quality_score(evidence, eligible_rows)
-        if quality is None:
-            return None
-        score, quality_keys = quality
-        quality_rule = rule_name
-    # A researched exact override is the finding itself, not a quality score to be
-    # routed, so reach does not scale it.
+    quality = _defense_quality_score(evidence, eligible_rows)
+    if quality is None:
+        return None
+    score, quality_keys = quality
+    quality_rule = rule_name
     side_height = _read(evidence, "identity.ht_in_in")
-    multiplier = 1.0 if special_rule is not None else _side_multiplier_from_height(side_height, field)
+    multiplier = _side_multiplier_from_height(side_height, field)
     position_keys: tuple[str, ...] = (
         "identity.ht_in_in",
         f"reach_side_multiplier={multiplier:.8f}",
         "side_split=interior_rises_with_reach;perimeter_falls_with_reach;no_position_label",
     )
-    if special_rule is None and _league(evidence) == "BAA":
+    if _league(evidence) == "BAA":
         population = _baa_routed_defense_population(field, eligible_rows)
         routed_score = score * multiplier
         if len(population) >= 2 and population[-1] > population[0]:

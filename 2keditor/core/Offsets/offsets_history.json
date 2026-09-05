@@ -1,4 +1,61 @@
 {
+  "History": {
+    "Hall of Famers": {
+      "Fields": [
+        {
+          "normalized_name": "FIRSTNAME",
+          "display_name": "First Name",
+          "versions": {
+            "2K27": {
+              "address": 4,
+              "hex": "0x4",
+              "length": 20,
+              "readonly": true,
+              "type": "wstring"
+            }
+          }
+        },
+        {
+          "normalized_name": "HALLOFFAMEPAYLOADUNRESOLVED",
+          "display_name": "Hall Of Fame Payload (Unresolved)",
+          "versions": {
+            "2K27": {
+              "address": 84,
+              "hex": "0x54",
+              "length": 24,
+              "readonly": true,
+              "type": "hex_bytes"
+            }
+          }
+        },
+        {
+          "normalized_name": "LASTNAME",
+          "display_name": "Last Name",
+          "versions": {
+            "2K27": {
+              "address": 44,
+              "hex": "0x2c",
+              "length": 20,
+              "readonly": true,
+              "type": "wstring"
+            }
+          }
+        },
+        {
+          "normalized_name": "PLAYERSIGNATUREID",
+          "display_name": "Player Signature ID",
+          "versions": {
+            "2K27": {
+              "address": 0,
+              "hex": "0x0",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ]
+    }
+  },
   "NBA History": {
     "History Tab": {
       "History Tab": [
@@ -9,6 +66,12 @@
             "2K26": {
               "address": 24,
               "hex": "0x18",
+              "type": "float"
+            },
+            "2K27": {
+              "address": 24,
+              "hex": "0x18",
+              "readonly": true,
               "type": "float"
             }
           }
@@ -22,6 +85,13 @@
               "hex": "0x7A",
               "length": 20,
               "type": "string"
+            },
+            "2K27": {
+              "address": 122,
+              "hex": "0x7a",
+              "length": 20,
+              "readonly": true,
+              "type": "string"
             }
           }
         },
@@ -33,6 +103,13 @@
               "address": 142,
               "hex": "0x8E",
               "length": 20,
+              "type": "string"
+            },
+            "2K27": {
+              "address": 142,
+              "hex": "0x8e",
+              "length": 20,
+              "readonly": true,
               "type": "string"
             }
           }
@@ -46,6 +123,13 @@
               "hex": "0x68",
               "length": 18,
               "type": "string"
+            },
+            "2K27": {
+              "address": 104,
+              "hex": "0x68",
+              "length": 18,
+              "readonly": true,
+              "type": "string"
             }
           }
         },
@@ -57,6 +141,13 @@
               "address": 79,
               "hex": "0x4F",
               "length": 25,
+              "type": "string"
+            },
+            "2K27": {
+              "address": 79,
+              "hex": "0x4f",
+              "length": 25,
+              "readonly": true,
               "type": "string"
             }
           }
@@ -70,6 +161,13 @@
               "hex": "0x18",
               "position_dropdown": true,
               "type": "float"
+            },
+            "2K27": {
+              "address": 24,
+              "hex": "0x18",
+              "position_dropdown": true,
+              "readonly": true,
+              "type": "float"
             }
           }
         },
@@ -81,6 +179,13 @@
               "address": 24,
               "hex": "0x18",
               "offset2": 28,
+              "type": "result_score"
+            },
+            "2K27": {
+              "address": 24,
+              "hex": "0x18",
+              "offset2": 28,
+              "readonly": true,
               "type": "result_score"
             }
           }
@@ -96,6 +201,29 @@
               "season_range": true,
               "season_year_base": 1791,
               "type": "byte"
+            },
+            "2K27": {
+              "address": 32,
+              "byteLength": 1,
+              "hex": "0x20",
+              "readonly": true,
+              "season_range": true,
+              "season_year_base": 1791,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "SECONDARYTEAMPOINTER",
+          "display_name": "Secondary Team Pointer",
+          "versions": {
+            "2K27": {
+              "address": 8,
+              "hex": "0x8",
+              "pointer_target": "Team",
+              "readonly": true,
+              "show_hex": true,
+              "type": "uint64"
             }
           }
         },
@@ -109,6 +237,14 @@
               "label_past_champions": "Winner Team City",
               "length": 25,
               "type": "string"
+            },
+            "2K27": {
+              "address": 61,
+              "hex": "0x3d",
+              "label_past_champions": "Winner Team City",
+              "length": 18,
+              "readonly": true,
+              "type": "string"
             }
           }
         },
@@ -120,6 +256,15 @@
               "address": 0,
               "byteLength": 8,
               "hex": "0x0",
+              "show_hex": true,
+              "team_dropdown": true,
+              "type": "uint64"
+            },
+            "2K27": {
+              "address": 0,
+              "hex": "0x0",
+              "pointer_target": "Team",
+              "readonly": true,
               "show_hex": true,
               "team_dropdown": true,
               "type": "uint64"
@@ -136,6 +281,14 @@
               "label_past_champions": "Winner Team Name",
               "length": 25,
               "type": "string"
+            },
+            "2K27": {
+              "address": 36,
+              "hex": "0x24",
+              "label_past_champions": "Winner Team Name",
+              "length": 25,
+              "readonly": true,
+              "type": "string"
             }
           }
         },
@@ -147,6 +300,13 @@
               "address": 16,
               "byteLength": 1,
               "hex": "0x10",
+              "type": "byte"
+            },
+            "2K27": {
+              "address": 16,
+              "byteLength": 1,
+              "hex": "0x10",
+              "readonly": true,
               "type": "byte"
             }
           }
@@ -166,6 +326,14 @@
               "hex": "0xC",
               "length": 20,
               "type": "string"
+            },
+            "2K27": {
+              "address": 12,
+              "array_count": 20,
+              "hex": "0xC",
+              "length": 20,
+              "readonly": true,
+              "type": "string"
             }
           }
         },
@@ -177,6 +345,14 @@
               "address": 32,
               "hex": "0x20",
               "length": 20,
+              "type": "string"
+            },
+            "2K27": {
+              "address": 32,
+              "array_count": 20,
+              "hex": "0x20",
+              "length": 20,
+              "readonly": true,
               "type": "string"
             }
           }
@@ -191,6 +367,12 @@
               "hex": "0x8",
               "show_hex": false,
               "type": "uint"
+            },
+            "2K27": {
+              "address": 8,
+              "hex": "0x8",
+              "readonly": true,
+              "type": "uint"
             }
           }
         },
@@ -204,6 +386,12 @@
               "hex": "0x0",
               "show_hex": true,
               "team_dropdown": true,
+              "type": "uint64"
+            },
+            "2K27": {
+              "address": 0,
+              "hex": "0x0",
+              "readonly": true,
               "type": "uint64"
             }
           }
@@ -223,6 +411,16 @@
               "length": 5,
               "startBit": 0,
               "type": "bitfield"
+            },
+            "2K27": {
+              "address": 56,
+              "bit_length": 5,
+              "bit_offset": 0,
+              "hex": "0x38",
+              "length": 5,
+              "readonly": true,
+              "startBit": 0,
+              "type": "bitfield"
             }
           }
         },
@@ -237,6 +435,16 @@
               "byteLength": 4,
               "hex": "0x38",
               "length": 4,
+              "startBit": 5,
+              "type": "bitfield"
+            },
+            "2K27": {
+              "address": 56,
+              "bit_length": 4,
+              "bit_offset": 5,
+              "hex": "0x38",
+              "length": 4,
+              "readonly": true,
               "startBit": 5,
               "type": "bitfield"
             }
@@ -255,6 +463,16 @@
               "length": 12,
               "startBit": 1,
               "type": "bitfield"
+            },
+            "2K27": {
+              "address": 56,
+              "bit_length": 12,
+              "bit_offset": 9,
+              "hex": "0x38",
+              "length": 12,
+              "readonly": true,
+              "startBit": 9,
+              "type": "bitfield"
             }
           }
         }
@@ -267,6 +485,12 @@
             "2K26": {
               "address": 52,
               "hex": "0x34",
+              "type": "float"
+            },
+            "2K27": {
+              "address": 52,
+              "hex": "0x34",
+              "readonly": true,
               "type": "float"
             }
           }

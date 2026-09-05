@@ -5,26 +5,16 @@ win shares. There are no steals, blocks, turnovers, split rebounds or shot locat
 rate anyone on, so each field here is built from the evidence that does exist and says
 so in its provenance.
 
-Three rules govern the module:
+The UI league selection owns the comparison population. ``All leagues`` supplies one
+mixed BAA/NBL population; a specific league supplies only that league. Weighted source
+components are combined in 0-1 magnitude space and the completed field composite is
+stretched to the legal 25-99 Attribute range.
 
-*Everyone is scaled against his own season, both leagues.* Rating inside one league gave
-the 1947 NBL and the 1947 BAA a 99 apiece, so the two sets of cards could not be read
-against each other. The pooled population is stamped by the generator before the league
-filter, so the scale does not move when the operator changes the selected league.
-
-*The composite is stretched, not its parts.* Averaging several 25-99 components can
-never reach either end -- a player would have to be the season's extreme on every term
-at once -- which is what held SPEED to a single 99 and STEAL to a 28-81 band. Components
-are blended as 0-1 shares and only the blend is stretched onto 25-99, so both ends of
-every field belong to a real player.
-
-*Shot execution is never stretched at all.* Those fields go on the captured pool's own
-curve for a player's shooting percentage. A 1947 shooter who led his league is not a 99
-layup finisher, and the pool's own 99th percentile for Post Fade is 62.
-
-Where a rule wants win shares and the player is NBL, his points per game carries that
-term instead: the NBL kept no win shares for anyone, and scoring is the production it
-did record. The provenance names whichever signal was used.
+Close Shot, Midrange and Driving Layup retain their captured-pool execution curves.
+Post Hook and Post Fade instead follow the explicitly authored pre-1952 body,
+production, and field-goal-percentage blend. Points per game substitutes for missing
+OWS only in the three post fields that explicitly authorize it; missing DWS never
+becomes scoring.
 """
 from __future__ import annotations
 
@@ -36,24 +26,17 @@ import player_pre1952_scale as scale
 #: Number of players per season pinned to the ceiling on Hustle.
 HUSTLE_CEILING_PLAYERS = 25
 
-#: A small man in this era handled and passed, because nothing else kept him on the
-#: floor -- and the box score cannot show it, since the NBL recorded no assists at all
-#: and the BAA's are thin. Height says it without the position label: under 6'2" is the
-#: measurement the label was standing in for, and it is a floor rather than a rating,
-#: lifting the bottom of the band to 60 and leaving the order inside it to the evidence.
-SMALL_HANDLER_HEIGHT = 74.0  # 6'2"
-SMALL_HANDLER_FLOOR = 60.0
-SMALL_HANDLER_FIELDS = ("Attributes/BALLCONTROL", "Attributes/PASSACCURACY")
+#: The only position-authored Attribute helper in this fallback.  A generated point
+#: guard's existing Ball Control and Pass Accuracy are remapped monotonically from the
+#: legal 25-99 domain into 60-99.  No other position changes an Attribute.
+POINT_GUARD_FLOOR = 60.0
+POINT_GUARD_FIELDS = ("Attributes/BALLCONTROL", "Attributes/PASSACCURACY")
 
-#: Fields restretched from the value the ordinary rule produced, rather than rebuilt.
-#: The shape of these is wanted; only their range was short. Speed with the ball is the
-#: same narrow body model as SPEED and has to move with it -- restretching SPEED alone
-#: left it topping out at 75 against SPEED's 99, so the 0.97 handling ceiling stopped
-#: binding and the ratio between them silently fell to 0.74.
+#: Speed and Vertical retain the ordering from their direct athleticism owners; only the
+#: selected-population range is opened to 25-99.
 RESTRETCHED_FIELDS = (
     "Attributes/VERTICAL",
     "Attributes/SPEED",
-    "Attributes/SPEEDWITHBALL",
 )
 
 #: A player who made no field goal all season has no shooting evidence of any kind, so
@@ -67,14 +50,12 @@ ZERO_MAKE_FLOOR_FIELDS = (
 )
 
 #: field -> ((signal, weight, invert), ...) blended as shares, then stretched to 25-99.
-#: "ows"/"dws" fall back to points per game for players whose league kept no win shares.
+#: ``ows_or_ppg`` is the one explicit missing-OWS substitute.  Missing DWS never becomes
+#: offense; components that require DWS remain absent when that statistic was not kept.
 _COMPOSITES: dict[str, tuple[tuple[str, float, bool], ...]] = {
     # Reach decides a block and the defensive record confirms it.
     "Attributes/BLOCK": (("height", 0.50, False), ("dws", 0.50, False)),
-    # A steal is a quick man's play, so the body leads it: hands and first step, which
-    # in this era only the frame can show. Weighted apart from perimeter defence on
-    # purpose -- given one set of weights the two were the same number on every card.
-    "Attributes/STEAL": (("height", 0.40, True), ("weight", 0.25, True), ("dws", 0.35, False)),
+
     # Staying in front of a man is what the defensive record actually measures, so it
     # leads here and the body follows.
     "Attributes/PERIMETERDEFENSE": (("height", 0.25, True), ("weight", 0.15, True), ("dws", 0.60, False)),
@@ -89,59 +70,25 @@ _COMPOSITES: dict[str, tuple[tuple[str, float, bool], ...]] = {
     # Shot selection is offensive value, which is what OWS measures.
     "Attributes/IQSHOT": (("ows", 1.00, False),),
     # Post play is leverage plus offensive production.
-    "Attributes/POSTCONTROL": (("height", 0.35, False), ("weight", 0.25, False), ("ows", 0.40, False)),
-    # Agility is a body field, but the defensive record moves it further than it did:
-    # a quick player shows up in what his team gave up.
-    "Attributes/AGILITY": (("height", 0.45, True), ("weight", 0.25, True), ("dws", 0.30, False)),
-    # Post Hook and Post Fade are shot execution, so they are not blended and stretched
-    # here at all -- they go on the captured pool's own fg% curve below, which is the
-    # only thing that keeps them at the level the pool actually records.
+    "Attributes/POSTCONTROL": (("height", 0.35, False), ("weight", 0.25, False), ("ows_or_ppg", 0.40, False)),
+    # Hook and fade keep the same body/production shape as Post Control, with one quarter
+    # reserved for demonstrated field-goal execution.  The original three-term ratios
+    # remain in the other 75%: height .2625, weight .1875, production .30.
+    "Attributes/POSTHOOK": (("height", 0.2625, False), ("weight", 0.1875, False), ("ows_or_ppg", 0.30, False), ("field_goal_percent", 0.25, False)),
+    "Attributes/POSTFADE": (("height", 0.2625, False), ("weight", 0.1875, False), ("ows_or_ppg", 0.30, False), ("field_goal_percent", 0.25, False)),
 }
 
-#: What the captured pool actually pays a shot-execution attribute, as
-#: ``(band signal value, p25, median, p75)`` per decile of the *band* signal, from
-#: **editor_capture_001** only.
-#:
-#: That capture only, deliberately. Captures 002-004 are recaptures taken after
-#: generated cards had been written back to the roster, so calibrating against them
-#: would be reading this module's own output back in as evidence. It shows in the data:
-#: median field goal percentage runs .370, .327, .304, .335 across the four, and by 004
-#: the within-decile interquartile width -- the room the placement signal has to move a
-#: player -- has fallen to 1.5 points on Post Fade and 2.7 on Post Hook, against 5.8
-#: and 16.6 in 001. Capture 001 is the least contaminated, not clean: it is the same
-#: 1947 roster, so these anchors are an earlier generation of this generator's own
-#: output. They are a defensible proxy, not ground truth, and a genuine reference
-#: roster would replace them.
-#:
-#: Only packages with at least 200 field goal attempts are used. Unfloored, the pool's
-#: shooting percentage carries almost no signal -- ``r(fg%, Driving Layup)`` is +0.40
-#: over all 306 packages, because the bottom decile was thirty players with a *median
-#: of three attempts*, whose noise inverted the bottom of the curve where 71% of the
-#: 1947 season sits. The break is a cliff rather than a slope and it sits low: the
-#: correlation is +0.90 by 25 attempts and +0.91 by 150, so 200 is a conservative floor
-#: on the safe side of it, not a fitted threshold. Lowering it buys nothing -- the pool
-#: has no rotation player shooting below .223 at any floor.
-#:
-#: That last fact is the real limit here, and no threshold fixes it. The median 1947
-#: player shot .267 and the season's lower quartile .220, while the floored pool's
-#: lowest decile sits at .275 -- so for the two fields still banded on fg%, 60% of the
-#: 1947 season is at or below the lowest shooting level the pool has any evidence for
-#: and shares one clamped band. Ordering inside it comes from the placement signal,
-#: which is real for Driving Layup (points per game, r=+0.68) and negligible for Post
-#: Fade (height, r=+0.10) -- so Post Fade lands near-constant at about 47 for the
-#: league. That is honest rather than modelled: it is what "no evidence at this
-#: shooting level" looks like, and it still prevents the 99s that stretching produced.
-#:
-#: The band signal is whichever signal the pool says actually moves the field, and it
-#: is not the same signal for all five. Close Shot and Post Hook are size fields
-#: (height r=+0.60 and +0.72, against fg%'s +0.29 and +0.13), Midrange tracks
-#: free-throw shooting (r=+0.93 against fg%'s +0.23), and only Driving Layup is really
-#: bought with field goal percentage (+0.91). Banding all five on fg% held the whole
-#: 1947 season between 42 and 57 on Post Hook -- a 6'10" Mikan scored 54 where the pool
-#: pays a 6'10" player 74 -- because fg% barely moves that field and 1947 shoots low.
-#:
-#: These are not stretched onto 25-99. A 1947 shooter who led his league is not a 99
-#: layup finisher; the pool says his percentage buys what it buys anywhere.
+_AGILITY_COMPONENTS = (
+    ("height", 0.40, True),
+    ("weight", 0.20, True),
+    ("dws", 0.40, False),
+)
+_STEAL_AGILITY_WEIGHT = 0.65
+_STEAL_DWS_WEIGHT = 0.35
+
+#: Captured-pool p25/median/p75 bands retained only for Close Shot, Midrange, and
+#: Driving Layup. Post Hook and Post Fade are owned by the authored composite above.
+#: These three retained execution curves are not stretched to 25-99.
 _SHOT_BAND_ANCHORS: dict[str, tuple[tuple[float, float, float, float], ...]] = {
     "Attributes/CLOSESHOT": (
         (69.417, 46.0, 56.0, 66.5), (71.625, 46.0, 55.0, 63.2), (72.750, 55.0, 55.0, 65.0),
@@ -149,12 +96,7 @@ _SHOT_BAND_ANCHORS: dict[str, tuple[tuple[float, float, float, float], ...]] = {
         (76.000, 62.0, 73.5, 83.0), (76.708, 65.0, 74.5, 83.0), (78.417, 69.0, 83.0, 93.2),
         (80.625, 71.8, 81.0, 95.0),
     ),
-    "Attributes/POSTHOOK": (
-        (69.417, 31.8, 42.0, 52.5), (71.625, 36.0, 40.5, 45.5), (72.750, 42.8, 45.5, 48.0),
-        (73.750, 45.2, 50.0, 54.0), (74.250, 48.0, 50.5, 53.0), (75.000, 51.8, 55.0, 59.2),
-        (76.000, 53.8, 61.5, 66.2), (76.708, 56.0, 61.0, 66.0), (78.417, 61.0, 67.5, 70.2),
-        (80.625, 62.5, 68.0, 77.0),
-    ),
+
     "Attributes/MIDRANGE": (
         (0.428, 51.0, 53.0, 55.5), (0.504, 54.0, 55.0, 58.0), (0.549, 55.0, 59.0, 60.2),
         (0.580, 59.0, 61.0, 62.2), (0.616, 62.0, 63.0, 64.0), (0.665, 64.8, 65.5, 67.0),
@@ -167,25 +109,16 @@ _SHOT_BAND_ANCHORS: dict[str, tuple[tuple[float, float, float, float], ...]] = {
         (0.418, 68.8, 77.0, 84.2), (0.450, 75.5, 83.0, 93.8), (0.487, 85.8, 96.5, 99.0),
         (0.524, 98.0, 98.0, 99.0),
     ),
-    "Attributes/POSTFADE": (
-        (0.275, 46.0, 47.0, 49.0), (0.318, 47.0, 50.0, 52.0), (0.336, 47.0, 49.5, 54.0),
-        (0.354, 48.0, 49.5, 51.2), (0.373, 49.0, 52.5, 55.0), (0.395, 47.0, 49.0, 52.8),
-        (0.418, 49.8, 53.0, 56.0), (0.450, 50.8, 52.5, 56.5), (0.487, 51.8, 53.5, 55.0),
-        (0.524, 50.0, 54.5, 57.0),
-    ),
+
 }
 
-#: field -> (band signal, placement signal, pool r for each). The band sets the range
-#: the pool pays at that level of the leading signal; the placement puts the player
-#: inside it on the secondary one. Post Fade is weak on both (its real driver is the
-#: post-fade *tendency* at r=+0.49, and 1947 recorded no shot-location data at all), so
-#: it stays narrow on purpose rather than being handed false resolution.
+#: field -> (band signal, placement signal, captured-pool r for each).
 _SHOT_SIGNALS: dict[str, tuple[str, str, float, float]] = {
     "Attributes/CLOSESHOT": ("height", "field_goal_percent", 0.60, 0.29),
-    "Attributes/POSTHOOK": ("height", "field_goal_percent", 0.72, 0.13),
+
     "Attributes/MIDRANGE": ("free_throw_percent", "field_goal_percent", 0.93, 0.23),
     "Attributes/DRIVINGLAYUP": ("field_goal_percent", "points_per_game", 0.91, 0.68),
-    "Attributes/POSTFADE": ("field_goal_percent", "height", 0.32, 0.10),
+
 }
 
 #: Estimated season field goal attempts below which a player's shooting percentage is
@@ -195,12 +128,6 @@ _SHOT_SIGNALS: dict[str, tuple[str, str, float, float]] = {
 #: attempts and 34% under 100, so this is not a rare branch -- it is a third of the
 #: league, and it is why the rule has to say "unmeasured" rather than "poor".
 SHOT_EVIDENCE_MIN_ATTEMPTS = 100.0
-
-#: Fields whose win-share term is the offensive side rather than the defensive one.
-_OFFENSIVE_WIN_SHARE_FIELDS = frozenset({
-    "Attributes/IQSHOT",
-    "Attributes/POSTCONTROL",
-})
 
 #: A fallback is what you use when nothing better is known, so it must never overwrite
 #: something that *is* known. A rule carrying one of these markers is a finding about a
@@ -290,8 +217,18 @@ def _entry_share(
     *,
     from_row: bool,
 ) -> tuple[float | None, str]:
+    if name == "ows_or_ppg":
+        value, signal = scale.win_share_share(
+            entry,
+            population,
+            "ows",
+            from_row=from_row,
+            fallback_to_points=True,
+        )
+        return value, signal or name
     if name in ("ows", "dws"):
-        return scale.win_share_share(entry, population, name, from_row=from_row)
+        value, signal = scale.win_share_share(entry, population, name, from_row=from_row)
+        return value, signal or name
     read = (lambda key: entry.get(key)) if from_row else (lambda key: scale.evidence_signal(entry, key))
     raw = read(name)
     try:
@@ -309,7 +246,14 @@ def _entry_share(
             _extremise(rank_share),
             f"height_span{HEIGHT_SCALE_FLOOR:.0f}_{HEIGHT_SCALE_CEILING:.0f}_extremity{_BODY_EXTREMITY:g}",
         )
-    rank_share = scale.share(number, scale.values_of(population, name), invert=invert)
+    values = scale.values_of(population, name)
+    rank_share = scale.share(
+        number,
+        values,
+        invert=invert,
+        low_anchor=values[0] if values else None,
+        high_anchor=values[-1] if values else None,
+    )
     if rank_share is not None and name in _BODY_SIGNALS:
         return _extremise(rank_share), f"{name}_extremity{_BODY_EXTREMITY:g}"
     return rank_share, name
@@ -338,7 +282,8 @@ def _composite_for(
 #: identical for every player rated against it. Recomputing them per player made a
 #: season quadratic in its own size.
 _COMPOSITE_CACHE: dict[tuple[int, tuple[tuple[str, float, bool], ...], str | None], tuple[float, ...]] = {}
-_REBOUND_CACHE: dict[tuple[int, str], dict[str, float]] = {}
+_STEAL_CACHE: dict[int, tuple[float, ...]] = {}
+_REBOUND_CACHE: dict[tuple[int, str], dict[tuple[str, str], float]] = {}
 _CACHE_GUARD: dict[int, Any] = {}
 
 
@@ -365,10 +310,138 @@ def _population_composite(
     return values
 
 
+def _population_composite_winner(
+    population: Sequence[Mapping[str, Any]],
+    components: Sequence[tuple[str, float, bool]],
+) -> tuple[str, str] | None:
+    scored = [
+        (score, _entry_identity(entry))
+        for entry in population
+        if all(_entry_identity(entry))
+        and (score := _composite_for(entry, population, components, from_row=True)[0]) is not None
+    ]
+    if not scored:
+        return None
+    maximum = max(score for score, _identity in scored)
+    return min(identity for score, identity in scored if score == maximum)
+
+
+def _speed_rating_for(
+    entry: Mapping[str, Any],
+    *,
+    from_row: bool,
+) -> float | None:
+    if from_row:
+        value = entry.get(scale.SPEED_RATING_KEY)
+        try:
+            number = float(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+        return float(round(number)) if number is not None else None
+    identity = _player_identity(entry)
+    raw = scale.field_base_values(entry).get(identity, {}).get("Attributes/SPEED")
+    spread = scale.field_distributions(entry).get("Attributes/SPEED", ())
+    rating = scale.stretch(
+        raw,
+        spread,
+        low_anchor=spread[0] if spread else None,
+        high_anchor=spread[-1] if spread else None,
+    )
+    return float(round(rating)) if rating is not None else None
+
+
+def _agility_rating_for(
+    entry: Mapping[str, Any],
+    population: Sequence[Mapping[str, Any]],
+    *,
+    from_row: bool,
+) -> tuple[float | None, tuple[str, ...]]:
+    raw, signals = _composite_for(
+        entry,
+        population,
+        _AGILITY_COMPONENTS,
+        from_row=from_row,
+    )
+    spread = _population_composite(population, _AGILITY_COMPONENTS)
+    rating = scale.stretch(
+        raw,
+        spread,
+        low_anchor=spread[0] if spread else None,
+        high_anchor=spread[-1] if spread else None,
+    )
+    if rating is None:
+        return None, signals
+    speed = _speed_rating_for(entry, from_row=from_row)
+    capped = False
+    if speed is not None and rating > speed + 5.0:
+        rating = speed + 5.0
+        capped = True
+    rating = float(round(max(scale.ATTRIBUTE_FLOOR, min(scale.ATTRIBUTE_CEILING, rating))))
+    return rating, signals + (
+        f"Attributes/SPEED={speed:.2f}" if speed is not None else "Attributes/SPEED=unavailable",
+        "agility_contract=AGILITY<=SPEED+5",
+        f"agility_speed_cap_applied={str(capped).lower()}",
+    )
+
+
+def _steal_composite_for(
+    entry: Mapping[str, Any],
+    population: Sequence[Mapping[str, Any]],
+    *,
+    from_row: bool,
+) -> tuple[float | None, tuple[str, ...]]:
+    agility_rating, _agility_signals = _agility_rating_for(
+        entry,
+        population,
+        from_row=from_row,
+    )
+    agility_share = (
+        (agility_rating - scale.ATTRIBUTE_FLOOR)
+        / (scale.ATTRIBUTE_CEILING - scale.ATTRIBUTE_FLOOR)
+        if agility_rating is not None
+        else None
+    )
+    dws_share, dws_signal = _entry_share(entry, population, "dws", False, from_row=from_row)
+    score = scale.composite_share((
+        (agility_share, _STEAL_AGILITY_WEIGHT),
+        (dws_share, _STEAL_DWS_WEIGHT),
+    ))
+    return score, (
+        f"Attributes/AGILITY={agility_rating:.2f}@{_STEAL_AGILITY_WEIGHT:.2f}"
+        if agility_rating is not None
+        else f"Attributes/AGILITY=unavailable@{_STEAL_AGILITY_WEIGHT:.2f}",
+        f"{dws_signal or 'dws'}@{_STEAL_DWS_WEIGHT:.2f}",
+    )
+
+
+def _population_steal_composite(
+    population: Sequence[Mapping[str, Any]],
+) -> tuple[float, ...]:
+    key = id(population)
+    cached = _STEAL_CACHE.get(key)
+    if cached is not None:
+        return cached
+    _CACHE_GUARD.setdefault(key, population)
+    values = tuple(sorted(
+        score
+        for entry in population
+        if (score := _steal_composite_for(entry, population, from_row=True)[0]) is not None
+    ))
+    _STEAL_CACHE[key] = values
+    return values
+
+
+def _entry_identity(entry: Mapping[str, Any]) -> tuple[str, str]:
+    return (
+        str(entry.get("player_id") or "").strip().upper(),
+        str(entry.get("team") or "").strip().upper(),
+    )
+
+
 def _rebound_values(
     population: Sequence[Mapping[str, Any]],
     side: str,
-) -> dict[str, float]:
+) -> dict[tuple[str, str], float]:
     """Height sets the value; win shares separate the players who share a height.
 
     Height is the rating -- shortest in the season 25, tallest 99. Every player at one
@@ -388,59 +461,53 @@ def _rebound_values(
     if not heights:
         return {}
     distinct = sorted(set(heights))
-    # The same fixed 5'3"-7'9" span the height component uses, so a roster move cannot
-    # re-rank a whole league's boards. The tallest man in a short season therefore sits
-    # below 99 on reach alone; the win-share spread below is what carries him the rest
-    # of the way, and the top height's ladder still runs to the ceiling.
+    height_span = distinct[-1] - distinct[0]
     base_by_height = {
-        height: scale.ATTRIBUTE_FLOOR
-        + (scale.ATTRIBUTE_CEILING - scale.ATTRIBUTE_FLOOR)
-        * (_fixed_span_share(height, HEIGHT_SCALE_FLOOR, HEIGHT_SCALE_CEILING) or 0.0)
+        height: (
+            scale.ATTRIBUTE_FLOOR
+            + (scale.ATTRIBUTE_CEILING - scale.ATTRIBUTE_FLOOR)
+            * ((height - distinct[0]) / height_span)
+            if height_span > 0.0
+            else (scale.ATTRIBUTE_FLOOR + scale.ATTRIBUTE_CEILING) / 2.0
+        )
         for height in distinct
     }
-    by_height: dict[float, list[tuple[float, str]]] = {}
+    by_height: dict[float, list[tuple[float, tuple[str, str]]]] = {}
     for entry in population:
         height = entry.get("height")
-        player_id = str(entry.get("player_id") or "")
-        if height is None or not player_id:
+        identity = _entry_identity(entry)
+        if height is None or not all(identity):
             continue
-        weight, _signal = scale.win_share_share(entry, population, side, from_row=True)
-        # Centred so "positive" means above the season's midpoint of whichever signal
-        # carried the term, not above a raw zero the NBL substitute never crosses.
-        by_height.setdefault(float(height), []).append(((weight - 0.5) if weight is not None else 0.0, player_id))
+        raw_win_shares = entry.get(side)
+        try:
+            magnitude = float(raw_win_shares) if raw_win_shares is not None else 0.0
+        except (TypeError, ValueError):
+            magnitude = 0.0
+        by_height.setdefault(float(height), []).append((magnitude, identity))
 
-    resolved: dict[str, float] = {}
+    resolved: dict[tuple[str, str], float] = {}
     for height, members in by_height.items():
         base = base_by_height[height]
         index = distinct.index(height)
         upper = base_by_height[distinct[index + 1]] if index + 1 < len(distinct) else scale.ATTRIBUTE_CEILING
         lower = base_by_height[distinct[index - 1]] if index > 0 else scale.ATTRIBUTE_FLOOR
-        positives = sorted((item for item in members if item[0] > 0.0), key=lambda item: item[0])
-        negatives = sorted((item for item in members if item[0] < 0.0), key=lambda item: -item[0])
+        positives = sorted(
+            (item for item in members if item[0] > 0.0),
+            key=lambda item: (item[0], item[1]),
+        )
+        negatives = sorted(
+            (item for item in members if item[0] < 0.0),
+            key=lambda item: (abs(item[0]), item[1]),
+        )
         neutral = [item for item in members if item[0] == 0.0]
-        for player_id in (item[1] for item in neutral):
-            resolved[player_id] = base
-        for rank, (_weight, player_id) in enumerate(positives, start=1):
+        for identity in (item[1] for item in neutral):
+            resolved[identity] = base
+        for rank, (_magnitude, identity) in enumerate(positives, start=1):
             step = rank / (len(positives) + 1)
-            resolved[player_id] = base + (upper - base) * step
-        for rank, (_weight, player_id) in enumerate(negatives, start=1):
+            resolved[identity] = base + (upper - base) * step
+        for rank, (_magnitude, identity) in enumerate(negatives, start=1):
             step = rank / (len(negatives) + 1)
-            resolved[player_id] = base - (base - lower) * step
-
-    # The fixed span decides the order; this puts that order on the range the captured
-    # pool actually occupies. Both rebound attributes run the full 25-99 there -- min
-    # 25, median 55, max 99, with height the dominant driver at r=0.82 -- so a season
-    # should use the whole scale even though nobody in it is 7'9". Ordering still comes
-    # from the fixed span, so a new extreme re-ranks nobody.
-    ordered = sorted(resolved.values())
-    if len(ordered) >= 2 and ordered[-1] > ordered[0]:
-        low_value, high_value = ordered[0], ordered[-1]
-        span = high_value - low_value
-        resolved = {
-            player_id: scale.ATTRIBUTE_FLOOR
-            + (scale.ATTRIBUTE_CEILING - scale.ATTRIBUTE_FLOOR) * ((value - low_value) / span)
-            for player_id, value in resolved.items()
-        }
+            resolved[identity] = base - (base - lower) * step
     _REBOUND_CACHE[key] = resolved
     return resolved
 
@@ -624,18 +691,22 @@ def _baa_shot_ceiling(
     return best
 
 
-def _player_id(evidence: Any) -> str:
+def _player_identity(evidence: Any) -> tuple[str, str]:
     value = getattr(evidence, "player_id", None)
     if not value:
         identity = getattr(evidence, "identity", None)
         if isinstance(identity, Mapping):
             value = identity.get("player_id")
-    return str(value or "").strip().upper()
+    team = getattr(evidence, "team", None)
+    if not team:
+        season_info = getattr(evidence, "season_info", None)
+        if isinstance(season_info, Mapping):
+            team = season_info.get("team")
+    return str(value or "").strip().upper(), str(team or "").strip().upper()
 
 
-def _is_small_handler(evidence: Any) -> bool:
-    height = scale.evidence_signal(evidence, "height")
-    return height is not None and height < SMALL_HANDLER_HEIGHT
+def _primary_position(positions: Any) -> str:
+    return str(getattr(positions, "primary", "") or "").strip().upper()
 
 
 def _made_no_field_goals(evidence: Any) -> bool:
@@ -643,7 +714,26 @@ def _made_no_field_goals(evidence: Any) -> bool:
     return made is not None and made <= 0.0
 
 
-def apply_pre_1952_ratings(evidence: Any, values: dict[str, Any]) -> dict[str, Any]:
+def _field_goal_percent_provenance(evidence: Any) -> tuple[str, ...]:
+    per_game = getattr(evidence, "per_game", None)
+    if not isinstance(per_game, Mapping):
+        return ("pre_1952_field_goal_percent_source=unresolved",)
+    source = str(
+        per_game.get("fg_percent_source")
+        or "recorded_player_per_game_fg_percent"
+    )
+    return (
+        f"pre_1952_field_goal_percent_source={source}",
+        f"pre_1952_field_goal_percent_imputed={str(per_game.get('fg_percent_imputed') is True).lower()}",
+    )
+
+
+def apply_pre_1952_ratings(
+    evidence: Any,
+    values: dict[str, Any],
+    *,
+    positions: Any = None,
+) -> dict[str, Any]:
     """Rebuild the authored fallback fields for a 1947-51 player.
 
     Fields the operator has not specified are left exactly as the ordinary rules
@@ -658,7 +748,7 @@ def apply_pre_1952_ratings(evidence: Any, values: dict[str, Any]) -> dict[str, A
         return values
 
     updated = dict(values)
-    player_id = _player_id(evidence)
+    player_identity = _player_identity(evidence)
     season_info = getattr(evidence, "season_info", {}) or {}
     league = str(season_info.get("lg") or "").strip().upper()
 
@@ -669,6 +759,7 @@ def apply_pre_1952_ratings(evidence: Any, values: dict[str, Any]) -> dict[str, A
         keys: tuple[str, ...],
         *,
         lowering_cap: bool = False,
+        force: bool = False,
     ) -> None:
         current = updated.get(field_key)
         if current is None:
@@ -677,13 +768,13 @@ def apply_pre_1952_ratings(evidence: Any, values: dict[str, Any]) -> dict[str, A
         # re-derivation: it only ever lowers, so it may still apply on top of one. The
         # 1949 NBL midrange leader was pinned by the BAA centre cap at 72 -- above the
         # best midrange shooter in the BAA -- and protection alone left him there.
-        if _is_protected(current) and not (
+        if not force and _is_protected(current) and not (
             lowering_cap and isinstance(current.value, (int, float)) and number < float(current.value)
         ):
             return
         value = int(round(max(scale.ATTRIBUTE_FLOOR, min(scale.ATTRIBUTE_CEILING, number))))
         provenance = keys + (
-            "pre_1952_scale_scope=same_season_all_leagues",
+            "pre_1952_scale_scope=ui_selected_same_season_population",
             f"pre_1952_scale_population={len(population)}",
         )
         updated[field_key] = replace(
@@ -700,32 +791,68 @@ def apply_pre_1952_ratings(evidence: Any, values: dict[str, Any]) -> dict[str, A
     for field_key, components in _COMPOSITES.items():
         if field_key not in updated:
             continue
-        side = "ows" if field_key in _OFFENSIVE_WIN_SHARE_FIELDS else "dws"
-        resolved = tuple(
-            (side if name in ("ows", "dws") else name, weight, invert)
-            for name, weight, invert in components
-        )
-        blended, signals = _composite_for(evidence, population, resolved, from_row=False)
+        blended, signals = _composite_for(evidence, population, components, from_row=False)
         if blended is None:
             continue
-        spread = _population_composite(population, resolved)
-        value = scale.stretch(blended, spread)
+        spread = _population_composite(population, components)
+        value = scale.stretch(
+            blended,
+            spread,
+            low_anchor=spread[0] if spread else None,
+            high_anchor=spread[-1] if spread else None,
+        )
         if value is None:
             continue
+        shooting_keys = (
+            _field_goal_percent_provenance(evidence)
+            if field_key in {"Attributes/POSTHOOK", "Attributes/POSTFADE"}
+            else ()
+        )
         write(
             field_key,
             value,
             f"pre_1952_{field_key.split('/')[-1].lower()}_authored_fallback",
             tuple(f"pre_1952_component={signal}" for signal in signals)
+            + shooting_keys
             + (f"pre_1952_composite_share={blended:.8f}",),
         )
 
+    # --- agility: body plus DWS, capped against final Speed -----------------------
+    if "Attributes/AGILITY" in updated:
+        value, signals = _agility_rating_for(evidence, population, from_row=False)
+        if value is not None:
+            write(
+                "Attributes/AGILITY",
+                value,
+                "pre_1952_agility_authored_fallback",
+                tuple(f"pre_1952_component={signal}" for signal in signals),
+            )
+
+    # --- steal: final agility plus defensive win shares --------------------------
+    if "Attributes/STEAL" in updated:
+        blended, signals = _steal_composite_for(evidence, population, from_row=False)
+        spread = _population_steal_composite(population)
+        value = scale.stretch(
+            blended,
+            spread,
+            low_anchor=spread[0] if spread else None,
+            high_anchor=spread[-1] if spread else None,
+        )
+        if value is not None:
+            write(
+                "Attributes/STEAL",
+                value,
+                "pre_1952_steal_agility_and_dws",
+                tuple(f"pre_1952_component={signal}" for signal in signals)
+                + (f"pre_1952_composite_share={blended:.8f}",),
+            )
+
     # --- rebounding: height first, win shares inside the height ------------------
     for field_key, side in (("Attributes/OFFENSIVEREBOUND", "ows"), ("Attributes/DEFENSEREBOUND", "dws")):
-        if field_key not in updated or not player_id:
+        if field_key not in updated or not all(player_identity):
             continue
         resolved_rebounds = _rebound_values(population, side)
-        value = resolved_rebounds.get(player_id)
+        value = resolved_rebounds.get(player_identity)
         if value is None:
             continue
         write(
@@ -778,92 +905,143 @@ def apply_pre_1952_ratings(evidence: Any, values: dict[str, Any]) -> dict[str, A
                 lowering_cap=True,
             )
 
-    # --- draw foul: a real zero at the bottom ------------------------------------
+    # --- draw foul: zero is 25 and the selected population maximum is 99 ----------
     if "Attributes/DRAWFOUL" in updated:
-        value = scale.stretch(
-            scale.evidence_signal(evidence, _DRAW_FOUL_SIGNAL),
-            scale.values_of(population, _DRAW_FOUL_SIGNAL),
-            low_anchor=0.0,
+        ft_per_game = scale.evidence_signal(evidence, _DRAW_FOUL_SIGNAL)
+        ft_population = scale.values_of(population, _DRAW_FOUL_SIGNAL)
+        value = (
+            scale.ATTRIBUTE_FLOOR
+            if ft_per_game == 0.0
+            else scale.stretch(
+                ft_per_game,
+                ft_population,
+                low_anchor=0.0,
+                high_anchor=ft_population[-1] if ft_population else None,
+            )
         )
         if value is not None:
             write(
                 "Attributes/DRAWFOUL",
                 value,
                 "pre_1952_drawfoul_free_throws_per_game",
-                ("pre_1952_component=ft_per_game", "pre_1952_low_anchor=0_free_throws_is_25"),
+                (
+                    "pre_1952_component=ft_per_game",
+                    "pre_1952_low_anchor=0_free_throws_is_25",
+                    "pre_1952_high_anchor=selected_population_max_is_99",
+                ),
             )
 
     # --- intangibles: NBL only, on the three totals the league kept ---------------
     if league == "NBL" and "Attributes/INTANGIBLES" in updated:
-        blended, signals = _composite_for(evidence, population, _NBL_INTANGIBLES, from_row=False)
+        nbl_population = scale.nbl_totals(evidence)
+        blended, signals = _composite_for(
+            evidence,
+            nbl_population,
+            _NBL_INTANGIBLES,
+            from_row=False,
+        )
         if blended is not None:
-            spread = _population_composite(population, _NBL_INTANGIBLES, league="NBL")
-            value = scale.stretch(blended, spread)
-            if value is not None:
+            spread = _population_composite(nbl_population, _NBL_INTANGIBLES)
+            winner = _population_composite_winner(nbl_population, _NBL_INTANGIBLES)
+            value = scale.stretch(
+                blended,
+                spread,
+                low_anchor=spread[0] if spread else None,
+                high_anchor=spread[-1] if spread else None,
+            )
+            if value is not None and winner is not None:
+                value = scale.ATTRIBUTE_CEILING if player_identity == winner else min(
+                    scale.ATTRIBUTE_CEILING - 1.0,
+                    value,
+                )
                 write(
                     "Attributes/INTANGIBLES",
                     value,
                     "pre_1952_nbl_intangibles_recorded_totals",
                     tuple(f"pre_1952_component={signal}" for signal in signals)
-                    + ("pre_1952_intangibles_scope=NBL_only", f"pre_1952_composite_share={blended:.8f}"),
+                    + (
+                        "pre_1952_intangibles_scope=NBL_only",
+                        f"pre_1952_intangibles_population={len(nbl_population)}",
+                        f"pre_1952_intangibles_winner={winner[0]}:{winner[1]}",
+                        f"pre_1952_intangibles_unique_99={str(player_identity == winner).lower()}",
+                        f"pre_1952_composite_share={blended:.8f}",
+                    ),
                 )
 
     # --- restretched body fields --------------------------------------------------
     distributions = scale.field_distributions(evidence)
+    field_base_values = scale.field_base_values(evidence).get(player_identity, {})
     for field_key in RESTRETCHED_FIELDS:
         current = updated.get(field_key)
         spread = distributions.get(field_key)
-        if current is None or not spread or not isinstance(current.value, (int, float)):
+        base_value = field_base_values.get(field_key)
+        if current is None or not spread or base_value is None:
             continue
-        value = scale.stretch(float(current.value), spread)
+        value = scale.stretch(
+            base_value,
+            spread,
+            low_anchor=spread[0],
+            high_anchor=spread[-1],
+        )
         if value is None:
             continue
         write(
             field_key,
             value,
             f"{current.source_rule}_pre_1952_season_stretch",
-            ("pre_1952_stretch=season_min_to_25_season_max_to_99",),
+            ("pre_1952_stretch=selected_population_min_to_25_max_to_99",),
         )
 
-    # --- hustle: the season's top twenty-five stand at the ceiling ----------------
+    # --- hustle: exactly the selected population's top twenty-five are 99 --------
     hustle = updated.get("Attributes/HUSTLE")
-    hustle_spread = distributions.get("Attributes/HUSTLE")
-    if hustle is not None and hustle_spread and isinstance(hustle.value, (int, float)):
-        if len(hustle_spread) >= HUSTLE_CEILING_PLAYERS:
-            threshold = hustle_spread[-HUSTLE_CEILING_PLAYERS]
-            if float(hustle.value) >= threshold:
-                write(
-                    "Attributes/HUSTLE",
-                    scale.ATTRIBUTE_CEILING,
-                    f"{hustle.source_rule}_pre_1952_season_ceiling",
-                    (
-                        f"pre_1952_hustle_ceiling_players={HUSTLE_CEILING_PLAYERS}",
-                        f"pre_1952_hustle_ceiling_threshold={threshold:.8f}",
-                        "pre_1952_hustle_ties=a_tie_on_the_threshold_keeps_every_tied_player",
-                    ),
-                )
+    hustle_top_keys = scale.hustle_top_keys(evidence)
+    if hustle is not None and hustle_top_keys and isinstance(hustle.value, (int, float)):
+        if player_identity in hustle_top_keys:
+            rank = hustle_top_keys.index(player_identity) + 1
+            write(
+                "Attributes/HUSTLE",
+                scale.ATTRIBUTE_CEILING,
+                f"{hustle.source_rule}_pre_1952_top_25_ceiling",
+                (
+                    f"pre_1952_hustle_ceiling_players={HUSTLE_CEILING_PLAYERS}",
+                    f"pre_1952_hustle_exact_rank={rank}",
+                    "pre_1952_hustle_ties=exact_player_id_team_tie_break",
+                ),
+            )
+        elif float(hustle.value) >= scale.ATTRIBUTE_CEILING:
+            write(
+                "Attributes/HUSTLE",
+                scale.ATTRIBUTE_CEILING - 1.0,
+                f"{hustle.source_rule}_pre_1952_outside_top_25_cap",
+                (
+                    f"pre_1952_hustle_ceiling_players={HUSTLE_CEILING_PLAYERS}",
+                    "pre_1952_hustle_exact_rank=outside_top_25",
+                    "pre_1952_hustle_non_top_max=98",
+                ),
+                lowering_cap=True,
+            )
 
-    # --- small men handled the ball -----------------------------------------------
-    if _is_small_handler(evidence):
-        height = scale.evidence_signal(evidence, "height")
-        for field_key in SMALL_HANDLER_FIELDS:
+    # --- point guards alone use the 60-99 handling/passing band ------------------
+    if _primary_position(positions) == "PG":
+        for field_key in POINT_GUARD_FIELDS:
             current = updated.get(field_key)
             if current is None or not isinstance(current.value, (int, float)):
                 continue
-            if float(current.value) >= SMALL_HANDLER_FLOOR:
-                continue
-            lifted = SMALL_HANDLER_FLOOR + (scale.ATTRIBUTE_CEILING - SMALL_HANDLER_FLOOR) * (
+            legal_share = (
                 (float(current.value) - scale.ATTRIBUTE_FLOOR)
                 / (scale.ATTRIBUTE_CEILING - scale.ATTRIBUTE_FLOOR)
             )
+            remapped = POINT_GUARD_FLOOR + (
+                scale.ATTRIBUTE_CEILING - POINT_GUARD_FLOOR
+            ) * max(0.0, min(1.0, legal_share))
             write(
                 field_key,
-                lifted,
-                f"{current.source_rule}_pre_1952_small_handler_floor",
+                remapped,
+                f"{current.source_rule}_pre_1952_point_guard_60_99",
                 (
-                    f"pre_1952_small_handler_band={SMALL_HANDLER_FLOOR:.0f}_to_99",
-                    f"pre_1952_small_handler_height_under={SMALL_HANDLER_HEIGHT:.0f}",
-                    f"identity.ht_in_in={height:.0f}" if height is not None else "identity.ht_in_in",
+                    "pre_1952_position_helper=PG_only",
+                    f"pre_1952_point_guard_band={POINT_GUARD_FLOOR:.0f}_to_99",
+                    f"pre_1952_pre_band_value={float(current.value):.2f}",
                 ),
             )
 
@@ -878,6 +1056,7 @@ def apply_pre_1952_ratings(evidence: Any, values: dict[str, Any]) -> dict[str, A
                 scale.ATTRIBUTE_FLOOR,
                 f"{current.source_rule}_pre_1952_no_made_field_goal",
                 ("pre_1952_zero_makes=no_field_goal_made_all_season",),
+                force=True,
             )
 
     # --- acceleration follows its own inputs --------------------------------------
@@ -917,10 +1096,9 @@ def apply_pre_1952_ratings(evidence: Any, values: dict[str, Any]) -> dict[str, A
 
 __all__ = [
     "HUSTLE_CEILING_PLAYERS",
+    "POINT_GUARD_FIELDS",
+    "POINT_GUARD_FLOOR",
     "RESTRETCHED_FIELDS",
-    "SMALL_HANDLER_FIELDS",
-    "SMALL_HANDLER_FLOOR",
-    "SMALL_HANDLER_HEIGHT",
     "ZERO_MAKE_FLOOR_FIELDS",
     "apply_pre_1952_ratings",
 ]

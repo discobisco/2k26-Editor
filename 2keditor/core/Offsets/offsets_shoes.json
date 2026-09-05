@@ -6,7 +6,7 @@
           "normalized_name": "ID",
           "display_name": "ID",
           "versions": {
-            "2K26": {
+            "2K26,2K27": {
               "address": 0,
               "hex": "0x0",
               "readonly": true,
@@ -24,6 +24,98 @@
               "length": 80,
               "readonly": true,
               "type": "wstring"
+            },
+            "2K27": {
+              "address": 16,
+              "alias_of": "SHOESTYLEDATA::LocalizedName",
+              "hex": "0x10",
+              "length": 32,
+              "readonly": true,
+              "type": "wstring"
+            }
+          }
+        }
+      ],
+      "Classification": [
+        {
+          "normalized_name": "COMMENTARYMASK",
+          "display_name": "CommentaryMask",
+          "versions": {
+            "2K27": {
+              "address": 118,
+              "hex": "0x76",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        },
+        {
+          "normalized_name": "GROUPID",
+          "display_name": "GroupId",
+          "versions": {
+            "2K27": {
+              "address": 112,
+              "hex": "0x70",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "SHOETYPE",
+          "display_name": "ShoeType",
+          "versions": {
+            "2K27": {
+              "address": 122,
+              "hex": "0x7A",
+              "readonly": true,
+              "type": "byte"
+            }
+          }
+        }
+      ],
+      "Flags": [
+        {
+          "normalized_name": "ISENABLED",
+          "display_name": "IsEnabled",
+          "versions": {
+            "2K27": {
+              "address": 119,
+              "bit_length": 1,
+              "bit_offset": 4,
+              "hex": "0x77",
+              "length": 1,
+              "readonly": true,
+              "startBit": 4,
+              "type": "bitfield"
+            }
+          }
+        }
+      ],
+      "Identity": [
+        {
+          "normalized_name": "LOCALIZEDNAME",
+          "display_name": "LocalizedName",
+          "versions": {
+            "2K27": {
+              "address": 16,
+              "hex": "0x10",
+              "length": 32,
+              "readonly": true,
+              "type": "wstring"
+            }
+          }
+        },
+        {
+          "normalized_name": "UNLOCALIZEDNAME",
+          "display_name": "UnlocalizedName",
+          "versions": {
+            "2K27": {
+              "address": 96,
+              "hex": "0x60",
+              "length": 8,
+              "readonly": true,
+              "type": "string"
             }
           }
         }

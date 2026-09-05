@@ -12,27 +12,12 @@ import player_rules_mental as mental
 import player_rules_offense as offense
 import player_rules_pre1952 as pre_1952_rules
 import player_rules_rebounding as rebounding
-from nbl_baa_projection import project_nbl_fields
 from player_era_role import adjust_values as _apply_era_role_playstyle
 from player_evidence import PlayerEvidence
 
 
 POSITIONS: tuple[str, ...] = ("PG", "SG", "SF", "PF", "C")
 
-# Keys in nbl_baa_projection.PROJECTED_FIELD_KEYS whose own NBL recipe outranks the
-# same-season BAA projection. The passing family earns this: its unrecorded-assist
-# recipes are calibrated against the league-wide BAA distribution and hold the
-# cross-league median gap inside a couple of points.
-#
-# OFFENSIVECONSISTENCY is deliberately absent. Its NBL recipe mapped a within-NBL
-# rank onto the BAA distribution and put ten NBL players at exactly 99 against the
-# BAA's four, so the projection owns it as PROJECTED_FIELD_KEYS declares.
-NBL_DIRECT_RULE_FIELDS: frozenset[str] = frozenset({
-    "Attributes/BALLCONTROL",
-    "Attributes/PASSACCURACY",
-    "Attributes/PASSIQ",
-    "Attributes/PASSVISION",
-})
 
 
 @dataclass(frozen=True)
@@ -451,40 +436,13 @@ def derive_formula_rule_values(
     # calibration, both of which rewrite fields this one owns. For the 1947-51 fields
     # the operator authored by hand, the authored rule is the answer rather than a
     # starting point for a later pass to overwrite. Cross-field ceilings still apply.
-    values = pre_1952_rules.apply_pre_1952_ratings(evidence, values)
-    return _apply_cross_field_ceilings(values)
-
-
-def _apply_cross_field_ceilings(values: dict[str, RuleValue]) -> dict[str, RuleValue]:
-    """Invariants between two finished fields, enforced after the position merge.
-
-    The merge takes the higher value per field independently, so a constraint applied
-    inside a rule can be broken by it: speed with ball from one position branch can
-    land above speed from another.
-    """
-
-    speed = values.get("Attributes/SPEED")
-    with_ball = values.get("Attributes/SPEEDWITHBALL")
-    if speed is None or with_ball is None:
-        return values
-    if not isinstance(speed.value, (int, float)) or not isinstance(with_ball.value, (int, float)):
-        return values
-    ceiling = int(athleticism.speed_with_ball_ceiling(float(speed.value)))
-    if int(with_ball.value) <= ceiling:
-        return values
-    adjusted = dict(values)
-    adjusted["Attributes/SPEEDWITHBALL"] = replace(
-        with_ball,
-        value=ceiling,
-        source_rule=f"{with_ball.source_rule}_speed_ceiling",
-        evidence_keys=with_ball.evidence_keys + (
-            f"speed_attribute={int(speed.value)}",
-            f"uncapped_speed_with_ball={int(with_ball.value)}",
-            "speed_with_ball_contract=never_above_the_player_own_speed",
-            "applied_after=multi_position_higher_value_fallback",
-        ),
+    values = pre_1952_rules.apply_pre_1952_ratings(
+        evidence,
+        values,
+        positions=positions,
     )
-    return adjusted
+    return values
+
 
 
 def _derive_formula_rule_values_once(
@@ -523,9 +481,7 @@ def _derive_formula_rule_values_once(
     # it was actually played in its era. No-op for every later season and when
     # PLAYERGEN_ERA_ROLE_PLAYSTYLE is disabled.
     values = _apply_era_role_playstyle(evidence, positions, values)
-    values = _apply_nbl_baa_center_scoring_caps(evidence, values)
-    values = _apply_nbl_baa_common_feature_projection(evidence, rows, values)
-    return _apply_shot_family_gate(values)
+    return values
 
 
 def _evidence_for_single_fallback_position(evidence: PlayerEvidence, position: str) -> PlayerEvidence:
@@ -592,63 +548,6 @@ _CENTER_CAP_FREE_HEIGHT = 74.0
 _CENTER_CAP_HEIGHT_SPAN = 6.0
 
 
-def _apply_nbl_baa_center_scoring_caps(
-    evidence: PlayerEvidence,
-    values: dict[str, RuleValue],
-) -> dict[str, RuleValue]:
-    league = str(evidence.season_info.get("lg") or "").strip().upper()
-    caps = evidence.source_context.get("nbl_baa_center_scoring_caps")
-    if league != "NBL" or not isinstance(caps, dict):
-        return values
-
-    # The cap used to fire only for players labelled "C", which is the label deciding
-    # the rating: a 6'2" listed centre took the same rim-scoring ceiling as Mikan while
-    # a 6'8" listed forward took none. It is a reach ceiling, so it binds by reach --
-    # fully at 6'8" and above, not at all at 6'2", straight line between.
-    height = evidence.identity.get("ht_in_in")
-    height = float(height) if isinstance(height, (int, float)) else None
-    if height is None:
-        return values
-    bind = max(0.0, min(1.0, (height - _CENTER_CAP_FREE_HEIGHT) / _CENTER_CAP_HEIGHT_SPAN))
-    if bind <= 0.0:
-        return values
-
-    calibrated = dict(values)
-    for field_key in _NBL_BAA_CENTER_SCORING_FIELDS:
-        current = calibrated.get(field_key)
-        cap = caps.get(field_key)
-        if current is None or not isinstance(cap, (int, float)):
-            continue
-        # Loosen the cap toward 99 as reach falls away, so it never binds on a short
-        # player and binds in full on a tall one.
-        cap_value = _clamp_rule_value(field_key, int(round(cap + (1.0 - bind) * (99.0 - cap))))
-        mapped = min(int(current.value), cap_value)
-        fixed_layup_cap = field_key == "Attributes/DRIVINGLAYUP"
-        calibrated[field_key] = replace(
-            current,
-            value=mapped,
-            source_rule=(
-                f"{current.source_rule}_fixed_nbl_center_cap"
-                if fixed_layup_cap
-                else f"{current.source_rule}_same_season_baa_center_cap"
-            ),
-            evidence_keys=current.evidence_keys + (
-                f"pre_baa_center_cap_value={int(current.value)}",
-                (
-                    f"fixed_nbl_center_driving_layup_cap={cap_value}"
-                    if fixed_layup_cap
-                    else f"same_season_baa_center_cap={cap_value};reach_bind={bind:.4f}"
-                ),
-                f"baa_center_cap_applied={str(mapped < int(current.value)).lower()}",
-                (
-                    "mapping=min(generated_value,user_approved_fixed_NBL_center_layup_cap)"
-                    if fixed_layup_cap
-                    else "mapping=min(generated_value,same_season_BAA_center_generated_max)"
-                ),
-            ),
-        )
-    return calibrated
-
 
 def _apply_nbl_unrecorded_assist_calibration(
     evidence: PlayerEvidence,
@@ -690,95 +589,8 @@ def _apply_nbl_unrecorded_assist_calibration(
     return calibrated
 
 
-def _apply_nbl_baa_common_feature_projection(
-    evidence: PlayerEvidence,
-    league_player_rows: tuple[dict[str, Any], ...],
-    values: dict[str, RuleValue],
-) -> dict[str, RuleValue]:
-    projected = project_nbl_fields(evidence, league_player_rows, values)
-    if not projected:
-        return values
-    calibrated = dict(values)
-    for field_key, projection in projected.items():
-        if field_key in NBL_DIRECT_RULE_FIELDS:
-            continue
-        current = calibrated.get(field_key)
-        if current is None:
-            calibrated[field_key] = RuleValue(
-                value=projection.value,
-                source_rule=projection.source_rule,
-                evidence_keys=projection.evidence_keys + (
-                    "replaced_sparse_nbl_rule=unresolved",
-                ),
-            )
-            continue
-        calibrated[field_key] = replace(
-            current,
-            value=projection.value,
-            source_rule=projection.source_rule,
-            evidence_keys=projection.evidence_keys + (
-                f"replaced_sparse_nbl_rule={current.source_rule}",
-            ),
-        )
-    return calibrated
 
 
-_SHOT_FAMILY_GATES: dict[str, tuple[str, ...]] = {
-    "Tendencies/MIDSHOT": (
-        "Tendencies/MIDSPOTUPSHOT",
-        "Tendencies/MIDOFFSCREENSHOT",
-        "Tendencies/CONTESTEDJUMPERMID",
-        "Tendencies/CONTESTEDJUMPERMIDRANGE",
-        "Tendencies/STEPBACKJUMPERMID",
-        "Tendencies/STEPBACKJUMPERMIDRANGE",
-        "Tendencies/DRIVEPULLUPMID",
-        "Tendencies/DRIVEPULLUPMIDRANGE",
-        "Tendencies/LEFTMIDSHOT",
-        "Tendencies/MIDRIGHTSHOT",
-        "Tendencies/CENTERMIDSHOT",
-        "Tendencies/CENTERLEFTMIDSHOT",
-        "Tendencies/CENTERMIDRIGHTSHOT",
-    ),
-    "Tendencies/3POINTSHOT": (
-        "Tendencies/3POINTSPOTUPSHOT",
-        "Tendencies/3POINTOFFSCREENSHOT",
-        "Tendencies/CONTESTEDJUMPER3POINT",
-        "Tendencies/STEPBACKJUMPER3POINT",
-        "Tendencies/DRIVEPULLUP3POINT",
-        "Tendencies/TRANSITIONPULLUP3POINT",
-        "Tendencies/3POINTLEFTSHOT",
-        "Tendencies/3POINTRIGHTSHOT",
-        "Tendencies/3POINTCENTERSHOT",
-        "Tendencies/3POINTCENTERLEFTSHOT",
-        "Tendencies/3POINTCENTERRIGHTSHOT",
-    ),
-}
-
-
-def _apply_shot_family_gate(values: dict[str, RuleValue]) -> dict[str, RuleValue]:
-    gated = dict(values)
-    for parent_key, child_keys in _SHOT_FAMILY_GATES.items():
-        parent = gated.get(parent_key)
-        # An absent parent is unresolved evidence, not a zero: only an explicit 0
-        # closes the family.
-        if parent is None or parent.value != 0:
-            continue
-        for child_key in child_keys:
-            child = gated.get(child_key)
-            if child is None or child.value == 0:
-                continue
-            gated[child_key] = replace(
-                child,
-                value=0,
-                source_rule=f"{child.source_rule}_shot_family_gate",
-                evidence_keys=child.evidence_keys
-                + (
-                    f"{parent_key}=0",
-                    "atd_rule=shot_family_total_gates_its_route_subtypes",
-                    f"ungated_{child_key.split('/')[-1].lower()}={child.value}",
-                ),
-            )
-    return gated
 
 
 def _clamp_rule_value(field_key: str, value: int) -> int:

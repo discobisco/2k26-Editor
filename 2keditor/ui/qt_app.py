@@ -43,6 +43,7 @@ from nba2k_editor.models.data_model import (
     EditorDataModel,
     FieldEntry,
     RecordListItem,
+    target_display_label,
     verify_edits,
 )
 from nba2k_editor.models.player_movement import PlayerMovement
@@ -60,7 +61,7 @@ APP_VIEWPORT_WIDTH = 1600
 APP_VIEWPORT_HEIGHT = 900
 PLAYER_GENERATOR_SCREEN = "Player Generator"
 FRANCHISE_SCREEN = "Franchise"
-TARGET_CHOICES: tuple[str, ...] = ("NBA 2K22", "NBA 2K23", "NBA 2K24", "NBA 2K25", "NBA 2K26")
+TARGET_CHOICES: tuple[str, ...] = ("NBA 2K22", "NBA 2K23", "NBA 2K24", "NBA 2K25", "NBA 2K26", "NBA 2K27")
 PLAYER_ROSTER_EXPORT_MODES: tuple[str, ...] = (
     "Full Loaded Roster",
     "Draft Class",
@@ -424,6 +425,7 @@ class QtEditorApp(QMainWindow):
         self.home_target_status.setObjectName("LiveStatusChip")
         target = configure_combo_box(QComboBox())
         target.addItems(TARGET_CHOICES)
+        target.setCurrentText(target_display_label(self.model.target_executable))
         target.currentTextChanged.connect(lambda text: self._set_target(text))
         header.addWidget(QLabel("Target"))
         header.addWidget(target)

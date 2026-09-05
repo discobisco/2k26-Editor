@@ -55,7 +55,6 @@ _GATES = ("guard", "wing", "frontcourt", "pivot", "perimeter")
 #: states the era correctly and then throws away which players did it more often.
 #: Values already under the ceiling are untouched; the rest are compressed into the
 #: top of the band in their original order.
-_CAP_BAND_FLOOR = 0.6
 
 
 #: The attribute floor. A field sitting here resolved to it on the player's own
@@ -76,18 +75,6 @@ def _is_demonstrated_floor(field_key: str, current: Any) -> bool:
     return isinstance(value, (int, float)) and float(value) <= _ATTRIBUTE_FLOOR
 
 
-def _capped(original: float, amount: float, gate: float) -> float:
-    """Apply an era ceiling without flattening everyone onto it."""
-
-    ceiling = amount + (original - amount) * (1.0 - gate)
-    if original <= ceiling or ceiling <= 0.0:
-        return min(original, ceiling)
-    headroom = 100.0 - ceiling
-    if headroom <= 0.0:
-        return ceiling
-    position = (original - ceiling) / headroom
-    return ceiling * (_CAP_BAND_FLOOR + (1.0 - _CAP_BAND_FLOOR) * position)
-
 
 @dataclass(frozen=True)
 class _Adj:
@@ -106,15 +93,7 @@ class _Adj:
 # question, and only the first belongs here.
 _MODEL: tuple[_Adj, ...] = (
     # -- on-ball creation & handle: did not exist -------------------------------
-    _Adj("Tendencies/SETUPWITHHESITATION", "cap", 8, None, "no live-dribble setup game pre-clock", "handle"),
-    _Adj("Tendencies/SETUPWITHSIZEUP", "cap", 4, None, "size-up dribble is a modern move", "handle"),
-    _Adj("Tendencies/TRIPLETHREATJABSTEP", "cap", 10, None, "triple-threat footwork is modern", "handle"),
-    _Adj("Tendencies/THREATTRIPLESHOT", "cap", 12, None, "triple-threat shot decision is modern", "handle"),
     _Adj("Tendencies/TRIPLETHREATPUMPFAKE", "scale", 0.7, None, "less shot-fake gamesmanship", "handle"),
-    _Adj("Tendencies/DRIVINGDRIBBLEHESITATION", "cap", 10, None, "hesitation dribble is modern", "handle"),
-    _Adj("Tendencies/DRIVINGBEHINDTHEBACK", "cap", 6, None, "combo dribble moves are modern", "handle"),
-    _Adj("Tendencies/DRIBBLECROSSOVER", "cap", 6, None, "combo dribble moves are modern", "handle"),
-    _Adj("Tendencies/DRIBBLESPIN", "cap", 6, None, "combo dribble moves are modern", "handle"),
     _Adj("Tendencies/NOSETUPDRIBBLE", "scale", 1.3, "perimeter", "catch and go, no extended setup", ""),
     _Adj("Tendencies/NODRIVINGDRIBBLEMOVE", "scale", 1.35, None, "straight-line drives, no combo moves", ""),
     # No BALLCONTROL cap. The era suppressed the crossover *moves* -- the tendencies
@@ -122,17 +101,11 @@ _MODEL: tuple[_Adj, ...] = (
     # league from being the best ball handler in the league. Capping the attribute at
     # 70 held Bob Davies, whose whole calling card was the handle, to the ceiling.
     # -- isolation basketball: did not exist ----------------------------------
-    _Adj("Tendencies/ISOVSAVERAGEDEFENDER", "cap", 12, None, "ball-movement offense, no iso", "iso"),
-    _Adj("Tendencies/ISOVSGOODDEFENDER", "cap", 9, None, "ball-movement offense, no iso", "iso"),
-    _Adj("Tendencies/ISOVSELITEDEFENDER", "cap", 6, None, "ball-movement offense, no iso", "iso"),
-    _Adj("Tendencies/ISOVSPOORDEFENDER", "cap", 16, None, "ball-movement offense, no iso", "iso"),
     _Adj("Tendencies/PLAYDISCIPLINE", "scale", 1.15, None, "set-play weave/give-and-go offense", "ball_dominant"),
     # -- driving: slower, more deliberate, no rim-attack athletes ------------
     _Adj("Tendencies/DRIVE", "scale", 0.72, None, "deliberate half-court sets", "drive"),
     _Adj("Tendencies/DRIVE", "scale", 0.4, "pivot", "centers and pivots finished post actions rather than initiating perimeter drives", "drive"),
     _Adj("Tendencies/ATTACKSTRONGONDRIVE", "scale", 0.7, None, "few power finishers at the rim", "drive"),
-    _Adj("Tendencies/DRIVEPULLUPMID", "cap", 8, None, "off-dribble pull-up is modern", "off_dribble_jumper"),
-    _Adj("Tendencies/DRIVEPULLUPMIDRANGE", "cap", 8, None, "off-dribble pull-up is modern", "off_dribble_jumper"),
     _Adj("Tendencies/OFFSCREENDRIVE", "scale", 0.7, None, "limited off-ball screen actions", "drive"),
     # -- shot selection: the two-hand set shot & the shot near the rim -------
     _Adj("Tendencies/MIDSPOTUPSHOT", "scale", 1.25, "perimeter", "two-hand set shot from the perimeter", "set_shot"),
@@ -140,15 +113,10 @@ _MODEL: tuple[_Adj, ...] = (
     _Adj("Tendencies/MIDOFFSCREENSHOT", "scale", 0.6, None, "little off-ball movement shooting", "off_screen"),
     _Adj("Tendencies/CONTESTEDJUMPERMID", "scale", 0.5, None, "you did not force contested jumpers", "volume_jumper"),
     _Adj("Tendencies/CONTESTEDJUMPERMIDRANGE", "scale", 0.5, None, "you did not force contested jumpers", "volume_jumper"),
-    _Adj("Tendencies/SPINJUMPER", "cap", 6, None, "spin jumper is modern", "off_dribble_jumper"),
-    _Adj("Tendencies/STEPBACKJUMPERMID", "cap", 5, None, "step-back jumper is modern", "off_dribble_jumper"),
-    _Adj("Tendencies/STEPBACKJUMPERMIDRANGE", "cap", 5, None, "step-back jumper is modern", "off_dribble_jumper"),
-    _Adj("Tendencies/STEPTHROUGH", "cap", 18, None, "aggressive step-through is modern footwork", "post_footwork"),
     _Adj("Tendencies/BASKETUNDERSHOT", "scale", 1.2, None, "most offense finished at the rim", "rim_finish"),
     _Adj("Tendencies/CLOSESHOT", "scale", 1.2, None, "most offense finished at the rim", "rim_finish"),
     _Adj("Tendencies/CLOSEMIDDLESHOT", "scale", 1.15, None, "most offense finished at the rim", "rim_finish"),
     _Adj("Tendencies/USEGLASS", "scale", 1.4, None, "the bank shot was standard", ""),
-    _Adj("Tendencies/FLOATER", "cap", 8, None, "the floater is a modern shot", "off_dribble_jumper"),
     # -- post game: the pivot was the hub; footwork was the hook ------------
     _Adj("Tendencies/POSTUP", "scale", 1.35, "frontcourt", "the pivot ran the offense", "post_hub"),
     _Adj("Tendencies/POSTUPANDUNDER", "scale", 1.2, "frontcourt", "up-and-under off the pivot", "post_hub"),
@@ -157,22 +125,10 @@ _MODEL: tuple[_Adj, ...] = (
     _Adj("Tendencies/POSTAGGRESSIVEBACKDOWN", "scale", 1.15, "pivot", "power pivots backed men down", "post_hub"),
     _Adj("Tendencies/POSTHOOKLEFT", "scale", 1.35, "pivot", "the hook was the money post shot", "post_hub"),
     _Adj("Tendencies/POSTHOOKRIGHT", "scale", 1.35, "pivot", "the hook was the money post shot", "post_hub"),
-    _Adj("Tendencies/POSTFACEUP", "cap", 12, None, "the pivot did not face up", "post_footwork"),
-    _Adj("Tendencies/POSTDRIVE", "cap", 10, None, "the pivot did not drive from the post", "post_footwork"),
-    _Adj("Tendencies/POSTSPIN", "cap", 8, None, "spin move is modern post footwork", "post_footwork"),
-    _Adj("Tendencies/POSTHOPSTEP", "cap", 8, None, "hop step is modern post footwork", "post_footwork"),
-    _Adj("Tendencies/POSTSHIMMYSHOT", "cap", 8, None, "shimmy is modern post footwork", "post_footwork"),
-    _Adj("Tendencies/POSTSTEPBACKSHOT", "cap", 5, None, "post step-back is modern", "post_footwork"),
     _Adj("Tendencies/POSTDROPSTEP", "scale", 0.7, None, "drop step existed but was less emphasised", "post_footwork"),
-    _Adj("Tendencies/HOPPOSTSHOT", "cap", 6, None, "hop shot is modern post footwork", "post_footwork"),
     # -- passing: give-and-go, not flair ----------------------------------
     _Adj("Tendencies/DISHTOOPENMAN", "scale", 1.15, None, "give-and-go, hit the cutter", "ball_dominant"),
-    _Adj("Tendencies/FLASHYPASS", "cap", 6, None, "fundamental passing, no flair", "flair_pass"),
-    _Adj("Tendencies/ALLEYOOPPASS", "cap", 3, None, "the alley-oop as a play did not exist", "alley_oop"),
     # -- finishing above the rim: ability is fine, the *choice* to do it in a game is not -
-    _Adj("Tendencies/ALLEYOOP", "cap", 2, None, "the alley-oop as a play did not exist", "alley_oop"),
-    _Adj("Tendencies/FLASHYDUNK", "cap", 2, None, "a dunk was never a show move in a game", "showtime_finish"),
-    _Adj("Tendencies/SPINLAYUP", "cap", 6, None, "spin layup is modern", "showtime_finish"),
     # NOTE: the dunk *attributes* (DRIVINGDUNK / STANDINGDUNK) are deliberately left alone.
     # Pre-shot-clock players dunked in warmups routinely -- the ability was there; they just
     # did not do it in games because of injury risk and convention. That is a *tendency*
@@ -285,8 +241,6 @@ def adjust_values(evidence: Any, positions: Any, values: dict[str, Any]) -> dict
             continue
         if adj.kind == "scale":
             new_value = original * (1.0 + (adj.amount - 1.0) * gate)
-        elif adj.kind == "cap":
-            new_value = _capped(original, adj.amount, gate)
         elif adj.kind == "raise_to":
             new_value = original + (adj.amount - original) * gate if original < adj.amount else original
         else:

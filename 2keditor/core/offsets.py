@@ -17,6 +17,7 @@ from .conversions import to_int
 
 MODULE_NAME = "NBA2K26.exe"
 HOOK_TARGET_LABELS: dict[str, str] = {
+    "nba2k27.exe": "NBA 2K27",
     "nba2k26.exe": "NBA 2K26",
     "nba2k25.exe": "NBA 2K25",
     "nba2k24.exe": "NBA 2K24",

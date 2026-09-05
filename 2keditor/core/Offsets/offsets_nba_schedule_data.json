@@ -1,0 +1,84 @@
+{
+  "NBAScheduleData": {
+    "Schedule Data": {
+      "Fields": [
+        {
+          "normalized_name": "AWAYTEAMPOINTER",
+          "display_name": "Away Team Pointer",
+          "versions": {
+            "2K27": {
+              "address": 8,
+              "hex": "0x8",
+              "pointer_target": "Team",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "CONTROLORTIMEUNRESOLVED",
+          "display_name": "Control or Time (Unresolved)",
+          "versions": {
+            "2K27": {
+              "address": 0,
+              "hex": "0x0",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "DATESERIAL",
+          "display_name": "Date Serial",
+          "versions": {
+            "2K27": {
+              "address": 2,
+              "date_epoch": "1956-11-27",
+              "date_formula": "date_epoch + raw days",
+              "hex": "0x2",
+              "readonly": true,
+              "type": "ushort"
+            }
+          }
+        },
+        {
+          "normalized_name": "HOMETEAMPOINTER",
+          "display_name": "Home Team Pointer",
+          "versions": {
+            "2K27": {
+              "address": 16,
+              "hex": "0x10",
+              "pointer_target": "Team",
+              "readonly": true,
+              "type": "uint64"
+            }
+          }
+        },
+        {
+          "normalized_name": "RESERVED0X1C",
+          "display_name": "Reserved 0x1C",
+          "versions": {
+            "2K27": {
+              "address": 28,
+              "hex": "0x1c",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        },
+        {
+          "normalized_name": "SCHEDULESUBTYPEORSLOTUNRESOLVED",
+          "display_name": "Schedule Subtype or Slot (Unresolved)",
+          "versions": {
+            "2K27": {
+              "address": 24,
+              "hex": "0x18",
+              "readonly": true,
+              "type": "uint"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

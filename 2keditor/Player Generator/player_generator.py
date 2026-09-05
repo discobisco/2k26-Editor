@@ -16,11 +16,6 @@ from nba2k_editor.core import offsets as offsets_mod
 from nba2k_editor.models.schema import FieldEntry
 from player_evidence import PlayerEvidence, shotquality_contest_rows
 from pre_nba_sqlite import available_pre_nba_seasons, load_pre_nba_season_payload
-from nbl_baa_projection import (
-    PROJECTED_FIELD_KEYS as NBL_BAA_PROJECTED_FIELD_KEYS,
-    REFERENCE_CONTEXT_KEY as NBL_BAA_REFERENCE_CONTEXT_KEY,
-    make_baa_projection_reference,
-)
 import player_pre1952_scale as pre_1952_scale
 import player_rules_athleticism as athleticism_rules
 import player_rules_mental as mental_rules
@@ -162,14 +157,12 @@ class SeasonPlayerContextIndex:
     comparison_rows: tuple[dict[str, Any], ...]
     evidence_by_key: dict[tuple[str, str], PlayerEvidence]
     field_index: dict[str, FieldEntry]
-    #: 1947-51 only: the season's players in every league, whatever the operator
-    #: selected. Those seasons are rated on one cross-league scale, so the population a
-    #: rule compares against must not move when the league selection does. Empty for
-    #: every other season, which keeps the selected-scope behaviour.
+    # Retained for constructor compatibility; rating comparisons follow the UI league
+    # selection, and "All leagues" supplies the mixed BAA/NBL population explicitly.
     pooled_comparison_rows: tuple[dict[str, Any], ...] = ()
 
     def rating_rows(self) -> tuple[dict[str, Any], ...]:
-        return self.pooled_comparison_rows or self.comparison_rows
+        return self.comparison_rows
 
     def comparison_row_for(self, *, player_id: str, team: str) -> dict[str, Any]:
         key = _player_team_key(player_id, team)
@@ -790,36 +783,60 @@ def _cached_season_context_index(
             if _comparison_row_league(row) == "NBL":
                 row.update(baa_reference)
 
-    # Stamped before the league filter below, deliberately. A 1947 player is scaled
-    # against everyone who played that season, not against whichever league the
-    # operator selected -- scaling inside one league gave the NBL and the BAA a 99
-    # apiece and made the two sets of cards unreadable against each other.
-    if 0 < season <= pre_1952_scale.LAST_PRE_1952_SEASON:
-        pooled = pre_1952_scale.build_population_snapshot(rows_by_key.values())
-        nbl_only = tuple(entry for entry in pooled if entry.get("league") == "NBL")
-        for row in rows_by_key.values():
-            row[pre_1952_scale.POOLED_POPULATION_KEY] = pooled
-            if nbl_only:
-                row[pre_1952_scale.NBL_TOTALS_KEY] = nbl_only
-        # Stamped second, and read by nothing above: the pass that consumes these
-        # distributions is a no-op while they are absent, so the run that builds them
-        # produces exactly the unstretched values they are supposed to describe.
-        distributions = _pre_1952_field_distributions(rows_by_key)
-        if distributions:
-            for row in rows_by_key.values():
-                row[pre_1952_scale.FIELD_DISTRIBUTIONS_KEY] = distributions
-
     normalized_league = str(selected_league or "").strip().upper()
     selected_keys = tuple(
         key
         for key in sorted(rows_by_key)
         if not normalized_league or _comparison_row_league(rows_by_key[key]) == normalized_league
     )
-    comparison_rows = tuple(
-        rows_by_key[key]
+    selected_rows_by_key = {
+        key: rows_by_key[key]
         for key in selected_keys
         if _comparison_row_has_positive_games(rows_by_key[key])
-    )
+    }
+
+    # The UI league selection owns the comparison population.  "All leagues" reaches
+    # this point as an empty filter and therefore supplies the mixed BAA/NBL population.
+    if 0 < season <= pre_1952_scale.LAST_PRE_1952_SEASON:
+        population = pre_1952_scale.build_population_snapshot(selected_rows_by_key.values())
+        nbl_only = tuple(entry for entry in population if entry.get("league") == "NBL")
+        distributions, hustle_top_keys, field_base_values = _pre_1952_field_distributions(selected_rows_by_key)
+        speed_spread = distributions.get("Attributes/SPEED", ())
+        base_values_by_key = {
+            (
+                str(item.get("player_id") or "").strip().upper(),
+                str(item.get("team") or "").strip().upper(),
+            ): item.get("values", {})
+            for item in field_base_values
+        }
+        if speed_spread:
+            for entry in population:
+                key = (
+                    str(entry.get("player_id") or "").strip().upper(),
+                    str(entry.get("team") or "").strip().upper(),
+                )
+                values = base_values_by_key.get(key)
+                raw_speed = values.get("Attributes/SPEED") if isinstance(values, dict) else None
+                speed_rating = pre_1952_scale.stretch(
+                    raw_speed,
+                    speed_spread,
+                    low_anchor=speed_spread[0],
+                    high_anchor=speed_spread[-1],
+                )
+                if speed_rating is not None:
+                    entry[pre_1952_scale.SPEED_RATING_KEY] = speed_rating
+        for row in selected_rows_by_key.values():
+            row[pre_1952_scale.POOLED_POPULATION_KEY] = population
+            if nbl_only:
+                row[pre_1952_scale.NBL_TOTALS_KEY] = nbl_only
+            if distributions:
+                row[pre_1952_scale.FIELD_DISTRIBUTIONS_KEY] = distributions
+            if field_base_values:
+                row[pre_1952_scale.FIELD_BASE_VALUES_KEY] = field_base_values
+            if hustle_top_keys:
+                row[pre_1952_scale.HUSTLE_TOP_KEYS_KEY] = hustle_top_keys
+
+    comparison_rows = tuple(selected_rows_by_key[key] for key in selected_rows_by_key)
     evidence_by_key = _build_evidence_index(
         season=season,
         keys=selected_keys,
@@ -830,13 +847,6 @@ def _cached_season_context_index(
         source_context_by_key=rows_by_key,
         shotquality_by_player_id=shotquality_by_player_id,
     )
-    pooled_comparison_rows: tuple[dict[str, Any], ...] = ()
-    if 0 < season <= pre_1952_scale.LAST_PRE_1952_SEASON:
-        pooled_comparison_rows = tuple(
-            rows_by_key[key]
-            for key in sorted(rows_by_key)
-            if _comparison_row_has_positive_games(rows_by_key[key])
-        )
     return SeasonPlayerContextIndex(
         season=season,
         source_database_path=database,
@@ -844,7 +854,6 @@ def _cached_season_context_index(
         comparison_rows=comparison_rows,
         evidence_by_key=evidence_by_key,
         field_index=dict(field_index),
-        pooled_comparison_rows=pooled_comparison_rows,
     )
 
 
@@ -954,7 +963,6 @@ def _same_season_baa_defense_reference(
         reference_key: []
         for reference_key in _NBL_BAA_DEFENSE_REFERENCE_FIELDS.values()
     }
-    projection_references: list[dict[str, Any]] = []
     for evidence in evidence_by_key.values():
         positions = select_positions_from_evidence(
             evidence.play_by_play,
@@ -964,77 +972,106 @@ def _same_season_baa_defense_reference(
             evidence,
             positions=positions,
             league_player_rows=baa_rows,
-            active_field_keys=set(_NBL_BAA_DEFENSE_REFERENCE_FIELDS) | set(NBL_BAA_PROJECTED_FIELD_KEYS),
+            active_field_keys=set(_NBL_BAA_DEFENSE_REFERENCE_FIELDS),
         )
         for field_key, reference_key in _NBL_BAA_DEFENSE_REFERENCE_FIELDS.items():
             value = result.values.get(field_key)
             if value is None or value.source_rule.endswith("_researched_exact_player_override"):
                 continue
             values_by_reference[reference_key].append(int(value.value))
-        projection_targets = {
-            field_key: int(value.value)
-            for field_key in NBL_BAA_PROJECTED_FIELD_KEYS
-            if (value := result.values.get(field_key)) is not None
-        }
-        if projection_targets:
-            reference = make_baa_projection_reference(evidence, baa_rows, projection_targets)
-            projection_references.append(reference)
     references: dict[str, Any] = {
         reference_key: tuple(sorted(values))
         for reference_key, values in values_by_reference.items()
         if len(values) >= 2
     }
-    if projection_references:
-        references[NBL_BAA_REFERENCE_CONTEXT_KEY] = tuple(projection_references)
     return references
 
 
 def _pre_1952_field_distributions(
     rows_by_key: dict[tuple[str, str], dict[str, Any]],
-) -> dict[str, tuple[float, ...]]:
-    """The season's spread for the fields that are restretched rather than rebuilt.
+) -> tuple[
+    dict[str, tuple[float, ...]],
+    tuple[tuple[str, str], ...],
+    tuple[dict[str, Any], ...],
+]:
+    """Build selected-population field spreads and the exact Hustle top 25."""
 
-    Vertical, Speed and Speed with Ball keep the shape their own rules give them and
-    only need their range opened to the full 25-99; Hustle needs to know which values
-    are the season's top twenty-five. All four therefore need the season's own
-    distribution.
-
-    These rules are called directly rather than regenerating every player. Building
-    these by running the full rule set over the season cost twenty-one seconds on 1947
-    -- a hundred times any other season, while the generator screen was still opening.
-    """
-
-    rows = tuple(
-        rows_by_key[key]
+    ordered_items = tuple(
+        (key, rows_by_key[key])
         for key in sorted(rows_by_key)
         if _comparison_row_has_positive_games(rows_by_key[key])
     )
+    rows = tuple(row for _key, row in ordered_items)
     if len(rows) < 2:
-        return {}
+        return {}, (), ()
     collected: dict[str, list[float]] = {field_key: [] for field_key in pre_1952_scale_fields()}
-    for row in rows:
+    hustle_ranked: list[tuple[float, tuple[str, str]]] = []
+    field_base_values: list[dict[str, Any]] = []
+    for key, row in ordered_items:
         body = SimpleNamespace(
+            season=int(_row_context_number(
+                row,
+                "player_season_info.season",
+                "season_info.season",
+                "season",
+            ) or 0),
             identity={
                 "ht_in_in": _row_context_number(row, "player_info.ht_in_in", "identity.ht_in_in"),
                 "wt": _row_context_number(row, "player_info.wt", "identity.wt"),
             },
             per_game={"g": _row_context_number(row, "player_per_game.g", "per_game.g")},
-            season_info={"age": _row_context_number(row, "player_season_info.age", "season_info.age")},
+            season_info={
+                "age": _row_context_number(row, "player_season_info.age", "season_info.age"),
+                "lg": _comparison_row_league(row),
+            },
             source_profile={},
         )
-        for field_key, result in (
-            ("Attributes/VERTICAL", athleticism_rules.derive_attribute_vertical(body, None, rows)),
-            ("Attributes/SPEED", athleticism_rules.derive_attribute_speed(body, None, rows)),
-            ("Attributes/SPEEDWITHBALL", athleticism_rules.derive_attribute_speedwithball(body, None, rows)),
-            ("Attributes/HUSTLE", mental_rules.derive_attribute_hustle(row, league_player_rows=rows)),
-        ):
-            if result is not None and isinstance(result.get("value"), (int, float)):
-                collected[field_key].append(float(result["value"]))
-    return {
+        player_field_values: dict[str, float] = {}
+        vertical_score = athleticism_rules._row_vertical_value(row)
+        field_results = (
+            ("Attributes/VERTICAL", vertical_score),
+            (
+                "Attributes/SPEED",
+                athleticism_rules.derive_attribute_speed(body, None, rows),
+            ),
+        )
+        for field_key, result in field_results:
+            value = (
+                float(result["value"])
+                if isinstance(result, dict) and isinstance(result.get("value"), (int, float))
+                else float(result)
+                if isinstance(result, (int, float))
+                else None
+            )
+            if value is not None:
+                collected[field_key].append(value)
+                player_field_values[field_key] = value
+        if player_field_values:
+            field_base_values.append({
+                "player_id": str(key[0]).strip().upper(),
+                "team": str(key[1]).strip().upper(),
+                "values": player_field_values,
+            })
+        hustle = mental_rules.derive_attribute_hustle(row, league_player_rows=rows)
+        if hustle is not None and isinstance(hustle.get("value"), (int, float)):
+            value = float(hustle["value"])
+            identity = (str(key[0]).strip().upper(), str(key[1]).strip().upper())
+            collected["Attributes/HUSTLE"].append(value)
+            hustle_ranked.append((value, identity))
+
+    distributions = {
         field_key: tuple(sorted(values))
         for field_key, values in collected.items()
         if len(values) >= 2
     }
+    hustle_top_keys = tuple(
+        identity
+        for _value, identity in sorted(
+            hustle_ranked,
+            key=lambda item: (-item[0], item[1]),
+        )[:pre_1952_rules.HUSTLE_CEILING_PLAYERS]
+    )
+    return distributions, hustle_top_keys, tuple(field_base_values)
 
 
 def pre_1952_scale_fields() -> tuple[str, ...]:
@@ -1134,7 +1171,7 @@ def _nbl_baa_overlap_intangibles_reference_values(database_path: str) -> tuple[i
         win_shares = aggregate if aggregate is not None else sum(value for _team, value in entries)
         top = maxima.get(season, 0.0)
         score = max(0.0, win_shares) / top if top > 0.0 else 0.0
-        rating = max(25, min(98, int(round(25.0 + 74.0 * score))))
+        rating = max(25, min(99, int(round(25.0 + 74.0 * score))))
         ratings_by_player.setdefault(player_id, []).append(rating)
     return tuple(sorted(int(round(sum(values) / len(values))) for values in ratings_by_player.values()))
 

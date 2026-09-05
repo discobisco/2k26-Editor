@@ -7,7 +7,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from nbl_baa_projection import REFERENCE_CONTEXT_KEY as NBL_BAA_REFERENCE_CONTEXT_KEY
+#: Key the season context used to stamp BAA reference cards under. Nothing writes it
+#: since nbl_baa_projection was removed, so _baa_reference_values returns empty and
+#: the NBL assist calibration below self-disables on its len(...) < 2 guard.
+NBL_BAA_REFERENCE_CONTEXT_KEY = "nbl_same_season_baa_common_feature_references"
 from player_era_context import player_era_context
 from player_era_role import era_role_playstyle_enabled as _era_role_playstyle_on
 from player_rules_athleticism import derive_attribute_vertical, derive_attribute_vertical_unadjusted
@@ -1242,9 +1245,6 @@ def _execution_reliability(percentage: float | None, exposure: float | None, pri
     return exposure / (exposure + prior)
 
 
-def _relaxed_ceiling(ceiling: float, reliability: float) -> float:
-    return ceiling + (1.0 - max(0.0, min(1.0, reliability))) * (99.0 - ceiling)
-
 
 #: Fields where recorded shooting is an upper bound rather than one term in a blend.
 #: DRAWFOUL and IQSHOT stay blended: drawing contact and choosing shots are not the
@@ -1253,11 +1253,6 @@ def _relaxed_ceiling(ceiling: float, reliability: float) -> float:
 # player can make, and a fade is a touch shot -- neither should fall off a cliff from
 # 48 to 25 because a bench player's season shows no made field goal. They keep the
 # blend, which moves them down smoothly instead.
-_EXECUTION_CEILING_FIELDS = frozenset({
-    "DRIVINGDUNK",
-    "POSTHOOK",
-    "STANDINGDUNK",
-})
 
 
 _POST_BODY_CACHE: dict[int, tuple[object, tuple[float, ...]]] = {}
@@ -1343,34 +1338,6 @@ def _absolute_attribute_adjustment(field: str, evidence: Any, relative_value: fl
 
     center = _ATTRIBUTE_CALIBRATION.get(field, (relative_value, 0.0))[0]
     games = _gp(evidence)
-    if field in {"DRIVINGDUNK", "STANDINGDUNK"}:
-        fit = _dunk_athletic_fit(evidence) if field == "DRIVINGDUNK" else _standing_dunk_height_fit(evidence)
-        if fit is not None:
-            ceiling = 25.0 + 74.0 * fit
-            return min(relative_value, ceiling), (
-                "identity.ht_in_in",
-                "identity.wt",
-                "season_info.age",
-                f"dunk_athletic_fit={fit:.8f}",
-                f"dunk_body_ceiling={ceiling:.4f}",
-                "mapping=min(relative_value,25+74*dunk_athletic_fit)",
-                "absolute_anchor_reason=dunking is reach and spring; the curve reaches zero at six foot so a player that size sits on the floor without a rule saying so",
-            )
-    if field == "POSTCONTROL":
-        body = _post_body_percentile(evidence, population)
-        if body is not None:
-            # Working the block is a body skill before it is a scoring skill, so the
-            # smallest, lightest frame in the league cannot rate above the floor no
-            # matter what his role says.
-            ceiling = 25.0 + 74.0 * body
-            return min(relative_value, ceiling), (
-                "identity.ht_in_in",
-                "identity.wt",
-                f"post_body_percentile={body:.8f}",
-                f"post_body_ceiling={ceiling:.4f}",
-                "mapping=min(relative_value,25+74*same_season_same_league_body_percentile)",
-                "absolute_anchor_reason=post position is held with height and mass; the smallest frame in the league is the floor",
-            )
     fga = _estimated_total(evidence, "fga")
     fta = _estimated_total(evidence, "fta")
     fg_percent = _basic_value(evidence, "per_game.fg_percent")
@@ -1391,25 +1358,6 @@ def _absolute_attribute_adjustment(field: str, evidence: Any, relative_value: fl
         reliability = fga / (fga + 100.0) if fga is not None else 0.0
         absolute_value = 25.0 + 100.0 * execution
         anchor = f"25+100*{'TS%' if ts_percent is not None else 'FG%'}({execution:.6f})"
-    elif (
-        field == "CLOSESHOT"
-        and fg_percent is not None
-        and _basic_value(evidence, "shooting.fg_percent_from_x0_3_range") is None
-        and _basic_value(evidence, "shooting.fg_percent_from_x3_10_range") is None
-    ):
-        # Original shrink-toward-centre construction, unchanged. It reaches the floor
-        # on its own now that a recorded zero counts as fully reliable evidence.
-        reliability = _execution_reliability(fg_percent, fga, 100.0)
-        response_cap = close_range_rating_for_make_probability(fg_percent)
-        reliable_cap = center + reliability * (response_cap - center)
-        return min(relative_value, reliable_cap), (
-            f"historical_close_response_probability={fg_percent:.6f}",
-            f"historical_close_response_rating={response_cap}",
-            f"historical_close_response_reliability={reliability:.8f}",
-            f"historical_close_reliable_cap={reliable_cap:.8f}",
-            "historical_close_cap_reason=overall_FG_percent_is_only_an_upper_bound_for_untracked_close_only_execution",
-            "mapping=min(relative_value,reliability_shrunk_close_range_response)",
-        )
     elif field in {"CLOSESHOT", "DRIVINGDUNK", "DRIVINGLAYUP", "POSTCONTROL", "POSTHOOK", "STANDINGDUNK"} and fg_percent is not None:
         slope = {
             "CLOSESHOT": 150.0,
@@ -1441,19 +1389,6 @@ def _absolute_attribute_adjustment(field: str, evidence: Any, relative_value: fl
     if absolute_value is None:
         return relative_value, ()
     reliable_absolute = center + reliability * (absolute_value - center)
-    if field in _EXECUTION_CEILING_FIELDS and reliability >= 1.0:
-        # A fully reliable execution reading is an upper bound rather than one voice in
-        # a blend. In practice that means a recorded zero: no made shot is unambiguous,
-        # so a player who made none all season cannot rate above the floor on a field
-        # that asks whether he could make it. Every other reading stays blended --
-        # applying an absolute FG% ceiling to everyone compressed a league that shot
-        # 28% into a narrow band and cost the win-share rankings a full three points.
-        return min(relative_value, absolute_value), (
-            f"absolute_field_anchor={anchor}",
-            f"absolute_field_anchor_reliability={reliability:.8f}",
-            "mapping=min(relative_value,field_specific_execution_ceiling)",
-            "absolute_anchor_reason=shot execution cannot exceed what the player's recorded shooting demonstrates",
-        )
     value = 0.45 * relative_value + 0.55 * reliable_absolute
     return value, (
         f"absolute_field_anchor={anchor}",
